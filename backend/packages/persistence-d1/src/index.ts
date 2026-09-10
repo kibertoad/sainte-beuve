@@ -54,12 +54,8 @@ export const D1_TABLES = [
 ] as const
 
 /** Every store, over one D1 binding. */
-export function createD1Repositories(db: D1Database): Repositories {
-  return createSqlRepositories(new D1SqlDriver(db))
-}
-
-/** Every store, over anything that speaks the driver. The suite reaches in here. */
-export function createSqlRepositories(db: SqlDriver): Repositories {
+export function createD1Repositories(binding: D1Database): Repositories {
+  const db: SqlDriver = new D1SqlDriver(binding)
   return {
     reviewers: new SqlReviewerRepository(db),
     reviews: new SqlReviewRequestRepository(db),
