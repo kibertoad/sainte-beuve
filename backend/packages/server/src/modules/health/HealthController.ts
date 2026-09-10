@@ -33,6 +33,12 @@ export function healthController(): Hono<AppEnv> {
     ])
     return c.json({
       status: 'ok',
+      // Beside the capabilities rather than inside them, because it is not one:
+      // every deployment has a store, and what an operator needs to know is
+      // WHICH. `memory` is the honest answer for local mode and an alarm
+      // anywhere else, and a deployment that thought it had wired D1 finds out
+      // here rather than after an isolate recycle.
+      persistence: container.persistence,
       capabilities: {
         chat: chat !== null,
         // Per host, not one flag. A deployment connected to GitHub and not to

@@ -12,6 +12,7 @@ import type {
   ProjectRepository,
   ReviewCommitmentRepository,
 } from '@sainte-beuve/kernel'
+import { projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import { clone, patched } from './clone.js'
 
 /**
@@ -23,11 +24,6 @@ import { clone, patched } from './clone.js'
  * the ports stay coarse enough for D1 and Postgres to implement without an N+1.
  * Split across two files only because one would be past the size budget.
  */
-
-/** The unique key of a registered project, matching the store's own uniqueness rule. */
-function refKey(ref: { provider: string; owner: string; repo: string }): string {
-  return `${ref.provider}:${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}`
-}
 
 export class InMemoryProjectRepository implements ProjectRepository {
   private readonly rows = new Map<string, Project>()
@@ -42,9 +38,9 @@ export class InMemoryProjectRepository implements ProjectRepository {
   }
 
   async getByRef(ref: { provider: string; owner: string; repo: string }): Promise<Project | null> {
-    const wanted = refKey(ref)
+    const wanted = projectRefKey(ref)
     for (const row of this.rows.values()) {
-      if (refKey(row) === wanted) return clone(row)
+      if (projectRefKey(row) === wanted) return clone(row)
     }
     return null
   }
@@ -134,19 +130,6 @@ export class InMemoryAttentionRepository implements AttentionRepository {
     this.rows.set(attentionId, next)
     return clone(next)
   }
-}
-
-/**
- * The unique key of a pull request. The HOST is part of it: `platform/api#12`
- * exists on both, and they are two different changes.
- */
-function pullRequestKey(pr: {
-  provider: string
-  owner: string
-  repo: string
-  number: number
-}): string {
-  return `${refKey(pr)}#${pr.number}`
 }
 
 export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepository {

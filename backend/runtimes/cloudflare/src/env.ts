@@ -6,6 +6,17 @@
  * any app registration exists.
  */
 export interface WorkerEnv {
+  /**
+   * The D1 database the board and the workspace live in.
+   *
+   * Optional like everything else here, and the one option whose absence is
+   * worth noticing: with no binding the Worker falls back to an in-memory store
+   * that an isolate recycle empties, and `/health` reports `persistence:
+   * "memory"`. Create the database, bind it as `DB`, and apply the migrations
+   * that ship in `@sainte-beuve/persistence-d1/migrations`; see deploy/backend.
+   */
+  DB?: D1Database
+
   /** Comma-separated list of origins the SPA is served from. `*` in a preview. */
   CORS_ORIGINS?: string
 

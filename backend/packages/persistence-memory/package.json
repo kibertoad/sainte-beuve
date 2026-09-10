@@ -1,7 +1,7 @@
 {
   "name": "@sainte-beuve/persistence-memory",
   "version": "0.1.0",
-  "description": "In-memory implementations of the sainte-beuve repository ports. The store every runtime boots with until a durable adapter is wired, and the fixture the domain suites run against.",
+  "description": "In-memory implementations of the sainte-beuve repository ports. What a facade boots with when no database is configured, and the fixture the domain suites run against.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/sainte-beuve.git",
@@ -35,6 +35,7 @@
     "@sainte-beuve/kernel": "workspace:*"
   },
   "devDependencies": {
+    "@sainte-beuve/persistence-conformance": "workspace:*",
     "@types/node": "^26.5.0",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"

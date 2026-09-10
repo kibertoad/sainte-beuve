@@ -22,6 +22,20 @@ head_sampling_rate = 1
 [triggers]
 crons = ["0 * * * *"]
 
+# The board's own database. Create it once with
+# `wrangler d1 create sainte-beuve` and paste the id it prints; the migrations
+# ship inside the installed @sainte-beuve/persistence-d1, so
+# `wrangler d1 migrations apply sainte-beuve --remote` applies them from there
+# and nothing has to be copied into this package.
+#
+# Without this binding the Worker still boots, on an in-memory store that an
+# isolate recycle empties, and /health reports `persistence: "memory"`.
+[[d1_databases]]
+binding = "DB"
+database_name = "sainte-beuve"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "node_modules/@sainte-beuve/persistence-d1/migrations"
+
 [vars]
 # Origins the SPA is served from. Comma-separated; `*` only for a preview, and
 # even then the Configuration screen needs the SPA's own origin named here: the

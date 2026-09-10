@@ -35,6 +35,7 @@
     "@sainte-beuve/ai-review": "workspace:*",
     "@sainte-beuve/integrations": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*",
+    "@sainte-beuve/persistence-d1": "workspace:*",
     "@sainte-beuve/persistence-memory": "workspace:*",
     "@sainte-beuve/server": "workspace:*"
   },

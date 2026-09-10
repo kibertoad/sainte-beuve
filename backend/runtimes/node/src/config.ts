@@ -56,6 +56,21 @@ export interface GitLabConfig {
 
 export interface NodeConfig {
   port: number
+  /**
+   * The Postgres the board and the workspace live in. Null leaves the process
+   * on the in-memory store, which is right for a laptop and wrong for anything
+   * shared; `/health` reports which one is in force.
+   */
+  databaseUrl: string | null
+  /** Pool ceiling. Undefined leaves it to node-postgres. */
+  databaseMaxConnections: number | undefined
+  /**
+   * Whether to bring the schema up to date at boot. On by default, because a
+   * rolling deploy otherwise serves requests against a schema one release
+   * behind. Turn it off in a deployment that runs the migrations as a step of
+   * its own, against `POSTGRES_MIGRATIONS_DIR`.
+   */
+  databaseMigrate: boolean
   corsOrigins: string[]
   logLevel: string
   /** How often the reminder clock runs, in ms. */
@@ -81,6 +96,12 @@ function intFrom(value: string | undefined, fallback: number): number {
   return Number.isNaN(parsed) ? fallback : parsed
 }
 
+/** An optional numeric setting: absent and unparseable both mean "leave the default". */
+function optionalIntFrom(value: string | undefined): number | undefined {
+  const parsed = Number.parseInt(value ?? '', 10)
+  return Number.isNaN(parsed) ? undefined : parsed
+}
+
 function listFrom(value: string | undefined, fallback: string[]): string[] {
   const parts = (value ?? '')
     .split(',')
@@ -92,6 +113,12 @@ function listFrom(value: string | undefined, fallback: string[]): string[] {
 export function loadConfig(env: Env = process.env): NodeConfig {
   return {
     port: intFrom(env.PORT, 8788),
+    databaseUrl: env.DATABASE_URL || null,
+    databaseMaxConnections: optionalIntFrom(env.DATABASE_MAX_CONNECTIONS),
+    // `!== 'false'`, so the durable path is what an operator gets by leaving
+    // the variable out, and turning migrations off is a decision somebody
+    // typed.
+    databaseMigrate: (env.DATABASE_MIGRATE ?? 'true') !== 'false',
     corsOrigins: listFrom(env.CORS_ORIGINS, ['*']),
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),

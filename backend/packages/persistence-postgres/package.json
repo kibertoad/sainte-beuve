@@ -1,0 +1,50 @@
+{
+  "name": "@sainte-beuve/persistence-postgres",
+  "version": "0.1.0",
+  "description": "The Postgres implementation of the sainte-beuve repository ports, over Drizzle: the durable store the Node service boots with, with the same tables the D1 adapter carries and the migrations that create them.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/packages/persistence-postgres"
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@sainte-beuve/contracts": "workspace:*",
+    "@sainte-beuve/kernel": "workspace:*",
+    "drizzle-orm": "1.0.0-rc.4",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@sainte-beuve/persistence-conformance": "workspace:*",
+    "@types/node": "^26.5.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "1.0.0-rc.4",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

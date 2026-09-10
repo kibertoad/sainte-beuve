@@ -30,6 +30,9 @@ describe('review board API', () => {
     // like it.
     expect(await res.json()).toStrictEqual({
       status: 'ok',
+      // The harness runs on the in-memory store, which is what a deployment
+      // that wired no database gets and what the probe has to say out loud.
+      persistence: 'memory',
       capabilities: {
         chat: false,
         vcs: { github: false, gitlab: false },

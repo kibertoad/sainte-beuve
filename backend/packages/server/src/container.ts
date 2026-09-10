@@ -7,6 +7,7 @@ import type {
   GatewayFactory,
   IdGenerator,
   Logger,
+  PersistenceKind,
   Repositories,
   SecretCipher,
   StateSigner,
@@ -78,6 +79,13 @@ export interface SlackWiring {
 
 export interface AppContainer {
   repositories: Repositories
+  /**
+   * Which store those repositories are, for `/health` to report. The facade
+   * knows and nothing below it does, which is the point: a service that
+   * branched on the store would be a service the conformance suite no longer
+   * covers.
+   */
+  persistence: PersistenceKind
   clock: Clock
   ids: IdGenerator
   logger: Logger
@@ -139,6 +147,8 @@ export interface AppContainer {
 
 export interface ContainerOptions {
   repositories: Repositories
+  /** Defaults to `memory`, which is what a facade that wired no durable store has. */
+  persistence?: PersistenceKind
   logger: Logger
   clock?: Clock
   ids?: IdGenerator
@@ -190,12 +200,21 @@ function githubWiring(options: Partial<GitHubWiring> | undefined): GitHubWiring 
   }
 }
 
+/** Beside `githubWiring`, and here for the same reason: blank counts as absent. */
+function slackWiring(options: Partial<SlackWiring> | undefined): SlackWiring {
+  return {
+    signingSecret: configured(options?.signingSecret),
+    announcementChannelId: configured(options?.announcementChannelId),
+  }
+}
+
 export function createContainer(options: ContainerOptions): AppContainer {
   // Unpacked once rather than three times inline: the two capabilities and the
   // reason there are none arrive together from `secretsFrom`.
   const secrets = options.secrets ?? { cipher: null, states: null, rejectedReason: null }
   return {
     repositories: options.repositories,
+    persistence: options.persistence ?? 'memory',
     logger: options.logger,
     clock: options.clock ?? systemClock,
     ids: options.ids ?? uuidGenerator,
@@ -213,10 +232,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     states: secrets.states,
     secretsRejectedReason: secrets.rejectedReason,
     github: githubWiring(options.github),
-    slack: {
-      signingSecret: configured(options.slack?.signingSecret),
-      announcementChannelId: configured(options.slack?.announcementChannelId),
-    },
+    slack: slackWiring(options.slack),
     appBaseUrl: configured(options.appBaseUrl),
   }
 }

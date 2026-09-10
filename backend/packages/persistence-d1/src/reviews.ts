@@ -1,0 +1,214 @@
+import type {
+  AiReviewRun,
+  Reminder,
+  ReminderStatus,
+  ReviewRequest,
+  ReviewStatus,
+} from '@sainte-beuve/contracts'
+import type {
+  AiReviewRunRepository,
+  EpochMs,
+  ReminderRepository,
+  ReviewRequestRepository,
+} from '@sainte-beuve/kernel'
+import type { SqlDriver } from './driver.js'
+import { decodeData, decodeRows, encodeData, patched, placeholders } from './rows.js'
+
+/**
+ * The board: the reviews a deployment has taken responsibility for, the nudges
+ * scheduled against them, and the AI runs delegated from them.
+ *
+ * Every ordering here is the one the in-memory store already answers with, and
+ * the conformance suite is what keeps the three stores honest about it. There is
+ * a secondary sort on the id wherever the primary one is a timestamp: two rows
+ * written in the same millisecond otherwise come back in whichever order the
+ * engine settled on, and a board that reshuffles between two reads is one nobody
+ * can follow.
+ */
+
+const REVIEW_UPSERT = `INSERT INTO review_requests (id, status, pr_owner, pr_repo, pr_number, created_at, data)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+  status = excluded.status,
+  pr_owner = excluded.pr_owner,
+  pr_repo = excluded.pr_repo,
+  pr_number = excluded.pr_number,
+  created_at = excluded.created_at,
+  data = excluded.data`
+
+export class SqlReviewRequestRepository implements ReviewRequestRepository {
+  constructor(private readonly db: SqlDriver) {}
+
+  async list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]> {
+    const wanted = filter?.status
+    // A filter naming no status matches nothing, and `IN ()` parses on neither
+    // engine, so that answer is given without a statement.
+    if (wanted !== undefined && wanted.length === 0) return []
+    const where = wanted === undefined ? '' : ` WHERE status IN (${placeholders(wanted.length)})`
+    const rows = await this.db.all(
+      `SELECT data FROM review_requests${where} ORDER BY created_at DESC, id DESC`,
+      wanted,
+    )
+    return decodeRows<ReviewRequest>(rows)
+  }
+
+  async getById(reviewId: string): Promise<ReviewRequest | null> {
+    const row = await this.db.first('SELECT data FROM review_requests WHERE id = ?', [reviewId])
+    return row === null ? null : decodeData<ReviewRequest>(row.data)
+  }
+
+  async getByPullRequest(ref: {
+    owner: string
+    repo: string
+    number: number
+  }): Promise<ReviewRequest | null> {
+    const row = await this.db.first(
+      'SELECT data FROM review_requests WHERE pr_owner = ? AND pr_repo = ? AND pr_number = ?',
+      [ref.owner, ref.repo, ref.number],
+    )
+    return row === null ? null : decodeData<ReviewRequest>(row.data)
+  }
+
+  async create(review: ReviewRequest): Promise<ReviewRequest> {
+    await this.write(review)
+    return review
+  }
+
+  async update(reviewId: string, patch: Partial<ReviewRequest>): Promise<ReviewRequest | null> {
+    const current = await this.getById(reviewId)
+    if (current === null) return null
+    const next = patched(current, patch)
+    await this.write(next)
+    return next
+  }
+
+  private async write(review: ReviewRequest): Promise<void> {
+    const pr = review.pullRequest
+    await this.db.run(REVIEW_UPSERT, [
+      review.id,
+      review.status,
+      pr.owner,
+      pr.repo,
+      pr.number,
+      review.createdAt,
+      encodeData(review),
+    ])
+  }
+}
+
+const REMINDER_UPSERT = `INSERT INTO reminders (id, review_id, status, due_at, data)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+  review_id = excluded.review_id,
+  status = excluded.status,
+  due_at = excluded.due_at,
+  data = excluded.data`
+
+export class SqlReminderRepository implements ReminderRepository {
+  constructor(private readonly db: SqlDriver) {}
+
+  async listByReview(reviewId: string): Promise<Reminder[]> {
+    const rows = await this.db.all(
+      'SELECT data FROM reminders WHERE review_id = ? ORDER BY due_at, id',
+      [reviewId],
+    )
+    return decodeRows<Reminder>(rows)
+  }
+
+  async listDue(now: EpochMs, limit: number): Promise<Reminder[]> {
+    const rows = await this.db.all(
+      "SELECT data FROM reminders WHERE status = 'scheduled' AND due_at <= ? ORDER BY due_at, id LIMIT ?",
+      [now, limit],
+    )
+    return decodeRows<Reminder>(rows)
+  }
+
+  async create(reminder: Reminder): Promise<Reminder> {
+    await this.write(reminder)
+    return reminder
+  }
+
+  async updateStatus(
+    reminderId: string,
+    status: ReminderStatus,
+    fields?: { sentAt?: EpochMs; failureReason?: string },
+  ): Promise<void> {
+    const row = await this.db.first('SELECT data FROM reminders WHERE id = ?', [reminderId])
+    if (row === null) return
+    const current = decodeData<Reminder>(row.data)
+    await this.write({
+      ...current,
+      status,
+      // An absent field keeps what is stored: a delivery that failed and was
+      // retried must not lose the time the first attempt went out.
+      sentAt: fields?.sentAt ?? current.sentAt,
+      failureReason: fields?.failureReason ?? current.failureReason,
+    })
+  }
+
+  async cancelScheduledForReview(reviewId: string): Promise<void> {
+    // Read then write, rather than one `UPDATE`, because the status lives in the
+    // payload as well as in the column and the two must not disagree. Both
+    // engines can edit JSON in place and they spell it differently, which is the
+    // dialect branch this package exists not to have. The set is one review's
+    // outstanding nudges, which the policy caps at a handful.
+    const rows = await this.db.all(
+      "SELECT data FROM reminders WHERE review_id = ? AND status = 'scheduled'",
+      [reviewId],
+    )
+    for (const reminder of decodeRows<Reminder>(rows)) {
+      await this.write({ ...reminder, status: 'cancelled' })
+    }
+  }
+
+  private async write(reminder: Reminder): Promise<void> {
+    await this.db.run(REMINDER_UPSERT, [
+      reminder.id,
+      reminder.reviewId,
+      reminder.status,
+      reminder.dueAt,
+      encodeData(reminder),
+    ])
+  }
+}
+
+const RUN_UPSERT = `INSERT INTO ai_review_runs (id, review_id, requested_at, data)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+  review_id = excluded.review_id,
+  requested_at = excluded.requested_at,
+  data = excluded.data`
+
+export class SqlAiReviewRunRepository implements AiReviewRunRepository {
+  constructor(private readonly db: SqlDriver) {}
+
+  async listByReview(reviewId: string): Promise<AiReviewRun[]> {
+    const rows = await this.db.all(
+      'SELECT data FROM ai_review_runs WHERE review_id = ? ORDER BY requested_at DESC, id DESC',
+      [reviewId],
+    )
+    return decodeRows<AiReviewRun>(rows)
+  }
+
+  async getById(runId: string): Promise<AiReviewRun | null> {
+    const row = await this.db.first('SELECT data FROM ai_review_runs WHERE id = ?', [runId])
+    return row === null ? null : decodeData<AiReviewRun>(row.data)
+  }
+
+  async create(run: AiReviewRun): Promise<AiReviewRun> {
+    await this.write(run)
+    return run
+  }
+
+  async update(runId: string, patch: Partial<AiReviewRun>): Promise<AiReviewRun | null> {
+    const current = await this.getById(runId)
+    if (current === null) return null
+    const next = patched(current, patch)
+    await this.write(next)
+    return next
+  }
+
+  private async write(run: AiReviewRun): Promise<void> {
+    await this.db.run(RUN_UPSERT, [run.id, run.reviewId, run.requestedAt, encodeData(run)])
+  }
+}

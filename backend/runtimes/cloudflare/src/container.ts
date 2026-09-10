@@ -6,7 +6,15 @@ import {
   SlackChatGateway,
   staticTokenSource,
 } from '@sainte-beuve/integrations'
-import type { AiReviewGateway, ChatGateway, GatewayFactory, Logger } from '@sainte-beuve/kernel'
+import type {
+  AiReviewGateway,
+  ChatGateway,
+  GatewayFactory,
+  Logger,
+  PersistenceKind,
+  Repositories,
+} from '@sainte-beuve/kernel'
+import { createD1Repositories } from '@sainte-beuve/persistence-d1'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
 import {
   type AppContainer,
@@ -20,15 +28,30 @@ import {
 import type { WorkerEnv } from './env.js'
 
 /**
- * Build the container for one Worker isolate.
+ * The fallback store, for a Worker with no `DB` binding.
  *
- * The store is a MODULE-LEVEL in-memory one, which is wrong for production and
- * deliberately so: it makes the missing D1 adapter impossible to forget (an isolate
- * recycle loses the board) rather than quietly shipping something that looks
- * durable. Slice 5 replaces this with D1 and the line goes away. See
- * docs/implementation-plan.md.
+ * MODULE-LEVEL, because the container is rebuilt per request here and a store
+ * built with it would lose the board between two calls rather than between two
+ * isolates. It is not a production configuration and `/health` says so
+ * (`persistence: "memory"`): bind D1 and this line is never reached. What it
+ * buys is `wrangler dev` and a first deploy that work before anybody has
+ * created a database.
  */
-const repositories = createInMemoryRepositories()
+const fallbackRepositories = createInMemoryRepositories()
+
+/**
+ * The store this request runs against.
+ *
+ * D1 whenever the deployment bound one, and the binding is read per request
+ * because that is the only place bindings exist. The wrapper around it is
+ * three methods over `prepare`, so building it per request costs nothing worth
+ * caching.
+ */
+function storeFor(env: WorkerEnv): { repositories: Repositories; kind: PersistenceKind } {
+  return env.DB === undefined
+    ? { repositories: fallbackRepositories, kind: 'memory' }
+    : { repositories: createD1Repositories(env.DB), kind: 'd1' }
+}
 
 /**
  * The attention fan-out, held per ISOLATE for the same reason the store is: the
@@ -203,8 +226,10 @@ function buildVcs(env: WorkerEnv): EnvironmentVcsGateways {
 }
 
 export function containerFor(env: WorkerEnv): AppContainer {
+  const store = storeFor(env)
   return createContainer({
-    repositories,
+    repositories: store.repositories,
+    persistence: store.kind,
     logger: workerLogger,
     chat: buildChat(env),
     vcs: buildVcs(env),

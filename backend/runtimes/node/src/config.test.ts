@@ -16,6 +16,32 @@ describe('loadConfig', () => {
     expect(config.encryptionKey).toBeNull()
   })
 
+  it('reads a blank DATABASE_URL as no database at all', () => {
+    // `.env.example` ships the name with a value to replace, and a copied file
+    // that had it blanked would otherwise hand node-postgres an empty
+    // connection string instead of falling back to the in-memory store.
+    expect(loadConfig({}).databaseUrl).toBeNull()
+    expect(loadConfig({ DATABASE_URL: '' }).databaseUrl).toBeNull()
+    expect(loadConfig({ DATABASE_URL: 'postgres://localhost/sb' }).databaseUrl).toBe(
+      'postgres://localhost/sb',
+    )
+  })
+
+  it('migrates at boot unless somebody says otherwise', () => {
+    // The durable path is what an operator gets by leaving the variable out: a
+    // deployment that silently skipped its migrations would answer requests
+    // against a schema one release behind.
+    expect(loadConfig({}).databaseMigrate).toBe(true)
+    expect(loadConfig({ DATABASE_MIGRATE: '' }).databaseMigrate).toBe(true)
+    expect(loadConfig({ DATABASE_MIGRATE: 'false' }).databaseMigrate).toBe(false)
+  })
+
+  it('leaves the pool size to node-postgres unless it is a number', () => {
+    expect(loadConfig({}).databaseMaxConnections).toBeUndefined()
+    expect(loadConfig({ DATABASE_MAX_CONNECTIONS: '' }).databaseMaxConnections).toBeUndefined()
+    expect(loadConfig({ DATABASE_MAX_CONNECTIONS: '20' }).databaseMaxConnections).toBe(20)
+  })
+
   it('reads an empty encryption key as no key at all', () => {
     expect(loadConfig({ SETTINGS_ENCRYPTION_KEY: '' }).encryptionKey).toBeNull()
     expect(loadConfig({ SETTINGS_ENCRYPTION_KEY: 'a-key' }).encryptionKey).toBe('a-key')

@@ -17,12 +17,17 @@ import { type NodeConfig, type RunningServer, loadConfig, start } from '@sainte-
  *     to use that one instead; the rest of the wiring is identical either way.
  *   - The reminder clock still runs, just faster, so a developer can watch a nudge
  *     fire in a minute rather than in four hours.
+ *   - The store is in memory, so a restart empties the board and nothing has to
+ *     be installed to try the product. `DATABASE_URL` points local mode at a
+ *     Postgres and it becomes durable, schema applied at boot, exactly as the
+ *     Node deployment does it.
  *   - The credential-encryption key is generated at boot, so the Configuration
  *     screen works with nothing set. It is EPHEMERAL, and that is the honest
- *     default here: local mode's store is in-memory, so a token entered in the
+ *     default beside a store that empties on a restart: a token entered in the
  *     SPA does not outlive the process either way. Set SETTINGS_ENCRYPTION_KEY
- *     to pin it to the one a hosted deployment uses. A blank one in a copied
- *     `.env` counts as unset, not as a key.
+ *     to pin it to the one a hosted deployment uses, which is also what a local
+ *     run with a `DATABASE_URL` needs. A blank one in a copied `.env` counts as
+ *     unset, not as a key.
  *   - CORS opens to `*` for the board; the configuration routes read that as
  *     loopback only, which is the local SPA and nothing else. See `allowedOrigin`
  *     in @sainte-beuve/server.
@@ -52,9 +57,10 @@ export function localConfig(env: Record<string, string | undefined> = process.en
     // for a developer to fill in, `--env-file` reads that blank line as `''`, and
     // a default placed BEFORE the spread would be overwritten by it. Copying the
     // example file would then turn the Configuration screen off, which is the
-    // opposite of what local mode promises. A fresh key per boot, because nothing
-    // sealed under it has to survive a restart: nothing in the in-memory store
-    // does either.
+    // opposite of what local mode promises. A fresh key per boot, because
+    // nothing sealed under it has to survive a restart: nothing in the default
+    // store does either. A local run against a `DATABASE_URL` should set this,
+    // or the credentials in that database are unreadable after a restart.
     SETTINGS_ENCRYPTION_KEY:
       env.SETTINGS_ENCRYPTION_KEY || randomBytes(ENCRYPTION_KEY_BYTES).toString('base64'),
   })

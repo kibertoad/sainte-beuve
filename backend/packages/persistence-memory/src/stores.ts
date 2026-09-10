@@ -27,14 +27,21 @@ import {
 /**
  * In-memory implementations of the repository ports.
  *
- * This is the store every runtime boots with today, and it is deliberately the
- * FIRST adapter rather than a test double retrofitted later: writing the ports
- * against a store that cannot cheat (no SQL escape hatch, no lazy loading) is what
- * keeps them coarse enough for D1 and Postgres to implement without an N+1. The
- * durable adapters land in slice 5; see docs/implementation-plan.md.
+ * This was deliberately the FIRST adapter rather than a test double retrofitted
+ * later, and the durable ones are the argument for it: writing the ports
+ * against a store that cannot cheat (no SQL escape hatch, no lazy loading) is
+ * what kept them coarse enough for D1 (@sainte-beuve/persistence-d1) and
+ * Postgres (@sainte-beuve/persistence-postgres) to implement without an N+1.
  *
- * Every read returns a COPY (see `clone.ts` for why). The workspace stores live
- * in `workspace-stores.ts`; the split is a size budget, not a boundary.
+ * It is still what a facade boots with when no database is configured: local
+ * mode, a `wrangler dev` before anybody has created a D1, a first container
+ * run. `/health` reports it as `persistence: "memory"`, because a store a
+ * restart empties is the right answer on a laptop and an alarm anywhere else.
+ *
+ * Every read returns a COPY (see `clone.ts` for why), which is one of the
+ * behaviours `@sainte-beuve/persistence-conformance` holds all three stores to.
+ * The workspace stores live in `workspace-stores.ts`; the split is a size
+ * budget, not a boundary.
  */
 
 export class InMemoryReviewerRepository implements ReviewerRepository {

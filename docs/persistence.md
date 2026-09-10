@@ -1,0 +1,150 @@
+# Where the board lives
+
+Three implementations of the same nine repository ports, and one suite that
+holds them to one behaviour:
+
+| Store                      | Package                              | Used by                                             |
+| -------------------------- | ------------------------------------ | --------------------------------------------------- |
+| **D1**                     | `@sainte-beuve/persistence-d1`       | the Cloudflare Worker, when a `DB` binding is there |
+| **Postgres**, over Drizzle | `@sainte-beuve/persistence-postgres` | the Node service, when `DATABASE_URL` is set        |
+| **In memory**              | `@sainte-beuve/persistence-memory`   | every facade with neither, and the server suite     |
+
+`GET /health` reports which one a process is on (`persistence: "d1"`,
+`"postgres"`, `"memory"`). That field exists because "is this deployment
+durable?" has to be answerable from outside the process: `memory` is the right
+answer on a laptop and an alarm on anything a team can see, and a deployment
+that thought it had bound D1 finds out from the probe rather than from an
+isolate recycle.
+
+Nothing above the port knows which store it got. No service branches on it, and
+that is what keeps the conformance suite meaningful: a behaviour proved for one
+store is a behaviour proved for the code path every deployment runs.
+
+## One schema, in two dialects
+
+Both durable stores carry the same nine tables with the same columns. Only the
+types differ, because only the types have to: `jsonb` where SQLite has `TEXT`,
+`bigint` where it has `INTEGER`.
+
+| Table                | Key                   | Columns beside `data`                                      |
+| -------------------- | --------------------- | ---------------------------------------------------------- |
+| `reviewers`          | `id`                  | `outstanding_reviews`, `created_at`                        |
+| `review_requests`    | `id`                  | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at` |
+| `reminders`          | `id`                  | `review_id`, `status`, `due_at`                            |
+| `ai_review_runs`     | `id`                  | `review_id`, `requested_at`                                |
+| `integration_tokens` | `integration_id`      | `sealed`, `hint`, `subject`, `updated_at` (no payload)     |
+| `projects`           | `id`                  | `ref_key` (UNIQUE), `created_at`                           |
+| `identities`         | `(provider, subject)` | `reviewer_id`                                              |
+| `attention_requests` | `id`                  | `status`, `created_at`                                     |
+| `review_commitments` | `id`                  | `reviewer_id`, `pull_request_key`, `created_at`            |
+
+### The payload IS the row
+
+Every table stores its contract object as JSON in one `data` column. The scalar
+columns beside it are indexes derived from that payload at write time: the
+status a filter reads, the `due_at` the reminder tick scans, the
+`(owner, repo, number)` a webhook replay looks a review up by. A read decodes
+the payload and ignores them.
+
+This is a trade, and it is the shape the ports asked for. They are coarse by
+design (`listDue`, not a query builder), so the set of columns a store has to
+index is short and closed. A column per contract field would instead be two
+mappers per table to keep in step with contracts that still move every slice,
+and it would need a JSON column anyway for the arrays and the nested objects: a
+review's assigned reviewers, an AI run's findings and its post report. What the
+payload column costs is ad-hoc SQL over a field nobody indexed, which Postgres
+answers through `jsonb` and which no code path here needs.
+
+Adding a field to a contract therefore needs no migration. Adding one that has
+to be FILTERED or SORTED on needs a column, an index and a migration in both
+dialects, which is the price of the port having grown a new question.
+
+**One field is not in the payload's gift.** `reviewers.outstanding_reviews` is
+incremented rather than written (`adjustOutstanding`), so two assignments
+landing together must both count: the column is authoritative, the statement is
+a single `UPDATE`, and the reviewer mapper overlays the column onto the decoded
+payload. It is the only exception in either store.
+
+### Two keys are computed, not stored twice
+
+`projectRefKey` (`provider:owner/repo`, lowercased) and `pullRequestKey`
+(`provider:owner/repo#number`) live in `@sainte-beuve/kernel`, because they are
+domain rules and every store needs them. A copy per adapter is how one of them
+comes to treat `Platform/API` as a second repository, or to answer a GitLab
+merge request with the GitHub pull request of the same number.
+
+`projects.ref_key` carries a UNIQUE index, which is the uniqueness the port
+declares and the in-memory store can only promise.
+
+## The claim that has to be atomic
+
+`IdentityRepository.link` answers "whose account is this NOW", and the answer is
+not always the reviewer that was passed in. Two first sign-ins that both find no
+row are how a directory forks into two people with one account between them.
+
+Both durable stores settle it in one statement: insert, and on a conflict with
+`(provider, subject)` leave the holder's `reviewer_id` alone and return it. A
+caller that already holds the key refreshes the handle on the same trip, which
+is what keeps a rename visible. The in-memory store reads and then writes, and
+can only promise the same outcome.
+
+## Migrations
+
+Each durable store ships its migrations inside its own package, and a deployment
+applies them from there rather than copying them.
+
+**D1** stores plain `.sql` in `@sainte-beuve/persistence-d1/migrations`, applied by
+wrangler. `deploy/backend`'s `wrangler.toml` points `migrations_dir` at the
+installed copy:
+
+```bash
+wrangler d1 create sainte-beuve            # paste the id into wrangler.toml
+pnpm --filter @sainte-beuve/deploy-backend db:migrate
+```
+
+**Postgres** migrations are generated by drizzle-kit from `src/schema.ts` into
+`@sainte-beuve/persistence-postgres/migrations`, committed, and applied by the
+Node facade at boot before it serves a request. A rolling deploy otherwise
+answers requests against a schema one release behind. A deployment that gates
+schema changes on a human sets `DATABASE_MIGRATE=false` and applies
+`POSTGRES_MIGRATIONS_DIR` itself.
+
+```bash
+pnpm --filter @sainte-beuve/persistence-postgres db:generate   # after editing schema.ts
+```
+
+Nothing generates SQL at runtime and nothing pushes a schema straight at a
+database: what a deployment applies is what somebody read in a diff.
+
+## The conformance suite
+
+`@sainte-beuve/persistence-conformance` is a list of cases over `Repositories`,
+and all three stores run it:
+
+| Store     | Runs in                                  | Against                              |
+| --------- | ---------------------------------------- | ------------------------------------ |
+| in memory | Node                                     | itself                               |
+| D1        | workerd, through the Workers vitest pool | a real D1, migrated as a deploy is   |
+| Postgres  | Node                                     | PGlite, migrated from the same files |
+
+The cases are DATA rather than `describe` blocks, and they assert with
+`node:assert` rather than a matcher library, because the three suites do not run
+in the same place: a shared module that reached for a runner's globals is how the
+D1 store would have ended up with a suite of its own.
+
+Two choices in that table are worth stating:
+
+- **D1 is tested inside workerd, not against a SQLite file in Node.** What has
+  to hold is that these statements work on the engine the Worker deploys to,
+  applied to the schema `wrangler d1 migrations apply` produces. A Node harness
+  would prove neither.
+- **Postgres is tested against PGlite, not a container.** PGlite is Postgres
+  compiled to WASM, so the SQL Drizzle generates meets the real planner and the
+  real types, with no service in CI and no port on a laptop. What it does not
+  cover is node-postgres itself, which is why `connectPostgres` is thin enough
+  to read in one screen.
+
+A new port method lands in all three stores in the same change, with a case
+here. That is the rule the symmetry rests on: a store that is behind is a
+deployment that behaves differently, and the suite is the only thing that
+notices.

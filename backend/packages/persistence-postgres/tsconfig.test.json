@@ -1,0 +1,11 @@
+{
+  // The suite lives outside `src/`, so it is not part of the emitted project.
+  // Typechecked separately rather than not at all: a test that stopped compiling
+  // is the same defect as a source file that did.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["test/**/*.ts", "src/**/*.ts"]
+}

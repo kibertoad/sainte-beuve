@@ -1,5 +1,5 @@
-import { SELF } from 'cloudflare:test'
-import { afterEach, describe, expect, it } from 'vitest'
+import { applyD1Migrations, env, SELF } from 'cloudflare:test'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 // A smoke suite, deliberately thin. The behaviour lives in @sainte-beuve/server and
 // is tested there; what only this suite can tell us is that the bundle boots on
@@ -8,12 +8,21 @@ import { afterEach, describe, expect, it } from 'vitest'
 const TOKEN_URL = 'https://example.com/api/v1/settings/integrations/cat-factory/token'
 const CONNECTIONS_URL = 'https://example.com/api/v1/settings/connections'
 
+declare module 'cloudflare:test' {
+  interface ProvidedEnv {
+    DB: D1Database
+    TEST_MIGRATIONS: D1Migration[]
+  }
+}
+
 describe('sainte-beuve worker', () => {
-  // The store is module-level in this facade, and the pool's isolated storage
-  // resets bindings rather than module state, so a credential stored by one case
-  // would still be there for every case after it.
-  afterEach(async () => {
-    await SELF.fetch(TOKEN_URL, { method: 'DELETE' })
+  beforeAll(async () => {
+    // The schema this facade's D1 binding needs, applied exactly as
+    // `wrangler d1 migrations apply` applies it. The store conformance suite
+    // lives in @sainte-beuve/persistence-d1; what this one adds is that the
+    // FACADE reaches the binding at all.
+    await applyD1Migrations(env.DB, env.TEST_MIGRATIONS)
+    await env.DB.prepare('DELETE FROM integration_tokens').run()
   })
 
   it('serves the health probe', async () => {
@@ -21,6 +30,10 @@ describe('sainte-beuve worker', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toStrictEqual({
       status: 'ok',
+      // wrangler.toml binds a D1 database, so this is the facade reporting the
+      // store it actually resolved rather than the one it was written for. A
+      // Worker with no binding falls back to memory and says `memory` here.
+      persistence: 'd1',
       // The suite's env carries an encryption key and nothing else, so the flags
       // are read off the bindings rather than reported from a fixed table. The
       // inbound pair is separate from the outbound one: posting to Slack needs a

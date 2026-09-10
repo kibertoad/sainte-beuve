@@ -18,3 +18,12 @@ crons = ["0 * * * *"]
 
 [vars]
 CORS_ORIGINS = "*"
+
+# The board's own database. Local to the suite and to `wrangler dev`: miniflare
+# creates it, and the id below names nothing on any account. A deployment binds
+# its own (see deploy/backend) and points `migrations_dir` at the copy of the
+# migrations inside the installed @sainte-beuve/persistence-d1.
+[[d1_databases]]
+binding = "DB"
+database_name = "sainte-beuve-local"
+database_id = "sainte-beuve-local"

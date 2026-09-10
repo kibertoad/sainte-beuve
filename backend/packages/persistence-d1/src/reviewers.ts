@@ -1,0 +1,74 @@
+import type { Reviewer } from '@sainte-beuve/contracts'
+import type { ReviewerRepository } from '@sainte-beuve/kernel'
+import type { SqlDriver, SqlRow } from './driver.js'
+import { decodeCount, decodeData, encodeData, patched } from './rows.js'
+
+/**
+ * The reviewer directory.
+ *
+ * The one store with a column that is not derived from its payload (see
+ * `rows.ts`): `adjustOutstanding` increments, and two assignments landing in the
+ * same second must both count. So the counter is a column, the adjustment is one
+ * `UPDATE`, and every read overlays the column onto the decoded row.
+ */
+
+const SELECT = 'SELECT outstanding_reviews, data FROM reviewers'
+
+const UPSERT = `INSERT INTO reviewers (id, outstanding_reviews, created_at, data)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE SET
+  outstanding_reviews = excluded.outstanding_reviews,
+  created_at = excluded.created_at,
+  data = excluded.data`
+
+// `MAX(a, b)` is SQLite's two-argument maximum, which is a scalar here and an
+// aggregate in Postgres; the Drizzle adapter spells the same floor `GREATEST`.
+const ADJUST =
+  'UPDATE reviewers SET outstanding_reviews = MAX(outstanding_reviews + ?, 0) WHERE id = ?'
+
+function toReviewer(row: SqlRow): Reviewer {
+  return {
+    ...decodeData<Reviewer>(row.data),
+    outstandingReviews: decodeCount(row.outstanding_reviews),
+  }
+}
+
+export class SqlReviewerRepository implements ReviewerRepository {
+  constructor(private readonly db: SqlDriver) {}
+
+  async list(): Promise<Reviewer[]> {
+    const rows = await this.db.all(`${SELECT} ORDER BY created_at, id`)
+    return rows.map(toReviewer)
+  }
+
+  async getById(reviewerId: string): Promise<Reviewer | null> {
+    const row = await this.db.first(`${SELECT} WHERE id = ?`, [reviewerId])
+    return row === null ? null : toReviewer(row)
+  }
+
+  async create(reviewer: Reviewer): Promise<Reviewer> {
+    await this.write(reviewer)
+    return reviewer
+  }
+
+  async update(reviewerId: string, patch: Partial<Reviewer>): Promise<Reviewer | null> {
+    const current = await this.getById(reviewerId)
+    if (current === null) return null
+    const next = patched(current, patch)
+    await this.write(next)
+    return next
+  }
+
+  async adjustOutstanding(reviewerId: string, delta: number): Promise<void> {
+    await this.db.run(ADJUST, [delta, reviewerId])
+  }
+
+  private async write(reviewer: Reviewer): Promise<void> {
+    await this.db.run(UPSERT, [
+      reviewer.id,
+      reviewer.outstandingReviews,
+      reviewer.createdAt,
+      encodeData(reviewer),
+    ])
+  }
+}

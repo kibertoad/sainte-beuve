@@ -16,21 +16,36 @@ capabilities are off.
 ## Deploy it
 
 1. Copy this package into your own repo (or keep it here and edit in place).
-2. Set the `[vars]` in `wrangler.toml` to your own origins and ids.
-3. Set the secrets with `wrangler secret put <NAME>`; wrangler.toml lists every
+2. Create the database and apply the schema:
+
+   ```bash
+   wrangler d1 create sainte-beuve            # paste the id into wrangler.toml
+   pnpm --filter @sainte-beuve/deploy-backend db:migrate
+   ```
+
+   The migrations ship inside `@sainte-beuve/persistence-d1`, and
+   `migrations_dir` in wrangler.toml already points at the installed copy, so
+   there is nothing to keep in step by hand. Without the binding the Worker
+   still boots, on a store an isolate recycle empties, and `/health` reports
+   `persistence: "memory"`.
+
+3. Set the `[vars]` in `wrangler.toml` to your own origins and ids.
+4. Set the secrets with `wrangler secret put <NAME>`; wrangler.toml lists every
    one and what it is for. `SETTINGS_ENCRYPTION_KEY` (`openssl rand -base64 32`)
    is the one to set first and then keep: it seals the credentials entered on the
    Configuration screen and signs the connect round trips, and rotating it makes
    every credential stored under it unreadable.
-4. Name the SPA's origin in `CORS_ORIGINS`. Reading the board is happy with `*`;
+5. Name the SPA's origin in `CORS_ORIGINS`. Reading the board is happy with `*`;
    writing is not, and neither is the Configuration screen, because a route that
    changes something and carries no session is one any page the operator visits
    can call.
-5. `pnpm --filter @sainte-beuve/deploy-backend deploy`
-6. Register the Worker's URLs with GitHub and Slack. They are shown on the
+6. `pnpm --filter @sainte-beuve/deploy-backend deploy`
+7. Register the Worker's URLs with GitHub and Slack. They are shown on the
    Configuration screen with this deployment's own base URL filled in, and the
    step-by-step is [docs/integrations.md](../../docs/integrations.md).
 
-Persistence is in-memory today, so an isolate recycle loses the board. The D1 adapter
-is slice 5 of [the plan](../../docs/implementation-plan.md); do not run this against a
-real team until it lands.
+`pnpm dev:worker` runs against a local D1 that miniflare creates for you; apply
+the schema to it once with
+`pnpm --filter @sainte-beuve/deploy-backend db:migrate:local`. How the store is
+put together, and what it costs to add a column, is
+[docs/persistence.md](../../docs/persistence.md).

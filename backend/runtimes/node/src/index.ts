@@ -1,7 +1,10 @@
 import { serve } from '@hono/node-server'
+import type { Logger } from '@sainte-beuve/kernel'
 import { createApp, runReminderTick } from '@sainte-beuve/server'
+import { pino } from 'pino'
 import { type NodeConfig, loadConfig } from './config.js'
 import { buildContainer } from './container.js'
+import { openStore } from './persistence.js'
 
 /**
  * The Node.js facade: the same Hono app the Worker serves, over
@@ -17,7 +20,12 @@ export interface RunningServer {
 }
 
 export async function start(config: NodeConfig = loadConfig()): Promise<RunningServer> {
-  const container = buildContainer(config)
+  const logger: Logger = pino({ level: config.logLevel })
+  // Before the server, because opening the store runs the migrations: a process
+  // that accepted requests first would answer them against a schema it is still
+  // changing.
+  const store = await openStore(config, logger)
+  const container = buildContainer(config, store, logger)
   const app = createApp({
     resolveContainer: () => container,
     corsOrigins: config.corsOrigins,
@@ -41,6 +49,7 @@ export async function start(config: NodeConfig = loadConfig()): Promise<RunningS
   container.logger.info(
     {
       port: config.port,
+      persistence: store.kind,
       catFactory: config.catFactory === null ? 'not configured' : config.catFactory.baseUrl,
       slack: slackSummary(config),
       github: githubSummary(config),
@@ -54,6 +63,8 @@ export async function start(config: NodeConfig = loadConfig()): Promise<RunningS
     close: async () => {
       clearInterval(timer)
       await new Promise<void>((resolve) => server.close(() => resolve()))
+      // After the server, so a request in flight still has its connections.
+      await store.close()
     },
   }
 }
@@ -89,3 +100,4 @@ function slackSummary(config: NodeConfig): string {
 
 export { type GitHubConfig, type GitLabConfig, type NodeConfig, loadConfig } from './config.js'
 export { buildContainer } from './container.js'
+export { type NodeStore, openStore } from './persistence.js'

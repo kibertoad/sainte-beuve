@@ -21,6 +21,9 @@
       "path": "../../packages/persistence-memory/tsconfig.build.json"
     },
     {
+      "path": "../../packages/persistence-postgres/tsconfig.build.json"
+    },
+    {
       "path": "../../packages/server/tsconfig.build.json"
     }
   ]

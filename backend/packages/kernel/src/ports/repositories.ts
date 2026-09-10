@@ -15,10 +15,11 @@ import type {
 import type { EpochMs } from '../domain/types.js'
 
 /**
- * Persistence ports. Every runtime supplies its own implementation (in-memory
- * today (@sainte-beuve/persistence-memory), D1 on the Worker and Postgres on the
- * Node service once the storage slice lands), and nothing above this line knows
- * which one it got.
+ * Persistence ports. There are three implementations (in-memory in
+ * @sainte-beuve/persistence-memory, D1 in @sainte-beuve/persistence-d1,
+ * Postgres in @sainte-beuve/persistence-postgres), one shared suite that proves
+ * they behave alike (@sainte-beuve/persistence-conformance), and nothing above
+ * this line knows which one it got.
  *
  * The methods are deliberately coarse: `listDue` rather than a query builder, so a
  * store can answer it with one index and no caller can accidentally write an N+1.
@@ -164,6 +165,15 @@ export interface ReviewCommitmentRepository {
   create(commitment: ReviewCommitment): Promise<ReviewCommitment>
   delete(commitmentId: string): Promise<void>
 }
+
+/**
+ * Which store a facade actually wired.
+ *
+ * Reported on `/health`, because "is this deployment durable?" is a question an
+ * operator has to be able to answer from outside the process, and the in-memory
+ * store is a legitimate answer for local mode and a loud one anywhere else.
+ */
+export type PersistenceKind = 'memory' | 'd1' | 'postgres'
 
 /** The stores a runtime has to supply, handed to the services as one object. */
 export interface Repositories {
