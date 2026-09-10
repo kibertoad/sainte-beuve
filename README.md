@@ -67,6 +67,23 @@ resolved and disappears from everybody's inbox, including the people who never
 got round to it. An ask that stayed up after it was answered would train the
 team to ignore the next one.
 
+## Who is in the pool
+
+Both of those depend on the same list, and **Reviewers** is where it is kept: who
+can be asked, what they know, and how much they should take.
+
+A person carries a handle PER HOST, and the screen shows both, because a reviewer
+with no handle on the host a project lives on is invisible in that project's
+workspace and this is the only place that says so. Skills are an ALL-of gate: a
+review that needs `payments` is never handed to somebody who merely knows
+`typescript`, so a partial match is not a near miss, it is not a candidate.
+Weight is the share of the load, for somebody part-time or ramping up.
+
+Going heads-down is one click: **Pause** takes somebody out of every selection and
+keeps their row, so they come back as themselves rather than being retyped. There
+is no delete, for the same reason and one more: the row is what a review's
+assignment and a signed-in host account point at.
+
 ## Try it in one command
 
 ```bash

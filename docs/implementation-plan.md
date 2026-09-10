@@ -116,18 +116,25 @@ provider)` from that host's own credential. Above the adapter there is no
   without a redeploy.
 - `GET /health` reporting which optional capabilities the process actually wired,
   outbound and inbound separately.
+- **One client, driven by the contracts**: the SPA sends every request through
+  `sendByApiContract` against the same contract objects the controllers are
+  mounted from, so a path, a method or a response field cannot drift between the
+  two halves, and a body that does not match its schema is refused where the call
+  was made rather than three components later.
+- **The reviewer directory is editable**: adding somebody, editing their skills,
+  team, per-host handles, Slack id and weight, and pausing or resuming them in one
+  click.
 
 ## What is a placeholder, and why it is still here
 
-| Placeholder                                | Why it exists now                                                                                                                                                                                                                   |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useSainteBeuveApi` calling routes by path | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                                                                                              |
-| Single cat-factory service id              | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
-| A stored credential is never re-checked    | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
-| An AI review is polled on the READ         | Nothing drives `refresh()` on a clock, so a review that parks while nobody is looking sits there until somebody opens the row. The reminder tick is where that belongs.                                                             |
-| The viewer is the deployment's credential  | Whoever the source-control token acts as is who the workspace renders for. Right for one person's local run, wrong for a shared deployment, and exactly what slice 6 replaces.                                                      |
-| The attention stream is per process        | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
-| No GitLab intake                           | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
+| Placeholder                               | Why it exists now                                                                                                                                                                                                                   |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single cat-factory service id             | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
+| A stored credential is never re-checked   | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
+| An AI review is polled on the READ        | Nothing drives `refresh()` on a clock, so a review that parks while nobody is looking sits there until somebody opens the row. The reminder tick is where that belongs.                                                             |
+| The viewer is the deployment's credential | Whoever the source-control token acts as is who the workspace renders for. Right for one person's local run, wrong for a shared deployment, and exactly what slice 6 replaces.                                                      |
+| The attention stream is per process       | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
+| No GitLab intake                          | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
 
 ## Slices, in order
 
@@ -136,14 +143,45 @@ provider)` from that host's own credential. Above the adapter there is no
 The tree above, three runtimes, the domain packages with their suites, CI, and a
 deployment example for each target.
 
-### Slice 2: contract-driven client
+### Slice 2: contract-driven client (done)
 
-Replace the hand-written paths in `useSainteBeuveApi` with `sendByApiContract` from
-`@toad-contracts/frontend-http-client`, against the same contract objects the
-controllers mount. A response that does not match its contract then fails at the
-client boundary instead of three components later.
+Every call the SPA makes goes through `sendByApiContract` against the contract the
+controller is mounted from, and the reviewer pool is editable from the screen that
+lists it. What that slice decided, in short:
 
-Also: reviewer CRUD in the SPA, so the pool is manageable without curl.
+- **The client takes a base URL; the composable supplies it.**
+  `createSainteBeuveApi` is a plain function of one string, and
+  `useSainteBeuveApi` is the two lines that read it out of runtime config. That is
+  what lets the boundary have a suite at all: the cases run in Node with a stubbed
+  `fetch` and no Nuxt around them.
+- **A refusal keeps its envelope, a transport failure keeps its own message.** The
+  API answers `{ error: { code, message } }` and the message names what is missing,
+  so that is what a screen shows. A `TypeError` from `fetch` is passed through
+  untouched instead, because "the backend is not running" and "the backend refused"
+  send whoever is reading the toast to different places.
+- **A body that does not match its contract is restated, not dumped.** The
+  underlying `SchemaValidationError` carries a JSON blob of every issue and says
+  nothing about where it came from; what reaches the screen is the route and the
+  first few field paths (`GET /reviewers did not match its contract:
+reviewers.0.handles: ...`). The same gate runs on the way out, so a request the
+  contract forbids never leaves the browser.
+- **The live half stays an `EventSource`, and the contract still owns its path.**
+  `sendByApiContract` can iterate an SSE contract over `fetch`, and that would give
+  up the one thing the attention stream needs, which is a reader that reconnects by
+  itself after a laptop closes. The URL is built from the stream contract rather
+  than typed out, so the rule that no path is hand-written holds anyway.
+- **What it caught on the first pass**, which is the argument for the slice:
+  `assignReviewers` was hand-typed as `{ assigned }` while the route answers
+  `{ review, assigned, shortfallReason }`. An assign that put nobody on the row
+  because nobody in the pool holds the skills was read as a success and reported
+  as nothing at all. The board now says which of the two reasons it was, in the
+  same words the bot uses on the pull request.
+- **A reviewer cannot be deleted, and that is the answer rather than a gap.**
+  `paused` is the way out of the pool: it keeps the skills, the team and the host
+  accounts, so somebody back from leave reappears as themselves instead of being
+  retyped. The row is also what a review's assignment and a linked host account
+  point AT, so removing one would leave a board row assigned to nobody and a
+  signed-in account attached to nothing.
 
 ### Slice 3: GitHub and Slack, for real (done)
 

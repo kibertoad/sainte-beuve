@@ -31,9 +31,34 @@ const statusColor: Record<ReviewRequest['status'], BadgeColor> = {
 // API's own message and refreshes the board. One copy, shared with the
 // Configuration screen, so a change to how a refusal is shown lands in one file.
 const { run } = useApiAction({ refresh })
+const toast = useToast()
+
+/**
+ * Why a successful assign put nobody on the row.
+ *
+ * The route answers 200 with an empty `assigned` list and the reason, because
+ * "the pool has nobody with these skills" is a configuration answer rather than
+ * a fault. Same wording as the bot's reply on the pull request, so a person
+ * reading one and a person reading the other are told the same thing.
+ */
+const SHORTFALL: Record<'no_candidates' | 'pool_exhausted', string> = {
+  no_candidates:
+    'Nobody in the reviewer pool holds every skill this review needs. Add the skill to a ' +
+    'reviewer, or drop it from the request.',
+  pool_exhausted: 'Everybody who could review this is already on it, or is the author.',
+}
 
 async function assign(review: ReviewRequest) {
-  await run(() => api.assignReviewers(review.id), 'Could not find a reviewer')
+  await run(async () => {
+    const result = await api.assignReviewers(review.id)
+    if (result.shortfallReason !== null) {
+      toast.add({
+        color: 'warning',
+        title: 'Nobody was assigned',
+        description: SHORTFALL[result.shortfallReason],
+      })
+    }
+  }, 'Could not find a reviewer')
 }
 
 /**
