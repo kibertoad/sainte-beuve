@@ -53,9 +53,16 @@ Point the Request URLs at whatever it prints, and set `GITHUB_WEBHOOK_SECRET` an
 trusted. See [docs/integrations.md](../../docs/integrations.md).
 
 The Configuration screen needs nothing: local mode generates a credential-encryption
-key at boot. It is ephemeral on purpose, because the store behind it is in-memory, so
-a token entered in the SPA does not survive a restart either way. Set
-`SETTINGS_ENCRYPTION_KEY` to pin it.
+key at boot. It is ephemeral on purpose, because the store behind it empties on a
+restart too, so a token entered in the SPA does not survive one either way. Set
+`SETTINGS_ENCRYPTION_KEY` to pin it, which is what a local run against a real
+database needs: credentials sealed under a key that is gone are credentials nobody
+can read.
+
+The board lives in memory here, which is why nothing has to be installed to try the
+product. Local mode is the Node stack, so `DATABASE_URL` makes it durable and applies
+the schema at boot, the same way the hosted deployment does; `/health` reports which
+store is in force.
 
 Local mode is the same app the hosted deployments serve, with different defaults,
 not a reduced build. A bug you find here is a bug in production.

@@ -1,0 +1,15 @@
+# The library's own wrangler config: what the workerd test pool runs against.
+# A deployment carries its own (see deploy/backend) and points `migrations_dir`
+# at the copy of `migrations/` inside the installed package.
+name = "sainte-beuve-persistence-d1"
+main = "test/worker.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# A local database, created by miniflare for the suite. No account, no id that
+# means anything outside this repository.
+[[d1_databases]]
+binding = "DB"
+database_name = "sainte-beuve-conformance"
+database_id = "sainte-beuve-conformance"
+migrations_dir = "migrations"

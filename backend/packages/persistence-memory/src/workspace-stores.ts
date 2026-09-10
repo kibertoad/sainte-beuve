@@ -12,7 +12,9 @@ import type {
   ProjectRepository,
   ReviewCommitmentRepository,
 } from '@sainte-beuve/kernel'
+import { projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import { clone, patched } from './clone.js'
+import { byText, newestFirst, oldestFirst } from './order.js'
 
 /**
  * The workspace half of the in-memory store: the projects a deployment watches,
@@ -24,16 +26,11 @@ import { clone, patched } from './clone.js'
  * Split across two files only because one would be past the size budget.
  */
 
-/** The unique key of a registered project, matching the store's own uniqueness rule. */
-function refKey(ref: { provider: string; owner: string; repo: string }): string {
-  return `${ref.provider}:${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}`
-}
-
 export class InMemoryProjectRepository implements ProjectRepository {
   private readonly rows = new Map<string, Project>()
 
   async list(): Promise<Project[]> {
-    return [...this.rows.values()].sort((a, b) => a.createdAt - b.createdAt).map(clone)
+    return [...this.rows.values()].sort(oldestFirst((row) => row.createdAt)).map(clone)
   }
 
   async getById(projectId: string): Promise<Project | null> {
@@ -42,9 +39,9 @@ export class InMemoryProjectRepository implements ProjectRepository {
   }
 
   async getByRef(ref: { provider: string; owner: string; repo: string }): Promise<Project | null> {
-    const wanted = refKey(ref)
+    const wanted = projectRefKey(ref)
     for (const row of this.rows.values()) {
-      if (refKey(row) === wanted) return clone(row)
+      if (projectRefKey(row) === wanted) return clone(row)
     }
     return null
   }
@@ -85,6 +82,7 @@ export class InMemoryIdentityRepository implements IdentityRepository {
     return [...this.rows.values()]
       .filter((row) => row.reviewerId === reviewerId)
       .map((row) => clone(row.identity))
+      .sort((a, b) => byText(a.provider, b.provider) || byText(a.subject, b.subject))
   }
 
   async link(reviewerId: string, identity: LinkedIdentity): Promise<string> {
@@ -110,7 +108,7 @@ export class InMemoryAttentionRepository implements AttentionRepository {
     const wanted = filter?.status
     return [...this.rows.values()]
       .filter((row) => wanted === undefined || wanted.includes(row.status))
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort(newestFirst((row) => row.createdAt))
       .map(clone)
   }
 
@@ -136,26 +134,13 @@ export class InMemoryAttentionRepository implements AttentionRepository {
   }
 }
 
-/**
- * The unique key of a pull request. The HOST is part of it: `platform/api#12`
- * exists on both, and they are two different changes.
- */
-function pullRequestKey(pr: {
-  provider: string
-  owner: string
-  repo: string
-  number: number
-}): string {
-  return `${refKey(pr)}#${pr.number}`
-}
-
 export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepository {
   private readonly rows = new Map<string, ReviewCommitment>()
 
   async listByReviewer(reviewerId: string): Promise<ReviewCommitment[]> {
     return [...this.rows.values()]
       .filter((row) => row.reviewerId === reviewerId)
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort(newestFirst((row) => row.createdAt))
       .map(clone)
   }
 
@@ -169,11 +154,14 @@ export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepos
     pullRequest: { provider: string; owner: string; repo: string; number: number },
   ): Promise<ReviewCommitment | null> {
     const wanted = pullRequestKey(pullRequest)
-    for (const row of this.rows.values()) {
-      if (row.reviewerId !== reviewerId) continue
-      if (pullRequestKey(row.pullRequest) === wanted) return clone(row)
-    }
-    return null
+    // The OLDEST matching promise, ties broken on the id, which is what both
+    // durable stores answer with (`ORDER BY created_at, id`, first row). A scan
+    // that took whichever row it reached first would let a second click find a
+    // different promise than the click before it.
+    const [found] = [...this.rows.values()]
+      .filter((row) => row.reviewerId === reviewerId && pullRequestKey(row.pullRequest) === wanted)
+      .sort(oldestFirst((row) => row.createdAt))
+    return found === undefined ? null : clone(found)
   }
 
   async create(commitment: ReviewCommitment): Promise<ReviewCommitment> {

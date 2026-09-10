@@ -7,7 +7,6 @@ import {
   staticTokenSource,
 } from '@sainte-beuve/integrations'
 import type { AiReviewGateway, GatewayFactory, Logger } from '@sainte-beuve/kernel'
-import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
 import {
   type AppContainer,
   createContainer,
@@ -15,27 +14,27 @@ import {
   InMemoryAttentionBus,
   secretsFrom,
 } from '@sainte-beuve/server'
-import { pino } from 'pino'
 import type { NodeConfig } from './config.js'
+import type { NodeStore } from './persistence.js'
 
 /**
  * Assemble the Node facade's container once, at boot.
  *
- * The in-memory store is the placeholder the Postgres adapter replaces in slice 5
- * (docs/implementation-plan.md). It is called out here as well as in the Worker
- * facade because the two must stay SYMMETRIC: a capability wired on one runtime and
- * not the other is the failure mode this layout exists to prevent.
+ * The STORE is opened before this and handed in (`openStore`), because opening
+ * it is asynchronous and running the migrations is part of it: a container
+ * factory that reached for a database would make every caller of it wait on
+ * a schema.
  *
- * The gateway FACTORY is built here too, and it is what lets a credential entered
+ * The gateway FACTORY is built here, and it is what lets a credential entered
  * on the Configuration screen take effect on a process that read its environment
  * at boot: the container is built once, and the gateway a request authenticates
  * with is resolved per request from whatever is stored (see
  * `integrations/resolve.ts` in @sainte-beuve/server).
  */
-export function buildContainer(config: NodeConfig): AppContainer {
-  const logger: Logger = pino({ level: config.logLevel })
+export function buildContainer(config: NodeConfig, store: NodeStore, logger: Logger): AppContainer {
   return createContainer({
-    repositories: createInMemoryRepositories(),
+    repositories: store.repositories,
+    persistence: store.kind,
     logger,
     chat:
       config.slack.botToken === null

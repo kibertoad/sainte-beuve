@@ -1,4 +1,6 @@
-import { cloudflareTest } from '@cloudflare/vitest-pool-workers'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
 import { defineConfig } from 'vitest/config'
 
 // The Worker suite runs inside the real Workers runtime (workerd, the same engine
@@ -6,6 +8,17 @@ import { defineConfig } from 'vitest/config'
 // a Node-only suite proves the Hono app works, which @sainte-beuve/server already
 // proves, and says nothing about whether the code we deploy boots on the runtime we
 // deploy it to.
+
+// The schema the facade's D1 binding needs, read from the package that ships it
+// rather than from a path spelled out here: the deployment applies exactly these
+// files, and resolving through the package name is what keeps the suite honest
+// if they ever move.
+const migrationsDir = join(
+  dirname(createRequire(import.meta.url).resolve('@sainte-beuve/persistence-d1/package.json')),
+  'migrations',
+)
+const migrations = await readD1Migrations(migrationsDir)
+
 export default defineConfig({
   plugins: [
     cloudflareTest({
@@ -27,6 +40,9 @@ export default defineConfig({
           // label, and both fail somewhere that does not name them.
           GITHUB_WEBHOOK_SECRET: '',
           GITHUB_LABEL_REVIEW: '',
+          // The suite applies these itself, because there is no filesystem
+          // inside the runtime to read them from.
+          TEST_MIGRATIONS: migrations,
         },
       },
     }),

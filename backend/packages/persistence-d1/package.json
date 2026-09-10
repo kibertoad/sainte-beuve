@@ -1,0 +1,47 @@
+{
+  "name": "@sainte-beuve/persistence-d1",
+  "version": "0.1.0",
+  "description": "The D1 implementation of the sainte-beuve repository ports: the durable store the Cloudflare Worker boots with, plus the migrations directory a deployment points wrangler at.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/packages/persistence-d1"
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./migrations/*": "./migrations/*",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@sainte-beuve/contracts": "workspace:*",
+    "@sainte-beuve/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "5.20260815.1",
+    "@sainte-beuve/persistence-conformance": "workspace:*",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11",
+    "wrangler": "4.124.0"
+  }
+}

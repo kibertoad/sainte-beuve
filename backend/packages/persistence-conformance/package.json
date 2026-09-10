@@ -1,0 +1,42 @@
+{
+  "name": "@sainte-beuve/persistence-conformance",
+  "version": "0.1.0",
+  "description": "The suite every sainte-beuve store has to pass: one set of assertions over the repository ports, run against the in-memory store, D1 and Postgres so the three are one behaviour rather than three.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/packages/persistence-conformance"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest --passWithNoTests",
+    "test:run": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@sainte-beuve/contracts": "workspace:*",
+    "@sainte-beuve/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

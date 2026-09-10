@@ -11,7 +11,17 @@ pnpm dev:node
 ```
 
 Serves on `http://localhost:8788`. `GET /health` reports which optional capabilities
-this process actually wired.
+this process actually wired, and which store it is on.
+
+Point `DATABASE_URL` at a Postgres and the board is durable; the schema is
+applied at boot from the migrations that ship inside
+`@sainte-beuve/persistence-postgres`, so there is no separate step to remember.
+Leave it out and the process runs on an in-memory store that a restart empties,
+and `/health` says `persistence: "memory"`. Bringing one up locally:
+
+```bash
+docker run --rm -p 5432:5432 -e POSTGRES_USER=sainte_beuve -e POSTGRES_PASSWORD=sainte_beuve -e POSTGRES_DB=sainte_beuve postgres:18
+```
 
 Set `SETTINGS_ENCRYPTION_KEY` (`openssl rand -base64 32`) for the SPA's Configuration
 screen to be able to store credentials and start a connect flow, and keep it across
@@ -34,5 +44,6 @@ docker build -f deploy/node/Dockerfile -t sainte-beuve-node .
 docker run --env-file deploy/node/.env -p 8788:8788 sainte-beuve-node
 ```
 
-Persistence is in-memory today, so a restart loses the board. The Postgres adapter is
-slice 5 of [the plan](../../docs/implementation-plan.md).
+A container deploy that gates schema changes on a human sets `DATABASE_MIGRATE=false`
+and applies `POSTGRES_MIGRATIONS_DIR` itself. How the store is put together, and what
+it costs to add a column, is [docs/persistence.md](../../docs/persistence.md).

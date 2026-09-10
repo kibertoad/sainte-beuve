@@ -40,6 +40,7 @@
     "@sainte-beuve/integrations": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*",
     "@sainte-beuve/persistence-memory": "workspace:*",
+    "@sainte-beuve/persistence-postgres": "workspace:*",
     "@sainte-beuve/server": "workspace:*",
     "hono": "^4.13.7",
     "pino": "^10.3.1"

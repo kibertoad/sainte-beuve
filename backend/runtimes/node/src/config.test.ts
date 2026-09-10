@@ -16,6 +16,47 @@ describe('loadConfig', () => {
     expect(config.encryptionKey).toBeNull()
   })
 
+  it('reads a blank DATABASE_URL as no database at all', () => {
+    // Both example deployments ship the name with no value, and `--env-file`
+    // reads that as `''`: without this it would hand node-postgres an empty
+    // connection string instead of falling back to the in-memory store.
+    expect(loadConfig({}).databaseUrl).toBeNull()
+    expect(loadConfig({ DATABASE_URL: '' }).databaseUrl).toBeNull()
+    expect(loadConfig({ DATABASE_URL: 'postgres://localhost/sb' }).databaseUrl).toBe(
+      'postgres://localhost/sb',
+    )
+  })
+
+  it('migrates at boot unless somebody says otherwise', () => {
+    // The durable path is what an operator gets by leaving the variable out: a
+    // deployment that silently skipped its migrations would answer requests
+    // against a schema one release behind.
+    expect(loadConfig({}).databaseMigrate).toBe(true)
+    expect(loadConfig({ DATABASE_MIGRATE: '' }).databaseMigrate).toBe(true)
+    expect(loadConfig({ DATABASE_MIGRATE: 'true' }).databaseMigrate).toBe(true)
+  })
+
+  it('takes every spelling of off for an answer', () => {
+    // Somebody who typed `0` asked for the same thing as somebody who typed
+    // `false`, and a deployment that gates schema changes on a human gets no
+    // second chance to notice: the boot log names the store, not whether it
+    // migrated.
+    for (const off of ['false', 'FALSE', 'False', '0', 'no', 'off', ' off ']) {
+      expect(loadConfig({ DATABASE_MIGRATE: off }).databaseMigrate).toBe(false)
+    }
+  })
+
+  it('leaves the pool size to node-postgres unless it is a usable one', () => {
+    expect(loadConfig({}).databaseMaxConnections).toBeUndefined()
+    expect(loadConfig({ DATABASE_MAX_CONNECTIONS: '' }).databaseMaxConnections).toBeUndefined()
+    expect(loadConfig({ DATABASE_MAX_CONNECTIONS: '20' }).databaseMaxConnections).toBe(20)
+    // A ceiling of zero or less is a pool that is full before it hands out a
+    // client: the boot waits for a connection for ever, so the process neither
+    // becomes ready nor exits. The default is the only useful answer.
+    expect(loadConfig({ DATABASE_MAX_CONNECTIONS: '0' }).databaseMaxConnections).toBeUndefined()
+    expect(loadConfig({ DATABASE_MAX_CONNECTIONS: '-4' }).databaseMaxConnections).toBeUndefined()
+  })
+
   it('reads an empty encryption key as no key at all', () => {
     expect(loadConfig({ SETTINGS_ENCRYPTION_KEY: '' }).encryptionKey).toBeNull()
     expect(loadConfig({ SETTINGS_ENCRYPTION_KEY: 'a-key' }).encryptionKey).toBe('a-key')

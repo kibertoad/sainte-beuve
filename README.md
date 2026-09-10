@@ -85,28 +85,32 @@ a reduced build.
 
 ## Repository layout
 
-| Path                                  | Package                            | What it is                                                      |
-| ------------------------------------- | ---------------------------------- | --------------------------------------------------------------- |
-| `backend/packages/contracts`          | `@sainte-beuve/contracts`          | Valibot wire contracts, shared by the frontend and every facade |
-| `backend/packages/kernel`             | `@sainte-beuve/kernel`             | Domain errors and port interfaces                               |
-| `backend/packages/reviewers`          | `@sainte-beuve/reviewers`          | Reviewer selection, attention audiences, workspace cuts (pure)  |
-| `backend/packages/reminders`          | `@sainte-beuve/reminders`          | Reminder cadence and escalation (pure)                          |
-| `backend/packages/integrations`       | `@sainte-beuve/integrations`       | GitHub, GitLab and Slack adapters, and the protocols they speak |
-| `backend/packages/ai-review`          | `@sainte-beuve/ai-review`          | The cat-factory gateway                                         |
-| `backend/packages/persistence-memory` | `@sainte-beuve/persistence-memory` | In-memory repositories                                          |
-| `backend/packages/server`             | `@sainte-beuve/server`             | The runtime-neutral Hono app                                    |
-| `backend/runtimes/cloudflare`         | `@sainte-beuve/worker`             | Cloudflare Worker facade                                        |
-| `backend/runtimes/node`               | `@sainte-beuve/node-server`        | Node.js service facade                                          |
-| `backend/runtimes/local`              | `@sainte-beuve/local-server`       | Local-mode facade                                               |
-| `frontend/app`                        | `@sainte-beuve/app`                | The Nuxt layer                                                  |
-| `deploy/backend`                      | `@sainte-beuve/deploy-backend`     | Example Cloudflare Worker deployment                            |
-| `deploy/node`                         | `@sainte-beuve/deploy-node`        | Example Node.js service deployment                              |
-| `deploy/local`                        | `@sainte-beuve/deploy-local`       | Local mode                                                      |
-| `deploy/frontend`                     | `@sainte-beuve/deploy-frontend`    | Example Cloudflare Pages deployment                             |
+| Path                                       | Package                                 | What it is                                                      |
+| ------------------------------------------ | --------------------------------------- | --------------------------------------------------------------- |
+| `backend/packages/contracts`               | `@sainte-beuve/contracts`               | Valibot wire contracts, shared by the frontend and every facade |
+| `backend/packages/kernel`                  | `@sainte-beuve/kernel`                  | Domain errors and port interfaces                               |
+| `backend/packages/reviewers`               | `@sainte-beuve/reviewers`               | Reviewer selection, attention audiences, workspace cuts (pure)  |
+| `backend/packages/reminders`               | `@sainte-beuve/reminders`               | Reminder cadence and escalation (pure)                          |
+| `backend/packages/integrations`            | `@sainte-beuve/integrations`            | GitHub, GitLab and Slack adapters, and the protocols they speak |
+| `backend/packages/ai-review`               | `@sainte-beuve/ai-review`               | The cat-factory gateway                                         |
+| `backend/packages/persistence-memory`      | `@sainte-beuve/persistence-memory`      | In-memory repositories, for a facade with no database           |
+| `backend/packages/persistence-d1`          | `@sainte-beuve/persistence-d1`          | The D1 store and its migrations                                 |
+| `backend/packages/persistence-postgres`    | `@sainte-beuve/persistence-postgres`    | The Postgres store, over Drizzle, and its migrations            |
+| `backend/packages/persistence-conformance` | `@sainte-beuve/persistence-conformance` | The suite all three stores run                                  |
+| `backend/packages/server`                  | `@sainte-beuve/server`                  | The runtime-neutral Hono app                                    |
+| `backend/runtimes/cloudflare`              | `@sainte-beuve/worker`                  | Cloudflare Worker facade                                        |
+| `backend/runtimes/node`                    | `@sainte-beuve/node-server`             | Node.js service facade                                          |
+| `backend/runtimes/local`                   | `@sainte-beuve/local-server`            | Local-mode facade                                               |
+| `frontend/app`                             | `@sainte-beuve/app`                     | The Nuxt layer                                                  |
+| `deploy/backend`                           | `@sainte-beuve/deploy-backend`          | Example Cloudflare Worker deployment                            |
+| `deploy/node`                              | `@sainte-beuve/deploy-node`             | Example Node.js service deployment                              |
+| `deploy/local`                             | `@sainte-beuve/deploy-local`            | Local mode                                                      |
+| `deploy/frontend`                          | `@sainte-beuve/deploy-frontend`         | Example Cloudflare Pages deployment                             |
 
 Read [docs/implementation-plan.md](./docs/implementation-plan.md) for what is built,
-what is a placeholder, and what lands next, and
-[docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design.
+what is a placeholder, and what lands next,
+[docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design, and
+[docs/persistence.md](./docs/persistence.md) for where the board lives.
 
 ## Connecting GitHub, GitLab and Slack
 
@@ -147,8 +151,10 @@ your infrastructure.
 - **SPA** ([deploy/frontend](./deploy/frontend/README.md)): a static Nuxt build on
   Cloudflare Pages, or any static host.
 
-Persistence is in-memory today, on purpose (see the plan). Do not point a real team
-at a hosted deployment until slice 5 lands.
+The board is durable on both: D1 on the Worker, Postgres on the Node service, one
+schema and one suite behind them ([docs/persistence.md](./docs/persistence.md)). A
+deployment that binds neither still boots, on a store a restart empties, and
+`GET /health` reports which one it is on and whether it answers.
 
 ## Working in the repo
 

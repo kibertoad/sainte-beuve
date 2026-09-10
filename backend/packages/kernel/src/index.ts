@@ -14,6 +14,7 @@ export {
   UpstreamFailedError,
   ValidationError,
 } from './domain/errors.js'
+export { projectRefKey, pullRequestKey } from './domain/keys.js'
 export { DEFAULT_REMINDER_POLICY, type EpochMs, formatPullRequest } from './domain/types.js'
 export { base64url, base64urlText, base64urlToBytes, timingSafeEqual } from './encoding.js'
 export {
@@ -39,6 +40,7 @@ export type {
   AttentionRepository,
   IdentityRepository,
   IntegrationTokenRepository,
+  PersistenceKind,
   ProjectRepository,
   ReminderRepository,
   Repositories,

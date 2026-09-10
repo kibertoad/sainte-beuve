@@ -18,6 +18,9 @@
       "path": "../../packages/persistence-memory/tsconfig.build.json"
     },
     {
+      "path": "../../packages/persistence-d1/tsconfig.build.json"
+    },
+    {
       "path": "../../packages/server/tsconfig.build.json"
     }
   ]

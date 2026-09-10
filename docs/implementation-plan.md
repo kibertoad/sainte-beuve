@@ -28,21 +28,24 @@ and every row links out to it.
 
 Mirrors cat-factory's layout, for the same reasons it works there.
 
-| Path                                  | What lives there                                                                                              |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `backend/packages/contracts`          | Valibot wire contracts. The one definition of every model and route, shared by the frontend and every facade. |
-| `backend/packages/kernel`             | Domain errors and PORT interfaces. Nothing here reaches a network or a database.                              |
-| `backend/packages/reviewers`          | Who should look: selection, attention audiences, and the cut of a host's list that is yours. Pure.            |
-| `backend/packages/reminders`          | Reminder cadence and escalation. Pure.                                                                        |
-| `backend/packages/integrations`       | GitHub, GitLab and Slack adapters behind the kernel ports, plus the vendor protocols (signatures, events).    |
-| `backend/packages/ai-review`          | The cat-factory gateway. The only package that knows cat-factory exists.                                      |
-| `backend/packages/persistence-memory` | In-memory repositories: what every runtime boots with today.                                                  |
-| `backend/packages/server`             | The runtime-neutral Hono app: controllers, services, error envelope.                                          |
-| `backend/runtimes/cloudflare`         | Worker facade: `fetch` plus a cron-driven reminder clock.                                                     |
-| `backend/runtimes/node`               | Node facade: `@hono/node-server` plus an interval-driven clock.                                               |
-| `backend/runtimes/local`              | Local mode: the Node stack with defaults that need no accounts.                                               |
-| `frontend/app`                        | The Nuxt layer (pages, components, composables).                                                              |
-| `deploy/*`                            | Four example deployments, each carrying only configuration.                                                   |
+| Path                                       | What lives there                                                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `backend/packages/contracts`               | Valibot wire contracts. The one definition of every model and route, shared by the frontend and every facade. |
+| `backend/packages/kernel`                  | Domain errors and PORT interfaces. Nothing here reaches a network or a database.                              |
+| `backend/packages/reviewers`               | Who should look: selection, attention audiences, and the cut of a host's list that is yours. Pure.            |
+| `backend/packages/reminders`               | Reminder cadence and escalation. Pure.                                                                        |
+| `backend/packages/integrations`            | GitHub, GitLab and Slack adapters behind the kernel ports, plus the vendor protocols (signatures, events).    |
+| `backend/packages/ai-review`               | The cat-factory gateway. The only package that knows cat-factory exists.                                      |
+| `backend/packages/persistence-memory`      | In-memory repositories: what a facade boots with when no database is configured.                              |
+| `backend/packages/persistence-d1`          | The D1 store, plus the migrations directory a deployment points wrangler at.                                  |
+| `backend/packages/persistence-postgres`    | The Postgres store, over Drizzle, plus its generated migrations.                                              |
+| `backend/packages/persistence-conformance` | The suite all three stores run, so they are one behaviour rather than three.                                  |
+| `backend/packages/server`                  | The runtime-neutral Hono app: controllers, services, error envelope.                                          |
+| `backend/runtimes/cloudflare`              | Worker facade: `fetch` plus a cron-driven reminder clock.                                                     |
+| `backend/runtimes/node`                    | Node facade: `@hono/node-server` plus an interval-driven clock.                                               |
+| `backend/runtimes/local`                   | Local mode: the Node stack with defaults that need no accounts.                                               |
+| `frontend/app`                             | The Nuxt layer (pages, components, composables).                                                              |
+| `deploy/*`                                 | Four example deployments, each carrying only configuration.                                                   |
 
 Three rules hold the shape:
 
@@ -61,6 +64,11 @@ provider)` from that host's own credential. Above the adapter there is no
 
 ## What works today
 
+- **A durable board, on both runtimes**: D1 behind the Worker, Postgres behind
+  the Node service, the same nine tables in each, and one conformance suite that
+  proves the three stores (those two and the in-memory one) answer alike. A
+  facade with neither bound still boots, and `/health` reports which store it is
+  on. See [persistence.md](./persistence.md).
 - **The workspace**: `GET /api/v1/workspace` sweeps every registered project
   once per host and cuts the result three ways (yours, waiting on you, promised
   by you), reporting per project whether it could be read at all.
@@ -113,7 +121,6 @@ provider)` from that host's own credential. Above the adapter there is no
 
 | Placeholder                                | Why it exists now                                                                                                                                                                                                                   |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| In-memory persistence                      | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.                                                                                                                   |
 | `useSainteBeuveApi` calling routes by path | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                                                                                              |
 | Single cat-factory service id              | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
 | A stored credential is never re-checked    | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
@@ -253,22 +260,55 @@ What is left:
   retracts it). It is a fourth verb on the same surface; the loop is usable
   without it and the screen has nowhere to put the verdict yet.
 
-### Slice 5: durable persistence
+### Slice 5: durable persistence (done)
 
-Two adapters against the ports that already exist, landing together to keep the
-runtimes symmetric:
+D1 behind the Worker, Postgres behind the Node service, one conformance suite
+over both and over the in-memory store. The design is
+[persistence.md](./persistence.md); what that slice decided, in short:
 
-- **D1** for the Worker, with a migrations directory shipped inside
-  `@sainte-beuve/worker` (the pattern cat-factory uses, so a deployment points
-  `migrations_dir` at the installed package).
-- **Postgres and Drizzle** for the Node service, with the same schema.
+- **The payload IS the row.** Each table stores its contract object as JSON in
+  one `data` column, and the scalar columns beside it are indexes derived from
+  it at write time. The ports are coarse on purpose, so the set of columns a
+  store has to index is short and closed; a column per contract field would be
+  two mappers per table to keep in step with contracts that still move every
+  slice, and would need a JSON column anyway for the arrays and the nested
+  objects. The one field that is not in the payload's gift is
+  `outstanding_reviews`, because its port method INCREMENTS: the column is
+  authoritative there, so two assignments landing together both count.
+- **Two implementations, one suite.** The stores are not one codebase with two
+  drivers: D1 speaks plain SQL over the binding, and the Node side is a Drizzle
+  schema with typed `jsonb` payloads and generated migrations. What keeps them
+  one BEHAVIOUR is `@sainte-beuve/persistence-conformance`, whose cases are data
+  rather than `describe` blocks so the D1 run can happen inside workerd and the
+  Postgres one in Node.
+- **Each store is tested on the engine it deploys to.** D1 inside workerd
+  through the Workers pool, against the schema `wrangler d1 migrations apply`
+  produces; Postgres against PGlite, which is Postgres compiled to WASM, so CI
+  needs no container and the SQL still meets the real planner.
+- **Migrations ship inside the store's own package**, and a deployment applies
+  them from there rather than copying them: `migrations_dir` points into the
+  installed `@sainte-beuve/persistence-d1`, and the Node facade applies the
+  generated Postgres files at boot, before it serves a request, so a rolling
+  deploy cannot answer against a schema one release behind.
+- **The in-memory store stays**, and is what a facade boots with when nothing is
+  configured. It is what makes local mode and a first deploy work with no
+  database, and `/health` reports it as `persistence: "memory"` rather than
+  letting a deployment discover it after a restart.
 
-The ports were written against the in-memory store first on purpose: it has no SQL
-escape hatch and no lazy loading, so nothing above the port could grow a dependency
-on either.
+The ports were written against that store first on purpose: it has no SQL escape
+hatch and no lazy loading, so nothing above the port could grow a dependency on
+either, and both adapters implement `Repositories` without an N+1.
 
-A conformance suite runs the same assertions against all three implementations. That
-is the guard that keeps them one behaviour instead of three.
+What is left over from it:
+
+- **A commitment is not unique per pull request in the store.** The service
+  checks before it writes, so a second click is still a no-op; a UNIQUE index
+  would make the race impossible rather than unlikely, and the in-memory store
+  would have to answer the constraint violation the same way.
+- **Nothing here is transactional across two stores.** A service that writes a
+  review and then its reminder can be interrupted between them. The ports have
+  no unit of work, and adding one costs the in-memory store its simplicity, so
+  it waits for a case where the gap is visible.
 
 ### Slice 6: auth and tenancy
 
@@ -336,9 +376,10 @@ webhook secret answers 503 to every GitHub delivery and every Slack command,
 naming the variable. The alternative, acting on an unverified body, would let
 anybody who can find the URL close a review or reassign one.
 
-**In-memory persistence is the first adapter, not a test double.** Writing the ports
-against a store that cannot cheat is what keeps them coarse enough for D1 and
-Postgres to implement without an N+1.
+**In-memory persistence was the first adapter, not a test double.** Writing the
+ports against a store that cannot cheat (no SQL escape hatch, no lazy loading)
+is what kept them coarse enough for D1 and Postgres to implement without an
+N+1, and it is still what a facade with no database configured boots with.
 
 **A handle per host, never a `githubLogin`.** The same engineer is one name on
 GitHub and another on GitLab, and every place that mirrors an assignment or

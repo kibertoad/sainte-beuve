@@ -17,6 +17,7 @@ import type {
   StoredIntegrationToken,
 } from '@sainte-beuve/kernel'
 import { clone, patched } from './clone.js'
+import { byText, newestFirst, oldestFirst } from './order.js'
 import {
   InMemoryAttentionRepository,
   InMemoryIdentityRepository,
@@ -27,21 +28,28 @@ import {
 /**
  * In-memory implementations of the repository ports.
  *
- * This is the store every runtime boots with today, and it is deliberately the
- * FIRST adapter rather than a test double retrofitted later: writing the ports
- * against a store that cannot cheat (no SQL escape hatch, no lazy loading) is what
- * keeps them coarse enough for D1 and Postgres to implement without an N+1. The
- * durable adapters land in slice 5; see docs/implementation-plan.md.
+ * This was deliberately the FIRST adapter rather than a test double retrofitted
+ * later, and the durable ones are the argument for it: writing the ports
+ * against a store that cannot cheat (no SQL escape hatch, no lazy loading) is
+ * what kept them coarse enough for D1 (@sainte-beuve/persistence-d1) and
+ * Postgres (@sainte-beuve/persistence-postgres) to implement without an N+1.
  *
- * Every read returns a COPY (see `clone.ts` for why). The workspace stores live
- * in `workspace-stores.ts`; the split is a size budget, not a boundary.
+ * It is still what a facade boots with when no database is configured: local
+ * mode, a `wrangler dev` before anybody has created a D1, a first container
+ * run. `/health` reports it as `persistence: "memory"`, because a store a
+ * restart empties is the right answer on a laptop and an alarm anywhere else.
+ *
+ * Every read returns a COPY (see `clone.ts` for why), which is one of the
+ * behaviours `@sainte-beuve/persistence-conformance` holds all three stores to.
+ * The workspace stores live in `workspace-stores.ts`; the split is a size
+ * budget, not a boundary.
  */
 
 export class InMemoryReviewerRepository implements ReviewerRepository {
   private readonly rows = new Map<string, Reviewer>()
 
   async list(): Promise<Reviewer[]> {
-    return [...this.rows.values()].map(clone)
+    return [...this.rows.values()].sort(oldestFirst((row) => row.createdAt)).map(clone)
   }
 
   async getById(reviewerId: string): Promise<Reviewer | null> {
@@ -50,16 +58,28 @@ export class InMemoryReviewerRepository implements ReviewerRepository {
   }
 
   async create(reviewer: Reviewer): Promise<Reviewer> {
-    this.rows.set(reviewer.id, clone(reviewer))
-    return clone(reviewer)
+    return clone(this.write(reviewer))
   }
 
   async update(reviewerId: string, patch: Partial<Reviewer>): Promise<Reviewer | null> {
     const row = this.rows.get(reviewerId)
     if (row === undefined) return null
-    const next = patched(row, patch)
-    this.rows.set(reviewerId, next)
-    return clone(next)
+    return clone(this.write(patched(row, patch)))
+  }
+
+  /**
+   * The counter is `adjustOutstanding`'s alone once the row exists, which is
+   * what both durable stores do by writing `outstanding_reviews` on INSERT and
+   * leaving it out of the conflict branch. A write built from a read taken
+   * before an adjustment landed must not walk the count back.
+   */
+  private write(reviewer: Reviewer): Reviewer {
+    const held = this.rows.get(reviewer.id)
+    const next = clone(
+      held === undefined ? reviewer : { ...reviewer, outstandingReviews: held.outstandingReviews },
+    )
+    this.rows.set(next.id, next)
+    return next
   }
 
   async adjustOutstanding(reviewerId: string, delta: number): Promise<void> {
@@ -79,7 +99,7 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
     const wanted = filter?.status
     return [...this.rows.values()]
       .filter((row) => wanted === undefined || wanted.includes(row.status))
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort(newestFirst((row) => row.createdAt))
       .map(clone)
   }
 
@@ -120,13 +140,16 @@ export class InMemoryReminderRepository implements ReminderRepository {
   private readonly rows = new Map<string, Reminder>()
 
   async listByReview(reviewId: string): Promise<Reminder[]> {
-    return [...this.rows.values()].filter((row) => row.reviewId === reviewId).map(clone)
+    return [...this.rows.values()]
+      .filter((row) => row.reviewId === reviewId)
+      .sort(oldestFirst((row) => row.dueAt))
+      .map(clone)
   }
 
   async listDue(now: EpochMs, limit: number): Promise<Reminder[]> {
     return [...this.rows.values()]
       .filter((row) => row.status === 'scheduled' && row.dueAt <= now)
-      .sort((a, b) => a.dueAt - b.dueAt)
+      .sort(oldestFirst((row) => row.dueAt))
       .slice(0, limit)
       .map(clone)
   }
@@ -166,7 +189,7 @@ export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
   async listByReview(reviewId: string): Promise<AiReviewRun[]> {
     return [...this.rows.values()]
       .filter((row) => row.reviewId === reviewId)
-      .sort((a, b) => b.requestedAt - a.requestedAt)
+      .sort(newestFirst((row) => row.requestedAt))
       .map(clone)
   }
 
@@ -199,7 +222,9 @@ export class InMemoryIntegrationTokenRepository implements IntegrationTokenRepos
   private readonly rows = new Map<string, StoredIntegrationToken>()
 
   async list(): Promise<StoredIntegrationToken[]> {
-    return [...this.rows.values()].map(clone)
+    return [...this.rows.values()]
+      .sort((a, b) => byText(a.integrationId, b.integrationId))
+      .map(clone)
   }
 
   async get(integrationId: string): Promise<StoredIntegrationToken | null> {

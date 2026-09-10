@@ -8,6 +8,26 @@
       "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"],
     },
+    "backend/packages/persistence-d1": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+      // `cloudflare:test` is the pool's virtual module, and wrangler is reached
+      // through `wrangler.toml` rather than through an import: the suite runs
+      // inside workerd, against a D1 binding this package's own config
+      // declares.
+      "ignoreDependencies": ["cloudflare", "wrangler"],
+    },
+    "backend/packages/persistence-postgres": {
+      "entry": ["test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+    },
+    "deploy/backend": {
+      // `@sainte-beuve/persistence-d1` is a dependency so that
+      // `migrations_dir` in wrangler.toml resolves into the installed package.
+      // Nothing here imports it, and that is the point: the schema ships with
+      // the adapter rather than being copied into every deployment.
+      "ignoreDependencies": ["@sainte-beuve/persistence-d1"],
+    },
     "backend/runtimes/cloudflare": {
       "entry": ["test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"],
