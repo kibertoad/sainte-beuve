@@ -87,11 +87,15 @@ export class InMemoryIdentityRepository implements IdentityRepository {
       .map((row) => clone(row.identity))
   }
 
-  async link(reviewerId: string, identity: LinkedIdentity): Promise<void> {
-    this.rows.set(identityKey(identity.provider, identity.subject), {
-      reviewerId,
-      identity: clone(identity),
-    })
+  async link(reviewerId: string, identity: LinkedIdentity): Promise<string> {
+    const key = identityKey(identity.provider, identity.subject)
+    const held = this.rows.get(key)
+    // First claim wins, which is the uniqueness the durable table will enforce
+    // with a constraint on the key. A second person cannot take an account off
+    // the row that already holds it; they are told whose it is instead.
+    if (held !== undefined && held.reviewerId !== reviewerId) return held.reviewerId
+    this.rows.set(key, { reviewerId, identity: clone(identity) })
+    return reviewerId
   }
 }
 
@@ -132,6 +136,19 @@ export class InMemoryAttentionRepository implements AttentionRepository {
   }
 }
 
+/**
+ * The unique key of a pull request. The HOST is part of it: `platform/api#12`
+ * exists on both, and they are two different changes.
+ */
+function pullRequestKey(pr: {
+  provider: string
+  owner: string
+  repo: string
+  number: number
+}): string {
+  return `${refKey(pr)}#${pr.number}`
+}
+
 export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepository {
   private readonly rows = new Map<string, ReviewCommitment>()
 
@@ -149,18 +166,12 @@ export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepos
 
   async find(
     reviewerId: string,
-    pullRequest: { owner: string; repo: string; number: number },
+    pullRequest: { provider: string; owner: string; repo: string; number: number },
   ): Promise<ReviewCommitment | null> {
+    const wanted = pullRequestKey(pullRequest)
     for (const row of this.rows.values()) {
       if (row.reviewerId !== reviewerId) continue
-      const pr = row.pullRequest
-      if (
-        pr.owner === pullRequest.owner &&
-        pr.repo === pullRequest.repo &&
-        pr.number === pullRequest.number
-      ) {
-        return clone(row)
-      }
+      if (pullRequestKey(row.pullRequest) === wanted) return clone(row)
     }
     return null
   }

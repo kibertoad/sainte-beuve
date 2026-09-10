@@ -88,10 +88,15 @@ export class AttentionService {
     if (request.requestedById === viewer.id) {
       throw new ForbiddenError('You asked for this review, so you cannot be the one to take it')
     }
+    // Their OWN commitment is answered before the status is, and the order is
+    // the whole point: with the default critical mass of one, the click that
+    // resolved the ask makes the next click from the same person a click on a
+    // resolved ask. Refusing it would toast "could not commit" at the one
+    // person who did, over a re-render or a restored tab.
+    if (request.commitments.some((entry) => entry.reviewerId === viewer.id)) return request
     if (request.status !== 'open') {
       throw new ConflictError(`This request is already ${request.status}`, { attentionId })
     }
-    if (request.commitments.some((entry) => entry.reviewerId === viewer.id)) return request
 
     const now = this.container.clock.now()
     const commitments = [
@@ -99,6 +104,13 @@ export class AttentionService {
       { reviewerId: viewer.id, displayName: viewer.displayName, committedAt: now },
     ]
     const satisfied = isAttentionSatisfied({ ...request, commitments })
+    // The commitment row FIRST, then the ask, then the event. Both writes are
+    // needed and there is no transaction across them, so the order decides what
+    // a failure between them leaves behind: this way a refused second write
+    // leaves the ask open with a commitment nobody lost, and the retry finds
+    // that row and is a no-op. The other way round resolves the ask, drops the
+    // promise, and tells nobody.
+    await this.recordCommitment(viewer, request.pullRequest, request.title, attentionId)
     const updated = assertFound(
       await this.container.repositories.attention.update(attentionId, {
         commitments,
@@ -108,7 +120,6 @@ export class AttentionService {
       }),
       `No attention request ${attentionId}`,
     )
-    await this.recordCommitment(viewer, request.pullRequest, request.title, attentionId)
     this.publish(satisfied ? 'resolved' : 'committed', updated)
     return updated
   }

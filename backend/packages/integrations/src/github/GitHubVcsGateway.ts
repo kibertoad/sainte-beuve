@@ -18,8 +18,16 @@ import type { GitHubTokenSource } from './credentials.js'
  * repository. Which one a deployment uses is resolved above this line; nothing
  * here knows or cares.
  */
-/** How many pull requests one workspace read pulls per repository. */
+
+/** How many pull requests one page of a workspace read pulls. GitHub's own cap. */
 const PAGE_SIZE = 100
+
+/**
+ * How many pages one read will follow. A repository with more than a thousand
+ * open pull requests is past what any screen is read down, and the cap is what
+ * keeps one badly registered project from spending a rate-limit budget.
+ */
+const MAX_PAGES = 10
 
 interface GitHubUser {
   id: number
@@ -65,16 +73,28 @@ export class GitHubVcsGateway implements VcsGateway {
    * ago is missing from it), it carries its own much smaller rate limit, and it
    * would take one query per role where this takes one per repository and
    * answers both.
+   *
+   * PAGED, because `per_page` stops at 100: a monorepo with more open pull
+   * requests would otherwise drop the viewer's own older one off the workspace
+   * while the screen reported the project as read, which states positively that
+   * there is nothing there.
    */
   async listOpenPullRequests(project: ProjectRef): Promise<OpenPullRequest[]> {
-    const pulls = await githubRequest<GitHubPullRequest[]>({
-      path:
-        `/repos/${project.owner}/${project.repo}/pulls` +
-        `?state=open&per_page=${PAGE_SIZE}&sort=updated&direction=desc`,
-      token: await this.options.tokens.tokenFor(project.owner, project.repo),
-      baseUrl: this.options.baseUrl,
-      fetchImpl: this.options.fetchImpl,
-    })
+    const token = await this.options.tokens.tokenFor(project.owner, project.repo)
+    const pulls: GitHubPullRequest[] = []
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      const batch = await githubRequest<GitHubPullRequest[]>({
+        path:
+          `/repos/${project.owner}/${project.repo}/pulls` +
+          `?state=open&per_page=${PAGE_SIZE}&page=${page}&sort=updated&direction=desc`,
+        token,
+        baseUrl: this.options.baseUrl,
+        fetchImpl: this.options.fetchImpl,
+      })
+      pulls.push(...batch)
+      // A short page is the last page, so there is no request spent finding out.
+      if (batch.length < PAGE_SIZE) break
+    }
     return pulls.map((pull) => toOpenPullRequest(project, pull))
   }
 

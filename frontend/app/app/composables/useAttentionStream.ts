@@ -19,16 +19,29 @@ export function useAttentionStream() {
   const live = ref(false)
   const error = ref<string | null>(null)
   let source: EventSource | null = null
+  /** Whether the stream has been attached before, so an `open` is a RECONNECT. */
+  let attached = false
+  /**
+   * Where an event that arrives DURING a fetch is kept. The fetch answers from
+   * a moment before that event was published, so assigning its list would drop
+   * it; it is applied again on top.
+   */
+  let raced: AttentionEvent[] | null = null
 
   async function refresh(): Promise<void> {
+    const queue: AttentionEvent[] = []
+    raced = queue
     try {
       requests.value = (await api.listAttention()).requests
+      for (const event of queue) apply(event)
       error.value = null
     } catch (err) {
       // A deployment that cannot say who is looking answers 503 here, which is
       // a configuration answer rather than a fault to swallow.
       error.value = apiErrorMessage(err)
       requests.value = []
+    } finally {
+      raced = null
     }
   }
 
@@ -42,9 +55,18 @@ export function useAttentionStream() {
     source = new EventSource(api.attentionStreamUrl)
     source.addEventListener('open', () => {
       live.value = true
+      // Every event published while the connection was down went to a
+      // subscriber the backend had already dropped, so a reconnect starts from
+      // a list that is missing them. Reading 'live' beside a stale inbox is
+      // worse than the honest 'refresh to update' the badge showed a second
+      // ago, so the list is fetched again each time the stream comes back.
+      if (attached) void refresh()
+      attached = true
     })
     source.addEventListener('attention', (event) => {
-      apply(JSON.parse((event as MessageEvent<string>).data) as AttentionEvent)
+      const received = JSON.parse((event as MessageEvent<string>).data) as AttentionEvent
+      raced?.push(received)
+      apply(received)
     })
     source.addEventListener('error', () => {
       // `EventSource` reconnects by itself, so this is a state to REPORT rather
@@ -53,15 +75,19 @@ export function useAttentionStream() {
     })
   }
 
-  onMounted(async () => {
-    await refresh()
+  // Connected BEFORE the first fetch, not after: an ask raised between the two
+  // is in the store the fetch is about to read, where an ask raised between a
+  // fetch and a later subscribe would be in neither.
+  onMounted(() => {
     connect()
+    void refresh()
   })
 
   onBeforeUnmount(() => {
     source?.close()
     source = null
     live.value = false
+    attached = false
   })
 
   return { requests, live, error, refresh }

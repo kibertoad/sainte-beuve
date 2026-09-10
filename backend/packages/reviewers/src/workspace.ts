@@ -1,4 +1,5 @@
-import type { OpenPullRequest } from '@sainte-beuve/contracts'
+import type { OpenPullRequest, VcsHandles } from '@sainte-beuve/contracts'
+import { handleOf } from '@sainte-beuve/contracts'
 import { isSameHandle } from './selection.js'
 
 /**
@@ -6,7 +7,7 @@ import { isSameHandle } from './selection.js'
  *
  * Pure, and separate from the fetch, for the reason the workspace exists: a
  * person is known by a different handle on each host, so "mine" is a question
- * about a SET of handles rather than about a string, and getting that wrong
+ * about a MAP of handles rather than about a string, and getting that wrong
  * shows somebody an empty workspace with no way to tell whether it is empty
  * because there is no work or because it looked for the wrong name.
  */
@@ -19,6 +20,13 @@ export interface PartitionedPullRequests {
 /**
  * Split by the part the viewer plays.
  *
+ * Each pull request is matched against the handle the viewer holds on ITS OWN
+ * host, never against the whole set: the list arrives flattened from every
+ * registered project, and a viewer who is `kibertoad` on GitHub and
+ * `igor.savin` on GitLab would otherwise be handed the GitHub pull requests of
+ * a stranger who happens to be called `igor.savin`, with the buttons that act
+ * on them.
+ *
  * The two lists are EXCLUSIVE: a pull request you opened stays in `authored`
  * even if the host also has a review request against you on it, which happens
  * when somebody reassigns their own work. Listing it twice would make the
@@ -29,12 +37,14 @@ export interface PartitionedPullRequests {
  */
 export function partitionForViewer(
   pullRequests: readonly OpenPullRequest[],
-  handles: readonly string[],
+  handles: VcsHandles,
 ): PartitionedPullRequests {
-  const mine = (login: string): boolean => handles.some((handle) => isSameHandle(handle, login))
   const authored: OpenPullRequest[] = []
   const reviewRequested: OpenPullRequest[] = []
   for (const pr of pullRequests) {
+    const handle = handleOf(handles, pr.pullRequest.provider)
+    if (handle === null) continue
+    const mine = (login: string): boolean => isSameHandle(handle, login)
     if (mine(pr.authorLogin)) authored.push(pr)
     else if (pr.requestedReviewerLogins.some(mine)) reviewRequested.push(pr)
   }

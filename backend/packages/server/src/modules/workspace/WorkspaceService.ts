@@ -5,11 +5,10 @@ import type {
   Workspace,
   WorkspaceSource,
 } from '@sainte-beuve/contracts'
-import { knownHandles } from '@sainte-beuve/contracts'
 import { getErrorMessage, type VcsGateway } from '@sainte-beuve/kernel'
 import { partitionForViewer } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
-import { resolveVcs } from '../../integrations/resolve.js'
+import { VcsResolutions } from '../../integrations/resolve.js'
 import { ViewerService } from '../identity/ViewerService.js'
 
 /**
@@ -34,18 +33,23 @@ export class WorkspaceService {
   constructor(private readonly container: AppContainer) {}
 
   async read(): Promise<Workspace> {
-    const viewer = await new ViewerService(this.container).current()
+    // One resolution cache for the whole read: the viewer and the sweep both
+    // need this deployment's credential for a host, and each resolution opens a
+    // sealed envelope.
+    const resolutions = new VcsResolutions(this.container)
+    const viewer = await new ViewerService(this.container, resolutions).current()
     const projects = await this.container.repositories.projects.list()
-    const gateways = await this.gatewaysByProvider(projects)
+    const gateways = await this.gatewaysByProvider(resolutions, projects)
 
     const reads = await Promise.all(
       projects.map((project) => this.readProject(project, gateways.get(project.provider) ?? null)),
     )
     const pullRequests = reads.flatMap((read) => read.pullRequests)
-    const { authored, reviewRequested } = partitionForViewer(
-      pullRequests,
-      knownHandles(viewer.reviewer.handles),
-    )
+    // The whole MAP of handles, not a flat list: each pull request is matched
+    // against the name the viewer holds on its own host, so a stranger who
+    // happens to be called what the viewer is called on the other host stays
+    // off this screen.
+    const { authored, reviewRequested } = partitionForViewer(pullRequests, viewer.reviewer.handles)
     return {
       viewer,
       authored,
@@ -56,18 +60,18 @@ export class WorkspaceService {
   }
 
   /**
-   * One gateway per host, resolved once for the whole sweep rather than per
-   * project. Resolution opens a sealed credential, and doing that per project
-   * would be one HKDF derivation per repository on a screen somebody refreshes.
+   * One gateway per host, resolved once for the whole read rather than per
+   * project, and through the same cache the viewer used. Resolution opens a
+   * sealed credential, and doing that per project would be one HKDF derivation
+   * per repository on a screen somebody refreshes.
    */
   private async gatewaysByProvider(
+    resolutions: VcsResolutions,
     projects: readonly Project[],
   ): Promise<Map<VcsProvider, VcsGateway>> {
     const providers = [...new Set(projects.map((project) => project.provider))]
     const resolved = await Promise.all(
-      providers.map(
-        async (provider) => [provider, await resolveVcs(this.container, provider)] as const,
-      ),
+      providers.map(async (provider) => [provider, await resolutions.acting(provider)] as const),
     )
     const gateways = new Map<VcsProvider, VcsGateway>()
     for (const [provider, entry] of resolved) {

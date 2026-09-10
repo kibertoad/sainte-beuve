@@ -16,8 +16,15 @@ import { gitlabRequest, projectPath } from './client.js'
  * mint per project.
  */
 
-/** How many merge requests one workspace read pulls per project. */
+/** How many merge requests one page of a workspace read pulls. GitLab's own cap. */
 const PAGE_SIZE = 100
+
+/**
+ * How many pages one read will follow. A project with more than a thousand open
+ * merge requests is past what any screen is read down, and the cap is what
+ * keeps one badly registered project from spending a rate-limit budget.
+ */
+const MAX_PAGES = 10
 
 interface GitLabUser {
   id: number
@@ -56,12 +63,24 @@ export class GitLabVcsGateway implements VcsGateway {
     this.options = options
   }
 
+  /**
+   * PAGED, because `per_page` stops at 100: a project with more open merge
+   * requests would otherwise drop the viewer's own older one off the workspace
+   * while the screen reported the project as read, which states positively that
+   * there is nothing there.
+   */
   async listOpenPullRequests(project: ProjectRef): Promise<OpenPullRequest[]> {
-    const merges = await this.call<GitLabMergeRequest[]>({
-      path:
-        `/projects/${projectPath(project.owner, project.repo)}/merge_requests` +
-        `?state=opened&per_page=${PAGE_SIZE}&order_by=updated_at&sort=desc`,
-    })
+    const merges: GitLabMergeRequest[] = []
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      const batch = await this.call<GitLabMergeRequest[]>({
+        path:
+          `/projects/${projectPath(project.owner, project.repo)}/merge_requests` +
+          `?state=opened&per_page=${PAGE_SIZE}&page=${page}&order_by=updated_at&sort=desc`,
+      })
+      merges.push(...batch)
+      // A short page is the last page, so there is no request spent finding out.
+      if (batch.length < PAGE_SIZE) break
+    }
     return merges.map((merge) => this.toOpenPullRequest(project, merge))
   }
 

@@ -83,8 +83,14 @@ export async function gitlabRequest<T>(request: GitLabRequest): Promise<T> {
   return (await parse(response)) as T
 }
 
+/**
+ * `||` rather than `??`: a base URL somebody left BLANK is one they did not
+ * set. Every example deployment ships `GITLAB_BASE_URL=` with no value, so a
+ * copied file gives `''`, and `''` as the base would build every path relative
+ * and fail as `TypeError: Failed to parse URL`.
+ */
 function trimBase(baseUrl: string | undefined): string {
-  return (baseUrl ?? GITLAB_BASE_URL).replace(/\/+$/, '')
+  return (baseUrl || GITLAB_BASE_URL).replace(/\/+$/, '')
 }
 
 async function parse(response: Response): Promise<unknown> {

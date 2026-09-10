@@ -1,13 +1,17 @@
 import type { Project, Viewer, Workspace } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  addReviewer,
+  appVcs,
   buildHarness,
   del,
   environmentVcs,
+  everyHost,
   get,
   openPullRequest,
   patch,
   post,
+  stubGateways,
   type TestHarness,
   viewerVcs,
 } from './helpers.js'
@@ -80,6 +84,21 @@ describe('the viewer', () => {
     expect(viewer.reviewer.skills).toStrictEqual(['Backend'])
   })
 
+  it('is the person behind the credential on a deployment that also holds an App', async () => {
+    // An App installation identifies nobody, so resolving the viewer through the
+    // acting credential would answer 503 and tell the operator to sign in, which
+    // is the thing they already did.
+    const harness = buildHarness({
+      vcs: environmentVcs(viewerVcs('kibertoad')),
+      gateways: stubGateways({ vcsAsApp: (provider) => (provider === 'github' ? appVcs() : null) }),
+    })
+
+    const res = await harness.app.fetch(get('/api/v1/me'))
+
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as Viewer).reviewer.handles.github).toBe('kibertoad')
+  })
+
   it('answers the same person twice rather than creating a second row', async () => {
     const harness = harnessFor('kibertoad')
     const first = (await (await harness.app.fetch(get('/api/v1/me'))).json()) as Viewer
@@ -88,6 +107,22 @@ describe('the viewer', () => {
     expect(second.reviewer.id).toBe(first.reviewer.id)
     const listed = await harness.app.fetch(get('/api/v1/reviewers'))
     expect(((await listed.json()) as { reviewers: unknown[] }).reviewers).toHaveLength(1)
+  })
+
+  it('creates one person when a page load asks three times at once', async () => {
+    const harness = harnessFor('kibertoad')
+
+    // What the first page load actually does: the workspace, the inbox and the
+    // stream each resolve the viewer, and none of them has a row to find yet.
+    // Three rows for one human leaves two orphans that the reviewer screen
+    // draws and the router can pick.
+    await Promise.all([
+      harness.app.fetch(get('/api/v1/me')),
+      harness.app.fetch(get('/api/v1/workspace')),
+      harness.app.fetch(get('/api/v1/attention')),
+    ])
+
+    expect(await harness.container.repositories.reviewers.list()).toHaveLength(1)
   })
 })
 
@@ -206,6 +241,41 @@ describe('the workspace', () => {
     // Both hosts return the author and the reviewers on the same page, so a
     // second call per role would double the rate-limit cost of this screen.
     expect(gateway.listed).toHaveLength(1)
+  })
+
+  it('does not hand the viewer a stranger who holds their other host name', async () => {
+    const stranger = openPullRequest({ authorLogin: 'igor.savin', title: 'Somebody else' })
+    const mine = openPullRequest({ authorLogin: 'kibertoad', title: 'Mine' })
+    const harness = harnessFor('kibertoad', [stranger, mine])
+    // The viewer adopts this row, so they hold a handle on each host.
+    await addReviewer(harness, {
+      displayName: 'Igor',
+      handles: { github: 'kibertoad', gitlab: 'igor.savin' },
+    })
+    await addProject(harness, { provider: 'github', owner: 'kibertoad', repo: 'sainte-beuve' })
+
+    const board = await workspace(harness)
+
+    // `igor.savin` is who the viewer is on GitLab. The GitHub account of that
+    // name is a different human, and the ask buttons act on what is listed here.
+    expect(board.authored.map((pr) => pr.title)).toStrictEqual(['Mine'])
+    expect(board.reviewRequested).toStrictEqual([])
+  })
+
+  it('reaches repositories as the App while the viewer stays the person', async () => {
+    const seen = openPullRequest({ authorLogin: 'kibertoad', title: 'Seen by the App' })
+    const harness = buildHarness({
+      // The environment's own credential names the viewer and lists nothing; the
+      // App lists the work. Both halves of the precedence at once.
+      vcs: environmentVcs(viewerVcs('kibertoad')),
+      gateways: stubGateways({ vcsAsApp: everyHost(appVcs([seen])) }),
+    })
+    await addProject(harness, { provider: 'github', owner: 'kibertoad', repo: 'sainte-beuve' })
+
+    const board = await workspace(harness)
+
+    expect(board.viewer.reviewer.handles.github).toBe('kibertoad')
+    expect(board.authored.map((pr) => pr.title)).toStrictEqual(['Seen by the App'])
   })
 
   it('starts empty for a viewer with no projects registered', async () => {

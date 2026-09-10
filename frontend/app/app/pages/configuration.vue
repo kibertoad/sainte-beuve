@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IntegrationId, IntegrationTokenStatus, VcsProvider } from '@sainte-beuve/contracts'
-import { vcsDisplayName, vcsPatCredentialKey } from '@sainte-beuve/contracts'
+import { isVcsProvider, vcsDisplayName, vcsPatCredentialKey } from '@sainte-beuve/contracts'
 
 // Configuration: how this deployment reaches the systems it depends on.
 //
@@ -26,20 +26,38 @@ const { data, pending, error, refresh } = await useAsyncData('configuration', as
 
 const { busy, run } = useApiAction({ refresh })
 
-/**
- * The credential inputs, so a successful save can clear the one it landed on.
- * Held here rather than inside each field because only the page knows the call
- * succeeded, and clearing on a refusal throws away what was pasted.
- *
- * The host cards are a LIST rather than named refs: there is one per host the
- * API reports, so naming them here would put the set of hosts in two places.
- */
-const hostCards = ref<{ clearDraft: () => void }[]>([])
-const slack = ref<{ clearDraft: () => void } | null>(null)
-const catFactory = ref<{ clearDraft: () => void } | null>(null)
+// The credential inputs, so a successful save can clear the one it landed on.
+// Held on the page rather than inside each field because only the page knows
+// the call succeeded, and clearing on a refusal throws away what was pasted.
 
-function hostCardAt(index: number): { clearDraft: () => void } | null {
-  return hostCards.value[index] ?? null
+/** What the page needs of a credential input: a way to clear the draft in it. */
+interface DraftHolder {
+  clearDraft: () => void
+}
+
+const slack = ref<DraftHolder | null>(null)
+const catFactory = ref<DraftHolder | null>(null)
+
+/**
+ * The host cards, keyed by HOST rather than by position in the loop.
+ *
+ * Vue does not promise that a `ref` array inside a `v-for` is in the source
+ * order, so an index would let the GitLab save clear the GitHub card, wiping a
+ * token somebody had just typed into the other one while leaving the saved one
+ * on screen. Not reactive: nothing renders from it, a save reads it.
+ */
+const hostCards: Partial<Record<VcsProvider, DraftHolder | null>> = {}
+const hostCardBinders = new Map<VcsProvider, (el: unknown) => void>()
+
+/** One stable binder per host, so a re-render does not re-bind every card. */
+function bindHostCard(provider: VcsProvider): (el: unknown) => void {
+  const held = hostCardBinders.get(provider)
+  if (held !== undefined) return held
+  const bind = (el: unknown): void => {
+    hostCards[provider] = el as DraftHolder | null
+  }
+  hostCardBinders.set(provider, bind)
+  return bind
 }
 
 /**
@@ -61,11 +79,7 @@ function statusOf(integrationId: IntegrationId): IntegrationTokenStatus {
   )
 }
 
-async function save(
-  integrationId: IntegrationId,
-  token: string,
-  field: { clearDraft: () => void } | null,
-) {
+async function save(integrationId: IntegrationId, token: string, field: DraftHolder | null) {
   const stored = await run(
     () => api.setIntegrationToken(integrationId, token),
     'Could not store the credential',
@@ -115,8 +129,11 @@ async function signOut(provider: VcsProvider) {
 // an unchanged-looking screen reads as a flow that silently did nothing.
 onMounted(() => {
   const connected = route.query.connected
-  if (typeof connected === 'string' && connected.length > 0) {
-    toast.add({ color: 'success', title: `${connected} connection updated` })
+  // Named, and CHECKED: the value is whatever the URL carries, so a slug this
+  // build does not know is not worth echoing into a toast, and `github` in a
+  // sentence reads like a bug report where GitHub reads like a product.
+  if (typeof connected === 'string' && isVcsProvider(connected)) {
+    toast.add({ color: 'success', title: `${vcsDisplayName(connected)} connection updated` })
   }
 })
 </script>
@@ -148,9 +165,9 @@ onMounted(() => {
 
     <div v-else-if="data" class="flex flex-col gap-4">
       <VcsConnectionCard
-        v-for="(connection, index) in data.connections.vcs"
+        v-for="connection in data.connections.vcs"
         :key="connection.provider"
-        ref="hostCards"
+        :ref="bindHostCard(connection.provider)"
         :connection="connection"
         :pat-status="statusOf(vcsPatCredentialKey(connection.provider))"
         :api-base="api.apiBase"
@@ -166,7 +183,13 @@ onMounted(() => {
           )
         "
         @sign-out="signOut(connection.provider)"
-        @save-pat="save(vcsPatCredentialKey(connection.provider), $event, hostCardAt(index))"
+        @save-pat="
+          save(
+            vcsPatCredentialKey(connection.provider),
+            $event,
+            hostCards[connection.provider] ?? null,
+          )
+        "
         @clear-pat="clear(vcsPatCredentialKey(connection.provider))"
       />
 

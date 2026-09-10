@@ -35,6 +35,13 @@ import { SlackChatGateway } from './slack/SlackChatGateway.js'
  * and this one has no business importing it.
  */
 
+/**
+ * How long a gateway built from a stored credential is kept, and how many are
+ * kept at once. See {@link tokenGateways}.
+ */
+const GATEWAY_TTL_MS = 5 * 60_000
+const MAX_KEPT_GATEWAYS = 16
+
 /** An OAuth client, in the shape both hosts' sign-in flows take. */
 export interface OAuthClientConfig {
   clientId: string
@@ -86,6 +93,7 @@ export function createGatewayFactory(config: GatewayFactoryConfig): GatewayFacto
     github: githubSignIn(config),
     gitlab: gitlabSignIn(config),
   }
+  const fromToken = tokenGateways(config)
   return {
     chat: (botToken) =>
       new SlackChatGateway({
@@ -93,10 +101,45 @@ export function createGatewayFactory(config: GatewayFactoryConfig): GatewayFacto
         appBaseUrl: config.appBaseUrl,
         fetch: config.fetchImpl,
       }),
-    vcsFromToken: (provider, token) => vcsFromToken(config, provider, token),
+    vcsFromToken: fromToken,
     vcsAsApp: (provider) => asApp[provider],
     aiReview: config.aiReview,
     signIn: (provider) => signIn[provider],
+  }
+}
+
+/**
+ * Gateways built from a credential somebody stored, kept a few minutes per
+ * `(host, credential)`.
+ *
+ * The adapters memoise `identify()` for the life of the instance and resolution
+ * runs per request, so a fresh instance per call spends a `GET /user` on every
+ * workspace read, inbox poll and stream open to be told the same thing. The
+ * credential is part of the key, so a rotated token builds a new gateway
+ * instead of answering out of the old one's cache.
+ *
+ * Kept for MINUTES rather than for the life of the isolate: a handle is
+ * renameable, and an instance that outlived the rename would keep mirroring
+ * assignments onto a name the host no longer routes. Bounded for the same
+ * reason a map keyed on credentials always should be.
+ */
+function tokenGateways(
+  config: GatewayFactoryConfig,
+): (provider: VcsProvider, token: string) => VcsGateway {
+  const kept = new Map<string, { builtAt: number; gateway: VcsGateway }>()
+  const now = (): number => config.clock?.now() ?? Date.now()
+  return (provider, token) => {
+    const key = JSON.stringify([provider, token])
+    const held = kept.get(key)
+    if (held !== undefined && now() - held.builtAt < GATEWAY_TTL_MS) return held.gateway
+    // Re-inserted rather than overwritten, so the map's order is least recently
+    // built first and the eviction below drops that one.
+    kept.delete(key)
+    const oldest = kept.size < MAX_KEPT_GATEWAYS ? undefined : kept.keys().next().value
+    if (oldest !== undefined) kept.delete(oldest)
+    const gateway = vcsFromToken(config, provider, token)
+    kept.set(key, { builtAt: now(), gateway })
+    return gateway
   }
 }
 

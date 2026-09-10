@@ -53,12 +53,16 @@ export const reviewerSchema = v.object({
 })
 export type Reviewer = v.InferOutput<typeof reviewerSchema>
 
+// The object and array defaults below are FACTORIES. Valibot hands a plain
+// default value back by reference, so every row parsed without the field would
+// share one map and one array with every other, and the first caller to write
+// into what it was given would change the shape of rows it never saw.
 export const createReviewerSchema = v.object({
   displayName: reviewerSchema.entries.displayName,
-  handles: v.optional(vcsHandlesSchema, NO_VCS_HANDLES),
+  handles: v.optional(vcsHandlesSchema, () => ({ ...NO_VCS_HANDLES })),
   slackUserId: v.optional(v.nullable(v.string()), null),
   team: v.optional(v.nullable(v.string()), null),
-  skills: v.optional(v.array(skillSchema), []),
+  skills: v.optional(v.array(skillSchema), () => []),
   availability: v.optional(reviewerAvailabilitySchema, 'available'),
   weight: v.optional(reviewerSchema.entries.weight, 1),
 })

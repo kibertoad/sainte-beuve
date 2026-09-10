@@ -22,9 +22,10 @@ capabilities are off.
    is the one to set first and then keep: it seals the credentials entered on the
    Configuration screen and signs the connect round trips, and rotating it makes
    every credential stored under it unreadable.
-4. Name the SPA's origin in `CORS_ORIGINS`. The board is happy with `*`; the
-   configuration routes are not, because a credential write reachable from any
-   origin is one any page the operator visits can make.
+4. Name the SPA's origin in `CORS_ORIGINS`. Reading the board is happy with `*`;
+   writing is not, and neither is the Configuration screen, because a route that
+   changes something and carries no session is one any page the operator visits
+   can call.
 5. `pnpm --filter @sainte-beuve/deploy-backend deploy`
 6. Register the Worker's URLs with GitHub and Slack. They are shown on the
    Configuration screen with this deployment's own base URL filled in, and the

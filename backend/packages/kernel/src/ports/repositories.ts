@@ -121,8 +121,20 @@ export interface IdentityRepository {
   /** The person behind one external account, or null. */
   findReviewerId(provider: IdentityProvider, subject: string): Promise<string | null>
   listForReviewer(reviewerId: string): Promise<LinkedIdentity[]>
-  /** Attach an account to a person. Idempotent on `(provider, subject)`. */
-  link(reviewerId: string, identity: LinkedIdentity): Promise<void>
+  /**
+   * Attach an account to a person, and answer whose it is NOW.
+   *
+   * The key `(provider, subject)` is claimed by the first caller and the answer
+   * is the reviewer holding it, which is not always the one that was passed in.
+   * That return value is the store's uniqueness rule made usable: two first
+   * requests that both found no row and both created one are how a directory
+   * forks into two people with one account between them, and the loser needs to
+   * be told which row won rather than keeping its own.
+   *
+   * A caller that already owns the key refreshes the handle with it, so the
+   * write is an upsert for its own row and a no-op for anybody else's.
+   */
+  link(reviewerId: string, identity: LinkedIdentity): Promise<string>
 }
 
 export interface AttentionRepository {
@@ -135,10 +147,19 @@ export interface AttentionRepository {
 export interface ReviewCommitmentRepository {
   listByReviewer(reviewerId: string): Promise<ReviewCommitment[]>
   getById(commitmentId: string): Promise<ReviewCommitment | null>
-  /** What one person already promised about one pull request, so a second click is a no-op. */
+  /**
+   * What one person already promised about one pull request, so a second click
+   * is a no-op.
+   *
+   * The `provider` is part of the key, not decoration: `platform/api#12` on
+   * GitHub and `platform/api#12` on GitLab are two different changes, and a
+   * lookup that matched on the path alone would answer the second with the
+   * first, leave no commitment row for it, and put the wrong host's pull
+   * request on somebody's workspace.
+   */
   find(
     reviewerId: string,
-    pullRequest: { owner: string; repo: string; number: number },
+    pullRequest: { provider: string; owner: string; repo: string; number: number },
   ): Promise<ReviewCommitment | null>
   create(commitment: ReviewCommitment): Promise<ReviewCommitment>
   delete(commitmentId: string): Promise<void>

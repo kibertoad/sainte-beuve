@@ -88,8 +88,9 @@ export class GitLabIdentityGateway implements VcsIdentityGateway {
     }
   }
 
+  /** `||`, so a `GITLAB_BASE_URL` left blank means gitlab.com and not a relative URL. */
   private root(): string {
-    return (this.options.baseUrl ?? GITLAB_BASE_URL).replace(/\/+$/, '')
+    return (this.options.baseUrl || GITLAB_BASE_URL).replace(/\/+$/, '')
   }
 
   private async postForToken(input: { code: string; redirectUri: string }): Promise<string> {

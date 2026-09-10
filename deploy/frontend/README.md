@@ -26,5 +26,5 @@ not a runtime one.
 
 The backend has to name this deployment's own origin in `CORS_ORIGINS`. A board
 served from an origin the API does not list still loads and reaches nothing, and the
-Configuration screen needs the origin named even where the board runs on `*`: the
-routes that hold a credential are excluded from the wildcard.
+origin has to be named even where reading the board works on `*`: the wildcard
+covers reads, and every write plus the Configuration screen is excluded from it.

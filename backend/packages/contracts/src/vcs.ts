@@ -23,6 +23,15 @@ export type VcsProvider = v.InferOutput<typeof vcsProviderSchema>
 export const VCS_PROVIDERS: readonly VcsProvider[] = ['github', 'gitlab'] as const
 
 /**
+ * Whether a string names a host this build knows. For the places a provider
+ * arrives as text somebody else wrote: a query parameter on a callback, a row
+ * from a store written by a newer build.
+ */
+export function isVcsProvider(value: string): value is VcsProvider {
+  return (VCS_PROVIDERS as readonly string[]).includes(value)
+}
+
+/**
  * What each host calls itself. The slug is a wire value and the name is what
  * goes in a sentence: "Connected to github" reads like a bug report.
  */
@@ -102,8 +111,15 @@ export type VcsHandles = v.InferOutput<typeof vcsHandlesSchema>
 /** What a CALLER sends: both members optional, so naming one is enough. */
 export type VcsHandlesInput = v.InferInput<typeof vcsHandlesSchema>
 
-/** Somebody with no host account recorded yet. */
-export const NO_VCS_HANDLES: VcsHandles = { github: null, gitlab: null }
+/**
+ * Somebody with no host account recorded yet.
+ *
+ * FROZEN, because it is a shared constant and every caller reaches it by
+ * reference: one `reviewer.handles.github = x` on a row that was defaulted from
+ * here would otherwise rewrite the handles of everybody who has been defaulted
+ * from it since. Build a new map with {@link withHandle} instead.
+ */
+export const NO_VCS_HANDLES: VcsHandles = Object.freeze({ github: null, gitlab: null })
 
 /** The handle to address this person by on one host, or null when there is none. */
 export function handleOf(handles: VcsHandles, provider: VcsProvider): string | null {

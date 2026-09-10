@@ -11,6 +11,9 @@ import {
   post,
 } from './helpers.js'
 
+/** The header the CORS cases are all about. */
+const ALLOW_ORIGIN = 'access-control-allow-origin'
+
 describe('review board API', () => {
   let harness: TestHarness
 
@@ -168,6 +171,25 @@ describe('review board API', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
     // A wildcard and credentials are invalid together, so the pair is never sent.
     expect(res.headers.get('access-control-allow-credentials')).toBeNull()
+  })
+
+  it('does not let the wildcard cover a write', async () => {
+    // No route carries a session yet, so `*` on a write would let any page an
+    // operator happens to visit empty this deployment's project registry.
+    const preflight = (origin: string) =>
+      harness.app.fetch(
+        new Request('http://localhost/api/v1/projects/p-1', {
+          method: 'OPTIONS',
+          headers: { origin, 'access-control-request-method': 'DELETE' },
+        }),
+      )
+
+    expect((await preflight('https://evil.example.com')).headers.get(ALLOW_ORIGIN)).toBeNull()
+    // Loopback still passes: that is the local SPA, which is already code
+    // running on the operator's own machine.
+    expect((await preflight('http://localhost:3000')).headers.get(ALLOW_ORIGIN)).toBe(
+      'http://localhost:3000',
+    )
   })
 
   it('answers only the origins a deployment listed', async () => {

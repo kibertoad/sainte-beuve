@@ -152,6 +152,23 @@ describe('answering an attention request', () => {
     expect(((await again.json()) as AttentionRequest).commitments).toHaveLength(1)
   })
 
+  it('answers a second click from the person who resolved it, rather than refusing', async () => {
+    const asker = harnessFor('kibertoad')
+    // One commitment is the default critical mass, so the click that commits is
+    // also the click that resolves.
+    const request = await raise(asker)
+    const peer = buildHarness({ ...asker.container, vcs: environmentVcs(viewerVcs('peer')) })
+
+    const first = await peer.app.fetch(post(`${ATTENTION}/${request.id}/commit`, {}))
+    expect(((await first.json()) as AttentionRequest).status).toBe('resolved')
+
+    // A slow click, a re-render or a restored tab. Refusing it would toast
+    // "could not commit" at the one person who did.
+    const again = await peer.app.fetch(post(`${ATTENTION}/${request.id}/commit`, {}))
+    expect(again.status).toBe(200)
+    expect(((await again.json()) as AttentionRequest).commitments).toHaveLength(1)
+  })
+
   it('refuses to commit to an ask somebody already answered', async () => {
     const asker = harnessFor('kibertoad')
     const request = await raise(asker)
@@ -195,6 +212,25 @@ describe('committing without an ask', () => {
 
     const board = await harness.app.fetch(get('/api/v1/workspace'))
     expect(((await board.json()) as { committed: unknown[] }).committed).toHaveLength(1)
+  })
+
+  it('keeps one promise per host, not one per path and number', async () => {
+    const harness = harnessFor('kibertoad')
+    // The same path and the same number on the two hosts are two different
+    // changes, and committing to one must not answer with the other.
+    const onGitLab = {
+      ...PR,
+      provider: 'gitlab',
+      url: 'https://gitlab.com/kibertoad/sainte-beuve/-/merge_requests/7',
+    }
+    await harness.app.fetch(post('/api/v1/commitments', { pullRequest: PR, title: 'On GitHub' }))
+    await harness.app.fetch(
+      post('/api/v1/commitments', { pullRequest: onGitLab, title: 'On GitLab' }),
+    )
+
+    const board = await harness.app.fetch(get('/api/v1/workspace'))
+    const committed = ((await board.json()) as { committed: { title: string }[] }).committed
+    expect(committed.map((entry) => entry.title).sort()).toStrictEqual(['On GitHub', 'On GitLab'])
   })
 
   it('hands one back and answers with what is left', async () => {

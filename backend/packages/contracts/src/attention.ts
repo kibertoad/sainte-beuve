@@ -72,7 +72,9 @@ export type AttentionRequest = v.InferOutput<typeof attentionRequestSchema>
 export const createAttentionRequestSchema = v.object({
   pullRequest: pullRequestRefSchema,
   title: attentionRequestSchema.entries.title,
-  requiredSkills: v.optional(v.array(skillSchema), []),
+  // A FACTORY default: valibot hands a plain default back by reference, so
+  // every ask parsed without the field would share one array.
+  requiredSkills: v.optional(v.array(skillSchema), () => []),
   sameTeamOnly: v.optional(v.boolean(), false),
   neededCommitments: v.optional(attentionRequestSchema.entries.neededCommitments, 1),
   note: v.optional(v.nullable(attentionRequestSchema.entries.note), null),

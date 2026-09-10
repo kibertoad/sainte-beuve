@@ -21,6 +21,18 @@ describe('loadConfig', () => {
     expect(loadConfig({ SETTINGS_ENCRYPTION_KEY: 'a-key' }).encryptionKey).toBe('a-key')
   })
 
+  it('reads a base URL left blank as no base URL at all', () => {
+    // Every example deployment ships `GITLAB_BASE_URL=` with no value, and `''`
+    // as the base builds every path relative: `TypeError: Failed to parse URL`
+    // on the first project, and a sign-in route that 500s.
+    const config = loadConfig({ GITLAB_BASE_URL: '', GITHUB_API_BASE_URL: '' })
+    expect(config.gitlab.baseUrl).toBeUndefined()
+    expect(config.github.baseUrl).toBeUndefined()
+    expect(loadConfig({ GITLAB_BASE_URL: 'https://gitlab.example.com' }).gitlab.baseUrl).toBe(
+      'https://gitlab.example.com',
+    )
+  })
+
   it('treats a partly configured cat-factory as not configured', () => {
     // A base URL with no service id names no service, so a gateway built from it
     // would fail on the first delegation instead of on `/health`.

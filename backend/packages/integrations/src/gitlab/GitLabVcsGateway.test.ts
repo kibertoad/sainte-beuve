@@ -44,6 +44,18 @@ function stub(payloads: unknown[]): { fetchImpl: typeof globalThis.fetch; calls:
   return { fetchImpl, calls }
 }
 
+/** `count` open merge requests, numbered from `start`. */
+function openMerges(start: number, count: number): unknown[] {
+  return Array.from({ length: count }, (_, index) => ({
+    iid: start + index,
+    title: 'A change',
+    web_url: `https://gitlab.com/platform/backend/api/-/merge_requests/${start + index}`,
+    created_at: '2026-09-01T10:00:00Z',
+    updated_at: '2026-09-02T10:00:00Z',
+    author: { id: 1, username: 'author' },
+  }))
+}
+
 describe('GitLabVcsGateway', () => {
   it('lists open merge requests as pull requests, with the author and reviewers', async () => {
     const { fetchImpl, calls } = stub([
@@ -78,6 +90,23 @@ describe('GitLabVcsGateway', () => {
         createdAt: Date.parse('2026-09-01T10:00:00Z'),
         updatedAt: Date.parse('2026-09-02T10:00:00Z'),
       },
+    ])
+  })
+
+  it('follows the pages, so a project past the first one is not truncated', async () => {
+    // 100 is GitLab's own cap on `per_page`. A project with more open merge
+    // requests would otherwise drop the viewer's older one off the workspace
+    // while the screen reported the project as read.
+    const { fetchImpl, calls } = stub([openMerges(1, 100), openMerges(101, 12)])
+    const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
+
+    const listed = await gateway.listOpenPullRequests(PROJECT)
+
+    expect(listed).toHaveLength(112)
+    // A short page is the last page, so the second answer ends the read.
+    expect(calls.map((call) => new URL(call.url).searchParams.get('page'))).toStrictEqual([
+      '1',
+      '2',
     ])
   })
 

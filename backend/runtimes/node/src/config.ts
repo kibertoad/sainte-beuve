@@ -106,7 +106,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
       signingSecret: env.SLACK_SIGNING_SECRET || null,
       channelId: env.SLACK_CHANNEL_ID || null,
     },
-    appBaseUrl: env.APP_BASE_URL,
+    appBaseUrl: env.APP_BASE_URL || undefined,
     encryptionKey: env.SETTINGS_ENCRYPTION_KEY || null,
   }
 }
@@ -122,48 +122,66 @@ function catFactoryFrom(env: Env): NodeConfig['catFactory'] {
   return {
     baseUrl: CAT_FACTORY_BASE_URL,
     serviceId: CAT_FACTORY_SERVICE_ID,
-    pipelineId: env.CAT_FACTORY_PIPELINE_ID,
+    pipelineId: env.CAT_FACTORY_PIPELINE_ID || undefined,
   }
+}
+
+/**
+ * One host's OAuth client, or null when the pair that makes one is not there.
+ * Both hosts' sign-ins are configured the same way, so both read it here: a
+ * client id with no secret is half a flow, and offering it would be a button
+ * that fails at the exchange.
+ */
+function oauthFrom(client: {
+  clientId: string | undefined
+  clientSecret: string | undefined
+  scope: string | undefined
+}): GitHubConfig['oauth'] {
+  const { clientId, clientSecret } = client
+  if (!clientId || !clientSecret) return null
+  return { clientId, clientSecret, scope: client.scope || undefined }
 }
 
 function gitlabFrom(env: Env): GitLabConfig {
   return {
-    baseUrl: env.GITLAB_BASE_URL,
+    // `|| undefined`, like every other read here: `GITLAB_BASE_URL=` in a
+    // copied `.env.example` is a variable nobody set, and `''` as the base
+    // builds every GitLab path relative instead of against gitlab.com.
+    baseUrl: env.GITLAB_BASE_URL || undefined,
     token: env.GITLAB_TOKEN || null,
-    oauth:
-      env.GITLAB_OAUTH_CLIENT_ID && env.GITLAB_OAUTH_CLIENT_SECRET
-        ? {
-            clientId: env.GITLAB_OAUTH_CLIENT_ID,
-            clientSecret: env.GITLAB_OAUTH_CLIENT_SECRET,
-            scope: env.GITLAB_OAUTH_SCOPE,
-          }
-        : null,
+    oauth: oauthFrom({
+      clientId: env.GITLAB_OAUTH_CLIENT_ID,
+      clientSecret: env.GITLAB_OAUTH_CLIENT_SECRET,
+      scope: env.GITLAB_OAUTH_SCOPE,
+    }),
+  }
+}
+
+/** The reviewer-facing labels, each falling back to the default when unset. */
+function labelsFrom(env: Env): GitHubLabelRules {
+  return {
+    review: env.GITHUB_LABEL_REVIEW || DEFAULT_GITHUB_LABELS.review,
+    aiReview: env.GITHUB_LABEL_AI_REVIEW || DEFAULT_GITHUB_LABELS.aiReview,
+    skillPrefix: env.GITHUB_LABEL_SKILL_PREFIX || DEFAULT_GITHUB_LABELS.skillPrefix,
   }
 }
 
 function githubFrom(env: Env): GitHubConfig {
   return {
     token: env.GITHUB_TOKEN || null,
-    baseUrl: env.GITHUB_API_BASE_URL,
+    baseUrl: env.GITHUB_API_BASE_URL || undefined,
     webhookSecret: env.GITHUB_WEBHOOK_SECRET || null,
     app:
       env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY
         ? { appId: env.GITHUB_APP_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY }
         : null,
     appSlug: env.GITHUB_APP_SLUG || null,
-    oauth:
-      env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET
-        ? {
-            clientId: env.GITHUB_OAUTH_CLIENT_ID,
-            clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET,
-            scope: env.GITHUB_OAUTH_SCOPE,
-          }
-        : null,
+    oauth: oauthFrom({
+      clientId: env.GITHUB_OAUTH_CLIENT_ID,
+      clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET,
+      scope: env.GITHUB_OAUTH_SCOPE,
+    }),
     botLogin: env.GITHUB_BOT_LOGIN || null,
-    labels: {
-      review: env.GITHUB_LABEL_REVIEW || DEFAULT_GITHUB_LABELS.review,
-      aiReview: env.GITHUB_LABEL_AI_REVIEW || DEFAULT_GITHUB_LABELS.aiReview,
-      skillPrefix: env.GITHUB_LABEL_SKILL_PREFIX || DEFAULT_GITHUB_LABELS.skillPrefix,
-    },
+    labels: labelsFrom(env),
   }
 }

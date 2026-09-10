@@ -46,6 +46,32 @@ function stub(
   return { fetchImpl, calls }
 }
 
+/** Answers each call from a queue of pages, so a paged read can be scripted. */
+function pagedStub(pages: unknown[][]): { fetchImpl: typeof globalThis.fetch; urls: string[] } {
+  const urls: string[] = []
+  const queue = [...pages]
+  const fetchImpl = (async (url: string | URL | Request) => {
+    urls.push(String(url))
+    return new Response(JSON.stringify(queue.shift() ?? []), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }) as typeof globalThis.fetch
+  return { fetchImpl, urls }
+}
+
+/** `count` open pull requests, numbered from `start`. */
+function openPulls(start: number, count: number): unknown[] {
+  return Array.from({ length: count }, (_, index) => ({
+    number: start + index,
+    title: 'A change',
+    html_url: `https://github.com/kibertoad/sainte-beuve/pull/${start + index}`,
+    created_at: '2026-09-01T10:00:00Z',
+    updated_at: '2026-09-02T10:00:00Z',
+    user: { id: 1, login: 'author' },
+  }))
+}
+
 describe('GitHubVcsGateway', () => {
   it('mirrors an assignment onto the pull request', async () => {
     const { fetchImpl, calls } = stub()
@@ -148,6 +174,24 @@ describe('GitHubVcsGateway', () => {
         updatedAt: Date.parse('2026-09-02T10:00:00Z'),
       },
     ])
+  })
+
+  it('follows the pages, so a repository past the first one is not truncated', async () => {
+    // 100 is GitHub's own cap on `per_page`. A monorepo with more open pull
+    // requests would otherwise drop the viewer's older one off the workspace
+    // while the screen reported the project as read.
+    const { fetchImpl, urls } = pagedStub([openPulls(1, 100), openPulls(101, 20)])
+    const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
+
+    const listed = await gateway.listOpenPullRequests({
+      provider: 'github',
+      owner: 'kibertoad',
+      repo: 'sainte-beuve',
+    })
+
+    expect(listed).toHaveLength(120)
+    // A short page is the last page, so the second answer ends the read.
+    expect(urls.map((url) => new URL(url).searchParams.get('page'))).toStrictEqual(['1', '2'])
   })
 
   it('answers no account for an App, without asking GitHub', async () => {

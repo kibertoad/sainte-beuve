@@ -250,8 +250,13 @@ export function viewerVcs(
     comment: async () => {},
     listOpenPullRequests: async (project) => {
       listed.push(project)
+      // The HOST is part of the match, as it is in a real adapter: a gateway
+      // for one host cannot answer with the other's pull requests.
       return pullRequests.filter(
-        (pr) => pr.pullRequest.owner === project.owner && pr.pullRequest.repo === project.repo,
+        (pr) =>
+          pr.pullRequest.provider === project.provider &&
+          pr.pullRequest.owner === project.owner &&
+          pr.pullRequest.repo === project.repo,
       )
     },
     identify: async () => ({
@@ -263,10 +268,17 @@ export function viewerVcs(
   }
 }
 
+/**
+ * A gateway authenticated as the deployment's own App: it reaches repositories
+ * and it identifies NOBODY, which is exactly what an installation token is.
+ */
+export function appVcs(pullRequests: OpenPullRequest[] = []): VcsGateway {
+  return { ...viewerVcs('installation', pullRequests), identify: async () => null }
+}
+
 /** One open pull request, with only the fields a case cares about spelled out. */
 export function openPullRequest(overrides: Partial<OpenPullRequest> = {}): OpenPullRequest {
   return {
-    pullRequest: { ...PR, ...overrides.pullRequest },
     title: 'A change',
     authorLogin: 'someone',
     requestedReviewerLogins: [],
@@ -274,5 +286,10 @@ export function openPullRequest(overrides: Partial<OpenPullRequest> = {}): OpenP
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
+    // AFTER the spread, so a case that names one field of the ref gets that
+    // field ON TOP of the default one. Before it, `{ pullRequest: { number: 5 } }`
+    // would be overwritten wholesale and leave the provider, the owner and the
+    // repo undefined, which no filter matches and no assertion notices.
+    pullRequest: { ...PR, ...overrides.pullRequest },
   }
 }

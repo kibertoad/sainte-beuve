@@ -55,7 +55,9 @@ export const createReviewRequestSchema = v.object({
   pullRequest: pullRequestRefSchema,
   title: reviewRequestSchema.entries.title,
   authorLogin: v.string(),
-  requiredSkills: v.optional(v.array(skillSchema), []),
+  // A FACTORY default: valibot hands a plain default back by reference, so
+  // every review parsed without the field would share one array.
+  requiredSkills: v.optional(v.array(skillSchema), () => []),
   priority: v.optional(reviewPrioritySchema, 'normal'),
   dueAt: v.optional(v.nullable(v.number()), null),
 })
@@ -70,7 +72,7 @@ export type CreateReviewRequestInput = v.InferInput<typeof createReviewRequestSc
  */
 export const assignReviewersSchema = v.object({
   count: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5)), 1),
-  excludeReviewerIds: v.optional(v.array(v.string()), []),
+  excludeReviewerIds: v.optional(v.array(v.string()), () => []),
 })
 export type AssignReviewers = v.InferOutput<typeof assignReviewersSchema>
 

@@ -58,7 +58,28 @@ export async function resolveVcs(
 ): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
   const asApp = container.gateways?.vcsAsApp(provider) ?? null
   if (asApp !== null) return { gateway: asApp, source: 'app' }
+  return resolveVcsAsPerson(container, provider)
+}
 
+/**
+ * The credential in force for one host that acts as a PERSON: a sign-in, then a
+ * pasted token, then the environment's own.
+ *
+ * The App step of the precedence is missing on purpose, and this is not a
+ * shortcut: an installation token identifies nobody (`identify()` answers null
+ * without a request), so asking `resolveVcs` who is looking answers "nobody" on
+ * a deployment that holds an App AND a sign-in. Every route that needs a viewer
+ * would then 503 with a message telling the operator to sign in, which is the
+ * thing they already did, while their stored credential sat unreachable.
+ *
+ * Which credential a call is MADE with is a different question, and `resolveVcs`
+ * is still the answer to it: the App is the stronger credential for reaching a
+ * repository, it is just not a person.
+ */
+async function resolveVcsAsPerson(
+  container: AppContainer,
+  provider: VcsProvider,
+): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
   const signedIn = await gatewayFromStored(container, provider, vcsOauthCredentialKey(provider))
   if (signedIn !== null) return { gateway: signedIn, source: 'oauth' }
 
@@ -67,6 +88,44 @@ export async function resolveVcs(
 
   const fromEnvironment = container.vcs[provider]
   return fromEnvironment === null ? null : { gateway: fromEnvironment, source: 'environment' }
+}
+
+/**
+ * The resolutions made while answering ONE request, so a call chain that needs
+ * the same host twice opens its sealed credential once.
+ *
+ * A workspace read needs GitHub for the viewer and again for the sweep, and
+ * every resolution is an HKDF derivation plus an AES-GCM open. Deliberately not
+ * cached on the container: the Node facade builds one container at boot, so a
+ * cache with that lifetime would keep answering with the token a Configuration
+ * screen has already replaced, which is the property `resolveVcs` runs per
+ * request to protect.
+ *
+ * Only the person chain is memoised. `vcsAsApp` is a lookup of a gateway the
+ * factory built once, so there is nothing there to save.
+ */
+export class VcsResolutions {
+  private readonly asPersonByProvider = new Map<
+    VcsProvider,
+    Promise<Resolved<VcsGateway, VcsAuthMethod> | null>
+  >()
+
+  constructor(private readonly container: AppContainer) {}
+
+  /** The gateway calls to this host are made with. See {@link resolveVcs}. */
+  async acting(provider: VcsProvider): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
+    const asApp = this.container.gateways?.vcsAsApp(provider) ?? null
+    if (asApp !== null) return { gateway: asApp, source: 'app' }
+    return this.asPerson(provider)
+  }
+
+  /** The gateway that can say who is looking. See {@link resolveVcsAsPerson}. */
+  async asPerson(provider: VcsProvider): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
+    const pending =
+      this.asPersonByProvider.get(provider) ?? resolveVcsAsPerson(this.container, provider)
+    this.asPersonByProvider.set(provider, pending)
+    return pending
+  }
 }
 
 /** A gateway built from one stored credential, or null when there is no usable pair of the two. */

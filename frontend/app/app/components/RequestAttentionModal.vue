@@ -38,11 +38,20 @@ const open = computed({
   },
 })
 
-/** The vocabulary of the project this pull request is in, when it is a known one. */
+/**
+ * The vocabulary of the project this pull request is in, when it is a known one.
+ *
+ * Matched on the HOST as well as the path: `platform/api` can be registered on
+ * both, with a different vocabulary on each, and offering the other host's
+ * skills is how a requester picks one nobody on this side holds and the ask
+ * reaches nobody while looking correctly configured.
+ */
 const skills = computed(() => {
   const pr = props.pullRequest?.pullRequest
   if (pr === undefined) return []
-  const project = props.projects.find((entry) => entry.owner === pr.owner && entry.repo === pr.repo)
+  const project = props.projects.find(
+    (entry) => entry.provider === pr.provider && entry.owner === pr.owner && entry.repo === pr.repo,
+  )
   return project?.skills ?? []
 })
 

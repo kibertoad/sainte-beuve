@@ -127,7 +127,10 @@ function gatewaysFor(env: WorkerEnv): GatewayFactory {
 function buildGateways(env: WorkerEnv): GatewayFactory {
   return createGatewayFactory({
     github: {
-      apiBaseUrl: env.GITHUB_API_BASE_URL,
+      // `|| undefined` throughout, for the reason `containerFor` gives below: a
+      // binding left blank is one nobody set, and `''` as a base URL builds
+      // every path relative rather than falling back to the host's own root.
+      apiBaseUrl: env.GITHUB_API_BASE_URL || undefined,
       app:
         env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY
           ? { appId: env.GITHUB_APP_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY }
@@ -137,22 +140,22 @@ function buildGateways(env: WorkerEnv): GatewayFactory {
           ? {
               clientId: env.GITHUB_OAUTH_CLIENT_ID,
               clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET,
-              scope: env.GITHUB_OAUTH_SCOPE,
+              scope: env.GITHUB_OAUTH_SCOPE || undefined,
             }
           : null,
     },
     gitlab: {
-      baseUrl: env.GITLAB_BASE_URL,
+      baseUrl: env.GITLAB_BASE_URL || undefined,
       oauth:
         env.GITLAB_OAUTH_CLIENT_ID && env.GITLAB_OAUTH_CLIENT_SECRET
           ? {
               clientId: env.GITLAB_OAUTH_CLIENT_ID,
               clientSecret: env.GITLAB_OAUTH_CLIENT_SECRET,
-              scope: env.GITLAB_OAUTH_SCOPE,
+              scope: env.GITLAB_OAUTH_SCOPE || undefined,
             }
           : null,
     },
-    appBaseUrl: env.APP_BASE_URL,
+    appBaseUrl: env.APP_BASE_URL || undefined,
     aiReview: (apiKey) => aiReviewFrom(env, apiKey),
   })
 }
@@ -165,7 +168,7 @@ function aiReviewFrom(env: WorkerEnv, apiKey: string): AiReviewGateway | null {
     baseUrl: CAT_FACTORY_BASE_URL,
     apiKey,
     serviceId: CAT_FACTORY_SERVICE_ID,
-    pipelineId: env.CAT_FACTORY_PIPELINE_ID,
+    pipelineId: env.CAT_FACTORY_PIPELINE_ID || undefined,
   })
 }
 
@@ -175,7 +178,10 @@ function buildAiReview(env: WorkerEnv): AiReviewGateway | null {
 
 function buildChat(env: WorkerEnv): ChatGateway | null {
   if (!env.SLACK_BOT_TOKEN) return null
-  return new SlackChatGateway({ botToken: env.SLACK_BOT_TOKEN, appBaseUrl: env.APP_BASE_URL })
+  return new SlackChatGateway({
+    botToken: env.SLACK_BOT_TOKEN,
+    appBaseUrl: env.APP_BASE_URL || undefined,
+  })
 }
 
 /** The environment's own credential per host: what a stored one takes precedence over. */
@@ -184,11 +190,14 @@ function buildVcs(env: WorkerEnv): EnvironmentVcsGateways {
     github: env.GITHUB_TOKEN
       ? new GitHubVcsGateway({
           tokens: staticTokenSource(env.GITHUB_TOKEN),
-          baseUrl: env.GITHUB_API_BASE_URL,
+          baseUrl: env.GITHUB_API_BASE_URL || undefined,
         })
       : null,
     gitlab: env.GITLAB_TOKEN
-      ? new GitLabVcsGateway({ token: env.GITLAB_TOKEN, baseUrl: env.GITLAB_BASE_URL })
+      ? new GitLabVcsGateway({
+          token: env.GITLAB_TOKEN,
+          baseUrl: env.GITLAB_BASE_URL || undefined,
+        })
       : null,
   }
 }
