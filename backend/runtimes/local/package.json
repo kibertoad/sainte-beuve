@@ -34,9 +34,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.1",
-    "@sainte-beuve/node-server": "workspace:*",
-    "@sainte-beuve/server": "workspace:*"
+    "@sainte-beuve/node-server": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",

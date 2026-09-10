@@ -42,6 +42,18 @@ function normalizeSkill(skill: string): string {
 }
 
 /**
+ * Whether two GitHub logins name the same account. GitHub logins are
+ * case-insensitive, and the same person arrives spelled two ways: a webhook
+ * carries the casing GitHub stores, a reviewer registered by hand carries whatever
+ * was typed. Compared exactly, `Kibertoad` and `kibertoad` are two people, and the
+ * author lands in their own review's candidate pool.
+ */
+export function isSameGithubLogin(left: string | null, right: string | null): boolean {
+  if (left === null || right === null) return false
+  return left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
+/**
  * Whether a reviewer can take this review at all. Skills are an ALL-of gate, not a
  * ranking: a review that needs `payments` should not fall to somebody who merely
  * knows `typescript`, because a partial match here reads to the author as a real

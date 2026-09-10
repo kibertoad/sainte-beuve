@@ -1,41 +1,15 @@
-import type { CreateReviewerInput, CreateReviewRequestInput } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { type TestHarness, buildHarness } from './helpers.js'
-
-const PR: CreateReviewRequestInput['pullRequest'] = {
-  provider: 'github',
-  owner: 'kibertoad',
-  repo: 'sainte-beuve',
-  number: 7,
-  url: 'https://github.com/kibertoad/sainte-beuve/pull/7',
-}
-
-function post(path: string, body: unknown): Request {
-  return new Request(`http://localhost${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-}
-
-async function addReviewer(harness: TestHarness, reviewer: CreateReviewerInput) {
-  const res = await harness.app.fetch(post('/api/v1/reviewers', reviewer))
-  expect(res.status).toBe(201)
-  return (await res.json()) as { id: string; displayName: string }
-}
-
-async function openReview(harness: TestHarness, overrides: Partial<CreateReviewRequestInput> = {}) {
-  const res = await harness.app.fetch(
-    post('/api/v1/reviews', {
-      pullRequest: PR,
-      title: 'Add a health check',
-      authorLogin: 'author',
-      ...overrides,
-    }),
-  )
-  expect(res.status).toBe(201)
-  return (await res.json()) as { id: string; status: string; assignedReviewerIds: string[] }
-}
+import { createApp } from '../src/app.js'
+import {
+  PR,
+  type TestHarness,
+  addReviewer,
+  assignReviewer,
+  buildHarness,
+  openReview,
+  patch,
+  post,
+} from './helpers.js'
 
 describe('review board API', () => {
   let harness: TestHarness
@@ -89,7 +63,7 @@ describe('review board API', () => {
     })
     const review = await openReview(harness, { requiredSkills: ['typescript'] })
 
-    const res = await harness.app.fetch(post(`/api/v1/reviews/${review.id}/assign`, { count: 1 }))
+    const res = await assignReviewer(harness, review.id)
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
       assigned: { reviewerId: string }[]
@@ -106,7 +80,7 @@ describe('review board API', () => {
     await addReviewer(harness, { displayName: 'Gopher', githubLogin: 'gopher', skills: ['go'] })
     const review = await openReview(harness, { requiredSkills: ['rust'] })
 
-    const res = await harness.app.fetch(post(`/api/v1/reviews/${review.id}/assign`, { count: 1 }))
+    const res = await assignReviewer(harness, review.id)
     const body = (await res.json()) as { assigned: unknown[]; shortfallReason: string }
     expect(body.assigned).toStrictEqual([])
     expect(body.shortfallReason).toBe('no_candidates')
@@ -123,4 +97,79 @@ describe('review board API', () => {
     expect(res.status).toBe(503)
     expect(await res.json()).toMatchObject({ error: { code: 'unavailable' } })
   })
+
+  it('never assigns the author, whatever case their login is spelled in', async () => {
+    const author = await addReviewer(harness, { displayName: 'Author', githubLogin: 'kibertoad' })
+    const review = await openReview(harness, { authorLogin: 'Kibertoad' })
+
+    const body = (await (await assignReviewer(harness, review.id)).json()) as {
+      assigned: { reviewerId: string }[]
+      shortfallReason: string | null
+    }
+    expect(body.assigned).toStrictEqual([])
+    expect(body.shortfallReason).toBe('no_candidates')
+    expect(body.assigned.map((a) => a.reviewerId)).not.toContain(author.id)
+  })
+
+  it('releases a reviewer once, however many times the same close is replayed', async () => {
+    const reviewer = await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    const review = await openReview(harness)
+    await assignReviewer(harness, review.id)
+    expect(await outstanding(harness, reviewer.id)).toBe(1)
+
+    await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'closed' }))
+    expect(await outstanding(harness, reviewer.id)).toBe(0)
+
+    // What a GitHub webhook replay looks like: the same terminal write, twice.
+    await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'closed' }))
+    expect(await outstanding(harness, reviewer.id)).toBe(0)
+  })
+
+  it('puts the reviewers back on the hook when a closed review is reopened', async () => {
+    const reviewer = await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    const review = await openReview(harness)
+    await assignReviewer(harness, review.id)
+    await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'closed' }))
+
+    await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'in_review' }))
+    expect(await outstanding(harness, reviewer.id)).toBe(1)
+  })
+
+  it('allows the SPA on the wildcard every runtime defaults to', async () => {
+    const res = await harness.app.fetch(
+      new Request('http://localhost/api/v1/reviews', {
+        headers: { origin: 'http://localhost:3000' },
+      }),
+    )
+    expect(res.headers.get('access-control-allow-origin')).toBe('*')
+    // A wildcard and credentials are invalid together, so the pair is never sent.
+    expect(res.headers.get('access-control-allow-credentials')).toBeNull()
+  })
+
+  it('answers only the origins a deployment listed', async () => {
+    const listed = buildHarness()
+    const app = createApp({
+      resolveContainer: () => listed.container,
+      corsOrigins: ['https://board.example.com'],
+    })
+
+    const allowed = await app.fetch(
+      new Request('http://localhost/api/v1/reviews', {
+        headers: { origin: 'https://board.example.com' },
+      }),
+    )
+    expect(allowed.headers.get('access-control-allow-origin')).toBe('https://board.example.com')
+
+    const refused = await app.fetch(
+      new Request('http://localhost/api/v1/reviews', {
+        headers: { origin: 'https://evil.example.com' },
+      }),
+    )
+    expect(refused.headers.get('access-control-allow-origin')).toBeNull()
+  })
 })
+
+async function outstanding(harness: TestHarness, reviewerId: string): Promise<number> {
+  const reviewer = await harness.container.repositories.reviewers.getById(reviewerId)
+  return reviewer?.outstandingReviews ?? -1
+}

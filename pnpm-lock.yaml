@@ -235,15 +235,9 @@ importers:
 
   backend/runtimes/local:
     dependencies:
-      '@hono/node-server':
-        specifier: ^2.1.1
-        version: 2.1.1(hono@4.13.7)
       '@sainte-beuve/node-server':
         specifier: workspace:*
         version: link:../node
-      '@sainte-beuve/server':
-        specifier: workspace:*
-        version: link:../../packages/server
     devDependencies:
       '@types/node':
         specifier: ^26.5.0

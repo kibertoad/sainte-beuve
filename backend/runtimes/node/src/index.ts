@@ -33,7 +33,15 @@ export async function start(config: NodeConfig = loadConfig()): Promise<RunningS
   // by the HTTP server closing, not by a timer nobody is waiting on.
   timer.unref()
 
-  container.logger.info({ port: config.port }, 'sainte-beuve node server listening')
+  container.logger.info(
+    {
+      port: config.port,
+      catFactory: config.catFactory === null ? 'not configured' : config.catFactory.baseUrl,
+      slack: config.slack === null ? 'not configured' : 'configured',
+      github: config.github === null ? 'not configured' : 'configured',
+    },
+    'sainte-beuve server listening',
+  )
   return {
     port: config.port,
     close: async () => {

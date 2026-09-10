@@ -30,6 +30,18 @@ export interface AiReviewHandle {
   url: string | null
 }
 
+/**
+ * What a poll found. `summary` is the verdict of a run that finished and
+ * `failureReason` is why one did not: they are separate fields because the board
+ * shows them in different places, and a gateway that writes the failure text into
+ * the summary leaves a failed review looking like a reviewed one.
+ */
+export interface AiReviewReport {
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  summary: string | null
+  failureReason: string | null
+}
+
 /** cat-factory, reached over the published `@cat-factory/sdk`. */
 export interface AiReviewGateway {
   /** Hand a pull request to cat-factory. Resolves once the task is accepted, not once it runs. */
@@ -39,8 +51,5 @@ export interface AiReviewGateway {
     instructions: string | null
   }): Promise<AiReviewHandle>
   /** Poll one delegated run. The Worker cron and the Node scheduler both drive this. */
-  getStatus(taskId: string): Promise<{
-    status: 'running' | 'completed' | 'failed' | 'cancelled'
-    summary: string | null
-  }>
+  getStatus(taskId: string): Promise<AiReviewReport>
 }

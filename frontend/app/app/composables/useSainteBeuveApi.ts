@@ -37,3 +37,15 @@ export function useSainteBeuveApi() {
       post<{ id: string; status: string }>(`/reviews/${reviewId}/ai-review`, { instructions }),
   }
 }
+
+/**
+ * The operator-facing text for a failed call. The backend answers every fault as
+ * `{ error: { code, message } }` and the message names what is missing (which
+ * configuration, which review), so it is the thing to show; the transport error is
+ * the fallback for a backend that never answered at all.
+ */
+export function apiErrorMessage(err: unknown): string {
+  const envelope = (err as { data?: { error?: { message?: string } } } | null)?.data?.error
+  if (envelope?.message) return envelope.message
+  return err instanceof Error ? err.message : 'The sainte-beuve API could not be reached'
+}

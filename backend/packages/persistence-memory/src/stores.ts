@@ -33,6 +33,16 @@ function clone<T>(value: T): T {
   return structuredClone(value)
 }
 
+/**
+ * Apply a patch to a stored row. Cloned on the way IN as well as out: a patch
+ * carrying an array or an object would otherwise be held by reference, and a caller
+ * that mutates it afterwards would rewrite the store, which no durable adapter
+ * would let it do. The id is never patchable.
+ */
+function patched<T extends { id: string }>(row: T, patch: Partial<T>): T {
+  return clone({ ...row, ...patch, id: row.id })
+}
+
 export class InMemoryReviewerRepository implements ReviewerRepository {
   private readonly rows = new Map<string, Reviewer>()
 
@@ -53,7 +63,7 @@ export class InMemoryReviewerRepository implements ReviewerRepository {
   async update(reviewerId: string, patch: Partial<Reviewer>): Promise<Reviewer | null> {
     const row = this.rows.get(reviewerId)
     if (row === undefined) return null
-    const next = { ...row, ...patch, id: row.id }
+    const next = patched(row, patch)
     this.rows.set(reviewerId, next)
     return clone(next)
   }
@@ -106,7 +116,7 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
   async update(reviewId: string, patch: Partial<ReviewRequest>): Promise<ReviewRequest | null> {
     const row = this.rows.get(reviewId)
     if (row === undefined) return null
-    const next = { ...row, ...patch, id: row.id }
+    const next = patched(row, patch)
     this.rows.set(reviewId, next)
     return clone(next)
   }
@@ -179,7 +189,7 @@ export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
   async update(runId: string, patch: Partial<AiReviewRun>): Promise<AiReviewRun | null> {
     const row = this.rows.get(runId)
     if (row === undefined) return null
-    const next = { ...row, ...patch, id: row.id }
+    const next = patched(row, patch)
     this.rows.set(runId, next)
     return clone(next)
   }

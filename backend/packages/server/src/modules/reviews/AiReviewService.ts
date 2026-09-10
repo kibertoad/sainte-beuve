@@ -85,6 +85,7 @@ export class AiReviewService {
     return repositories.aiReviewRuns.update(runId, {
       status: reported.status,
       summary: reported.summary,
+      failureReason: reported.failureReason,
       completedAt: finished ? clock.now() : null,
     })
   }

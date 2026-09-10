@@ -82,32 +82,35 @@ function latestSentAt(sent: readonly Reminder[], kind: ReminderKind): EpochMs | 
 }
 
 /**
- * The single next reminder to schedule for a review, or null when there is nothing
- * to chase. Returns AT MOST one: the tick re-plans after each send, so a stalled
- * review cannot accumulate a queue of nudges that all fire at once when it wakes.
- *
- * Order matters. Escalation is checked first because a review past its deadline
- * needs the wider audience regardless of how many private nudges are left in the
- * budget, which is the case where the `maxPendingReminders` cap would otherwise
- * make the system go quiet exactly when it should get louder.
+ * The wide nudge, due a fixed wait past the review's own deadline. Planned once:
+ * widening the audience is a one-off event, and repeating it is how a channel
+ * learns to mute the bot.
  */
-export function planNextReminder(
+function planEscalation(
   review: ReviewRequest,
   policy: ReminderPolicy,
   alreadySent: readonly Reminder[],
 ): PlannedReminder | null {
-  if (isResolved(review)) return null
-
-  if (review.dueAt !== null && latestSentAt(alreadySent, 'escalation') === null) {
-    return {
-      reviewId: review.id,
-      kind: 'escalation',
-      channel: 'slack_channel',
-      reviewerId: null,
-      dueAt: review.dueAt + policy.escalateAfterDueMs,
-    }
+  if (review.dueAt === null) return null
+  if (latestSentAt(alreadySent, 'escalation') !== null) return null
+  return {
+    reviewId: review.id,
+    kind: 'escalation',
+    channel: 'slack_channel',
+    reviewerId: null,
+    dueAt: review.dueAt + policy.escalateAfterDueMs,
   }
+}
 
+/**
+ * The ordinary nudge: the channel while nobody owns the review, the assigned
+ * reviewer's DM once somebody does, up to the pending budget.
+ */
+function planNudge(
+  review: ReviewRequest,
+  policy: ReminderPolicy,
+  alreadySent: readonly Reminder[],
+): PlannedReminder | null {
   if (review.assignedReviewerIds.length === 0) {
     if (latestSentAt(alreadySent, 'unassigned') !== null) return null
     return {
@@ -127,4 +130,41 @@ export function planNextReminder(
     reviewerId: review.assignedReviewerIds[0] ?? null,
     dueAt: nextPendingReminderAt(review, policy, latestSentAt(alreadySent, 'pending')),
   }
+}
+
+/**
+ * The soonest candidate, or null when there is none. A tie goes to the first in the
+ * list, the escalation: when a private nudge and a wide one fall due at the same
+ * moment, the wide one is the answer and the private one is re-planned behind it.
+ */
+function earliest(candidates: readonly (PlannedReminder | null)[]): PlannedReminder | null {
+  let soonest: PlannedReminder | null = null
+  for (const candidate of candidates) {
+    if (candidate === null) continue
+    if (soonest === null || candidate.dueAt < soonest.dueAt) soonest = candidate
+  }
+  return soonest
+}
+
+/**
+ * The single next reminder to schedule for a review, or null when there is nothing
+ * to chase. Returns AT MOST one: the tick re-plans after each send, so a stalled
+ * review cannot accumulate a queue of nudges that all fire at once when it wakes.
+ *
+ * Which one is decided by the clock, not by a precedence between kinds. An
+ * escalation that is a week out must not silence the DM that is due tomorrow, and
+ * once the pending budget is spent the escalation is the only candidate left, so it
+ * is planned even though it is further away. That is the case the budget would
+ * otherwise turn into silence exactly when the review most needs an audience.
+ */
+export function planNextReminder(
+  review: ReviewRequest,
+  policy: ReminderPolicy,
+  alreadySent: readonly Reminder[],
+): PlannedReminder | null {
+  if (isResolved(review)) return null
+  return earliest([
+    planEscalation(review, policy, alreadySent),
+    planNudge(review, policy, alreadySent),
+  ])
 }

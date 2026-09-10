@@ -3,6 +3,7 @@ import type { PullRequestRef } from '@sainte-beuve/contracts'
 import {
   type AiReviewGateway,
   type AiReviewHandle,
+  type AiReviewReport,
   UpstreamFailedError,
   formatPullRequest,
   getErrorMessage,
@@ -35,18 +36,40 @@ export interface CatFactoryOptions {
   serviceId: string
   /** Pin the pipeline the review runs on. Omitted, the task's own pinned pipeline runs. */
   pipelineId?: string
+  /** Swap the HTTP implementation. The SDK's own seam, so a suite needs no live instance. */
+  fetch?: typeof globalThis.fetch
 }
 
 /**
- * A cat-factory run is `blocked`/`paused` when it is waiting on a human decision.
- * From sainte-beuve's side that is still an unfinished review, not a failure: the
- * distinction the caller cares about is "has a verdict arrived", and a parked run
- * has not produced one.
+ * The cat-factory run states that END a review, and what each means to us. Anything
+ * absent from this table is in flight: a run is `blocked`/`paused` when it is
+ * waiting on a human decision, and from sainte-beuve's side that is an unfinished
+ * review rather than a failure. A state cat-factory adds later reads as in-flight
+ * too, which is the safe default, because the next poll settles it.
  */
-function mapRunStatus(status: string): 'running' | 'completed' | 'failed' | 'cancelled' {
-  if (status === 'done') return 'completed'
-  if (status === 'failed') return 'failed'
-  return 'running'
+const TERMINAL_STATUSES: Record<string, 'completed' | 'failed' | 'cancelled'> = {
+  done: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+}
+
+function mapRunStatus(status: string): AiReviewReport['status'] {
+  return TERMINAL_STATUSES[status] ?? 'running'
+}
+
+/**
+ * The verdict text for a finished run: the last step that produced output. The full
+ * transcript stays in cat-factory and the board shows a line, so this is capped
+ * rather than stored whole.
+ */
+const SUMMARY_LIMIT = 2000
+
+function summaryOf(steps: readonly { output: string | null }[]): string | null {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const output = steps[i]?.output?.trim()
+    if (output) return output.slice(0, SUMMARY_LIMIT)
+  }
+  return null
 }
 
 export class CatFactoryAiReviewGateway implements AiReviewGateway {
@@ -59,6 +82,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       userAgent: 'sainte-beuve',
+      fetch: options.fetch,
     })
   }
 
@@ -106,17 +130,21 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     }
   }
 
-  async getStatus(taskId: string): Promise<{
-    status: 'running' | 'completed' | 'failed' | 'cancelled'
-    summary: string | null
-  }> {
+  async getStatus(taskId: string): Promise<AiReviewReport> {
     try {
       const run = await this.client.tasks.getRun(taskId)
-      return { status: mapRunStatus(run.status), summary: run.error?.message ?? null }
+      const status = mapRunStatus(run.status)
+      return {
+        status,
+        summary: status === 'completed' ? summaryOf(run.steps) : null,
+        failureReason: run.error?.message ?? null,
+      }
     } catch (err) {
       // A task that has been filed but whose run has not been created yet has no
       // run to read. That is the normal first poll, not a fault.
-      if (err instanceof CatFactoryNotFoundError) return { status: 'running', summary: null }
+      if (err instanceof CatFactoryNotFoundError) {
+        return { status: 'running', summary: null, failureReason: null }
+      }
       throw new UpstreamFailedError(
         `cat-factory refused the run status for task ${taskId}: ${getErrorMessage(err)}`,
       )

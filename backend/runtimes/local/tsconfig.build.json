@@ -6,9 +6,6 @@
   "exclude": ["**/*.test.ts", "**/*.spec.ts"],
   "references": [
     {
-      "path": "../../packages/server/tsconfig.build.json"
-    },
-    {
       "path": "../node/tsconfig.build.json"
     }
   ]

@@ -142,4 +142,31 @@ describe('planNextReminder', () => {
     )
     expect(planned?.kind).toBe('pending')
   })
+
+  it('does not let a distant deadline silence the nudge that is due first', () => {
+    const planned = planNextReminder(
+      review({ status: 'assigned', assignedReviewerIds: ['rvw-1'], assignedAt: 0, dueAt: 7 * DAY }),
+      policy,
+      [],
+    )
+    expect(planned?.kind).toBe('pending')
+    expect(planned?.dueAt).toBe(DAY)
+  })
+
+  it('chases an unclaimed review in the channel before its deadline escalation', () => {
+    const planned = planNextReminder(review({ dueAt: 7 * DAY }), policy, [])
+    expect(planned?.kind).toBe('unassigned')
+    expect(planned?.dueAt).toBe(4 * HOUR)
+  })
+
+  it('escalates once the deadline comes round before the next nudge', () => {
+    const sent = [sentReminder({ kind: 'pending', sentAt: 5 * DAY })]
+    const planned = planNextReminder(
+      review({ status: 'assigned', assignedReviewerIds: ['rvw-1'], assignedAt: 0, dueAt: 4 * DAY }),
+      policy,
+      sent,
+    )
+    expect(planned?.kind).toBe('escalation')
+    expect(planned?.dueAt).toBe(5 * DAY)
+  })
 })

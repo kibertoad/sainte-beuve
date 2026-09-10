@@ -1,14 +1,13 @@
 import type {
   AssignReviewersResult,
   CreateReviewRequest,
-  Reminder,
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
-import { planNextReminder } from '@sainte-beuve/reminders'
-import { selectReviewers } from '@sainte-beuve/reviewers'
+import { isSameGithubLogin, selectReviewers } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { scheduleNextReminder } from '../../reminders/schedule.js'
 
 /**
  * Review-request use cases: register a pull request, hand it to reviewers, move it
@@ -46,7 +45,7 @@ export class ReviewService {
       assignedAt: null,
       dueAt: input.dueAt,
     })
-    await this.rescheduleReminders(review)
+    await scheduleNextReminder(this.container, review)
     return review
   }
 
@@ -70,7 +69,9 @@ export class ReviewService {
         excludeReviewerIds: [
           ...input.excludeReviewerIds,
           ...review.assignedReviewerIds,
-          ...candidates.filter((r) => r.githubLogin === review.authorLogin).map((r) => r.id),
+          ...candidates
+            .filter((r) => isSameGithubLogin(r.githubLogin, review.authorLogin))
+            .map((r) => r.id),
         ],
         count: input.count,
       },
@@ -103,12 +104,12 @@ export class ReviewService {
       await repositories.reviews.update(reviewId, { status, updatedAt: clock.now() }),
       `No review request ${reviewId}`,
     )
+    await this.moveOutstanding(review, status)
     if (isTerminal(status)) {
       await repositories.reminders.cancelScheduledForReview(reviewId)
-      await this.releaseReviewers(review.assignedReviewerIds)
       return updated
     }
-    await this.rescheduleReminders(updated)
+    await scheduleNextReminder(this.container, updated)
     return updated
   }
 
@@ -133,7 +134,7 @@ export class ReviewService {
     for (const reviewerId of reviewerIds) {
       await repositories.reviewers.adjustOutstanding(reviewerId, 1)
     }
-    await this.rescheduleReminders(updated)
+    await scheduleNextReminder(this.container, updated)
     return updated
   }
 
@@ -154,37 +155,20 @@ export class ReviewService {
     }
   }
 
-  private async releaseReviewers(reviewerIds: readonly string[]): Promise<void> {
-    for (const reviewerId of reviewerIds) {
-      await this.container.repositories.reviewers.adjustOutstanding(reviewerId, -1)
-    }
-  }
-
   /**
-   * Re-plan the reminder schedule after anything that changes what should be
-   * chased. Cancel-then-plan rather than diffing: the policy returns at most one
-   * next reminder, so the outstanding schedule is always a single row and
-   * rewriting it is both simpler and impossible to get out of step.
+   * Move the reviewers' outstanding counters on the TRANSITION, never on the write.
+   * A webhook replay that closes an already-closed review must not release its
+   * reviewers a second time (the counter would under-report their load for good,
+   * and selection would draw them more often than they deserve), and reopening one
+   * has to put the same people back on the hook.
    */
-  private async rescheduleReminders(review: ReviewRequest): Promise<void> {
-    const { repositories, reminderPolicy, clock, ids } = this.container
-    const sent = await repositories.reminders.listByReview(review.id)
-    await repositories.reminders.cancelScheduledForReview(review.id)
-    const planned = planNextReminder(review, reminderPolicy, sent)
-    if (planned === null) return
-    const reminder: Reminder = {
-      id: ids.next(),
-      reviewId: planned.reviewId,
-      kind: planned.kind,
-      channel: planned.channel,
-      reviewerId: planned.reviewerId,
-      dueAt: planned.dueAt,
-      status: 'scheduled',
-      sentAt: null,
-      failureReason: null,
-      createdAt: clock.now(),
+  private async moveOutstanding(review: ReviewRequest, next: ReviewStatus): Promise<void> {
+    const wasTerminal = isTerminal(review.status)
+    if (wasTerminal === isTerminal(next)) return
+    const delta = wasTerminal ? 1 : -1
+    for (const reviewerId of review.assignedReviewerIds) {
+      await this.container.repositories.reviewers.adjustOutstanding(reviewerId, delta)
     }
-    await repositories.reminders.create(reminder)
   }
 }
 

@@ -22,6 +22,16 @@ describe('sainte-beuve worker', () => {
     expect(await res.json()).toStrictEqual({ reviews: [] })
   })
 
+  it('lets the SPA in on the origins its bindings list', async () => {
+    // wrangler.toml sets CORS_ORIGINS = "*", and the app is built once per isolate,
+    // so this is also the proof that the per-request `env` still reaches the
+    // origin decision.
+    const res = await SELF.fetch('https://example.com/api/v1/reviews', {
+      headers: { origin: 'http://localhost:3000' },
+    })
+    expect(res.headers.get('access-control-allow-origin')).toBe('*')
+  })
+
   it('answers the error envelope for an unknown route', async () => {
     const res = await SELF.fetch('https://example.com/nope')
     expect(res.status).toBe(404)

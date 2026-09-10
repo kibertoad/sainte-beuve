@@ -46,6 +46,15 @@ describe('InMemoryReviewerRepository', () => {
     expect((await repo.getById('a'))?.skills).toStrictEqual(['typescript'])
   })
 
+  it('copies what a patch hands it, so a caller cannot rewrite the store after the write', async () => {
+    const repo = new InMemoryReviewerRepository()
+    await repo.create(reviewer('a'))
+    const skills = ['typescript']
+    await repo.update('a', { skills })
+    skills.push('rust')
+    expect((await repo.getById('a'))?.skills).toStrictEqual(['typescript'])
+  })
+
   it('refuses to let a patch change the id', async () => {
     const repo = new InMemoryReviewerRepository()
     await repo.create(reviewer('a'))

@@ -1,5 +1,10 @@
 import type { ErrorResponse } from '@sainte-beuve/contracts'
-import { type DomainErrorCode, UnavailableError, isDomainError } from '@sainte-beuve/kernel'
+import {
+  type DomainErrorCode,
+  type Logger,
+  UnavailableError,
+  isDomainError,
+} from '@sainte-beuve/kernel'
 import { SchemaValidationError } from '@toad-contracts/core'
 import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -25,6 +30,17 @@ export function errorBody(code: string, message: string, details?: unknown): Err
   return { error: { code, message, details } }
 }
 
+/**
+ * The container is set by a middleware, so it is ABSENT exactly when building it is
+ * what failed: a Worker whose bindings do not resolve, say. Reading `.logger` off
+ * it unguarded would throw a TypeError out of the error handler and bury the
+ * original fault under an opaque 500, so fall back to the console and keep the
+ * cause in the log.
+ */
+function loggerFor(c: Context<AppEnv>): Logger {
+  return c.get('container')?.logger ?? console
+}
+
 export function handleError(err: unknown, c: Context<AppEnv>): Response {
   // A request that does not match its contract. `buildHonoRoute`'s validator throws
   // this rather than answering, so that the shape of the refusal is decided here
@@ -44,10 +60,10 @@ export function handleError(err: unknown, c: Context<AppEnv>): Response {
   }
   if (isDomainError(err)) {
     const status = STATUS_BY_CODE[err.code]
-    if (status >= 500) c.get('container').logger.error({ err, code: err.code }, err.message)
+    if (status >= 500) loggerFor(c).error({ err, code: err.code }, err.message)
     return c.json(errorBody(err.code, err.message, err.details), status)
   }
-  c.get('container').logger.error({ err }, 'unhandled error')
+  loggerFor(c).error({ err }, 'unhandled error')
   return c.json(errorBody('internal', 'Unexpected error'), 500)
 }
 

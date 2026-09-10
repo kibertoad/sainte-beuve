@@ -15,7 +15,13 @@ export {
   ValidationError,
 } from './domain/errors.js'
 export { DEFAULT_REMINDER_POLICY, type EpochMs, formatPullRequest } from './domain/types.js'
-export type { AiReviewGateway, AiReviewHandle, ChatGateway, VcsGateway } from './ports/gateways.js'
+export type {
+  AiReviewGateway,
+  AiReviewHandle,
+  AiReviewReport,
+  ChatGateway,
+  VcsGateway,
+} from './ports/gateways.js'
 export type {
   AiReviewRunRepository,
   ReminderRepository,

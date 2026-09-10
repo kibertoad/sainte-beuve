@@ -3,6 +3,7 @@
 export {
   drawWeight,
   isEligible,
+  isSameGithubLogin,
   type ScoredCandidate,
   scoreCandidates,
   type SelectionInput,

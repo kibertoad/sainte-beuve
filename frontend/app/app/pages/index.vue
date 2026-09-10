@@ -21,14 +21,29 @@ const statusColor: Record<ReviewRequest['status'], BadgeColor> = {
   closed: 'neutral',
 }
 
+const toast = useToast()
+
+/**
+ * Run one board action and say what happened. Both of these routes refuse for
+ * reasons a viewer can act on (503 while cat-factory is unconfigured, which is
+ * every fresh deployment; 404 for a review somebody else has closed), and an
+ * unhandled rejection would leave the button looking simply dead.
+ */
+async function act(action: () => Promise<unknown>, title: string) {
+  try {
+    await action()
+    await refresh()
+  } catch (err) {
+    toast.add({ color: 'error', title, description: apiErrorMessage(err) })
+  }
+}
+
 async function assign(review: ReviewRequest) {
-  await api.assignReviewers(review.id)
-  await refresh()
+  await act(() => api.assignReviewers(review.id), 'Could not find a reviewer')
 }
 
 async function requestAiReview(review: ReviewRequest) {
-  await api.requestAiReview(review.id)
-  await refresh()
+  await act(() => api.requestAiReview(review.id), 'Could not request an AI review')
 }
 </script>
 

@@ -1,11 +1,4 @@
-import {
-  type NodeConfig,
-  type RunningServer,
-  buildContainer,
-  loadConfig,
-} from '@sainte-beuve/node-server'
-import { createApp, runReminderTick } from '@sainte-beuve/server'
-import { serve } from '@hono/node-server'
+import { type NodeConfig, type RunningServer, loadConfig, start } from '@sainte-beuve/node-server'
 
 /**
  * LOCAL MODE: the whole product on a developer's machine, with nothing registered
@@ -48,32 +41,8 @@ export function localConfig(env: Record<string, string | undefined> = process.en
 }
 
 export async function startLocal(options: LocalOptions = {}): Promise<RunningServer> {
-  const config = localConfig(options.env)
-  const container = buildContainer(config)
-  const app = createApp({ resolveContainer: () => container, corsOrigins: config.corsOrigins })
-
-  const server = serve({ fetch: app.fetch, port: config.port })
-  const timer = setInterval(() => {
-    void runReminderTick(container).catch((err: unknown) => {
-      container.logger.error({ err }, 'reminder tick failed')
-    })
-  }, config.reminderIntervalMs)
-  timer.unref()
-
-  container.logger.info(
-    {
-      port: config.port,
-      catFactory: config.catFactory === null ? 'not configured' : config.catFactory.baseUrl,
-      slack: config.slack === null ? 'not configured' : 'configured',
-      github: config.github === null ? 'not configured' : 'configured',
-    },
-    'sainte-beuve local mode ready',
-  )
-  return {
-    port: config.port,
-    close: async () => {
-      clearInterval(timer)
-      await new Promise<void>((resolve) => server.close(() => resolve()))
-    },
-  }
+  // Delegated, not reimplemented: local mode IS the Node facade with different
+  // defaults, so it must not carry its own copy of the serve/tick/shutdown path
+  // for the two to drift apart in.
+  return start(localConfig(options.env))
 }
