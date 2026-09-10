@@ -10,6 +10,23 @@
 //
 // What keeps them one behaviour is `@sainte-beuve/persistence-conformance`: the
 // same assertions run against this store, that one, and the in-memory one.
+//
+// The tables this adapter reads and writes, and the columns each one carries
+// beside its payload. `migrations/0001_initial.sql` is the definition; this is
+// the map, and the Postgres schema (`persistence-postgres/src/schema.ts`) is the
+// same one in the other dialect's types.
+//
+//  | table                | key                    | columns beside `data`                                      |
+//  | -------------------- | ---------------------- | ---------------------------------------------------------- |
+//  | `reviewers`          | `id`                   | `outstanding_reviews`, `created_at`                        |
+//  | `review_requests`    | `id`                   | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at` |
+//  | `reminders`          | `id`                   | `review_id`, `status`, `due_at`                            |
+//  | `ai_review_runs`     | `id`                   | `review_id`, `requested_at`                                |
+//  | `integration_tokens` | `integration_id`       | `sealed`, `hint`, `subject`, `updated_at` (no payload)     |
+//  | `projects`           | `id`                   | `ref_key` (UNIQUE), `created_at`                           |
+//  | `identities`         | `(provider, subject)`  | `reviewer_id`                                              |
+//  | `attention_requests` | `id`                   | `status`, `created_at`                                     |
+//  | `review_commitments` | `id`                   | `reviewer_id`, `pull_request_key`, `created_at`            |
 
 import type { Repositories } from '@sainte-beuve/kernel'
 import { SqlAttentionRepository, SqlReviewCommitmentRepository } from './attention.js'
@@ -23,35 +40,6 @@ import {
 } from './reviews.js'
 import { SqlIntegrationTokenRepository } from './settings.js'
 import { SqlIdentityRepository, SqlProjectRepository } from './workspace.js'
-
-/**
- * The tables this adapter reads and writes, and the columns each one carries
- * beside its payload. `migrations/0001_initial.sql` is the definition; this list
- * is the same set of names, for a suite that has to empty them between cases.
- *
- *  | table                | key                    | columns beside `data`                                      |
- *  | -------------------- | ---------------------- | ---------------------------------------------------------- |
- *  | `reviewers`          | `id`                   | `outstanding_reviews`, `created_at`                        |
- *  | `review_requests`    | `id`                   | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at` |
- *  | `reminders`          | `id`                   | `review_id`, `status`, `due_at`                            |
- *  | `ai_review_runs`     | `id`                   | `review_id`, `requested_at`                                |
- *  | `integration_tokens` | `integration_id`       | `sealed`, `hint`, `subject`, `updated_at` (no payload)     |
- *  | `projects`           | `id`                   | `ref_key` (UNIQUE), `created_at`                           |
- *  | `identities`         | `(provider, subject)`  | `reviewer_id`                                              |
- *  | `attention_requests` | `id`                   | `status`, `created_at`                                     |
- *  | `review_commitments` | `id`                   | `reviewer_id`, `pull_request_key`, `created_at`            |
- */
-export const D1_TABLES = [
-  'reviewers',
-  'review_requests',
-  'reminders',
-  'ai_review_runs',
-  'integration_tokens',
-  'projects',
-  'identities',
-  'attention_requests',
-  'review_commitments',
-] as const
 
 /** Every store, over one D1 binding. */
 export function createD1Repositories(binding: D1Database): Repositories {
@@ -70,4 +58,4 @@ export function createD1Repositories(binding: D1Database): Repositories {
 }
 
 export { D1SqlDriver } from './D1SqlDriver.js'
-export type { SqlDriver, SqlParam, SqlRow } from './driver.js'
+export type { SqlDriver, SqlParam, SqlRow, SqlStatement } from './driver.js'

@@ -11,7 +11,7 @@ import type {
   ReminderRepository,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
-import type { SqlDriver } from './driver.js'
+import type { SqlDriver, SqlParam } from './driver.js'
 import { decodeData, decodeRows, encodeData, patched, placeholders } from './rows.js'
 
 /**
@@ -104,6 +104,10 @@ ON CONFLICT (id) DO UPDATE SET
   due_at = excluded.due_at,
   data = excluded.data`
 
+function reminderParams(reminder: Reminder): readonly SqlParam[] {
+  return [reminder.id, reminder.reviewId, reminder.status, reminder.dueAt, encodeData(reminder)]
+}
+
 export class SqlReminderRepository implements ReminderRepository {
   constructor(private readonly db: SqlDriver) {}
 
@@ -150,25 +154,26 @@ export class SqlReminderRepository implements ReminderRepository {
     // Read then write, rather than one `UPDATE`, because the status lives in the
     // payload as well as in the column and the two must not disagree. Both
     // engines can edit JSON in place and they spell it differently, which is the
-    // dialect branch this package exists not to have. The set is one review's
-    // outstanding nudges, which the policy caps at a handful.
+    // dialect branch this package exists not to have.
+    //
+    // The writes go in ONE batch: this runs on every status change and every
+    // sent nudge, a statement per row would be a round trip per row inside a
+    // Worker's time budget, and a batch is a transaction, so an interrupted
+    // tick cannot leave a review with half its schedule cancelled.
     const rows = await this.db.all(
       "SELECT data FROM reminders WHERE review_id = ? AND status = 'scheduled'",
       [reviewId],
     )
-    for (const reminder of decodeRows<Reminder>(rows)) {
-      await this.write({ ...reminder, status: 'cancelled' })
-    }
+    await this.db.batch(
+      decodeRows<Reminder>(rows).map((reminder) => ({
+        sql: REMINDER_UPSERT,
+        params: reminderParams({ ...reminder, status: 'cancelled' }),
+      })),
+    )
   }
 
   private async write(reminder: Reminder): Promise<void> {
-    await this.db.run(REMINDER_UPSERT, [
-      reminder.id,
-      reminder.reviewId,
-      reminder.status,
-      reminder.dueAt,
-      encodeData(reminder),
-    ])
+    await this.db.run(REMINDER_UPSERT, reminderParams(reminder))
   }
 }
 

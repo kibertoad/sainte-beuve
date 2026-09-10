@@ -1,5 +1,5 @@
-import { applyD1Migrations, env, SELF } from 'cloudflare:test'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { applyD1Migrations, type D1Migration, env, SELF } from 'cloudflare:test'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 // A smoke suite, deliberately thin. The behaviour lives in @sainte-beuve/server and
 // is tested there; what only this suite can tell us is that the bundle boots on
@@ -8,10 +8,15 @@ import { beforeAll, describe, expect, it } from 'vitest'
 const TOKEN_URL = 'https://example.com/api/v1/settings/integrations/cat-factory/token'
 const CONNECTIONS_URL = 'https://example.com/api/v1/settings/connections'
 
-declare module 'cloudflare:test' {
-  interface ProvidedEnv {
-    DB: D1Database
-    TEST_MIGRATIONS: D1Migration[]
+// The bindings `vitest.config.ts` hands the suite, declared where the pool
+// reads `env`'s type from: `Cloudflare.Env` is the extension point the runtime
+// types name, and the declarations merge.
+declare global {
+  namespace Cloudflare {
+    interface Env {
+      DB: D1Database
+      TEST_MIGRATIONS: D1Migration[]
+    }
   }
 }
 
@@ -22,6 +27,14 @@ describe('sainte-beuve worker', () => {
     // lives in @sainte-beuve/persistence-d1; what this one adds is that the
     // FACADE reaches the binding at all.
     await applyD1Migrations(env.DB, env.TEST_MIGRATIONS)
+  })
+
+  beforeEach(async () => {
+    // The pool hands the whole file ONE database and does not roll it back
+    // between cases, so the credential the sealing case stores would otherwise
+    // still be there for the two cases that read the credential surface after
+    // it. Emptied here rather than after the case that writes it, so a case
+    // added later inherits the guarantee instead of the leftovers.
     await env.DB.prepare('DELETE FROM integration_tokens').run()
   })
 
@@ -34,6 +47,10 @@ describe('sainte-beuve worker', () => {
       // store it actually resolved rather than the one it was written for. A
       // Worker with no binding falls back to memory and says `memory` here.
       persistence: 'd1',
+      // And the probe READ that database, which is the half a binding cannot
+      // promise: this suite applies the migrations, and a deployment that
+      // skipped them gets `false` and a 503 instead of this.
+      persistenceReady: true,
       // The suite's env carries an encryption key and nothing else, so the flags
       // are read off the bindings rather than reported from a fixed table. The
       // inbound pair is separate from the outbound one: posting to Slack needs a

@@ -10,6 +10,13 @@ import { decodeCount, decodeData, encodeData, patched } from './rows.js'
  * `rows.ts`): `adjustOutstanding` increments, and two assignments landing in the
  * same second must both count. So the counter is a column, the adjustment is one
  * `UPDATE`, and every read overlays the column onto the decoded row.
+ *
+ * Which is why the counter is absent from the conflict branch below: the column
+ * is written when the row is INSERTED and moved by nothing but
+ * `adjustOutstanding` afterwards. A `DO UPDATE SET` that wrote it from the
+ * payload would let a patch built a moment earlier (`update` reads, then
+ * writes) discard an assignment that landed in between, and the counter would
+ * walk backwards every time a rename raced a review.
  */
 
 const SELECT = 'SELECT outstanding_reviews, data FROM reviewers'
@@ -17,7 +24,6 @@ const SELECT = 'SELECT outstanding_reviews, data FROM reviewers'
 const UPSERT = `INSERT INTO reviewers (id, outstanding_reviews, created_at, data)
 VALUES (?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
-  outstanding_reviews = excluded.outstanding_reviews,
   created_at = excluded.created_at,
   data = excluded.data`
 
@@ -54,7 +60,10 @@ export class SqlReviewerRepository implements ReviewerRepository {
   async update(reviewerId: string, patch: Partial<Reviewer>): Promise<Reviewer | null> {
     const current = await this.getById(reviewerId)
     if (current === null) return null
-    const next = patched(current, patch)
+    // The counter comes from the COLUMN that `getById` just overlaid, never
+    // from the patch. Putting it back leaves the payload, the column and the
+    // row this answers with all saying the same number.
+    const next = patched(current, { ...patch, outstandingReviews: current.outstandingReviews })
     await this.write(next)
     return next
   }

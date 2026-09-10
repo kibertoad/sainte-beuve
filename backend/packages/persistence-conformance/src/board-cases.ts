@@ -17,12 +17,16 @@ export const reviewCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.reviews.getById('rev-1'), written)
   }),
 
-  conformanceCase('lists the board newest first', async (repos) => {
+  conformanceCase('lists the board newest first, ties on the id', async (repos) => {
+    // `rev-4` shares a millisecond with `rev-3`, which is what a webhook batch
+    // intaken in one tick looks like. Without the tie-break the board reorders
+    // itself between two reads, and nobody can follow a list that does that.
     await repos.reviews.create(review('rev-1', { createdAt: 1_000 }))
     await repos.reviews.create(review('rev-3', { createdAt: 3_000 }))
     await repos.reviews.create(review('rev-2', { createdAt: 2_000 }))
+    await repos.reviews.create(review('rev-4', { createdAt: 3_000 }))
     const ids = (await repos.reviews.list()).map((row) => row.id)
-    assert.deepStrictEqual(ids, ['rev-3', 'rev-2', 'rev-1'])
+    assert.deepStrictEqual(ids, ['rev-4', 'rev-3', 'rev-2', 'rev-1'])
   }),
 
   conformanceCase('filters the board by status', async (repos) => {
@@ -75,22 +79,28 @@ export const reviewCases: readonly ConformanceCase[] = [
 ]
 
 export const reminderCases: readonly ConformanceCase[] = [
-  conformanceCase("lists one review's reminders and nobody else's", async (repos) => {
-    await repos.reminders.create(reminder('rem-1', { reviewId: 'rev-1' }))
+  conformanceCase("lists one review's reminders, soonest first", async (repos) => {
+    // Nobody else's, and in the order the cadence was planned in: a schedule
+    // shown out of order reads as a nudge that has already been missed.
+    await repos.reminders.create(reminder('rem-1', { reviewId: 'rev-1', dueAt: 2_000 }))
     await repos.reminders.create(reminder('rem-2', { reviewId: 'rev-2' }))
+    await repos.reminders.create(reminder('rem-3', { reviewId: 'rev-1', dueAt: 1_000 }))
     const ids = (await repos.reminders.listByReview('rev-1')).map((row) => row.id)
-    assert.deepStrictEqual(ids, ['rem-1'])
+    assert.deepStrictEqual(ids, ['rem-3', 'rem-1'])
   }),
 
   conformanceCase('what is due is scheduled, past its time, and oldest first', async (repos) => {
+    // Two nudges due in the same millisecond are ordered by id, so the tick
+    // takes the same batch twice rather than a different half each time.
     await repos.reminders.create(reminder('rem-late', { dueAt: 5_000 }))
     await repos.reminders.create(reminder('rem-early', { dueAt: 1_000 }))
+    await repos.reminders.create(reminder('rem-early-2', { dueAt: 1_000 }))
     await repos.reminders.create(reminder('rem-future', { dueAt: 50_000 }))
     await repos.reminders.create(reminder('rem-sent', { dueAt: 1_000, status: 'sent' }))
     const due = await repos.reminders.listDue(10_000, 10)
     assert.deepStrictEqual(
       due.map((row) => row.id),
-      ['rem-early', 'rem-late'],
+      ['rem-early', 'rem-early-2', 'rem-late'],
     )
   }),
 
@@ -121,6 +131,14 @@ export const reminderCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.reminders.listByReview('review-1'), [])
   }),
 
+  conformanceCase('cancelling a schedule that is not there does nothing', async (repos) => {
+    // The common case, not an edge one: this is called before every re-plan, so
+    // most calls have nothing to cancel. A store that writes its cancellations
+    // as one batch has to answer an empty one without complaining.
+    await repos.reminders.cancelScheduledForReview('rev-nobody')
+    assert.deepStrictEqual(await repos.reminders.listByReview('rev-nobody'), [])
+  }),
+
   conformanceCase('a verdict cancels the schedule and nothing else', async (repos) => {
     // `cancelled` is a state rather than a delete: a nudge that became moot
     // should still be visible when the cadence is tuned against what happened.
@@ -146,12 +164,13 @@ export const aiReviewCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.aiReviewRuns.getById('run-1'), written)
   }),
 
-  conformanceCase("lists a review's runs newest first", async (repos) => {
+  conformanceCase("lists a review's runs newest first, ties on the id", async (repos) => {
     await repos.aiReviewRuns.create(aiReviewRun('run-1', { requestedAt: 1_000 }))
     await repos.aiReviewRuns.create(aiReviewRun('run-2', { requestedAt: 2_000 }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-3', { requestedAt: 2_000 }))
     await repos.aiReviewRuns.create(aiReviewRun('run-x', { reviewId: 'review-2' }))
     const ids = (await repos.aiReviewRuns.listByReview('review-1')).map((row) => row.id)
-    assert.deepStrictEqual(ids, ['run-2', 'run-1'])
+    assert.deepStrictEqual(ids, ['run-3', 'run-2', 'run-1'])
   }),
 
   conformanceCase('a run patch replaces the curation wholesale', async (repos) => {
@@ -197,10 +216,16 @@ export const integrationTokenCases: readonly ConformanceCase[] = [
   }),
 
   conformanceCase('deleting a credential leaves the others', async (repos) => {
-    await repos.integrationTokens.put(integrationToken('github'))
+    // Listed by integration id, not in the order they were entered: the
+    // Configuration screen renders this list, and one that reshuffled after a
+    // paste would move the row somebody is about to click.
     await repos.integrationTokens.put(integrationToken('slack'))
+    await repos.integrationTokens.put(integrationToken('github'))
+    await repos.integrationTokens.put(integrationToken('gitlab'))
+    const listed = (await repos.integrationTokens.list()).map((row) => row.integrationId)
+    assert.deepStrictEqual(listed, ['github', 'gitlab', 'slack'])
     await repos.integrationTokens.delete('github')
-    const ids = (await repos.integrationTokens.list()).map((row) => row.integrationId)
-    assert.deepStrictEqual(ids, ['slack'])
+    const left = (await repos.integrationTokens.list()).map((row) => row.integrationId)
+    assert.deepStrictEqual(left, ['gitlab', 'slack'])
   }),
 ]

@@ -16,6 +16,15 @@ answer on a laptop and an alarm on anything a team can see, and a deployment
 that thought it had bound D1 finds out from the probe rather than from an
 isolate recycle.
 
+Beside it, `persistenceReady` is the answer to the question the name alone
+cannot settle: the probe READS the store (`integration_tokens`, which is the
+cheapest question that reaches the schema: four flat columns, no payload to
+decode, and one row per integration). A database that was created and
+never migrated, or a `DATABASE_URL` pointing at nothing, resolves perfectly well
+and answers nothing, so the probe reports `persistenceReady: false`, `status:
+"degraded"` and a 503 rather than calling that healthy while every board route
+fails.
+
 Nothing above the port knows which store it got. No service branches on it, and
 that is what keeps the conformance suite meaningful: a behaviour proved for one
 store is a behaviour proved for the code path every deployment runs.
@@ -64,6 +73,14 @@ incremented rather than written (`adjustOutstanding`), so two assignments
 landing together must both count: the column is authoritative, the statement is
 a single `UPDATE`, and the reviewer mapper overlays the column onto the decoded
 payload. It is the only exception in either store.
+
+Which is why the column is written when a reviewer is INSERTED and by nothing
+but `adjustOutstanding` afterwards. Every other write leaves it alone, in all
+three stores: a patch carries the count that was read a moment earlier, so an
+upsert that wrote the column from the payload would discard an assignment that
+landed in between and walk the counter backwards every time a rename raced a
+review. Selection damps by `1 / (1 + outstanding)`, so a count that is one low
+prefers that person for ever.
 
 ### Two keys are computed, not stored twice
 
@@ -143,6 +160,14 @@ Two choices in that table are worth stating:
   real types, with no service in CI and no port on a laptop. What it does not
   cover is node-postgres itself, which is why `connectPostgres` is thin enough
   to read in one screen.
+
+The cases assert list ORDER as the store answers it, ties and all, rather than
+sorting the result first. Every list sorted on a timestamp is sorted on the id
+after it, and two rows written in the same millisecond are what the tie-break is
+for: reviewer selection walks its candidate list positionally, so a store that
+answered in insertion order would turn one random draw into a different person
+than a hosted deployment picks. A case that sorted before asserting would pass
+against all three stores and prove none of it.
 
 A new port method lands in all three stores in the same change, with a case
 here. That is the rule the symmetry rests on: a store that is behind is a

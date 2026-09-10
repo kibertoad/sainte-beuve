@@ -16,6 +16,12 @@ import { reviewers } from './schema.js'
  * `GREATEST` rather than a branch: a review resolved twice (a webhook replay, a
  * Slack button pressed after the approval landed) must not leave somebody owing
  * minus one review, which would make selection prefer them for ever.
+ *
+ * The counter is therefore absent from the conflict branch of `write`: the
+ * column is written when the row is INSERTED and moved by nothing but
+ * `adjustOutstanding` afterwards. A conflict branch that wrote it from the
+ * payload would let a patch built a moment earlier (`update` reads, then
+ * writes) discard an assignment that landed in between.
  */
 type ReviewerRow = typeof reviewers.$inferSelect
 
@@ -48,7 +54,10 @@ export class PostgresReviewerRepository implements ReviewerRepository {
   async update(reviewerId: string, patch: Partial<Reviewer>): Promise<Reviewer | null> {
     const current = await this.getById(reviewerId)
     if (current === null) return null
-    const next = patched(current, patch)
+    // The counter comes from the COLUMN that `getById` just overlaid, never
+    // from the patch. Putting it back leaves the payload, the column and the
+    // row this answers with all saying the same number.
+    const next = patched(current, { ...patch, outstandingReviews: current.outstandingReviews })
     await this.write(next)
     return next
   }
@@ -63,15 +72,17 @@ export class PostgresReviewerRepository implements ReviewerRepository {
   }
 
   private async write(reviewer: Reviewer): Promise<void> {
-    const row = {
-      id: reviewer.id,
-      outstandingReviews: reviewer.outstandingReviews,
-      createdAt: reviewer.createdAt,
-      data: reviewer,
-    }
     await this.db
       .insert(reviewers)
-      .values(row)
-      .onConflictDoUpdate({ target: reviewers.id, set: row })
+      .values({
+        id: reviewer.id,
+        outstandingReviews: reviewer.outstandingReviews,
+        createdAt: reviewer.createdAt,
+        data: reviewer,
+      })
+      .onConflictDoUpdate({
+        target: reviewers.id,
+        set: { createdAt: reviewer.createdAt, data: reviewer },
+      })
   }
 }

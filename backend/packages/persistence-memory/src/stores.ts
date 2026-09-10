@@ -17,6 +17,7 @@ import type {
   StoredIntegrationToken,
 } from '@sainte-beuve/kernel'
 import { clone, patched } from './clone.js'
+import { byText, newestFirst, oldestFirst } from './order.js'
 import {
   InMemoryAttentionRepository,
   InMemoryIdentityRepository,
@@ -48,7 +49,7 @@ export class InMemoryReviewerRepository implements ReviewerRepository {
   private readonly rows = new Map<string, Reviewer>()
 
   async list(): Promise<Reviewer[]> {
-    return [...this.rows.values()].map(clone)
+    return [...this.rows.values()].sort(oldestFirst((row) => row.createdAt)).map(clone)
   }
 
   async getById(reviewerId: string): Promise<Reviewer | null> {
@@ -57,16 +58,28 @@ export class InMemoryReviewerRepository implements ReviewerRepository {
   }
 
   async create(reviewer: Reviewer): Promise<Reviewer> {
-    this.rows.set(reviewer.id, clone(reviewer))
-    return clone(reviewer)
+    return clone(this.write(reviewer))
   }
 
   async update(reviewerId: string, patch: Partial<Reviewer>): Promise<Reviewer | null> {
     const row = this.rows.get(reviewerId)
     if (row === undefined) return null
-    const next = patched(row, patch)
-    this.rows.set(reviewerId, next)
-    return clone(next)
+    return clone(this.write(patched(row, patch)))
+  }
+
+  /**
+   * The counter is `adjustOutstanding`'s alone once the row exists, which is
+   * what both durable stores do by writing `outstanding_reviews` on INSERT and
+   * leaving it out of the conflict branch. A write built from a read taken
+   * before an adjustment landed must not walk the count back.
+   */
+  private write(reviewer: Reviewer): Reviewer {
+    const held = this.rows.get(reviewer.id)
+    const next = clone(
+      held === undefined ? reviewer : { ...reviewer, outstandingReviews: held.outstandingReviews },
+    )
+    this.rows.set(next.id, next)
+    return next
   }
 
   async adjustOutstanding(reviewerId: string, delta: number): Promise<void> {
@@ -86,7 +99,7 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
     const wanted = filter?.status
     return [...this.rows.values()]
       .filter((row) => wanted === undefined || wanted.includes(row.status))
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort(newestFirst((row) => row.createdAt))
       .map(clone)
   }
 
@@ -127,13 +140,16 @@ export class InMemoryReminderRepository implements ReminderRepository {
   private readonly rows = new Map<string, Reminder>()
 
   async listByReview(reviewId: string): Promise<Reminder[]> {
-    return [...this.rows.values()].filter((row) => row.reviewId === reviewId).map(clone)
+    return [...this.rows.values()]
+      .filter((row) => row.reviewId === reviewId)
+      .sort(oldestFirst((row) => row.dueAt))
+      .map(clone)
   }
 
   async listDue(now: EpochMs, limit: number): Promise<Reminder[]> {
     return [...this.rows.values()]
       .filter((row) => row.status === 'scheduled' && row.dueAt <= now)
-      .sort((a, b) => a.dueAt - b.dueAt)
+      .sort(oldestFirst((row) => row.dueAt))
       .slice(0, limit)
       .map(clone)
   }
@@ -173,7 +189,7 @@ export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
   async listByReview(reviewId: string): Promise<AiReviewRun[]> {
     return [...this.rows.values()]
       .filter((row) => row.reviewId === reviewId)
-      .sort((a, b) => b.requestedAt - a.requestedAt)
+      .sort(newestFirst((row) => row.requestedAt))
       .map(clone)
   }
 
@@ -206,7 +222,9 @@ export class InMemoryIntegrationTokenRepository implements IntegrationTokenRepos
   private readonly rows = new Map<string, StoredIntegrationToken>()
 
   async list(): Promise<StoredIntegrationToken[]> {
-    return [...this.rows.values()].map(clone)
+    return [...this.rows.values()]
+      .sort((a, b) => byText(a.integrationId, b.integrationId))
+      .map(clone)
   }
 
   async get(integrationId: string): Promise<StoredIntegrationToken | null> {

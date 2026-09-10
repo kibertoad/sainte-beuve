@@ -11,7 +11,7 @@ import type {
   ReminderRepository,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
-import { and, asc, desc, eq, inArray, lte } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
 import { aiReviewRuns, reminders, reviewRequests } from './schema.js'
@@ -97,6 +97,31 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
   }
 }
 
+function reminderRow(reminder: Reminder) {
+  return {
+    id: reminder.id,
+    reviewId: reminder.reviewId,
+    status: reminder.status,
+    dueAt: reminder.dueAt,
+    data: reminder,
+  }
+}
+
+/**
+ * The conflict branch, written against `excluded` rather than against one
+ * row's values, so the same upsert takes a single reminder or a whole review's
+ * worth in one statement.
+ */
+const REMINDER_CONFLICT = {
+  target: reminders.id,
+  set: {
+    reviewId: sql`excluded.review_id`,
+    status: sql`excluded.status`,
+    dueAt: sql`excluded.due_at`,
+    data: sql`excluded.data`,
+  },
+}
+
 export class PostgresReminderRepository implements ReminderRepository {
   constructor(private readonly db: PostgresDatabase) {}
 
@@ -145,30 +170,28 @@ export class PostgresReminderRepository implements ReminderRepository {
   async cancelScheduledForReview(reviewId: string): Promise<void> {
     // The status is a column AND a field of the payload, so this is a read and
     // a write rather than one `UPDATE`: a statement that moved the column
-    // alone would leave every read reporting the nudge as still scheduled. The
-    // set is one review's outstanding nudges, which the policy caps at a
-    // handful.
+    // alone would leave every read reporting the nudge as still scheduled.
+    //
+    // The write is ONE multi-row upsert. This runs on every status change and
+    // every sent nudge, a statement per row would be a round trip per row, and
+    // a single statement is atomic, so an interrupted tick cannot leave a
+    // review with half its schedule cancelled.
     const rows = await this.db
       .select()
       .from(reminders)
       .where(and(eq(reminders.reviewId, reviewId), eq(reminders.status, 'scheduled')))
-    for (const row of rows) {
-      await this.write({ ...row.data, status: 'cancelled' })
-    }
+    if (rows.length === 0) return
+    await this.db
+      .insert(reminders)
+      .values(rows.map((row) => reminderRow({ ...row.data, status: 'cancelled' })))
+      .onConflictDoUpdate(REMINDER_CONFLICT)
   }
 
   private async write(reminder: Reminder): Promise<void> {
-    const row = {
-      id: reminder.id,
-      reviewId: reminder.reviewId,
-      status: reminder.status,
-      dueAt: reminder.dueAt,
-      data: reminder,
-    }
-    await this.db.insert(reminders).values(row).onConflictDoUpdate({
-      target: reminders.id,
-      set: row,
-    })
+    await this.db
+      .insert(reminders)
+      .values(reminderRow(reminder))
+      .onConflictDoUpdate(REMINDER_CONFLICT)
   }
 }
 

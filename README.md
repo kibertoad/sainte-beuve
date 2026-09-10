@@ -154,7 +154,7 @@ your infrastructure.
 The board is durable on both: D1 on the Worker, Postgres on the Node service, one
 schema and one suite behind them ([docs/persistence.md](./docs/persistence.md)). A
 deployment that binds neither still boots, on a store a restart empties, and
-`GET /health` reports which one it is on.
+`GET /health` reports which one it is on and whether it answers.
 
 ## Working in the repo
 

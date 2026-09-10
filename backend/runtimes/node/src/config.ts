@@ -96,10 +96,34 @@ function intFrom(value: string | undefined, fallback: number): number {
   return Number.isNaN(parsed) ? fallback : parsed
 }
 
-/** An optional numeric setting: absent and unparseable both mean "leave the default". */
-function optionalIntFrom(value: string | undefined): number | undefined {
+/**
+ * An optional COUNT: absent, unparseable and out of range all mean "leave the
+ * default".
+ *
+ * Zero or less is in that bucket rather than passed through, because a pool
+ * ceiling of `-1` is not a small pool: node-postgres compares
+ * `clients.length >= max`, so the pool is full before it has handed out
+ * anything, the migration at boot waits for a client for ever, and the process
+ * neither becomes ready nor exits. A supervisor can do nothing with that.
+ */
+function optionalCountFrom(value: string | undefined): number | undefined {
   const parsed = Number.parseInt(value ?? '', 10)
-  return Number.isNaN(parsed) ? undefined : parsed
+  return Number.isNaN(parsed) || parsed <= 0 ? undefined : parsed
+}
+
+/**
+ * Every spelling of "off" an operator might reasonably type. A setting that
+ * honoured only exact lowercase `false` would leave `DATABASE_MIGRATE=0`
+ * migrating at boot, which is the opposite of what somebody who typed it asked
+ * for, and nothing in the boot log would say so.
+ */
+const OFF = new Set(['false', '0', 'no', 'off'])
+
+/** A boolean setting. Blank means the variable was left in place, so it keeps the default. */
+function boolFrom(value: string | undefined, fallback: boolean): boolean {
+  const typed = (value ?? '').trim().toLowerCase()
+  if (typed.length === 0) return fallback
+  return !OFF.has(typed)
 }
 
 function listFrom(value: string | undefined, fallback: string[]): string[] {
@@ -114,11 +138,10 @@ export function loadConfig(env: Env = process.env): NodeConfig {
   return {
     port: intFrom(env.PORT, 8788),
     databaseUrl: env.DATABASE_URL || null,
-    databaseMaxConnections: optionalIntFrom(env.DATABASE_MAX_CONNECTIONS),
-    // `!== 'false'`, so the durable path is what an operator gets by leaving
-    // the variable out, and turning migrations off is a decision somebody
-    // typed.
-    databaseMigrate: (env.DATABASE_MIGRATE ?? 'true') !== 'false',
+    databaseMaxConnections: optionalCountFrom(env.DATABASE_MAX_CONNECTIONS),
+    // Defaults ON, so the durable path is what an operator gets by leaving the
+    // variable out, and turning migrations off is a decision somebody typed.
+    databaseMigrate: boolFrom(env.DATABASE_MIGRATE, true),
     corsOrigins: listFrom(env.CORS_ORIGINS, ['*']),
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),

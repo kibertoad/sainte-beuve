@@ -33,6 +33,9 @@ describe('review board API', () => {
       // The harness runs on the in-memory store, which is what a deployment
       // that wired no database gets and what the probe has to say out loud.
       persistence: 'memory',
+      // Answered by READING the store, not by naming it: see the degraded case
+      // below for what the name alone cannot tell an operator.
+      persistenceReady: true,
       capabilities: {
         chat: false,
         vcs: { github: false, gitlab: false },
@@ -41,6 +44,32 @@ describe('review board API', () => {
         githubWebhooks: false,
         slackInteractivity: false,
       },
+    })
+  })
+
+  it('refuses the probe when the store it named does not answer', async () => {
+    // The deployment this is about: a database created and its migrations
+    // skipped. The binding resolves, so the container reports `postgres`, and
+    // every board route answers `no such table`. A probe that read the name off
+    // the container would call that healthy.
+    const unreachable = buildHarness({
+      persistence: 'postgres',
+      repositories: {
+        ...buildHarness().container.repositories,
+        integrationTokens: {
+          list: () => Promise.reject(new Error('relation "integration_tokens" does not exist')),
+          get: () => Promise.reject(new Error('unreachable')),
+          put: () => Promise.reject(new Error('unreachable')),
+          delete: () => Promise.reject(new Error('unreachable')),
+        },
+      },
+    })
+    const res = await unreachable.app.fetch(new Request('http://localhost/health'))
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({
+      status: 'degraded',
+      persistence: 'postgres',
+      persistenceReady: false,
     })
   })
 

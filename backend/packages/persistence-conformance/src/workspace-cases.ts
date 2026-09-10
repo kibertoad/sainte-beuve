@@ -10,11 +10,12 @@ export const projectCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.projects.getById('p1'), written)
   }),
 
-  conformanceCase('lists the registry oldest first', async (repos) => {
+  conformanceCase('lists the registry oldest first, ties on the id', async (repos) => {
     await repos.projects.create(project('p2', { repo: 'web', createdAt: 2_000 }))
     await repos.projects.create(project('p1', { repo: 'api', createdAt: 1_000 }))
+    await repos.projects.create(project('p3', { repo: 'jobs', createdAt: 2_000 }))
     const ids = (await repos.projects.list()).map((row) => row.id)
-    assert.deepStrictEqual(ids, ['p1', 'p2'])
+    assert.deepStrictEqual(ids, ['p1', 'p2', 'p3'])
   }),
 
   conformanceCase('a repository is found however it was capitalised', async (repos) => {
@@ -106,10 +107,13 @@ export const identityCases: readonly ConformanceCase[] = [
   }),
 
   conformanceCase('one person holds an account on each host', async (repos) => {
-    await repos.identities.link('r1', identity({ provider: 'github', subject: '4711' }))
+    // Linked GitLab first and asserted in `(provider, subject)` order, which is
+    // what both durable stores answer with. Sorting the result before asserting
+    // would let a store answer in whatever order it stored them.
     await repos.identities.link('r1', identity({ provider: 'gitlab', subject: '99' }))
+    await repos.identities.link('r1', identity({ provider: 'github', subject: '4711' }))
     const providers = (await repos.identities.listForReviewer('r1')).map((row) => row.provider)
-    assert.deepStrictEqual(providers.toSorted(), ['github', 'gitlab'])
+    assert.deepStrictEqual(providers, ['github', 'gitlab'])
     assert.strictEqual(await repos.identities.findReviewerId('gitlab', '99'), 'r1')
     assert.strictEqual(await repos.identities.findReviewerId('github', '99'), null)
   }),
@@ -122,11 +126,12 @@ export const attentionCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.attention.getById('a1'), written)
   }),
 
-  conformanceCase('lists the asks newest first', async (repos) => {
+  conformanceCase('lists the asks newest first, ties on the id', async (repos) => {
     await repos.attention.create(attentionRequest('a1', { createdAt: 1_000 }))
     await repos.attention.create(attentionRequest('a2', { createdAt: 2_000 }))
+    await repos.attention.create(attentionRequest('a3', { createdAt: 2_000 }))
     const ids = (await repos.attention.list()).map((row) => row.id)
-    assert.deepStrictEqual(ids, ['a2', 'a1'])
+    assert.deepStrictEqual(ids, ['a3', 'a2', 'a1'])
   }),
 
   conformanceCase('the inbox reads only what is still open', async (repos) => {
@@ -162,14 +167,17 @@ export const commitmentCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.commitments.getById('c1'), written)
   }),
 
-  conformanceCase("lists one person's promises newest first", async (repos) => {
+  conformanceCase("lists one person's promises newest first, ties on the id", async (repos) => {
     await repos.commitments.create(commitment('c1', { createdAt: 1_000 }))
     await repos.commitments.create(
       commitment('c2', { createdAt: 2_000, pullRequest: pullRequest({ number: 13 }) }),
     )
     await repos.commitments.create(commitment('c3', { reviewerId: 'r2' }))
+    await repos.commitments.create(
+      commitment('c4', { createdAt: 2_000, pullRequest: pullRequest({ number: 14 }) }),
+    )
     const ids = (await repos.commitments.listByReviewer('reviewer-1')).map((row) => row.id)
-    assert.deepStrictEqual(ids, ['c2', 'c1'])
+    assert.deepStrictEqual(ids, ['c4', 'c2', 'c1'])
   }),
 
   conformanceCase('a second click on the same pull request finds the first', async (repos) => {
@@ -177,6 +185,15 @@ export const commitmentCases: readonly ConformanceCase[] = [
     const found = await repos.commitments.find('reviewer-1', pullRequest())
     assert.strictEqual(found?.id, 'c1')
     assert.strictEqual(await repos.commitments.find('r2', pullRequest()), null)
+  }),
+
+  conformanceCase('two promises about one pull request resolve to the same row', async (repos) => {
+    // Two clicks that raced both wrote a row, in the same millisecond. Whichever
+    // one this answers with, it has to be the same one every time it is asked,
+    // or the button reports a promise that is withdrawn somewhere else.
+    await repos.commitments.create(commitment('c2', { createdAt: 1_000 }))
+    await repos.commitments.create(commitment('c1', { createdAt: 1_000 }))
+    assert.strictEqual((await repos.commitments.find('reviewer-1', pullRequest()))?.id, 'c1')
   }),
 
   conformanceCase('the same number on the other host is another promise', async (repos) => {

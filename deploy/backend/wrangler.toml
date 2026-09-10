@@ -25,8 +25,12 @@ crons = ["0 * * * *"]
 # The board's own database. Create it once with
 # `wrangler d1 create sainte-beuve` and paste the id it prints; the migrations
 # ship inside the installed @sainte-beuve/persistence-d1, so
-# `wrangler d1 migrations apply sainte-beuve --remote` applies them from there
-# and nothing has to be copied into this package.
+# `wrangler d1 migrations apply DB --remote` applies them from there and nothing
+# has to be copied into this package.
+#
+# The `db:migrate` scripts name the BINDING rather than the database, so this
+# file stays the only place the name is written: rename the database here and
+# they follow.
 #
 # Without this binding the Worker still boots, on an in-memory store that an
 # isolate recycle empties, and /health reports `persistence: "memory"`.
