@@ -49,3 +49,12 @@ allowBuilds:
 # compromised release has to survive a day of public scrutiny before it can
 # reach an install here. 1440 minutes = 24 hours.
 minimumReleaseAge: 1440
+
+# The one exception, and it is not a convenience. `@cat-factory/sdk` is generated
+# from cat-factory's own OpenAPI spec and published out of the repository this one
+# is built against, so there is no third party between the spec and the package
+# for the window to protect us from. Holding it back a day instead pins this repo
+# to an SDK that predates the routes being wired to it, which is how a facade
+# comes to hand-write a path the spec already describes.
+minimumReleaseAgeExclude:
+  - '@cat-factory/sdk'

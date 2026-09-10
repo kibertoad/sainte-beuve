@@ -3,6 +3,10 @@
 # The names match the Node service's `.env.example` one for one, because a
 # variable that exists on one runtime and not the other is a capability that
 # works on one deployment and not the other.
+#
+# The key needs cat-factory's `decide` scope, not `write`: a review PARKS on its
+# findings for somebody to curate, and cat-factory refuses to start a run the
+# calling key could not then answer.
 CAT_FACTORY_BASE_URL=http://localhost:8787
 CAT_FACTORY_SERVICE_ID=
 CAT_FACTORY_API_KEY=

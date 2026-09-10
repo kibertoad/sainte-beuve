@@ -38,8 +38,8 @@ importers:
   backend/packages/ai-review:
     dependencies:
       '@cat-factory/sdk':
-        specifier: ^0.51.3
-        version: 0.51.3
+        specifier: ^0.52.0
+        version: 0.52.0
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -526,8 +526,8 @@ packages:
     resolution: {integrity: sha512-CuNiSqg7+e1cO/GjffyMOm5Tt2jUF9CWHHnvQ/UkqvtkGfHdgwEC0wpmq7fkN3gxwpRnrAN0WzO3vREKmNolMQ==}
     engines: {node: '>=18'}
 
-  '@cat-factory/sdk@0.51.3':
-    resolution: {integrity: sha512-M8MUsCBC65AntoENG7YAki1iiYHYMNoh5BVpTM1V99jcijBU+Vk6xK2FGEtnO8XYp/PBp0aOHwf0QIb3ZoJs1Q==}
+  '@cat-factory/sdk@0.52.0':
+    resolution: {integrity: sha512-KjOd9AgDXL58eFspLbeOdDVdgS9dEuFbKdOxyhdIY3zjSDKY24SZO/wUaFwITzyHQeik9FYhN/Dk7+7zNc/f/g==}
     engines: {node: '>=20'}
 
   '@changesets/apply-release-plan@8.1.0':
@@ -6218,7 +6218,7 @@ snapshots:
     dependencies:
       fontkitten: 1.0.3
 
-  '@cat-factory/sdk@0.51.3': {}
+  '@cat-factory/sdk@0.52.0': {}
 
   '@changesets/apply-release-plan@8.1.0':
     dependencies:

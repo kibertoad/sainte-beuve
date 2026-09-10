@@ -212,7 +212,7 @@ onMounted(() => {
           :status="statusOf('cat-factory')"
           :busy="busy === 'cat-factory'"
           placeholder="cf_live_…"
-          description="The instance AI reviews are delegated to. The key alone is not enough: the deployment also needs a base URL and a service id, and until it has both this credential is stored and unused."
+          description="The instance AI reviews are delegated to. The key needs cat-factory's decide scope rather than just write: a review parks on its findings, so a key that could not answer one is refused when the review is filed. The key alone is not enough either, since the deployment also needs a base URL and a service id, and until it has both this credential is stored and unused."
           @save="save('cat-factory', $event, catFactory)"
           @clear="clear('cat-factory')"
         />

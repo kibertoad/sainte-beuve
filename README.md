@@ -22,6 +22,33 @@ Mention the bot in a comment and it answers there. Take the review from a Slack
 button, or snooze it with `/review snooze`. How all of that is wired, and what has
 to be registered where, is [docs/integrations.md](./docs/integrations.md).
 
+## The AI review is a loop, not a button
+
+Press **AI review** on a board row and the pull request goes to cat-factory,
+which fans the diff out across parallel reviewers. It posts nothing. It comes
+back and waits, and the row opens on what it found: each finding with its
+severity, the file and line it is about, and the fix it suggests.
+
+You are the gate. Tick the ones worth saying out loud (the blockers and the highs
+start ticked), **Dismiss** the noise, and then choose:
+
+- **Post inline** puts the selection on the pull request as review comments, on
+  the lines they belong to. A finding whose line is outside the diff is folded
+  into the summary comment rather than dropped.
+- **Send to a fixer** hands the selection to an agent that commits onto the
+  reviewed branch.
+- **Finish without posting** closes the review having said nothing, which is the
+  right answer more often than it sounds.
+
+Posting reports back. If seven comments went out and two bounced, the row says
+which two and why, against the attempt number, and posting again skips what
+already landed rather than commenting twice. And if the reviewer wedges with
+every slice of the diff already in, **Resume** re-dispatches only the slices that
+never reported, so a review that stalled on its last turn is not thrown away.
+
+Nothing here polls in the background: the board reads cat-factory when you open
+the row, and stops when you close it.
+
 ## Asking for attention
 
 A pull request that nobody has picked up is the thing the workspace exists to

@@ -1,6 +1,6 @@
 import { SLACK_ACTIONS } from '@sainte-beuve/integrations'
-import type { AiReviewGateway } from '@sainte-beuve/kernel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { stubAiReview } from './ai-review-doubles.js'
 import {
   addReviewer,
   assignReviewer,
@@ -230,11 +230,7 @@ describe('Slack interactivity', () => {
   })
 
   it('delegates to cat-factory when it is configured', async () => {
-    const aiReview: AiReviewGateway = {
-      requestReview: async () => ({ taskId: 'task-1', url: null }),
-      getStatus: async () => ({ status: 'running', summary: null, failureReason: null }),
-    }
-    const wired = buildHarness({ aiReview, slack: harness.container.slack })
+    const wired = buildHarness({ aiReview: stubAiReview(), slack: harness.container.slack })
     const review = await openReview(wired)
     expect((await signed(wired, command(`ai ${review.id}`))).text).toContain('cat-factory')
   })

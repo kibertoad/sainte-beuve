@@ -51,7 +51,10 @@ GITHUB_LABEL_AI_REVIEW = "ai-review"
 GITHUB_LABEL_SKILL_PREFIX = "skill:"
 
 # SECRETS, set with `wrangler secret put <NAME>`, never in this file:
-#   CAT_FACTORY_API_KEY        a cat-factory public-API key (cf_live_<keyId>.<secret>)
+#   CAT_FACTORY_API_KEY        a cat-factory public-API key (cf_live_<keyId>.<secret>),
+#                              with the `decide` scope: a review parks on its
+#                              findings, and cat-factory will not start a run
+#                              through a key that could not then answer it
 #   GITHUB_APP_PRIVATE_KEY     the App's private key, PKCS#8 PEM. GitHub issues
 #                              PKCS#1; convert it once with
 #                              `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pk8.pem`

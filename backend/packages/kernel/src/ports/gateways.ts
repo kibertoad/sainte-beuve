@@ -1,4 +1,6 @@
 import type {
+  AiReviewCuration,
+  AiReviewResolution,
   OpenPullRequest,
   ProjectRef,
   PullRequestRef,
@@ -109,14 +111,31 @@ export interface AiReviewHandle {
  * `failureReason` is why one did not: they are separate fields because the board
  * shows them in different places, and a gateway that writes the failure text into
  * the summary leaves a failed review looking like a reviewed one.
+ *
+ * `runId` is here because a review is a LOOP: the task id is what we filed, and
+ * cat-factory addresses every curation verb by the run executing it. A task is
+ * accepted before its run exists, so the two ids do not arrive together and the
+ * second one is learnt by polling.
  */
 export interface AiReviewReport {
-  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'running' | 'awaiting_selection' | 'completed' | 'failed' | 'cancelled'
+  runId: string | null
   summary: string | null
   failureReason: string | null
+  /** What there is to curate right now, or null for a run carrying no review. */
+  curation: AiReviewCuration | null
 }
 
-/** cat-factory, reached over the published `@cat-factory/sdk`. */
+/**
+ * cat-factory, reached over the published `@cat-factory/sdk`.
+ *
+ * Filing is addressed by TASK because that is what we hold after
+ * `requestReview`; everything after it is addressed by RUN, which is what
+ * cat-factory's decision surface is keyed on. The asymmetry is deliberate: a
+ * gateway that took a task id for the curation verbs would have to re-resolve
+ * the run on every call, and would silently act on a different run than the one
+ * whose findings the caller is looking at.
+ */
 export interface AiReviewGateway {
   /** Hand a pull request to cat-factory. Resolves once the task is accepted, not once it runs. */
   requestReview(input: {
@@ -126,6 +145,30 @@ export interface AiReviewGateway {
   }): Promise<AiReviewHandle>
   /** Poll one delegated run. The Worker cron and the Node scheduler both drive this. */
   getStatus(taskId: string): Promise<AiReviewReport>
+  /**
+   * Drop one finding from the parked review. The review stays parked.
+   *
+   * SYNCHRONOUS, and it answers with the curation the drop left behind, which is
+   * the whole effect: a caller that re-polled after this would spend two more
+   * upstream calls to be told what this answer already says. Null for a run that
+   * came back carrying no review to curate.
+   */
+  dismissFinding(input: { runId: string; findingId: string }): Promise<AiReviewCuration | null>
+  /**
+   * Record the curated selection and act on it. ASYNCHRONOUS: it resolves once
+   * cat-factory has ACCEPTED the instruction, and what actually landed arrives on
+   * a later poll as `postReport`.
+   */
+  resolveReview(input: {
+    runId: string
+    action: AiReviewResolution
+    findingIds: string[]
+  }): Promise<void>
+  /**
+   * Re-dispatch the slices a stalled review never got back. Which ones is derived
+   * from what the run observed, so there is nothing to pass.
+   */
+  resumeReview(input: { runId: string }): Promise<void>
 }
 
 /**

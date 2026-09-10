@@ -1,6 +1,5 @@
 import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { aiReviewRunSchema, requestAiReviewSchema } from '../ai-review.js'
 import {
   assignReviewersResultSchema,
   assignReviewersSchema,
@@ -12,6 +11,9 @@ import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Review-request route contracts. See ReviewController in @sainte-beuve/server.
+//
+// Delegating a review to cat-factory and curating what it found are in
+// `routes/ai-review.ts`, because that loop has its own run-addressed surface.
 // ---------------------------------------------------------------------------
 
 const reviewListSchema = v.object({ reviews: v.array(reviewRequestSchema) })
@@ -53,19 +55,4 @@ export const assignReviewersContract = defineApiContract({
   pathResolver: ({ reviewId }) => `/reviews/${reviewId}/assign`,
   requestBodySchema: assignReviewersSchema,
   responsesByStatusCode: { 200: assignReviewersResultSchema, ...errorResponses },
-})
-
-export const requestAiReviewContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: reviewIdParams,
-  pathResolver: ({ reviewId }) => `/reviews/${reviewId}/ai-review`,
-  requestBodySchema: requestAiReviewSchema,
-  responsesByStatusCode: { 202: aiReviewRunSchema, ...errorResponses },
-})
-
-export const listAiReviewRunsContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: reviewIdParams,
-  pathResolver: ({ reviewId }) => `/reviews/${reviewId}/ai-review`,
-  responsesByStatusCode: { 200: v.object({ runs: v.array(aiReviewRunSchema) }), ...errorResponses },
 })
