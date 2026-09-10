@@ -4,9 +4,11 @@ import type {
   Reviewer,
   ReviewRequest,
   ReviewStatus,
+  VcsProvider,
 } from '@sainte-beuve/contracts'
+import { handleOf } from '@sainte-beuve/contracts'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
-import { isSameGithubLogin, selectReviewers } from '@sainte-beuve/reviewers'
+import { isSameHandle, selectReviewers } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
@@ -89,8 +91,12 @@ export class ReviewService {
       `No reviewer ${reviewerId}`,
     )
     if (review.assignedReviewerIds.includes(reviewerId)) return review
+    const provider = review.pullRequest.provider
     const updated = await this.recordAssignment(review, { assign: [reviewerId], release: [] })
-    await this.mirrorToVcs(updated, { request: [reviewer.githubLogin], withdraw: [] })
+    await this.mirrorToVcs(updated, {
+      request: [handleOf(reviewer.handles, provider)],
+      withdraw: [],
+    })
     return updated
   }
 
@@ -129,6 +135,10 @@ export class ReviewService {
     input: { count: number; exclude: string[]; release?: string[] },
   ): Promise<AssignReviewersResult> {
     const { repositories, random } = this.container
+    // The author is matched on the handle for the pull request's OWN host: the
+    // same person is spelled differently on each, and comparing against the
+    // wrong one would put them in their own review's candidate pool.
+    const provider = review.pullRequest.provider
     const candidates = await repositories.reviewers.list()
     const result = selectReviewers(
       {
@@ -141,7 +151,7 @@ export class ReviewService {
           ...input.exclude,
           ...review.assignedReviewerIds,
           ...candidates
-            .filter((r) => isSameGithubLogin(r.githubLogin, review.authorLogin))
+            .filter((r) => isSameHandle(handleOf(r.handles, provider), review.authorLogin))
             .map((r) => r.id),
         ],
         count: input.count,
@@ -158,8 +168,8 @@ export class ReviewService {
       release,
     })
     await this.mirrorToVcs(updated, {
-      request: result.selected.map((r) => r.githubLogin),
-      withdraw: loginsOf(candidates, release),
+      request: result.selected.map((r) => handleOf(r.handles, provider)),
+      withdraw: handlesOf(candidates, release, provider),
     })
     return { review: updated, assigned, shortfallReason: result.shortfallReason }
   }
@@ -240,7 +250,7 @@ export class ReviewService {
     const request = known(change.request)
     const withdraw = known(change.withdraw).filter((login) => !request.includes(login))
     if (request.length === 0 && withdraw.length === 0) return
-    const vcs = await resolveVcs(this.container)
+    const vcs = await resolveVcs(this.container, review.pullRequest.provider)
     if (vcs === null) return
     try {
       if (withdraw.length > 0) {
@@ -280,12 +290,19 @@ function isTerminal(status: ReviewStatus): boolean {
   return status === 'approved' || status === 'changes_requested' || status === 'closed'
 }
 
-/** The GitHub logins of the named reviewers, for the mirror. */
-function loginsOf(candidates: Reviewer[], reviewerIds: string[]): (string | null)[] {
-  return reviewerIds.map((id) => candidates.find((r) => r.id === id)?.githubLogin ?? null)
+/** The named reviewers' handles on the pull request's host, for the mirror. */
+function handlesOf(
+  candidates: Reviewer[],
+  reviewerIds: string[],
+  provider: VcsProvider,
+): (string | null)[] {
+  return reviewerIds.map((id) => {
+    const reviewer = candidates.find((r) => r.id === id)
+    return reviewer === undefined ? null : handleOf(reviewer.handles, provider)
+  })
 }
 
-/** A reviewer with no GitHub login cannot be mirrored, and is not a failure. */
+/** A reviewer with no account on that host cannot be mirrored, and is not a failure. */
 function known(logins: (string | null)[]): string[] {
   return logins.filter((login): login is string => login !== null)
 }

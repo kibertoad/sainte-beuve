@@ -5,6 +5,7 @@ import {
   addReviewer,
   assignReviewer,
   buildHarness,
+  environmentVcs,
   form,
   openReview,
   PR,
@@ -119,7 +120,7 @@ describe('Slack interactivity', () => {
   it('puts the person who asked on the review', async () => {
     await addReviewer(harness, {
       displayName: 'Peer',
-      githubLogin: 'peer',
+      handles: { github: 'peer' },
       slackUserId: 'U-peer',
     })
     const review = await openReview(harness)
@@ -154,8 +155,11 @@ describe('Slack interactivity', () => {
   })
 
   it('hands a reroll to somebody else, and takes it off whoever had it', async () => {
-    const first = await addReviewer(harness, { displayName: 'First', githubLogin: 'first' })
-    const second = await addReviewer(harness, { displayName: 'Second', githubLogin: 'second' })
+    const first = await addReviewer(harness, { displayName: 'First', handles: { github: 'first' } })
+    const second = await addReviewer(harness, {
+      displayName: 'Second',
+      handles: { github: 'second' },
+    })
     const review = await openReview(harness)
     await assignReviewer(harness, review.id)
     const posted = captureFollowUps()
@@ -172,7 +176,7 @@ describe('Slack interactivity', () => {
   })
 
   it('leaves the review where it is when there is nobody else to hand it to', async () => {
-    const only = await addReviewer(harness, { displayName: 'Only', githubLogin: 'only' })
+    const only = await addReviewer(harness, { displayName: 'Only', handles: { github: 'only' } })
     const review = await openReview(harness)
     await assignReviewer(harness, review.id)
 
@@ -189,7 +193,7 @@ describe('Slack interactivity', () => {
     // The cap is what makes the order matter: the store answers newest-first, so
     // on a busy board the reviews somebody reading `/review` could actually pick
     // up are the ones that fall off the end of the message.
-    await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' } })
     const waiting = await openReview(harness)
     harness.clock.advance(60_000)
     const taken = await openReview(harness, {
@@ -253,7 +257,7 @@ describe('Slack interactivity', () => {
     const chat = recordingChat()
     const announcing = buildHarness({
       chat,
-      vcs: recordingVcs(),
+      vcs: environmentVcs(recordingVcs()),
       slack: { signingSecret: SECRET, announcementChannelId: 'C-reviews' },
     })
     await openReview(announcing)

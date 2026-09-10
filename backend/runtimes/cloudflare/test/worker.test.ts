@@ -27,7 +27,7 @@ describe('sainte-beuve worker', () => {
       // bot token, and trusting a slash command needs the signing secret.
       capabilities: {
         chat: false,
-        vcs: false,
+        vcs: { github: false, gitlab: false },
         aiReview: false,
         secrets: true,
         githubWebhooks: false,
@@ -81,22 +81,41 @@ describe('sainte-beuve worker', () => {
     // pass the bindings through would report a deployment it is not.
     const res = await SELF.fetch(CONNECTIONS_URL)
     expect(res.status).toBe(200)
+    // `GITHUB_LABEL_REVIEW` is bound BLANK in this suite and reads as the
+    // default: an empty label would match nothing, so labelling a pull request
+    // would silently do nothing at all while the screen showed an empty
+    // `<code>` and no fault.
+    const labels = { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' }
     expect(await res.json()).toStrictEqual({
-      github: {
-        // An encryption key is set and nothing else, so a pasted token is the
-        // one credential this Worker could hold.
-        activeMethod: null,
-        availableMethods: ['pat'],
-        appInstallable: false,
-        account: null,
-        webhooksReady: false,
-        botLogin: null,
-        // `GITHUB_LABEL_REVIEW` is bound BLANK in this suite and reads as the
-        // default: an empty label would match nothing, so labelling a pull
-        // request would silently do nothing at all while the screen showed an
-        // empty `<code>` and no fault.
-        labels: { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' },
-      },
+      vcs: [
+        {
+          provider: 'github',
+          // An encryption key is set and nothing else, so a pasted token is the
+          // one credential this Worker could hold.
+          activeMethod: null,
+          availableMethods: ['pat'],
+          appInstallable: false,
+          account: null,
+          inboundIntake: true,
+          webhooksReady: false,
+          botLogin: null,
+          labels,
+        },
+        {
+          // Every host an adapter exists for is reported, connected or not:
+          // "GitLab is not connected" and "this build cannot reach GitLab" are
+          // different answers, and only the first is true here.
+          provider: 'gitlab',
+          activeMethod: null,
+          availableMethods: ['pat'],
+          appInstallable: false,
+          account: null,
+          inboundIntake: false,
+          webhooksReady: false,
+          botLogin: null,
+          labels,
+        },
+      ],
       slack: { ready: false, announcementChannelId: null, interactivityReady: false },
     })
   })

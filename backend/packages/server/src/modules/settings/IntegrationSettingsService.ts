@@ -1,10 +1,11 @@
 import type {
-  GitHubAuthMethod,
   IntegrationId,
   IntegrationTokenStatus,
   IntegrationTokenUnreadableReason,
+  VcsAuthMethod,
+  VcsProvider,
 } from '@sainte-beuve/contracts'
-import { integrationIdSchema } from '@sainte-beuve/contracts'
+import { integrationIdSchema, vcsPatCredentialKey } from '@sainte-beuve/contracts'
 import type { StoredIntegrationToken } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
@@ -39,7 +40,7 @@ const KEY_REJECTED =
  * whether another shadows it, so it cannot be decided a row at a time.
  */
 interface ActiveCredentials {
-  github: GitHubAuthMethod | null
+  vcs: Record<VcsProvider, VcsAuthMethod | null>
   chat: CredentialSource | null
   aiReview: CredentialSource | null
 }
@@ -96,30 +97,34 @@ export class IntegrationSettingsService {
 
   /**
    * Who a credential belongs to, when storing it is also the moment that can be
-   * found out. A pasted GitHub token is checked against `GET /user`, which does
-   * two things worth the round trip: the screen can then say which account is
-   * connected, and a token GitHub refuses fails the write instead of being stored
-   * and reported as configured until the next assignment quietly fails.
+   * found out. A pasted source-control token is checked against the host's own
+   * "who am I", which does two things worth the round trip: the screen can then
+   * say which account is connected, and a token the host refuses fails the
+   * write instead of being stored and reported as configured until the next
+   * assignment quietly fails.
    *
    * Every other credential returns null, because nothing on their ports answers
    * the question. A deployment with no gateway factory (a suite, or a facade that
    * wired no adapters) also returns null rather than refusing the write: the
-   * store is the capability being exercised, not GitHub.
+   * store is the capability being exercised, not the host.
    */
   private async subjectOf(integrationId: IntegrationId, token: string): Promise<string | null> {
-    const factory = this.container.gateways
-    if (integrationId !== 'github-pat' || factory === null) return null
-    return factory.vcsFromToken(token).identify()
+    const provider = providerOfPat(integrationId)
+    const gateway =
+      provider === null ? null : (this.container.gateways?.vcsFromToken(provider, token) ?? null)
+    if (gateway === null) return null
+    return (await gateway.identify())?.username ?? null
   }
 
   private async activeCredentials(): Promise<ActiveCredentials> {
-    const [vcs, chat, aiReview] = await Promise.all([
-      resolveVcs(this.container),
+    const [github, gitlab, chat, aiReview] = await Promise.all([
+      resolveVcs(this.container, 'github'),
+      resolveVcs(this.container, 'gitlab'),
       resolveChat(this.container),
       resolveAiReview(this.container),
     ])
     return {
-      github: vcs?.source ?? null,
+      vcs: { github: github?.source ?? null, gitlab: gitlab?.source ?? null },
       chat: chat?.source ?? null,
       aiReview: aiReview?.source ?? null,
     }
@@ -192,9 +197,17 @@ export class IntegrationSettingsService {
  */
 function inUse(integrationId: IntegrationId, active: ActiveCredentials): boolean {
   const ANSWERS: Record<IntegrationId, boolean> = {
-    'github-pat': active.github === 'pat',
+    'github-pat': active.vcs.github === 'pat',
+    'gitlab-pat': active.vcs.gitlab === 'pat',
     'slack-bot-token': active.chat === 'stored',
     'cat-factory': active.aiReview === 'stored',
   }
   return ANSWERS[integrationId]
+}
+
+/** The host a pasteable id names, or null for a credential that is not one's. */
+function providerOfPat(integrationId: IntegrationId): VcsProvider | null {
+  if (integrationId === vcsPatCredentialKey('github')) return 'github'
+  if (integrationId === vcsPatCredentialKey('gitlab')) return 'gitlab'
+  return null
 }

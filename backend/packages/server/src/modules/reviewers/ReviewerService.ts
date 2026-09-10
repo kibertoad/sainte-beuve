@@ -15,8 +15,9 @@ export class ReviewerService {
     return repositories.reviewers.create({
       id: ids.next(),
       displayName: input.displayName,
-      githubLogin: input.githubLogin,
+      handles: input.handles,
       slackUserId: input.slackUserId,
+      team: input.team,
       skills: input.skills,
       availability: input.availability,
       weight: input.weight,

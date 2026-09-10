@@ -1,5 +1,5 @@
-import type { PullRequestRef } from '@sainte-beuve/contracts'
-import type { VcsGateway } from '@sainte-beuve/kernel'
+import type { OpenPullRequest, ProjectRef, PullRequestRef } from '@sainte-beuve/contracts'
+import type { VcsAccount, VcsGateway } from '@sainte-beuve/kernel'
 import { githubRequest } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
 
@@ -18,6 +18,27 @@ import type { GitHubTokenSource } from './credentials.js'
  * repository. Which one a deployment uses is resolved above this line; nothing
  * here knows or cares.
  */
+/** How many pull requests one workspace read pulls per repository. */
+const PAGE_SIZE = 100
+
+interface GitHubUser {
+  id: number
+  login: string
+  name?: string | null
+  avatar_url?: string | null
+}
+
+interface GitHubPullRequest {
+  number: number
+  title: string
+  html_url: string
+  draft?: boolean
+  created_at: string
+  updated_at: string
+  user?: GitHubUser | null
+  requested_reviewers?: GitHubUser[] | null
+}
+
 export interface GitHubGatewayOptions {
   /** How to authenticate. `staticTokenSource(token)` covers a plain token. */
   tokens: GitHubTokenSource
@@ -30,10 +51,31 @@ export interface GitHubGatewayOptions {
 export class GitHubVcsGateway implements VcsGateway {
   private readonly options: GitHubGatewayOptions
   /** Memoised for the life of this gateway, so repeated reads cost one round trip. */
-  private identity?: Promise<string | null>
+  private identity?: Promise<VcsAccount | null>
 
   constructor(options: GitHubGatewayOptions) {
     this.options = options
+  }
+
+  /**
+   * The repository's open pull requests, newest activity first.
+   *
+   * The LIST endpoint rather than the search API, which could filter by author
+   * server-side. Search is eventually consistent (a pull request opened seconds
+   * ago is missing from it), it carries its own much smaller rate limit, and it
+   * would take one query per role where this takes one per repository and
+   * answers both.
+   */
+  async listOpenPullRequests(project: ProjectRef): Promise<OpenPullRequest[]> {
+    const pulls = await githubRequest<GitHubPullRequest[]>({
+      path:
+        `/repos/${project.owner}/${project.repo}/pulls` +
+        `?state=open&per_page=${PAGE_SIZE}&sort=updated&direction=desc`,
+      token: await this.options.tokens.tokenFor(project.owner, project.repo),
+      baseUrl: this.options.baseUrl,
+      fetchImpl: this.options.fetchImpl,
+    })
+    return pulls.map((pull) => toOpenPullRequest(project, pull))
   }
 
   async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
@@ -72,7 +114,7 @@ export class GitHubVcsGateway implements VcsGateway {
    * `GET /user` under an installation token is a 403, which would otherwise be
    * reported to an operator as a broken connection.
    */
-  async identify(): Promise<string | null> {
+  async identify(): Promise<VcsAccount | null> {
     if (!this.options.tokens.hasUser) return null
     // A FAILED read is not memoised: a rejected promise left in the field would
     // answer every later call with the same rate limit or the same expired
@@ -84,17 +126,22 @@ export class GitHubVcsGateway implements VcsGateway {
     return this.identity
   }
 
-  private async readViewer(): Promise<string | null> {
+  private async readViewer(): Promise<VcsAccount | null> {
     // No repository in play, so the source is asked for its unscoped token. A
     // static source ignores both arguments; an App source never reaches here.
     const token = await this.options.tokens.tokenFor('', '')
-    const user = await githubRequest<{ login?: string }>({
+    const user = await githubRequest<GitHubUser>({
       path: '/user',
       token,
       baseUrl: this.options.baseUrl,
       fetchImpl: this.options.fetchImpl,
     })
-    return user.login ?? null
+    return {
+      subject: String(user.id),
+      username: user.login,
+      displayName: user.name ?? null,
+      avatarUrl: user.avatar_url ?? null,
+    }
   }
 
   private async call(
@@ -107,5 +154,23 @@ export class GitHubVcsGateway implements VcsGateway {
       baseUrl: this.options.baseUrl,
       fetchImpl: this.options.fetchImpl,
     })
+  }
+}
+
+function toOpenPullRequest(project: ProjectRef, pull: GitHubPullRequest): OpenPullRequest {
+  return {
+    pullRequest: {
+      provider: 'github',
+      owner: project.owner,
+      repo: project.repo,
+      number: pull.number,
+      url: pull.html_url,
+    },
+    title: pull.title,
+    authorLogin: pull.user?.login ?? '',
+    requestedReviewerLogins: (pull.requested_reviewers ?? []).map((user) => user.login),
+    draft: pull.draft ?? false,
+    createdAt: Date.parse(pull.created_at),
+    updatedAt: Date.parse(pull.updated_at),
   }
 }

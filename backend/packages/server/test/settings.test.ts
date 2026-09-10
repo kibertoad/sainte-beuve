@@ -64,6 +64,7 @@ describe('integration configuration API', () => {
   it('lists every known integration, configured or not', async () => {
     expect((await listIntegrations(harness)).map((row) => row.integrationId)).toStrictEqual([
       'github-pat',
+      'gitlab-pat',
       'slack-bot-token',
       'cat-factory',
     ])
@@ -284,7 +285,13 @@ describe('a pasted GitHub credential', () => {
           requestReviewers: async () => {},
           removeRequestedReviewers: async () => {},
           comment: async () => {},
-          identify: async () => 'kibertoad',
+          listOpenPullRequests: async () => [],
+          identify: async () => ({
+            subject: '4249249',
+            username: 'kibertoad',
+            displayName: null,
+            avatarUrl: null,
+          }),
         }),
       }),
     })
@@ -306,6 +313,7 @@ describe('a pasted GitHub credential', () => {
           requestReviewers: async () => {},
           removeRequestedReviewers: async () => {},
           comment: async () => {},
+          listOpenPullRequests: async () => [],
           identify: () => Promise.reject(refused),
         }),
       }),

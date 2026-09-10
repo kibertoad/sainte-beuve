@@ -91,13 +91,63 @@ describe('GitHubVcsGateway', () => {
   })
 
   it('reads the account behind a credential that has one', async () => {
-    const { fetchImpl, calls } = stub(200, { login: 'kibertoad' })
+    const { fetchImpl, calls } = stub(200, { id: 4249249, login: 'kibertoad', name: 'Igor' })
     const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
 
-    expect(await gateway.identify()).toBe('kibertoad')
+    // The numeric id, not the login, is what an identity is keyed on: a handle
+    // is renameable and the next person to claim it must not inherit the row.
+    expect(await gateway.identify()).toStrictEqual({
+      subject: '4249249',
+      username: 'kibertoad',
+      displayName: 'Igor',
+      avatarUrl: null,
+    })
     // Memoised: a status screen that polls must not spend a request per poll.
-    expect(await gateway.identify()).toBe('kibertoad')
+    await gateway.identify()
     expect(calls).toHaveLength(1)
+  })
+
+  it('lists the open pull requests of a repository with their author and reviewers', async () => {
+    const { fetchImpl, calls } = stub(200, [
+      {
+        number: 7,
+        title: 'Add a health check',
+        html_url: 'https://github.com/kibertoad/sainte-beuve/pull/7',
+        draft: false,
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-02T10:00:00Z',
+        user: { id: 1, login: 'author' },
+        requested_reviewers: [{ id: 2, login: 'peer' }],
+      },
+    ])
+    const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
+
+    const listed = await gateway.listOpenPullRequests({
+      provider: 'github',
+      owner: 'kibertoad',
+      repo: 'sainte-beuve',
+    })
+
+    // The list endpoint, not search: search is eventually consistent, so a pull
+    // request opened seconds ago would be missing from a workspace read.
+    expect(calls[0]?.path).toBe('/repos/kibertoad/sainte-beuve/pulls')
+    expect(listed).toStrictEqual([
+      {
+        pullRequest: {
+          provider: 'github',
+          owner: 'kibertoad',
+          repo: 'sainte-beuve',
+          number: 7,
+          url: 'https://github.com/kibertoad/sainte-beuve/pull/7',
+        },
+        title: 'Add a health check',
+        authorLogin: 'author',
+        requestedReviewerLogins: ['peer'],
+        draft: false,
+        createdAt: Date.parse('2026-09-01T10:00:00Z'),
+        updatedAt: Date.parse('2026-09-02T10:00:00Z'),
+      },
+    ])
   })
 
   it('answers no account for an App, without asking GitHub', async () => {

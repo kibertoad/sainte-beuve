@@ -7,7 +7,9 @@ export {
   type ContainerOptions,
   createContainer,
   DEFAULT_GITHUB_LABELS,
+  type EnvironmentVcsGateways,
   type GitHubWiring,
+  NO_VCS_GATEWAYS,
   type SlackWiring,
 } from './container.js'
 export type { AppEnv } from './http/env.js'
@@ -28,7 +30,13 @@ export {
   resolveChat,
   resolveVcs,
 } from './integrations/resolve.js'
+export { AttentionService, concerns, reaches } from './modules/attention/AttentionService.js'
 export { ConnectionsService } from './modules/connections/ConnectionsService.js'
+export { ViewerService } from './modules/identity/ViewerService.js'
+export { ProjectService } from './modules/projects/ProjectService.js'
+export { WorkspaceService } from './modules/workspace/WorkspaceService.js'
+export { InMemoryAttentionBus } from './realtime/InMemoryAttentionBus.js'
+export { sseStream, type SseStreamOptions } from './realtime/sse.js'
 export { AiReviewService } from './modules/reviews/AiReviewService.js'
 export { ReviewService } from './modules/reviews/ReviewService.js'
 export { ReviewerService } from './modules/reviewers/ReviewerService.js'

@@ -12,8 +12,9 @@ function reviewer(id: string, overrides: Partial<Reviewer> = {}): Reviewer {
   return {
     id,
     displayName: id,
-    githubLogin: id,
+    handles: { github: id, gitlab: null },
     slackUserId: null,
+    team: null,
     skills: [],
     availability: 'available',
     weight: 1,

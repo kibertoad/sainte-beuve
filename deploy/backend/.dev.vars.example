@@ -25,6 +25,14 @@ GITHUB_WEBHOOK_SECRET=
 # mentioned as `@name`.
 GITHUB_BOT_LOGIN=
 
+# GitLab. One base URL configures the whole connection (the API and the OAuth
+# endpoints share a root); blank means gitlab.com. No App equivalent exists, so
+# the order is a sign-in, then a stored token, then GITLAB_TOKEN.
+GITLAB_BASE_URL=
+GITLAB_TOKEN=
+GITLAB_OAUTH_CLIENT_ID=
+GITLAB_OAUTH_CLIENT_SECRET=
+
 SLACK_BOT_TOKEN=
 SLACK_SIGNING_SECRET=
 SLACK_CHANNEL_ID=

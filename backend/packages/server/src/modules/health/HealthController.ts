@@ -25,16 +25,20 @@ export function healthController(): Hono<AppEnv> {
 
   app.get('/health', async (c) => {
     const container = c.get('container')
-    const [chat, vcs, aiReview] = await Promise.all([
+    const [chat, github, gitlab, aiReview] = await Promise.all([
       resolveChat(container),
-      resolveVcs(container),
+      resolveVcs(container, 'github'),
+      resolveVcs(container, 'gitlab'),
       resolveAiReview(container),
     ])
     return c.json({
       status: 'ok',
       capabilities: {
         chat: chat !== null,
-        vcs: vcs !== null,
+        // Per host, not one flag. A deployment connected to GitHub and not to
+        // GitLab is exactly as healthy as its GitLab projects are unreadable,
+        // and one boolean would report that as either fine or broken.
+        vcs: { github: github !== null, gitlab: gitlab !== null },
         aiReview: aiReview !== null,
         secrets: container.secrets !== null,
         githubWebhooks: container.github.webhookSecret !== null,

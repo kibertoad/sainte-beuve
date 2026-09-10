@@ -5,6 +5,8 @@ import { ReviewService } from '../src/modules/reviews/ReviewService.js'
 import {
   addReviewer,
   buildHarness,
+  environmentVcs,
+  everyHost,
   openReview,
   recordingVcs,
   stubGateways,
@@ -96,7 +98,7 @@ describe('GitHub webhook intake', () => {
   beforeEach(() => {
     vcs = recordingVcs()
     harness = buildHarness({
-      vcs,
+      vcs: environmentVcs(vcs),
       github: {
         appSlug: null,
         webhookSecret: SECRET,
@@ -124,7 +126,7 @@ describe('GitHub webhook intake', () => {
   })
 
   it('tracks an opened pull request and leaves it unassigned', async () => {
-    await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' } })
     const res = await deliver(harness, 'pull_request', pullRequestPayload('opened'))
 
     expect(res.status).toBe(202)
@@ -145,7 +147,11 @@ describe('GitHub webhook intake', () => {
   })
 
   it('routes the review when the review label lands, and mirrors it onto the PR', async () => {
-    await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer', skills: ['payments'] })
+    await addReviewer(harness, {
+      displayName: 'Peer',
+      handles: { github: 'peer' },
+      skills: ['payments'],
+    })
     const res = await deliver(
       harness,
       'pull_request',
@@ -169,7 +175,7 @@ describe('GitHub webhook intake', () => {
   })
 
   it('says so rather than failing when the pool holds nobody with the skill', async () => {
-    await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer', skills: [] })
+    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' }, skills: [] })
     const res = await deliver(
       harness,
       'pull_request',
@@ -237,7 +243,7 @@ describe('GitHub webhook intake', () => {
   })
 
   it('answers a bot mention on the pull request, including when it refuses', async () => {
-    await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' } })
     await deliver(harness, 'issue_comment', commentPayload('@sainte-beuve-bot review'))
     expect(vcs.comments.at(-1)?.body).toContain('Review requested from Peer')
 
@@ -283,8 +289,11 @@ describe('GitHub webhook intake', () => {
   })
 
   it('hands a reroll to somebody other than whoever already has it', async () => {
-    const first = await addReviewer(harness, { displayName: 'First', githubLogin: 'first' })
-    const second = await addReviewer(harness, { displayName: 'Second', githubLogin: 'second' })
+    const first = await addReviewer(harness, { displayName: 'First', handles: { github: 'first' } })
+    const second = await addReviewer(harness, {
+      displayName: 'Second',
+      handles: { github: 'second' },
+    })
     const review = await openReview(harness)
     await new ReviewService(harness.container).claim(review.id, first.id)
 
@@ -311,9 +320,9 @@ describe('GitHub webhook intake', () => {
     const asApp = recordingVcs()
     const appWired = buildHarness({
       github: harness.container.github,
-      gateways: stubGateways({ vcsAsApp: asApp }),
+      gateways: stubGateways({ vcsAsApp: everyHost(asApp) }),
     })
-    await addReviewer(appWired, { displayName: 'Peer', githubLogin: 'peer' })
+    await addReviewer(appWired, { displayName: 'Peer', handles: { github: 'peer' } })
     await deliver(appWired, 'issue_comment', commentPayload('@sainte-beuve-bot review'))
     expect(asApp.comments).toHaveLength(1)
     expect(asApp.requested).toStrictEqual([['peer']])

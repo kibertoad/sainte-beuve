@@ -59,6 +59,9 @@ GITHUB_LABEL_SKILL_PREFIX = "skill:"
 #   GITHUB_OAUTH_CLIENT_SECRET
 #   GITHUB_TOKEN               a personal access token, for a deployment with no App
 #   GITHUB_WEBHOOK_SECRET      the shared secret the webhook signature is checked against
+#   GITLAB_TOKEN               a personal or group access token, for GitLab projects
+#   GITLAB_OAUTH_CLIENT_ID     the OAuth application behind "Sign in with GitLab"
+#   GITLAB_OAUTH_CLIENT_SECRET
 #   SLACK_BOT_TOKEN            xoxb-… for the Slack bot
 #   SLACK_SIGNING_SECRET       the secret Slack signs its requests with
 #   SETTINGS_ENCRYPTION_KEY    seals the credentials entered on the Configuration
@@ -72,4 +75,5 @@ GITHUB_LABEL_SKILL_PREFIX = "skill:"
 # The three GitHub credentials are not alternatives to choose between at deploy
 # time: whichever are configured are offered on the Configuration screen, and the
 # strongest present is what calls are made with (the App, then a sign-in, then a
-# stored token, then GITHUB_TOKEN).
+# stored token, then GITHUB_TOKEN). GitLab follows the same order minus the App,
+# which it has no equivalent of.

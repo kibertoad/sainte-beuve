@@ -1,6 +1,7 @@
-import type { GitHubLabelRules, ReminderPolicy } from '@sainte-beuve/contracts'
+import type { GitHubLabelRules, ReminderPolicy, VcsProvider } from '@sainte-beuve/contracts'
 import type {
   AiReviewGateway,
+  AttentionBus,
   ChatGateway,
   Clock,
   GatewayFactory,
@@ -13,6 +14,13 @@ import type {
 } from '@sainte-beuve/kernel'
 import { DEFAULT_REMINDER_POLICY, systemClock, uuidGenerator } from '@sainte-beuve/kernel'
 import type { SecretsWiring } from './crypto/WebCryptoSecretCipher.js'
+import { InMemoryAttentionBus } from './realtime/InMemoryAttentionBus.js'
+
+/** The environment's own gateway per host. Absent for a host nothing configured. */
+export type EnvironmentVcsGateways = Record<VcsProvider, VcsGateway | null>
+
+/** Nothing configured for either host, which is what a fresh deployment has. */
+export const NO_VCS_GATEWAYS: EnvironmentVcsGateways = { github: null, gitlab: null }
 
 /**
  * Everything a request handler is allowed to reach, assembled once per runtime and
@@ -82,7 +90,13 @@ export interface AppContainer {
    * `integrations/resolve.ts` for the order and why it is that way round.
    */
   chat: ChatGateway | null
-  vcs: VcsGateway | null
+  /**
+   * The environment's own source-control credential per host, which every
+   * stored credential takes precedence over. A record rather than one gateway,
+   * because a deployment can hold `GITHUB_TOKEN` and `GITLAB_TOKEN` at once and
+   * a workspace sweeping both has to reach each with its own.
+   */
+  vcs: EnvironmentVcsGateways
   aiReview: AiReviewGateway | null
   /**
    * Builds a gateway from a stored credential, which is the seam that lets a
@@ -106,6 +120,13 @@ export interface AppContainer {
    * because ..." for the other instead of one message for both.
    */
   secretsRejectedReason: string | null
+  /**
+   * Fans attention events out to the pages that are connected right now. Never
+   * null: the workspace's REST inbox is what makes the feature correct, and the
+   * bus is the optimisation on top, so a facade that forgets to wire one gets
+   * an in-process bus rather than a stream that silently delivers nothing.
+   */
+  bus: AttentionBus
   github: GitHubWiring
   slack: SlackWiring
   /**
@@ -124,8 +145,9 @@ export interface ContainerOptions {
   reminderPolicy?: ReminderPolicy
   random?: () => number
   chat?: ChatGateway | null
-  vcs?: VcsGateway | null
+  vcs?: Partial<EnvironmentVcsGateways> | null
   aiReview?: AiReviewGateway | null
+  bus?: AttentionBus
   gateways?: GatewayFactory | null
   /** The cipher, the state signer, and the reason there is neither, as `secretsFrom` reports them. */
   secrets?: SecretsWiring | null
@@ -180,8 +202,12 @@ export function createContainer(options: ContainerOptions): AppContainer {
     reminderPolicy: options.reminderPolicy ?? DEFAULT_REMINDER_POLICY,
     random: options.random ?? Math.random,
     chat: options.chat ?? null,
-    vcs: options.vcs ?? null,
+    vcs: { ...NO_VCS_GATEWAYS, ...options.vcs },
     aiReview: options.aiReview ?? null,
+    // A fresh bus per container is right for a facade that builds one at boot
+    // and wrong for one that builds a container per request, which is why the
+    // Worker holds its own at module level and passes it in here.
+    bus: options.bus ?? new InMemoryAttentionBus(),
     gateways: options.gateways ?? null,
     secrets: secrets.cipher,
     states: secrets.states,

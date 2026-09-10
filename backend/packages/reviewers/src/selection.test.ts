@@ -1,12 +1,13 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
-import { drawWeight, isEligible, isSameGithubLogin, selectReviewers } from './selection.js'
+import { drawWeight, isEligible, isSameHandle, selectReviewers } from './selection.js'
 
 function reviewer(overrides: Partial<Reviewer> & { id: string }): Reviewer {
   return {
     displayName: overrides.id,
-    githubLogin: overrides.id,
+    handles: { github: overrides.id, gitlab: null },
     slackUserId: null,
+    team: null,
     skills: [],
     availability: 'available',
     weight: 1,
@@ -124,15 +125,15 @@ describe('selectReviewers', () => {
   })
 })
 
-describe('isSameGithubLogin', () => {
+describe('isSameHandle', () => {
   it('matches the same account however it is spelled', () => {
-    expect(isSameGithubLogin('Kibertoad', 'kibertoad')).toBe(true)
-    expect(isSameGithubLogin(' kibertoad ', 'KIBERTOAD')).toBe(true)
+    expect(isSameHandle('Kibertoad', 'kibertoad')).toBe(true)
+    expect(isSameHandle(' kibertoad ', 'KIBERTOAD')).toBe(true)
   })
 
   it('does not match two different people, or a reviewer with no login at all', () => {
-    expect(isSameGithubLogin('kibertoad', 'someone-else')).toBe(false)
-    expect(isSameGithubLogin(null, 'kibertoad')).toBe(false)
-    expect(isSameGithubLogin(null, null)).toBe(false)
+    expect(isSameHandle('kibertoad', 'someone-else')).toBe(false)
+    expect(isSameHandle(null, 'kibertoad')).toBe(false)
+    expect(isSameHandle(null, null)).toBe(false)
   })
 })

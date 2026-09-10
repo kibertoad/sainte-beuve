@@ -1,5 +1,16 @@
-import type { Connections, GitHubAuthMethod, GitHubConnection } from '@sainte-beuve/contracts'
-import { GITHUB_OAUTH_CREDENTIAL_KEY, GITHUB_SIGN_IN_CALLBACK_PATH } from '@sainte-beuve/contracts'
+import type {
+  Connections,
+  VcsAuthMethod,
+  VcsConnection,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
+import {
+  signInCallbackPath,
+  VCS_PROVIDERS,
+  vcsDisplayName,
+  vcsOauthCredentialKey,
+  vcsPatCredentialKey,
+} from '@sainte-beuve/contracts'
 import { type RoundTripState, ValidationError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
@@ -8,36 +19,58 @@ import { hintOf } from '../../integrations/credentials.js'
 import { resolveChat, resolveVcs } from '../../integrations/resolve.js'
 
 /**
- * How this deployment reaches GitHub and Slack, and how an operator changes it.
+ * How this deployment reaches its source-control hosts and Slack, and how an
+ * operator changes it.
  *
  * The read is one call because the questions it answers are one question:
  * "should I expect anything to work?" Which credential is in force, which ones
  * this deployment could offer instead, and whether an inbound delivery can be
  * verified are three halves of that, and a screen that had to assemble them from
  * three routes would report a state that never existed at any single moment.
+ *
+ * Every host goes through the same path. Which one a route is about is an
+ * argument, not a branch: the flow name, the callback path, the credential key
+ * and the gateway are all derived from the provider, so adding a third host
+ * adds no code here.
  */
 
 /** Names the flow a signed state belongs to, so one callback cannot accept another's. */
-const SIGN_IN_FLOW = 'github-sign-in'
+function signInFlow(provider: VcsProvider): string {
+  return `${provider}-sign-in`
+}
+
 const APP_INSTALL_FLOW = 'github-app-install'
 
 const NO_APP =
   'This deployment has no GitHub App to install: set GITHUB_APP_SLUG (with GITHUB_APP_ID and ' +
   'GITHUB_APP_PRIVATE_KEY) to offer one'
-const NO_OAUTH =
-  'Signing in with GitHub needs an OAuth client: set GITHUB_OAUTH_CLIENT_ID and ' +
-  'GITHUB_OAUTH_CLIENT_SECRET on the deployment'
 const NO_STATE =
   'Connecting an integration needs an encryption key, because the round trip has to be signed ' +
   'and the credential it returns has to be sealed: set SETTINGS_ENCRYPTION_KEY'
+
+/** The variables a host's OAuth client is configured under, for the refusal to name. */
+const OAUTH_VARIABLES: Record<VcsProvider, string> = {
+  github: 'GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET',
+  gitlab: 'GITLAB_OAUTH_CLIENT_ID and GITLAB_OAUTH_CLIENT_SECRET',
+}
+
+function noOAuth(provider: VcsProvider): string {
+  return (
+    `Signing in to ${vcsDisplayName(provider)} needs an OAuth client: ` +
+    `set ${OAUTH_VARIABLES[provider]} on the deployment`
+  )
+}
 
 export class ConnectionsService {
   constructor(private readonly container: AppContainer) {}
 
   async read(): Promise<Connections> {
-    const [github, chat] = await Promise.all([this.github(), resolveChat(this.container)])
+    const [vcs, chat] = await Promise.all([
+      Promise.all(VCS_PROVIDERS.map((provider) => this.connection(provider))),
+      resolveChat(this.container),
+    ])
     return {
-      github,
+      vcs,
       slack: {
         ready: chat !== null,
         announcementChannelId: this.container.slack.announcementChannelId,
@@ -60,22 +93,25 @@ export class ConnectionsService {
 
   /**
    * Where to sign in. `origin` is the API's OWN origin, taken from the incoming
-   * request rather than from configuration: GitHub matches the redirect URI
+   * request rather than from configuration: the host matches the redirect URI
    * against what the OAuth app registered, and deriving it from the request is
    * what lets one build serve `http://localhost:8788` and a hosted origin without
    * a second variable to keep in step.
    */
-  async signInUrl(origin: string): Promise<string> {
-    const identity = requireCapability(this.container.gateways?.githubSignIn ?? null, NO_OAUTH)
+  async signInUrl(provider: VcsProvider, origin: string): Promise<string> {
+    const identity = requireCapability(
+      this.container.gateways?.signIn(provider) ?? null,
+      noOAuth(provider),
+    )
     return identity.authorizeUrl({
-      redirectUri: callbackUrl(origin),
-      state: await this.mintState(SIGN_IN_FLOW),
+      redirectUri: callbackUrl(provider, origin),
+      state: await this.mintState(signInFlow(provider)),
     })
   }
 
   /**
    * Finish a sign-in: check that we started it, trade the code for a token, and
-   * seal the token as this deployment's GitHub credential.
+   * seal the token as this deployment's credential for that host.
    *
    * The state is checked FIRST, before the code is spent and before the
    * deployment's own configuration is consulted. Two reasons, and the second is
@@ -85,25 +121,32 @@ export class ConnectionsService {
    * caller who did not start a flow here should learn nothing about how this
    * deployment is configured.
    */
-  async completeSignIn(input: { code: string; state: string | null; origin: string }): Promise<{
-    login: string
-    returnTo: string | null
-  }> {
-    const claims = await this.verifyState(input.state, SIGN_IN_FLOW)
-    const identity = requireCapability(this.container.gateways?.githubSignIn ?? null, NO_OAUTH)
+  async completeSignIn(input: {
+    provider: VcsProvider
+    code: string
+    state: string | null
+    origin: string
+  }): Promise<{ login: string; returnTo: string | null }> {
+    const { provider } = input
+    const claims = await this.verifyState(input.state, signInFlow(provider))
+    const identity = requireCapability(
+      this.container.gateways?.signIn(provider) ?? null,
+      noOAuth(provider),
+    )
     const cipher = requireCapability(this.container.secrets, NO_STATE)
-    const { token, login } = await identity.exchangeCode({
+    const key = vcsOauthCredentialKey(provider)
+    const { token, account } = await identity.exchangeCode({
       code: input.code,
-      redirectUri: callbackUrl(input.origin),
+      redirectUri: callbackUrl(provider, input.origin),
     })
     await this.container.repositories.integrationTokens.put({
-      integrationId: GITHUB_OAUTH_CREDENTIAL_KEY,
-      sealed: await cipher.encrypt(token, GITHUB_OAUTH_CREDENTIAL_KEY),
+      integrationId: key,
+      sealed: await cipher.encrypt(token, key),
       hint: hintOf(token),
-      subject: login,
+      subject: account.username,
       updatedAt: this.container.clock.now(),
     })
-    return { login, returnTo: claims.returnTo }
+    return { login: account.username, returnTo: claims.returnTo }
   }
 
   /**
@@ -117,56 +160,67 @@ export class ConnectionsService {
     return { returnTo: (await this.verifyState(state, APP_INSTALL_FLOW)).returnTo }
   }
 
-  /** Drop the sign-in credential. The App and the environment are untouched. */
-  async signOut(): Promise<void> {
-    await this.container.repositories.integrationTokens.delete(GITHUB_OAUTH_CREDENTIAL_KEY)
+  /** Drop one host's sign-in credential. The App and the environment are untouched. */
+  async signOut(provider: VcsProvider): Promise<void> {
+    await this.container.repositories.integrationTokens.delete(vcsOauthCredentialKey(provider))
   }
 
-  private async github(): Promise<GitHubConnection> {
-    const active = await resolveVcs(this.container)
+  private async connection(provider: VcsProvider): Promise<VcsConnection> {
+    const active = await resolveVcs(this.container, provider)
     // `appSlug` is deliberately not on the wire: the install URL is its own
     // route, so the screen never has to know how one is assembled.
     const { webhookSecret, botLogin, labels } = this.container.github
     return {
+      provider,
       activeMethod: active?.source ?? null,
-      availableMethods: this.availableMethods(),
-      appInstallable: this.appInstallable(),
-      account: await this.accountFor(active?.source ?? null),
-      webhooksReady: webhookSecret !== null,
-      botLogin,
+      availableMethods: this.availableMethods(provider),
+      appInstallable: this.appInstallable(provider),
+      account: await this.accountFor(provider, active?.source ?? null),
+      // Inbound deliveries are a GitHub intake today; a GitLab webhook is its
+      // own slice, and reporting the GitHub secret against it would claim a
+      // capability that does not exist.
+      inboundIntake: provider === 'github',
+      webhooksReady: provider === 'github' && webhookSecret !== null,
+      botLogin: provider === 'github' ? botLogin : null,
       labels,
     }
   }
 
-  private availableMethods(): GitHubAuthMethod[] {
+  private availableMethods(provider: VcsProvider): VcsAuthMethod[] {
     const factory = this.container.gateways
-    const offered: [GitHubAuthMethod, boolean][] = [
+    const offered: [VcsAuthMethod, boolean][] = [
       // An App id and key alone: `resolveVcs` authenticates with those, so this
       // list has to hold `app` on exactly the deployments where the App can win.
       // The SLUG decides whether an install can be OFFERED, which is
       // `appInstallable` and a different question.
-      ['app', factory?.vcsAsApp != null],
-      ['oauth', factory?.githubSignIn != null && this.container.secrets !== null],
+      ['app', factory?.vcsAsApp(provider) != null],
+      ['oauth', factory?.signIn(provider) != null && this.container.secrets !== null],
       ['pat', this.container.secrets !== null],
-      ['environment', this.container.vcs !== null],
+      ['environment', this.container.vcs[provider] !== null],
     ]
     return offered.filter(([, available]) => available).map(([method]) => method)
   }
 
   /** An install needs a page to send an operator to, and the slug addresses it. */
-  private appInstallable(): boolean {
-    return this.container.gateways?.vcsAsApp != null && this.container.github.appSlug !== null
+  private appInstallable(provider: VcsProvider): boolean {
+    if (provider !== 'github') return false
+    return (
+      this.container.gateways?.vcsAsApp('github') != null && this.container.github.appSlug !== null
+    )
   }
 
   /**
    * The account behind the active credential. Read off the stored row rather than
-   * from GitHub: the login was captured when the credential was stored, and a
-   * status screen that polls must not spend a GitHub request per poll to repeat
-   * it. An App acts as itself rather than as a person, so it has none.
+   * from the host: the handle was captured when the credential was stored, and a
+   * status screen that polls must not spend a request per poll to repeat it. An
+   * App acts as itself rather than as a person, so it has none.
    */
-  private async accountFor(method: GitHubAuthMethod | null): Promise<string | null> {
+  private async accountFor(
+    provider: VcsProvider,
+    method: VcsAuthMethod | null,
+  ): Promise<string | null> {
     if (method !== 'oauth' && method !== 'pat') return null
-    const key = method === 'oauth' ? GITHUB_OAUTH_CREDENTIAL_KEY : 'github-pat'
+    const key = method === 'oauth' ? vcsOauthCredentialKey(provider) : vcsPatCredentialKey(provider)
     return (await this.container.repositories.integrationTokens.get(key))?.subject ?? null
   }
 
@@ -189,7 +243,7 @@ export class ConnectionsService {
       // is an operator finishing an install they started an hour ago, and the
       // message has to say "start again" rather than accuse them of anything.
       throw new ValidationError(
-        'This GitHub callback did not carry a state this deployment recently issued. Start the ' +
+        'This callback did not carry a state this deployment recently issued. Start the ' +
           'connection again from the Configuration screen.',
       )
     }
@@ -197,6 +251,6 @@ export class ConnectionsService {
   }
 }
 
-function callbackUrl(origin: string): string {
-  return new URL(GITHUB_SIGN_IN_CALLBACK_PATH, origin).toString()
+function callbackUrl(provider: VcsProvider, origin: string): string {
+  return new URL(signInCallbackPath(provider), origin).toString()
 }

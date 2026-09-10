@@ -1,6 +1,15 @@
-import { defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
+import * as v from 'valibot'
 import { connectionsSchema, connectStartSchema } from '../connections.js'
+import { vcsProviderSchema } from '../vcs.js'
 import { errorResponses } from './_shared.js'
+
+/**
+ * The host segment is the provider PICKLIST rather than a bare string, so a
+ * path naming a host this build has no adapter for is refused by the contract
+ * validator instead of reaching a service that has to invent the same refusal.
+ */
+const providerParams = withObjectKeys(v.object({ provider: vcsProviderSchema }))
 
 // ---------------------------------------------------------------------------
 // Connection route contracts. See ConnectionsController in @sainte-beuve/server.
@@ -25,10 +34,11 @@ export const startGitHubAppInstallContract = defineApiContract({
   responsesByStatusCode: { 200: connectStartSchema, ...errorResponses },
 })
 
-/** Where to sign in with GitHub, for a deployment connecting by OAuth. */
-export const startGitHubSignInContract = defineApiContract({
+/** Where to sign in to one host, for a deployment connecting it by OAuth. */
+export const startVcsSignInContract = defineApiContract({
   method: 'get',
-  pathResolver: () => '/settings/connections/github/sign-in',
+  requestPathParamsSchema: providerParams,
+  pathResolver: ({ provider }) => `/settings/connections/${provider}/sign-in`,
   responsesByStatusCode: { 200: connectStartSchema, ...errorResponses },
 })
 
@@ -36,10 +46,11 @@ export const startGitHubSignInContract = defineApiContract({
  * Drop the credential a sign-in stored. Its own route rather than a DELETE on
  * the token store, because the sign-in credential is deliberately not one of the
  * pasteable ids: it has no text input to clear, and the screen's button here
- * means "disconnect this GitHub account" rather than "forget a token".
+ * means "disconnect this account" rather than "forget a token".
  */
-export const disconnectGitHubSignInContract = defineApiContract({
+export const disconnectVcsSignInContract = defineApiContract({
   method: 'delete',
-  pathResolver: () => '/settings/connections/github/sign-in',
+  requestPathParamsSchema: providerParams,
+  pathResolver: ({ provider }) => `/settings/connections/${provider}/sign-in`,
   responsesByStatusCode: { 200: connectionsSchema, ...errorResponses },
 })

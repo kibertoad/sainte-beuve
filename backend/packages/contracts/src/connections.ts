@@ -1,8 +1,9 @@
 import * as v from 'valibot'
+import { vcsProviderSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
-// Connection wire contracts: how this deployment reaches GitHub and Slack, and
-// what an operator still has to do about it.
+// Connection wire contracts: how this deployment reaches its source-control
+// hosts and Slack, and what an operator still has to do about it.
 //
 // Separate from `settings.ts`, which is about one CREDENTIAL at a time. A
 // connection is the whole story for one system: which of several credentials is
@@ -13,24 +14,27 @@ import * as v from 'valibot'
 // ---------------------------------------------------------------------------
 
 /**
- * How a deployment authenticates to GitHub, strongest first. The order IS the
- * precedence the resolver applies, and it is documented here rather than in the
- * resolver because it is the thing an operator has to be able to predict:
+ * How a deployment authenticates to a source-control host, strongest first. The
+ * order IS the precedence the resolver applies, and it is documented here rather
+ * than in the resolver because it is the thing an operator has to be able to
+ * predict:
  *
  *   - `app`         a GitHub App installation token, minted per repository. The
  *                   only credential that is not a person's, so a deployment that
- *                   has registered an App uses it and nothing shadows it.
- *   - `oauth`       the token from a "Sign in with GitHub" round trip. Minted by
- *                   this deployment's own OAuth client, revocable by the person
- *                   who granted it from their own GitHub settings.
+ *                   has registered an App uses it and nothing shadows it. GitHub
+ *                   only: GitLab has no equivalent, and a group access token
+ *                   there is a pasted token like any other.
+ *   - `oauth`       the token from a sign-in round trip. Minted by this
+ *                   deployment's own OAuth client, revocable by the person who
+ *                   granted it from their own account settings.
  *   - `pat`         a personal access token somebody pasted. Long-lived, carrying
  *                   whatever scopes that person happened to give it, which is why
  *                   it sits below a credential minted through a live sign-in.
- *   - `environment` `GITHUB_TOKEN` on the process. Last, because it is the one an
- *                   operator cannot see or change from the board.
+ *   - `environment` `GITHUB_TOKEN` / `GITLAB_TOKEN` on the process. Last, because
+ *                   it is the one an operator cannot see or change from the board.
  */
-export const githubAuthMethodSchema = v.picklist(['app', 'oauth', 'pat', 'environment'])
-export type GitHubAuthMethod = v.InferOutput<typeof githubAuthMethodSchema>
+export const vcsAuthMethodSchema = v.picklist(['app', 'oauth', 'pat', 'environment'])
+export type VcsAuthMethod = v.InferOutput<typeof vcsAuthMethodSchema>
 
 /**
  * The labels that make GitHub drive the board, so the screen can tell a team what
@@ -48,9 +52,10 @@ export const githubLabelRulesSchema = v.object({
 })
 export type GitHubLabelRules = v.InferOutput<typeof githubLabelRulesSchema>
 
-export const githubConnectionSchema = v.object({
-  /** The credential GitHub calls are made with right now. Null when there is none. */
-  activeMethod: v.nullable(githubAuthMethodSchema),
+export const vcsConnectionSchema = v.object({
+  provider: vcsProviderSchema,
+  /** The credential this host's calls are made with right now. Null when there is none. */
+  activeMethod: v.nullable(vcsAuthMethodSchema),
   /**
    * The methods this deployment could connect with, whether or not one is
    * connected. `app` appears once an App id and private key are configured,
@@ -61,7 +66,7 @@ export const githubConnectionSchema = v.object({
    * is not listed here would leave a screen reporting a credential it also says
    * the deployment cannot hold.
    */
-  availableMethods: v.array(githubAuthMethodSchema),
+  availableMethods: v.array(vcsAuthMethodSchema),
   /**
    * Whether an App INSTALL can be offered, which needs `GITHUB_APP_SLUG` on top
    * of the id and the key: the install page is addressed by the slug, so without
@@ -70,20 +75,29 @@ export const githubConnectionSchema = v.object({
    * authenticates with it perfectly well and has nothing left to install.
    */
   appInstallable: v.boolean(),
-  /** The GitHub login behind the active credential, when it has one. */
+  /** The account handle behind the active credential, when it has one. */
   account: v.nullable(v.string()),
+  /**
+   * Whether this build has a webhook intake for the host at all. Separate from
+   * `webhooksReady`, which is about the SECRET: a host with no intake has
+   * nothing to configure and no warning to show, while one with an intake and
+   * no secret is a route that refuses every delivery. Collapsed into one flag,
+   * a screen would either nag about a webhook that does not exist or stay
+   * silent about one that is broken.
+   */
+  inboundIntake: v.boolean(),
   /**
    * Whether an inbound delivery can be VERIFIED. False leaves the webhook route
    * refusing every delivery rather than trusting an unsigned one, so a screen
    * that reported the connection as healthy would be reporting a route that
-   * answers 503 to GitHub on every event.
+   * answers 503 to the host on every event.
    */
   webhooksReady: v.boolean(),
   /** The login the bot answers to when it is @-mentioned in a comment. */
   botLogin: v.nullable(v.string()),
   labels: githubLabelRulesSchema,
 })
-export type GitHubConnection = v.InferOutput<typeof githubConnectionSchema>
+export type VcsConnection = v.InferOutput<typeof vcsConnectionSchema>
 
 export const slackConnectionSchema = v.object({
   /** Whether a message can be delivered at all: a bot token is resolvable. */
@@ -101,7 +115,13 @@ export const slackConnectionSchema = v.object({
 export type SlackConnection = v.InferOutput<typeof slackConnectionSchema>
 
 export const connectionsSchema = v.object({
-  github: githubConnectionSchema,
+  /**
+   * One entry per host an adapter exists for, always all of them. A host with
+   * nothing configured is reported with no active method rather than omitted:
+   * "GitLab is not connected" and "this build cannot talk to GitLab" are
+   * different answers, and only the first is true.
+   */
+  vcs: v.array(vcsConnectionSchema),
   slack: slackConnectionSchema,
 })
 export type Connections = v.InferOutput<typeof connectionsSchema>
@@ -110,7 +130,7 @@ export type Connections = v.InferOutput<typeof connectionsSchema>
  * Where to send the browser to start a connect round trip. Returned rather than
  * redirected to, because the caller is the SPA rather than a navigation: it opens
  * the URL itself, and a 302 out of `fetch` would be followed by the client and
- * land the GitHub page in a JSON parse.
+ * land the host's page in a JSON parse.
  */
 export const connectStartSchema = v.object({ url: v.pipe(v.string(), v.url()) })
 export type ConnectStart = v.InferOutput<typeof connectStartSchema>

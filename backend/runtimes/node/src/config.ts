@@ -42,6 +42,18 @@ export interface GitHubConfig {
   labels: GitHubLabelRules
 }
 
+/**
+ * GitLab. One base URL configures the whole connection: an install serves its
+ * API and its OAuth endpoints under the same root, unlike GitHub. There is no
+ * App equivalent, so a group access token is a pasted token like any other.
+ */
+export interface GitLabConfig {
+  /** The install's root. Undefined means gitlab.com. */
+  baseUrl: string | undefined
+  token: string | null
+  oauth: { clientId: string; clientSecret: string; scope?: string } | null
+}
+
 export interface NodeConfig {
   port: number
   corsOrigins: string[]
@@ -52,6 +64,7 @@ export interface NodeConfig {
   /** The cat-factory key from the environment, when there is one. */
   catFactoryApiKey: string | null
   github: GitHubConfig
+  gitlab: GitLabConfig
   slack: { botToken: string | null; signingSecret: string | null; channelId: string | null }
   appBaseUrl: string | undefined
   /**
@@ -87,6 +100,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     // not one they set, and `.env.example` ships every name with no value.
     catFactoryApiKey: env.CAT_FACTORY_API_KEY || null,
     github: githubFrom(env),
+    gitlab: gitlabFrom(env),
     slack: {
       botToken: env.SLACK_BOT_TOKEN || null,
       signingSecret: env.SLACK_SIGNING_SECRET || null,
@@ -109,6 +123,21 @@ function catFactoryFrom(env: Env): NodeConfig['catFactory'] {
     baseUrl: CAT_FACTORY_BASE_URL,
     serviceId: CAT_FACTORY_SERVICE_ID,
     pipelineId: env.CAT_FACTORY_PIPELINE_ID,
+  }
+}
+
+function gitlabFrom(env: Env): GitLabConfig {
+  return {
+    baseUrl: env.GITLAB_BASE_URL,
+    token: env.GITLAB_TOKEN || null,
+    oauth:
+      env.GITLAB_OAUTH_CLIENT_ID && env.GITLAB_OAUTH_CLIENT_SECRET
+        ? {
+            clientId: env.GITLAB_OAUTH_CLIENT_ID,
+            clientSecret: env.GITLAB_OAUTH_CLIENT_SECRET,
+            scope: env.GITLAB_OAUTH_SCOPE,
+          }
+        : null,
   }
 }
 

@@ -1,10 +1,12 @@
-import type { Connections } from '@sainte-beuve/contracts'
-import { GITHUB_OAUTH_CREDENTIAL_KEY } from '@sainte-beuve/contracts'
+import type { Connections, VcsConnection } from '@sainte-beuve/contracts'
+import { vcsOauthCredentialKey } from '@sainte-beuve/contracts'
 import type { VcsIdentityGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildHarness,
   del,
+  environmentVcs,
+  everyHost,
   get,
   put,
   recordingVcs,
@@ -28,7 +30,15 @@ function stubSignIn(): VcsIdentityGateway & { redirects: string[] } {
       redirects.push(redirectUri)
       return `https://github.com/login/oauth/authorize?state=${state}`
     },
-    exchangeCode: async ({ code }) => ({ token: `gho_${code}_token`, login: 'kibertoad' }),
+    exchangeCode: async ({ code }) => ({
+      token: `gho_${code}_token`,
+      account: {
+        subject: '4249249',
+        username: 'kibertoad',
+        displayName: 'Igor',
+        avatarUrl: null,
+      },
+    }),
   }
 }
 
@@ -44,6 +54,13 @@ async function connections(harness: TestHarness): Promise<Connections> {
   const res = await harness.app.fetch(get(CONNECTIONS))
   expect(res.status).toBe(200)
   return (await res.json()) as Connections
+}
+
+/** The GitHub entry, which is the one every case here is about. */
+async function github(harness: TestHarness): Promise<VcsConnection> {
+  const found = (await connections(harness)).vcs.find((entry) => entry.provider === 'github')
+  expect(found).toBeDefined()
+  return found as VcsConnection
 }
 
 async function urlFrom(harness: TestHarness, path: string): Promise<string> {
@@ -69,33 +86,36 @@ describe('GitHub and Slack connections', () => {
   })
 
   it('offers a pasted token on a deployment that has nothing else', async () => {
-    const state = await connections(harness)
+    const state = await github(harness)
     // Storing a token needs an encryption key and nothing more, so `pat` is what
     // a fresh keyed deployment can do; the rest need an app registration.
-    expect(state.github.availableMethods).toStrictEqual(['pat'])
-    expect(state.github.activeMethod).toBeNull()
-    expect(state.github.labels).toMatchObject({ review: 'needs-review' })
+    expect(state.availableMethods).toStrictEqual(['pat'])
+    expect(state.activeMethod).toBeNull()
+    expect(state.labels).toMatchObject({ review: 'needs-review' })
   })
 
   it('offers nothing at all without an encryption key', async () => {
     const unkeyed = buildHarness()
-    expect((await connections(unkeyed)).github.availableMethods).toStrictEqual([])
+    expect((await github(unkeyed)).availableMethods).toStrictEqual([])
   })
 
   it('reports the environment token as the credential of last resort', async () => {
-    const fromEnv = keyed({ vcs: recordingVcs() })
-    const state = await connections(fromEnv)
-    expect(state.github.availableMethods).toStrictEqual(['pat', 'environment'])
-    expect(state.github.activeMethod).toBe('environment')
+    const fromEnv = keyed({ vcs: environmentVcs(recordingVcs()) })
+    const state = await github(fromEnv)
+    expect(state.availableMethods).toStrictEqual(['pat', 'environment'])
+    expect(state.activeMethod).toBe('environment')
     // No account: the environment credential is one an operator cannot see or
     // change from the board, and it names nobody.
-    expect(state.github.account).toBeNull()
+    expect(state.account).toBeNull()
   })
 
   it('lets an App shadow every other credential', async () => {
     const app = keyed({
-      vcs: recordingVcs(),
-      gateways: stubGateways({ vcsAsApp: recordingVcs(), vcsFromToken: () => recordingVcs() }),
+      vcs: environmentVcs(recordingVcs()),
+      gateways: stubGateways({
+        vcsAsApp: everyHost(recordingVcs()),
+        vcsFromToken: () => recordingVcs(),
+      }),
       github: {
         appSlug: 'sainte-beuve',
         webhookSecret: 'secret',
@@ -105,13 +125,13 @@ describe('GitHub and Slack connections', () => {
     })
     await app.app.fetch(put(PAT_PATH, { token: 'ghp_0123456789abcd' }))
 
-    const state = await connections(app)
-    expect(state.github.availableMethods).toStrictEqual(['app', 'pat', 'environment'])
+    const state = await github(app)
+    expect(state.availableMethods).toStrictEqual(['app', 'pat', 'environment'])
     // The App is the only credential that is not a person's, so a deployment
     // that has one uses it and the pasted token sits unused behind it.
-    expect(state.github.activeMethod).toBe('app')
-    expect(state.github.account).toBeNull()
-    expect(state.github.appInstallable).toBe(true)
+    expect(state.activeMethod).toBe('app')
+    expect(state.account).toBeNull()
+    expect(state.appInstallable).toBe(true)
   })
 
   it('reports an App with no slug as in force but not installable', async () => {
@@ -120,18 +140,18 @@ describe('GitHub and Slack connections', () => {
     // active credential it also said this deployment cannot hold, and the screen
     // would offer a button that leads nowhere.
     const slugless = keyed({
-      gateways: stubGateways({ vcsAsApp: recordingVcs() }),
+      gateways: stubGateways({ vcsAsApp: everyHost(recordingVcs()) }),
       github: { ...harness.container.github, appSlug: null },
     })
-    const state = await connections(slugless)
-    expect(state.github.activeMethod).toBe('app')
-    expect(state.github.availableMethods).toContain('app')
-    expect(state.github.appInstallable).toBe(false)
+    const state = await github(slugless)
+    expect(state.activeMethod).toBe('app')
+    expect(state.availableMethods).toContain('app')
+    expect(state.appInstallable).toBe(false)
   })
 
   it('sends the browser to GitHub with a state it can check on the way back', async () => {
     const identity = stubSignIn()
-    const signing = keyed({ gateways: stubGateways({ githubSignIn: identity }) })
+    const signing = keyed({ gateways: stubGateways({ signIn: everyHost(identity) }) })
 
     const url = new URL(await urlFrom(signing, `${CONNECTIONS}/github/sign-in`))
     expect(url.origin).toBe('https://github.com')
@@ -143,7 +163,10 @@ describe('GitHub and Slack connections', () => {
 
   it('stores the credential a sign-in produced, and says whose it is', async () => {
     const signing = keyed({
-      gateways: stubGateways({ githubSignIn: stubSignIn(), vcsFromToken: () => recordingVcs() }),
+      gateways: stubGateways({
+        signIn: everyHost(stubSignIn()),
+        vcsFromToken: () => recordingVcs(),
+      }),
     })
 
     const callback = await signIn(signing)
@@ -152,12 +175,12 @@ describe('GitHub and Slack connections', () => {
       'https://board.example.com/configuration?connected=github',
     )
 
-    const state = await connections(signing)
-    expect(state.github.activeMethod).toBe('oauth')
-    expect(state.github.account).toBe('kibertoad')
+    const state = await github(signing)
+    expect(state.activeMethod).toBe('oauth')
+    expect(state.account).toBe('kibertoad')
     // Sealed like every other credential, and never readable back through the API.
     const stored = await signing.container.repositories.integrationTokens.get(
-      GITHUB_OAUTH_CREDENTIAL_KEY,
+      vcsOauthCredentialKey('github'),
     )
     expect(stored?.sealed).not.toContain('gho_abc_token')
   })
@@ -165,7 +188,10 @@ describe('GitHub and Slack connections', () => {
   it('answers with a page when the deployment never said where the SPA is', async () => {
     const headless = keyed({
       appBaseUrl: null,
-      gateways: stubGateways({ githubSignIn: stubSignIn(), vcsFromToken: () => recordingVcs() }),
+      gateways: stubGateways({
+        signIn: everyHost(stubSignIn()),
+        vcsFromToken: () => recordingVcs(),
+      }),
     })
     const callback = await signIn(headless)
     expect(callback.status).toBe(200)
@@ -173,7 +199,7 @@ describe('GitHub and Slack connections', () => {
   })
 
   it('refuses a callback carrying a state it never issued', async () => {
-    const signing = keyed({ gateways: stubGateways({ githubSignIn: stubSignIn() }) })
+    const signing = keyed({ gateways: stubGateways({ signIn: everyHost(stubSignIn()) }) })
     const res = await signing.app.fetch(get('/connect/github/callback?code=abc&state=forged'))
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({
@@ -185,7 +211,7 @@ describe('GitHub and Slack connections', () => {
     // One signing key serves every round trip, so the install flow's state must
     // not be presentable to the sign-in callback.
     const signing = keyed({
-      gateways: stubGateways({ githubSignIn: stubSignIn() }),
+      gateways: stubGateways({ signIn: everyHost(stubSignIn()) }),
       github: {
         appSlug: 'sainte-beuve',
         webhookSecret: null,
@@ -202,7 +228,7 @@ describe('GitHub and Slack connections', () => {
   })
 
   it('says what a declined sign-in was, rather than failing silently', async () => {
-    const signing = keyed({ gateways: stubGateways({ githubSignIn: stubSignIn() }) })
+    const signing = keyed({ gateways: stubGateways({ signIn: everyHost(stubSignIn()) }) })
     const res = await signing.app.fetch(get('/connect/github/callback?error=access_denied'))
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({
@@ -212,19 +238,22 @@ describe('GitHub and Slack connections', () => {
 
   it('drops a sign-in credential and reports what took over', async () => {
     const signing = keyed({
-      vcs: recordingVcs(),
-      gateways: stubGateways({ githubSignIn: stubSignIn(), vcsFromToken: () => recordingVcs() }),
+      vcs: environmentVcs(recordingVcs()),
+      gateways: stubGateways({
+        signIn: everyHost(stubSignIn()),
+        vcsFromToken: () => recordingVcs(),
+      }),
     })
     await signIn(signing)
-    expect((await connections(signing)).github.activeMethod).toBe('oauth')
+    expect((await github(signing)).activeMethod).toBe('oauth')
 
     const res = await signing.app.fetch(del(`${CONNECTIONS}/github/sign-in`))
     expect(res.status).toBe(200)
     // The whole connection, not an ack: dropping this credential changes which
     // one is in force, and the screen has to show what took over.
-    expect((await res.json()) as Connections).toMatchObject({
-      github: { activeMethod: 'environment' },
-    })
+    expect(((await res.json()) as Connections).vcs).toContainEqual(
+      expect.objectContaining({ provider: 'github', activeMethod: 'environment' }),
+    )
   })
 
   it('names the missing configuration rather than offering a broken button', async () => {
@@ -243,7 +272,7 @@ describe('GitHub and Slack connections', () => {
 
   it('acknowledges an App install without storing anything', async () => {
     const withApp = keyed({
-      gateways: stubGateways({ vcsAsApp: recordingVcs() }),
+      gateways: stubGateways({ vcsAsApp: everyHost(recordingVcs()) }),
       github: {
         appSlug: 'sainte-beuve',
         webhookSecret: null,
@@ -288,10 +317,10 @@ describe('GitHub and Slack connections', () => {
   })
 
   it('reports whether an inbound delivery can be verified at all', async () => {
-    expect((await connections(harness)).github.webhooksReady).toBe(false)
+    expect((await github(harness)).webhooksReady).toBe(false)
     const verifying = keyed({
       github: { ...harness.container.github, webhookSecret: 'secret' },
     })
-    expect((await connections(verifying)).github.webhooksReady).toBe(true)
+    expect((await github(verifying)).webhooksReady).toBe(true)
   })
 })

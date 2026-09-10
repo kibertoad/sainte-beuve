@@ -4,13 +4,16 @@ import { cors } from 'hono/cors'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
 import { errorBody, handleError } from './http/errors.js'
+import { attentionController } from './modules/attention/AttentionController.js'
 import { connectController } from './modules/connections/ConnectController.js'
 import { connectionsController } from './modules/connections/ConnectionsController.js'
 import { healthController } from './modules/health/HealthController.js'
+import { projectController } from './modules/projects/ProjectController.js'
 import { reviewerController } from './modules/reviewers/ReviewerController.js'
 import { reviewController } from './modules/reviews/ReviewController.js'
 import { settingsController } from './modules/settings/SettingsController.js'
 import { webhookController } from './modules/webhooks/WebhookController.js'
+import { workspaceController } from './modules/workspace/WorkspaceController.js'
 
 /**
  * The Hono app every facade serves. It owns the route table, the error envelope and
@@ -102,6 +105,9 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/', healthController())
   app.route('/', webhookController())
   app.route('/', connectController())
+  app.route('/api/v1', workspaceController())
+  app.route('/api/v1', projectController())
+  app.route('/api/v1', attentionController())
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
   app.route('/api/v1', settingsController())

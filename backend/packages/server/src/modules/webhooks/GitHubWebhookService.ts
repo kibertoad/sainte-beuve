@@ -247,7 +247,7 @@ export class GitHubWebhookService {
 
   /** Best-effort: the work is committed, and a failed reply must not undo it. */
   private async reply(pullRequest: PullRequestRef, body: string): Promise<void> {
-    const vcs = await resolveVcs(this.container)
+    const vcs = await resolveVcs(this.container, pullRequest.provider)
     if (vcs === null) return
     try {
       await vcs.gateway.comment(pullRequest, body)

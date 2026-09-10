@@ -1,5 +1,10 @@
-import type { GitHubAuthMethod, IntegrationId } from '@sainte-beuve/contracts'
-import { GITHUB_OAUTH_CREDENTIAL_KEY } from '@sainte-beuve/contracts'
+import type {
+  IntegrationId,
+  VcsAuthMethod,
+  VcsOauthCredentialKey,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
+import { vcsOauthCredentialKey, vcsPatCredentialKey } from '@sainte-beuve/contracts'
 import {
   type AiReviewGateway,
   type ChatGateway,
@@ -38,24 +43,41 @@ export interface Resolved<TGateway, TSource> {
 export type CredentialSource = 'stored' | 'environment'
 
 /**
- * The GitHub credential in force, by the precedence `githubAuthMethodSchema`
- * documents: App, then a sign-in, then a pasted token, then the environment.
+ * The credential in force for one source-control host, by the precedence
+ * `vcsAuthMethodSchema` documents: an app, then a sign-in, then a pasted token,
+ * then the environment.
+ *
+ * Every step can answer null on its own, and not only for want of a credential:
+ * a build with no adapter for the host has no factory member to call, so a
+ * stored GitLab token on a deployment that wired only GitHub resolves to
+ * nothing rather than to a gateway that cannot be built.
  */
 export async function resolveVcs(
   container: AppContainer,
-): Promise<Resolved<VcsGateway, GitHubAuthMethod> | null> {
-  const factory = container.gateways
-  if (factory?.vcsAsApp != null) return { gateway: factory.vcsAsApp, source: 'app' }
+  provider: VcsProvider,
+): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
+  const asApp = container.gateways?.vcsAsApp(provider) ?? null
+  if (asApp !== null) return { gateway: asApp, source: 'app' }
 
-  const signedIn = await openCredential(container, GITHUB_OAUTH_CREDENTIAL_KEY)
-  if (signedIn !== null && factory !== null) {
-    return { gateway: factory.vcsFromToken(signedIn), source: 'oauth' }
-  }
-  const pasted = await openCredential(container, 'github-pat')
-  if (pasted !== null && factory !== null) {
-    return { gateway: factory.vcsFromToken(pasted), source: 'pat' }
-  }
-  return container.vcs === null ? null : { gateway: container.vcs, source: 'environment' }
+  const signedIn = await gatewayFromStored(container, provider, vcsOauthCredentialKey(provider))
+  if (signedIn !== null) return { gateway: signedIn, source: 'oauth' }
+
+  const pasted = await gatewayFromStored(container, provider, vcsPatCredentialKey(provider))
+  if (pasted !== null) return { gateway: pasted, source: 'pat' }
+
+  const fromEnvironment = container.vcs[provider]
+  return fromEnvironment === null ? null : { gateway: fromEnvironment, source: 'environment' }
+}
+
+/** A gateway built from one stored credential, or null when there is no usable pair of the two. */
+async function gatewayFromStored(
+  container: AppContainer,
+  provider: VcsProvider,
+  key: IntegrationId | VcsOauthCredentialKey,
+): Promise<VcsGateway | null> {
+  const token = await openCredential(container, key)
+  if (token === null) return null
+  return container.gateways?.vcsFromToken(provider, token) ?? null
 }
 
 /** The Slack bot token in force: a stored one, else the deployment's own. */
@@ -97,7 +119,7 @@ export async function resolveAiReview(
  */
 export async function openCredential(
   container: AppContainer,
-  key: IntegrationId | typeof GITHUB_OAUTH_CREDENTIAL_KEY,
+  key: IntegrationId | VcsOauthCredentialKey,
 ): Promise<string | null> {
   const { secrets, repositories, logger } = container
   if (secrets === null) return null

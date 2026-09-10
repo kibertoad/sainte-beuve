@@ -2,20 +2,27 @@
 
 ## What it is
 
-A centralized place to run code review. Three jobs, in order of how much they hurt
+A centralized place to run code review. Four jobs, in order of how much they hurt
 today:
 
-1. **Find a reviewer with the right skillset.** Not a round-robin and not a
+1. **Give one person their three lists.** What you have out, what is waiting on
+   your review, and what you promised to review, across every registered
+   project on every host. Plus the one thing a list cannot do: ask the team to
+   look at something, addressed by skill rather than by name.
+2. **Find a reviewer with the right skillset.** Not a round-robin and not a
    `CODEOWNERS` file: a weighted random pick from the people who actually hold the
    skills a change needs, damped by what they already owe.
-2. **Keep reminders honest.** A nudge for a review nobody picked up, a nudge for a
+3. **Keep reminders honest.** A nudge for a review nobody picked up, a nudge for a
    reviewer who has gone quiet, and one escalation past the deadline. Then it stops.
-3. **Trigger an AI review.** sainte-beuve runs no models. It files a `review` task
+4. **Trigger an AI review.** sainte-beuve runs no models. It files a `review` task
    against a [cat-factory](https://github.com/kibertoad/cat-factory) instance over
    the published `@cat-factory/sdk` and tracks the run.
 
-Slack and GitHub are how people reach it: GitHub is where a review starts and where
-the verdict has to land, Slack is where the nudge arrives.
+Slack and the source-control hosts are how people reach it: GitHub and GitLab
+are where reviews happen and where the verdict has to land, Slack is where the
+nudge arrives. Nothing is reviewed inside sainte-beuve, on purpose: a diff
+rendered here would be a worse copy of the page the review actually happens on,
+and every row links out to it.
 
 ## Shape of the repo
 
@@ -25,9 +32,9 @@ Mirrors cat-factory's layout, for the same reasons it works there.
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `backend/packages/contracts`          | Valibot wire contracts. The one definition of every model and route, shared by the frontend and every facade. |
 | `backend/packages/kernel`             | Domain errors and PORT interfaces. Nothing here reaches a network or a database.                              |
-| `backend/packages/reviewers`          | Reviewer selection: skill matching, load-aware weighted random. Pure.                                         |
+| `backend/packages/reviewers`          | Who should look: selection, attention audiences, and the cut of a host's list that is yours. Pure.            |
 | `backend/packages/reminders`          | Reminder cadence and escalation. Pure.                                                                        |
-| `backend/packages/integrations`       | GitHub and Slack adapters behind the kernel ports, plus the vendor protocols (signatures, events, commands).  |
+| `backend/packages/integrations`       | GitHub, GitLab and Slack adapters behind the kernel ports, plus the vendor protocols (signatures, events).    |
 | `backend/packages/ai-review`          | The cat-factory gateway. The only package that knows cat-factory exists.                                      |
 | `backend/packages/persistence-memory` | In-memory repositories: what every runtime boots with today.                                                  |
 | `backend/packages/server`             | The runtime-neutral Hono app: controllers, services, error envelope.                                          |
@@ -37,7 +44,7 @@ Mirrors cat-factory's layout, for the same reasons it works there.
 | `frontend/app`                        | The Nuxt layer (pages, components, composables).                                                              |
 | `deploy/*`                            | Four example deployments, each carrying only configuration.                                                   |
 
-Two rules hold the shape:
+Three rules hold the shape:
 
 - **Decisions are pure, writes are services.** `selectReviewers` and
   `planNextReminder` take data and return data. The services in
@@ -46,17 +53,38 @@ Two rules hold the shape:
 - **The runtimes stay symmetric.** A capability wired on the Worker and not on Node
   is the failure mode this layout exists to prevent. Anything added to one facade
   lands in the other in the same change.
+- **One facade over the source-control hosts.** GitHub and GitLab are two
+  adapters behind one `VcsGateway`, resolved per host by `resolveVcs(container,
+provider)` from that host's own credential. Above the adapter there is no
+  branch on which host a project is on, and no field named after one: a person
+  carries a HANDLE PER HOST rather than a `githubLogin`.
 
 ## What works today
 
+- **The workspace**: `GET /api/v1/workspace` sweeps every registered project
+  once per host and cuts the result three ways (yours, waiting on you, promised
+  by you), reporting per project whether it could be read at all.
+- **The project registry**: GitHub or GitLab repositories, each carrying the
+  skill vocabulary an attention request on it picks from.
+- **Attention requests**: raised against a pull request with the skills it
+  needs, an optional same-team gate and a critical mass; delivered live over
+  server-sent events and over a REST inbox that carries the same payload;
+  resolved and withdrawn from every inbox the moment enough people commit.
+- **Identity that is not a login**: a person is a reviewer row, and the
+  accounts they are known by are `(provider, subject)` rows keyed on each
+  host's stable id. A rename keeps somebody's workspace, and one person can
+  hold a GitHub and a GitLab account at once.
+- **GitLab**, behind the same port as GitHub: listing merge requests, reviewer
+  changes (read-merge-write, because GitLab's update replaces the list),
+  comments, the account read, and a sign-in.
 - The review board API: register a pull request, list it, route it to a reviewer,
   move it through its statuses, delegate it to cat-factory, read the run back.
 - Reviewer selection, with the author and anyone already assigned excluded by the
   service rather than by the caller.
 - The reminder policy and the tick that fires it, on both runtimes.
 - Three facades that boot: Worker (smoke-tested inside workerd), Node, local mode.
-- A Nuxt SPA with the board, the reviewer directory and the Configuration screen
-  behind a side navigation.
+- A Nuxt SPA: the workspace on `/`, the project registry, the board, the
+  reviewer directory and the Configuration screen behind a side navigation.
 - **GitHub, three ways**: a GitHub App (installation tokens minted per repository
   on Web Crypto), a "Sign in with GitHub" round trip, and a pasted personal access
   token. Whichever are configured are offered; the strongest present is used. See
@@ -76,13 +104,16 @@ Two rules hold the shape:
 
 ## What is a placeholder, and why it is still here
 
-| Placeholder                                | Why it exists now                                                                                                                                      |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| In-memory persistence                      | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.                                      |
-| `useSainteBeuveApi` calling routes by path | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                 |
-| Single cat-factory service id              | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                |
-| A stored credential is never re-checked    | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it. |
-| No AI-review verdict on the pull request   | A run is filed and polled, and nothing posts the result back. That is the rest of slice 4.                                                             |
+| Placeholder                                | Why it exists now                                                                                                                                                                                                                   |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| In-memory persistence                      | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.                                                                                                                   |
+| `useSainteBeuveApi` calling routes by path | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                                                                                              |
+| Single cat-factory service id              | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
+| A stored credential is never re-checked    | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
+| No AI-review verdict on the pull request   | A run is filed and polled, and nothing posts the result back. That is the rest of slice 4.                                                                                                                                          |
+| The viewer is the deployment's credential  | Whoever the source-control token acts as is who the workspace renders for. Right for one person's local run, wrong for a shared deployment, and exactly what slice 6 replaces.                                                      |
+| The attention stream is per process        | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
+| No GitLab intake                           | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
 
 ## Slices, in order
 
@@ -125,6 +156,46 @@ What is left over from it: a `decline` button on the announcement (rerolling cov
 it, and "not me" is a different signal worth recording), and per-repository
 overrides for the label names.
 
+### Slice 3.5: the working space (done)
+
+The screen a person actually opens, and the three lists behind it. What that
+slice decided, in short:
+
+- **A project registry, not a repository crawl.** A deployment lists the
+  repositories it watches, and that list is also the only place a team's own
+  skill vocabulary lives. Discovering repositories from a token instead would
+  sweep everything an account can see, which on a work account is thousands of
+  repositories and one rate limit.
+- **One list call per project, cut three ways.** Both hosts return the author
+  and the requested reviewers on the same page, so a call per role would double
+  the cost of one screen and give two halves from two different moments. The
+  cut is pure (`partitionForViewer`), so it is tested without a host.
+- **The search API is not used**, even though it can filter by author
+  server-side: it is eventually consistent, so a pull request opened seconds
+  ago is missing from it, and it carries its own much smaller rate limit.
+- **An unreadable project is reported, not thrown.** A deployment holding one
+  host's credential and not the other's is the normal state; a workspace that
+  503s because of the second project is a workspace nobody can use for the
+  first.
+- **An identity is `(provider, subject)`, never a handle.** A login is
+  renameable and reusable by whoever claims it next. The canonical person is
+  the reviewer row, which already exists and already carries the skills
+  selection matches on, so there is no second `users` table to keep in step.
+  On first sight of an account the directory row with that handle is ADOPTED
+  rather than forked, because a team registers people long before anybody signs
+  in.
+- **An attention request resolves itself.** Reaching the critical mass
+  withdraws it from every inbox, including the people who never answered. The
+  alternative, leaving it up until somebody tidies it away, is how a team
+  learns to ignore the next one.
+- **Committing is open to anybody, being ASKED is gated.** The skill gate
+  decides who the request reaches; somebody who wants to help anyway has made a
+  judgement about their own competence that a label list is not in a position
+  to overrule. `ReviewService.claim` already made that call for the board.
+- **Two delivery paths, one payload.** The stream is not a faster inbox and the
+  inbox is not a broken stream: a page opened an hour later has to see the same
+  thing, and the REST half is the one that is correct on every runtime.
+
 ### Slice 4: the AI review loop
 
 Today a run is filed and polled. The credential half landed with slice 3: every
@@ -164,6 +235,15 @@ is the guard that keeps them one behaviour instead of three.
 Everything above is single-tenant and unauthenticated, which is fine for local mode
 and wrong for a hosted deployment. Sessions, an org boundary around the reviewer pool
 and the board, and API keys for the machine callers.
+
+The workspace raises the stakes and does not change the shape of the answer.
+It renders for a VIEWER, and the viewer is currently whoever the deployment's
+source-control credential acts as: correct for one person's local run, and on a
+shared deployment it means everyone sees the same person's lists. What closes
+it is one substitution, not a redesign: `ViewerService` stops asking a gateway
+who the credential belongs to and reads the session's subject instead. The
+identity layer under it is already the shape a session needs, because a session
+resolves to `(provider, subject)` and that is what the store is keyed on.
 
 The configuration routes are the ones this is most overdue for, because they hold a
 credential rather than a board row. Until it lands they are guarded by two things
@@ -219,3 +299,16 @@ anybody who can find the URL close a review or reassign one.
 **In-memory persistence is the first adapter, not a test double.** Writing the ports
 against a store that cannot cheat is what keeps them coarse enough for D1 and
 Postgres to implement without an N+1.
+
+**A handle per host, never a `githubLogin`.** The same engineer is one name on
+GitHub and another on GitLab, and every place that mirrors an assignment or
+matches an author has to ask for the handle belonging to the pull request's own
+host. One field would address the wrong person the day a second host is
+registered, and it would do it silently.
+
+**The workspace and the board are two screens on purpose.** The workspace is
+what one person has to act on, read live from the hosts. The board is what the
+deployment has taken responsibility for: the rows a label or a webhook created,
+which the reminder ladder is chasing. Merging them would put a team-wide
+backlog in the way of somebody's own three lists, and it would make a
+person-driven promise and a webhook-driven assignment look like one thing.

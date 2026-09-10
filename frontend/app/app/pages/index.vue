@@ -1,48 +1,93 @@
 <script setup lang="ts">
-import type { ReviewRequest } from '@sainte-beuve/contracts'
+import type { OpenPullRequest } from '@sainte-beuve/contracts'
+import { formatPullRequestRef } from '@sainte-beuve/contracts'
 
-// The review board: everything in flight, and the two actions a viewer can take on
-// each row. Deliberately one page for now: the shape of the board is the thing to
-// get right first, and splitting it into components before it has any real content
-// would be guessing at the seams.
+// The main working space: the three lists one person has to act on, and the
+// asks waiting on an answer.
+//
+// You do not review here. Every row links OUT to the pull request on its host,
+// because that is where the diff, the threads and the approve button live; what
+// this screen is for is deciding what to open next, and telling the team when
+// something needs eyes.
 const api = useSainteBeuveApi()
-const { data, pending, error, refresh } = await useAsyncData('reviews', () => api.listReviews())
 
-const reviews = computed<ReviewRequest[]>(() => data.value?.reviews ?? [])
+const { data, pending, error, refresh } = await useAsyncData('workspace', async () => {
+  const [workspace, projects] = await Promise.all([api.getWorkspace(), api.listProjects()])
+  return { workspace, projects: projects.projects }
+})
 
-type BadgeColor = 'error' | 'info' | 'success' | 'warning' | 'neutral'
+const attention = useAttentionStream()
 
-const statusColor: Record<ReviewRequest['status'], BadgeColor> = {
-  open: 'warning',
-  assigned: 'info',
-  in_review: 'info',
-  approved: 'success',
-  changes_requested: 'error',
-  closed: 'neutral',
+const workspace = computed(() => data.value?.workspace ?? null)
+const unreadable = computed(() => workspace.value?.sources.filter((source) => !source.ok) ?? [])
+
+const { busy, run } = useApiAction({ refresh })
+const { busy: askBusy, run: runAsk } = useApiAction({ refresh: attention.refresh })
+
+/** The pull request the "ask for attention" dialog is open for. Null when closed. */
+const asking = ref<OpenPullRequest | null>(null)
+
+async function ask(request: {
+  requiredSkills: string[]
+  sameTeamOnly: boolean
+  neededCommitments: number
+  note: string | null
+}) {
+  const pr = asking.value
+  if (pr === null) return
+  const raised = await runAsk(
+    () => api.requestAttention({ pullRequest: pr.pullRequest, title: pr.title, ...request }),
+    'Could not ask for attention',
+    pr.pullRequest.url,
+  )
+  if (raised) asking.value = null
 }
 
-// Both of these routes refuse for reasons a viewer can act on (503 while
-// cat-factory is unconfigured, which is every fresh deployment; 404 for a review
-// somebody else has closed), which is what `useApiAction` is for: it toasts the
-// API's own message and refreshes the board. One copy, shared with the
-// Configuration screen, so a change to how a refusal is shown lands in one file.
-const { run } = useApiAction({ refresh })
-
-async function assign(review: ReviewRequest) {
-  await run(() => api.assignReviewers(review.id), 'Could not find a reviewer')
+async function commit(attentionId: string) {
+  await runAsk(
+    () => api.commitToAttention(attentionId),
+    'Could not commit to the review',
+    attentionId,
+  )
+  await refresh()
 }
 
-async function requestAiReview(review: ReviewRequest) {
-  await run(() => api.requestAiReview(review.id), 'Could not request an AI review')
+async function withdraw(attentionId: string) {
+  await runAsk(
+    () => api.cancelAttention(attentionId),
+    'Could not withdraw the request',
+    attentionId,
+  )
+}
+
+async function takeOn(pr: OpenPullRequest) {
+  await run(
+    () => api.commitToPullRequest(pr.pullRequest, pr.title),
+    'Could not record the commitment',
+    pr.pullRequest.url,
+  )
+}
+
+async function release(commitmentId: string) {
+  await run(
+    () => api.releaseCommitment(commitmentId),
+    'Could not release the commitment',
+    commitmentId,
+  )
 }
 </script>
 
 <template>
   <UContainer class="py-8">
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-start justify-between gap-4 mb-6">
       <div>
-        <h1 class="text-2xl font-semibold">Reviews</h1>
-        <p class="text-sm text-muted">Everything waiting on a human, and what it is waiting for.</p>
+        <h1 class="text-2xl font-semibold">Workspace</h1>
+        <p class="text-sm text-muted">
+          <template v-if="workspace">
+            Everything open across your projects, as {{ workspace.viewer.reviewer.displayName }}.
+          </template>
+          <template v-else>Everything open across your projects.</template>
+        </p>
       </div>
       <UButton icon="i-lucide-refresh-cw" variant="ghost" :loading="pending" @click="refresh()">
         Refresh
@@ -53,46 +98,125 @@ async function requestAiReview(review: ReviewRequest) {
       v-if="error"
       color="error"
       variant="subtle"
-      title="Could not reach the sainte-beuve API"
-      :description="`Tried ${api.apiBase}. Is the backend running?`"
+      :title="'This deployment could not build your workspace'"
+      :description="apiErrorMessage(error)"
     />
 
-    <UCard v-else-if="reviews.length === 0">
-      <p class="text-sm text-muted">
-        Nothing is being reviewed. Open a pull request, or register one through the API.
-      </p>
-    </UCard>
+    <div v-else-if="workspace" class="flex flex-col gap-4">
+      <UAlert
+        v-for="source in unreadable"
+        :key="source.projectId"
+        color="warning"
+        variant="subtle"
+        :title="`${source.owner}/${source.repo} could not be read`"
+        :description="source.reason ?? 'No reason given.'"
+      />
 
-    <div v-else class="flex flex-col gap-3">
-      <UCard v-for="review in reviews" :key="review.id">
-        <div class="flex items-start justify-between gap-4">
-          <div class="min-w-0">
-            <ULink :to="review.pullRequest.url" target="_blank" class="font-medium">
-              {{ review.pullRequest.owner }}/{{ review.pullRequest.repo }}#{{
-                review.pullRequest.number
-              }}
-            </ULink>
-            <p class="text-sm text-muted truncate">{{ review.title }}</p>
-            <div class="flex gap-1 mt-2">
-              <UBadge
-                v-for="skill in review.requiredSkills"
-                :key="skill"
-                variant="subtle"
-                size="sm"
-              >
-                {{ skill }}
-              </UBadge>
+      <AttentionInbox
+        :requests="attention.requests.value"
+        :viewer-id="workspace.viewer.reviewer.id"
+        :live="attention.live.value"
+        :busy="askBusy"
+        @commit="commit"
+        @cancel="withdraw"
+      />
+
+      <PullRequestList
+        title="Waiting on your review"
+        description="Pull requests the host has formally asked you to review."
+        empty="Nothing is waiting on you."
+        :pull-requests="workspace.reviewRequested"
+      >
+        <template #actions="{ pullRequest }">
+          <UButton
+            size="sm"
+            variant="ghost"
+            :loading="busy === pullRequest.pullRequest.url"
+            @click="takeOn(pullRequest)"
+          >
+            I will review it
+          </UButton>
+        </template>
+      </PullRequestList>
+
+      <UCard>
+        <template #header>
+          <div class="flex items-baseline justify-between gap-4">
+            <div>
+              <h2 class="font-medium">You committed to reviewing</h2>
+              <p class="text-sm text-muted">
+                Promises you made here. They survive nobody having pressed the button on the host.
+              </p>
             </div>
+            <UBadge variant="subtle" color="neutral">{{ workspace.committed.length }}</UBadge>
           </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <UBadge :color="statusColor[review.status]" variant="subtle">
-              {{ review.status }}
-            </UBadge>
-            <UButton size="sm" variant="soft" @click="assign(review)">Find a reviewer</UButton>
-            <UButton size="sm" variant="ghost" @click="requestAiReview(review)">AI review</UButton>
+        </template>
+        <p v-if="workspace.committed.length === 0" class="text-sm text-muted">
+          You have not taken anything on.
+        </p>
+        <div v-else class="flex flex-col divide-y divide-default">
+          <div
+            v-for="commitment in workspace.committed"
+            :key="commitment.id"
+            class="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
+          >
+            <div class="min-w-0">
+              <ULink :to="commitment.pullRequest.url" target="_blank" class="font-medium truncate">
+                {{ commitment.title }}
+              </ULink>
+              <p class="text-xs text-muted">{{ formatPullRequestRef(commitment.pullRequest) }}</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <UButton
+                size="sm"
+                variant="ghost"
+                color="neutral"
+                :loading="busy === commitment.id"
+                @click="release(commitment.id)"
+              >
+                Hand back
+              </UButton>
+              <UButton
+                :to="commitment.pullRequest.url"
+                target="_blank"
+                size="sm"
+                variant="ghost"
+                icon="i-lucide-external-link"
+              >
+                Review
+              </UButton>
+            </div>
           </div>
         </div>
       </UCard>
+
+      <PullRequestList
+        title="Your open pull requests"
+        description="What you have out. Ask for attention when one has been sitting too long."
+        empty="You have nothing open."
+        :pull-requests="workspace.authored"
+      >
+        <template #actions="{ pullRequest }">
+          <UButton size="sm" variant="soft" @click="asking = pullRequest"
+            >Ask for attention</UButton
+          >
+        </template>
+      </PullRequestList>
+
+      <UCard v-if="data && data.projects.length === 0">
+        <p class="text-sm text-muted">
+          No projects are registered, so there is nothing to sweep. Add one on the
+          <ULink to="/projects">Projects</ULink> screen.
+        </p>
+      </UCard>
     </div>
+
+    <RequestAttentionModal
+      :pull-request="asking"
+      :projects="data?.projects ?? []"
+      :busy="askBusy !== null"
+      @submit="ask"
+      @close="asking = null"
+    />
   </UContainer>
 </template>

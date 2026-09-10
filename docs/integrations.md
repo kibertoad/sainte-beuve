@@ -1,11 +1,18 @@
-# GitHub and Slack
+# GitHub, GitLab and Slack
 
-GitHub is where a review starts and where the verdict has to land. Slack is where
-the nudge arrives. This is how sainte-beuve connects to both, what each one can
-make it do, and what has to be registered where.
+GitHub and GitLab are where reviews happen and where the verdict has to land.
+Slack is where the nudge arrives. This is how sainte-beuve connects to each,
+what each one can make it do, and what has to be registered where.
 
-Everything here is optional. A deployment with neither still serves the board,
-and `GET /health` reports which halves are wired.
+Everything here is optional. A deployment with none of them still serves the
+board, and `GET /health` reports which halves are wired, per host.
+
+Both source-control hosts sit behind ONE port (`VcsGateway`), with one adapter
+each. Nothing above the adapter knows a merge request from a pull request: a
+project is `owner/repo` on either, a person carries a handle per host, and
+`resolveVcs(container, provider)` answers which credential that host is being
+reached with. Adding a third host is an adapter directory plus one entry in
+`createGatewayFactory`.
 
 ## Connecting to GitHub
 

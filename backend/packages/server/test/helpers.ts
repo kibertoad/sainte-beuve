@@ -1,15 +1,22 @@
 import type {
   CreateReviewerInput,
   CreateReviewRequestInput,
+  OpenPullRequest,
+  ProjectRef,
   Reviewer,
   ReviewRequest,
+  VcsProvider,
 } from '@sainte-beuve/contracts'
 import type { ChatGateway, GatewayFactory, Logger, VcsGateway } from '@sainte-beuve/kernel'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
 import type { Hono } from 'hono'
 import { expect } from 'vitest'
 import { createApp } from '../src/app.js'
-import { type AppContainer, createContainer } from '../src/container.js'
+import {
+  type AppContainer,
+  type EnvironmentVcsGateways,
+  createContainer,
+} from '../src/container.js'
 import { secretsFrom } from '../src/crypto/WebCryptoSecretCipher.js'
 import type { AppEnv } from '../src/http/env.js'
 
@@ -86,9 +93,9 @@ export function buildHarness(
  *
  * Every member is optional and the defaults throw, because a case that stores a
  * Slack token and asserts on GitHub should fail loudly rather than pass against
- * a gateway that quietly does nothing. `vcsAsApp` and `githubSignIn` default to
- * NULL rather than throwing: absent is a real deployment state for both, and it
- * is the state most cases want.
+ * a gateway that quietly does nothing. `vcsAsApp` and `signIn` default to NULL
+ * rather than throwing: absent is a real deployment state for both, and it is
+ * the state most cases want.
  */
 export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFactory {
   return {
@@ -98,11 +105,21 @@ export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFa
     vcsFromToken: () => {
       throw new Error('this case wired no VCS gateway')
     },
-    vcsAsApp: null,
+    vcsAsApp: () => null,
     aiReview: () => null,
-    githubSignIn: null,
+    signIn: () => null,
     ...overrides,
   }
+}
+
+/** One gateway for every host, for a case that does not care which one answers. */
+export function everyHost<T>(gateway: T): (provider: VcsProvider) => T {
+  return () => gateway
+}
+
+/** The environment's own gateway, on GitHub only, which is what most cases mean. */
+export function environmentVcs(gateway: VcsGateway): EnvironmentVcsGateways {
+  return { github: gateway, gitlab: null }
 }
 
 /** A VCS gateway that records what it was asked to do and answers nothing. */
@@ -129,7 +146,13 @@ export function recordingVcs(): VcsGateway & {
     comment: async (pr, body) => {
       comments.push({ body, number: pr.number })
     },
-    identify: async () => 'sainte-beuve-bot',
+    identify: async () => ({
+      subject: '1',
+      username: 'sainte-beuve-bot',
+      displayName: null,
+      avatarUrl: null,
+    }),
+    listOpenPullRequests: async () => [],
   }
 }
 
@@ -208,4 +231,48 @@ export async function openReview(
 
 export async function assignReviewer(harness: TestHarness, reviewId: string): Promise<Response> {
   return harness.app.fetch(post(`/api/v1/reviews/${reviewId}/assign`, { count: 1 }))
+}
+
+/**
+ * A source-control gateway acting as one named person, over a fixed list of
+ * open pull requests. What the workspace suite needs and the board suite does
+ * not, so it is separate from `recordingVcs`.
+ */
+export function viewerVcs(
+  username: string,
+  pullRequests: OpenPullRequest[] = [],
+): VcsGateway & { listed: ProjectRef[] } {
+  const listed: ProjectRef[] = []
+  return {
+    listed,
+    requestReviewers: async () => {},
+    removeRequestedReviewers: async () => {},
+    comment: async () => {},
+    listOpenPullRequests: async (project) => {
+      listed.push(project)
+      return pullRequests.filter(
+        (pr) => pr.pullRequest.owner === project.owner && pr.pullRequest.repo === project.repo,
+      )
+    },
+    identify: async () => ({
+      subject: `subject-${username}`,
+      username,
+      displayName: null,
+      avatarUrl: null,
+    }),
+  }
+}
+
+/** One open pull request, with only the fields a case cares about spelled out. */
+export function openPullRequest(overrides: Partial<OpenPullRequest> = {}): OpenPullRequest {
+  return {
+    pullRequest: { ...PR, ...overrides.pullRequest },
+    title: 'A change',
+    authorLogin: 'someone',
+    requestedReviewerLogins: [],
+    draft: false,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  }
 }

@@ -44,6 +44,7 @@ export async function start(config: NodeConfig = loadConfig()): Promise<RunningS
       catFactory: config.catFactory === null ? 'not configured' : config.catFactory.baseUrl,
       slack: slackSummary(config),
       github: githubSummary(config),
+      gitlab: gitlabSummary(config),
       secrets: config.encryptionKey === null ? 'not configured' : 'configured',
     },
     'sainte-beuve server listening',
@@ -68,6 +69,15 @@ function githubSummary(config: NodeConfig): string {
   return offered.length === 0 ? 'not configured' : offered.join(', ')
 }
 
+/** Which GitLab credentials this process can offer. No App: GitLab has none. */
+function gitlabSummary(config: NodeConfig): string {
+  const offered = [
+    config.gitlab.oauth === null ? null : 'sign-in',
+    config.gitlab.token === null ? null : 'token',
+  ].filter((entry): entry is string => entry !== null)
+  return offered.length === 0 ? 'not configured' : offered.join(', ')
+}
+
 function slackSummary(config: NodeConfig): string {
   const offered = [
     config.slack.botToken === null ? null : 'bot token',
@@ -77,5 +87,5 @@ function slackSummary(config: NodeConfig): string {
   return offered.length === 0 ? 'not configured' : offered.join(', ')
 }
 
-export { type GitHubConfig, type NodeConfig, loadConfig } from './config.js'
+export { type GitHubConfig, type GitLabConfig, type NodeConfig, loadConfig } from './config.js'
 export { buildContainer } from './container.js'
