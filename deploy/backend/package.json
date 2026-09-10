@@ -1,0 +1,20 @@
+{
+  "name": "@sainte-beuve/deploy-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example Cloudflare Worker deployment of the @sainte-beuve/worker library. Carries the wrangler.toml and config; copy this package to deploy the backend on your own Cloudflare account.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@sainte-beuve/worker": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260815.1",
+    "typescript": "7.0.2",
+    "wrangler": "4.124.0"
+  }
+}

@@ -1,0 +1,7 @@
+# Cloudflare Pages deployment of the SPA. `pnpm --filter @sainte-beuve/deploy-frontend
+# generate` writes the static output, then `pnpm ... deploy` uploads it.
+#
+# A TEMPLATE: set `name` to your own Pages project before deploying.
+name = "sainte-beuve-frontend"
+compatibility_date = "2025-06-01"
+pages_build_output_dir = "dist"

@@ -1,0 +1,43 @@
+{
+  "name": "@sainte-beuve/integrations",
+  "version": "0.1.0",
+  "description": "GitHub and Slack adapters for sainte-beuve: the VCS gateway (pull requests, reviewer assignment, webhook verification) and the chat gateway (review requests, reminders, slash commands) behind the kernel ports.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/packages/integrations"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@sainte-beuve/contracts": "workspace:*",
+    "@sainte-beuve/kernel": "workspace:*",
+    "octokit": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

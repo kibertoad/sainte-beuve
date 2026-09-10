@@ -1,0 +1,196 @@
+import type {
+  AiReviewRun,
+  Reminder,
+  ReminderStatus,
+  Reviewer,
+  ReviewRequest,
+  ReviewStatus,
+} from '@sainte-beuve/contracts'
+import type {
+  AiReviewRunRepository,
+  EpochMs,
+  ReminderRepository,
+  Repositories,
+  ReviewerRepository,
+  ReviewRequestRepository,
+} from '@sainte-beuve/kernel'
+
+/**
+ * In-memory implementations of the repository ports.
+ *
+ * This is the store every runtime boots with today, and it is deliberately the
+ * FIRST adapter rather than a test double retrofitted later: writing the ports
+ * against a store that cannot cheat (no SQL escape hatch, no lazy loading) is what
+ * keeps them coarse enough for D1 and Postgres to implement without an N+1. The
+ * durable adapters land in slice 5; see docs/implementation-plan.md.
+ *
+ * Every read returns a COPY. A caller that mutates what it got back must not
+ * silently rewrite the store, because no durable adapter would behave that way and
+ * a test passing against this one would then fail against those.
+ */
+
+function clone<T>(value: T): T {
+  return structuredClone(value)
+}
+
+export class InMemoryReviewerRepository implements ReviewerRepository {
+  private readonly rows = new Map<string, Reviewer>()
+
+  async list(): Promise<Reviewer[]> {
+    return [...this.rows.values()].map(clone)
+  }
+
+  async getById(reviewerId: string): Promise<Reviewer | null> {
+    const row = this.rows.get(reviewerId)
+    return row === undefined ? null : clone(row)
+  }
+
+  async create(reviewer: Reviewer): Promise<Reviewer> {
+    this.rows.set(reviewer.id, clone(reviewer))
+    return clone(reviewer)
+  }
+
+  async update(reviewerId: string, patch: Partial<Reviewer>): Promise<Reviewer | null> {
+    const row = this.rows.get(reviewerId)
+    if (row === undefined) return null
+    const next = { ...row, ...patch, id: row.id }
+    this.rows.set(reviewerId, next)
+    return clone(next)
+  }
+
+  async adjustOutstanding(reviewerId: string, delta: number): Promise<void> {
+    const row = this.rows.get(reviewerId)
+    if (row === undefined) return
+    this.rows.set(reviewerId, {
+      ...row,
+      outstandingReviews: Math.max(0, row.outstandingReviews + delta),
+    })
+  }
+}
+
+export class InMemoryReviewRequestRepository implements ReviewRequestRepository {
+  private readonly rows = new Map<string, ReviewRequest>()
+
+  async list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]> {
+    const wanted = filter?.status
+    return [...this.rows.values()]
+      .filter((row) => wanted === undefined || wanted.includes(row.status))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(clone)
+  }
+
+  async getById(reviewId: string): Promise<ReviewRequest | null> {
+    const row = this.rows.get(reviewId)
+    return row === undefined ? null : clone(row)
+  }
+
+  async getByPullRequest(ref: {
+    owner: string
+    repo: string
+    number: number
+  }): Promise<ReviewRequest | null> {
+    for (const row of this.rows.values()) {
+      const pr = row.pullRequest
+      if (pr.owner === ref.owner && pr.repo === ref.repo && pr.number === ref.number) {
+        return clone(row)
+      }
+    }
+    return null
+  }
+
+  async create(review: ReviewRequest): Promise<ReviewRequest> {
+    this.rows.set(review.id, clone(review))
+    return clone(review)
+  }
+
+  async update(reviewId: string, patch: Partial<ReviewRequest>): Promise<ReviewRequest | null> {
+    const row = this.rows.get(reviewId)
+    if (row === undefined) return null
+    const next = { ...row, ...patch, id: row.id }
+    this.rows.set(reviewId, next)
+    return clone(next)
+  }
+}
+
+export class InMemoryReminderRepository implements ReminderRepository {
+  private readonly rows = new Map<string, Reminder>()
+
+  async listByReview(reviewId: string): Promise<Reminder[]> {
+    return [...this.rows.values()].filter((row) => row.reviewId === reviewId).map(clone)
+  }
+
+  async listDue(now: EpochMs, limit: number): Promise<Reminder[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.status === 'scheduled' && row.dueAt <= now)
+      .sort((a, b) => a.dueAt - b.dueAt)
+      .slice(0, limit)
+      .map(clone)
+  }
+
+  async create(reminder: Reminder): Promise<Reminder> {
+    this.rows.set(reminder.id, clone(reminder))
+    return clone(reminder)
+  }
+
+  async updateStatus(
+    reminderId: string,
+    status: ReminderStatus,
+    fields?: { sentAt?: EpochMs; failureReason?: string },
+  ): Promise<void> {
+    const row = this.rows.get(reminderId)
+    if (row === undefined) return
+    this.rows.set(reminderId, {
+      ...row,
+      status,
+      sentAt: fields?.sentAt ?? row.sentAt,
+      failureReason: fields?.failureReason ?? row.failureReason,
+    })
+  }
+
+  async cancelScheduledForReview(reviewId: string): Promise<void> {
+    for (const [id, row] of this.rows) {
+      if (row.reviewId === reviewId && row.status === 'scheduled') {
+        this.rows.set(id, { ...row, status: 'cancelled' })
+      }
+    }
+  }
+}
+
+export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
+  private readonly rows = new Map<string, AiReviewRun>()
+
+  async listByReview(reviewId: string): Promise<AiReviewRun[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.reviewId === reviewId)
+      .sort((a, b) => b.requestedAt - a.requestedAt)
+      .map(clone)
+  }
+
+  async getById(runId: string): Promise<AiReviewRun | null> {
+    const row = this.rows.get(runId)
+    return row === undefined ? null : clone(row)
+  }
+
+  async create(run: AiReviewRun): Promise<AiReviewRun> {
+    this.rows.set(run.id, clone(run))
+    return clone(run)
+  }
+
+  async update(runId: string, patch: Partial<AiReviewRun>): Promise<AiReviewRun | null> {
+    const row = this.rows.get(runId)
+    if (row === undefined) return null
+    const next = { ...row, ...patch, id: row.id }
+    this.rows.set(runId, next)
+    return clone(next)
+  }
+}
+
+/** One call for the four stores a runtime has to supply. */
+export function createInMemoryRepositories(): Repositories {
+  return {
+    reviewers: new InMemoryReviewerRepository(),
+    reviews: new InMemoryReviewRequestRepository(),
+    reminders: new InMemoryReminderRepository(),
+    aiReviewRuns: new InMemoryAiReviewRunRepository(),
+  }
+}

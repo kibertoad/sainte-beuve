@@ -1,0 +1,25 @@
+{
+  "name": "@sainte-beuve/deploy-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example Cloudflare Pages deployment of the sainte-beuve SPA. Extends the @sainte-beuve/app Nuxt layer; copy this package to deploy the frontend on your own account.",
+  "type": "module",
+  "scripts": {
+    "postinstall": "nuxt prepare",
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "deploy": "wrangler pages deploy",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@sainte-beuve/app": "workspace:*",
+    "nuxt": "^4.5.2"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.3.11",
+    "wrangler": "4.124.0"
+  }
+}

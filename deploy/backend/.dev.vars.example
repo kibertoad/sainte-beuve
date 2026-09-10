@@ -1,0 +1,11 @@
+# Copy to `.dev.vars` for `wrangler dev`. Every value is optional: leave one out and
+# the capability it powers reports as off on /health instead of failing a request.
+CAT_FACTORY_BASE_URL=http://localhost:8787
+CAT_FACTORY_API_KEY=
+CAT_FACTORY_SERVICE_ID=
+GITHUB_TOKEN=
+GITHUB_WEBHOOK_SECRET=
+SLACK_BOT_TOKEN=
+SLACK_SIGNING_SECRET=
+SLACK_CHANNEL_ID=
+APP_BASE_URL=http://localhost:3000

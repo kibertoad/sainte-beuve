@@ -1,0 +1,59 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  // Turborepo owns the cross-package task graph (ordering + caching). Each package
+  // still builds/typechecks/tests itself with its own script (`tsc -b` over the TS
+  // project-reference graph); Turbo only decides WHICH packages run a task and in
+  // WHAT order, then caches the result so unchanged packages are skipped.
+  //
+  // `^build` = "build every workspace dependency first". Declare the edge once here
+  // and no entrypoint can run ahead of its dependencies.
+  //
+  // A change to the shared tsconfig invalidates every cached build/typecheck.
+  "globalDependencies": ["backend/tsconfig.base.json"],
+  "tasks": {
+    // Per-package compile. `tsc -b` writes `dist/` plus a sibling `*.tsbuildinfo`;
+    // both are cached so a restore reproduces the package's emitted state exactly.
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "*.tsbuildinfo"]
+    },
+    // `--noEmit` typecheck. Needs dependencies' declaration files, hence `^build`,
+    // but produces no cached artifact (only a pass/fail keyed on the inputs).
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    // Unit/integration suites. Tests import workspace dependencies through their
+    // built `dist` (the package `main`), so dependencies must be built first.
+    "test:run": {
+      "dependsOn": ["^build"]
+    },
+    // Nuxt build. `^build` guarantees @sainte-beuve/contracts (reached via the
+    // @sainte-beuve/app layer) is compiled before vite resolves it.
+    "generate": {
+      "dependsOn": ["^build"],
+      "outputs": [".output/**", ".nuxt/**"]
+    },
+    // The frontend deploy package's `build` is `nuxt build`, not a `tsc -b` to
+    // `dist/`, so override the generic `build` task's outputs for it.
+    "@sainte-beuve/deploy-frontend#build": {
+      "dependsOn": ["^build"],
+      "outputs": [".output/**", ".nuxt/**"]
+    },
+    // Wrangler deploy / pages deploy. Never cached (it has live side effects) and
+    // gated on its dependencies being built. Turbo runs tasks in strict env mode, so
+    // an operator's Cloudflare credentials must be passed through explicitly or
+    // wrangler sees an empty environment. `passThroughEnv` (not `env`) keeps these
+    // secrets out of the cache key.
+    "deploy": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+    },
+    // Long-running dev servers: build deps once, then hand off to the watcher.
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

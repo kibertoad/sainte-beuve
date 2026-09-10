@@ -1,0 +1,37 @@
+{
+  "name": "sainte-beuve",
+  "private": true,
+  "description": "Centralized review workspace: pick a reviewer with the right skills, keep reminders honest, and trigger an AI review through cat-factory. See README.md.",
+  "type": "module",
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test:run",
+    "test:run": "turbo run test:run",
+    "test:changed": "turbo run test:run --concurrency=50% --output-logs=errors-only --filter='...[origin/main]'",
+    "lint": "oxlint && oxfmt --check .",
+    "lint:fix": "oxlint --fix && oxfmt .",
+    "lint:monorepo": "sherif -i typescript -i @types/node -i vitest",
+    "lint:knip": "knip",
+    "dev:worker": "turbo run dev --filter=@sainte-beuve/deploy-backend",
+    "dev:node": "turbo run dev --filter=@sainte-beuve/deploy-node",
+    "dev:local": "turbo run dev --filter=@sainte-beuve/deploy-local",
+    "dev:frontend": "turbo run dev --filter=@sainte-beuve/deploy-frontend",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "ci:publish": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^3.0.2",
+    "knip": "^6.35.1",
+    "oxfmt": "^0.67.0",
+    "oxlint": "^1.82.0",
+    "sherif": "^1.13.0",
+    "turbo": "^2.10.12",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.25.0"
+}

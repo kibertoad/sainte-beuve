@@ -1,0 +1,51 @@
+{
+  "name": "@sainte-beuve/node-server",
+  "version": "0.1.0",
+  "description": "Node.js runtime facade for sainte-beuve: serves the shared @sainte-beuve/server Hono app over @hono/node-server and drives the reminder clock from an interval timer.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/runtimes/node"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "build:watch": "tsc -b tsconfig.build.json --watch",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "node --watch dist/main.js",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@sainte-beuve/ai-review": "workspace:*",
+    "@sainte-beuve/integrations": "workspace:*",
+    "@sainte-beuve/kernel": "workspace:*",
+    "@sainte-beuve/persistence-memory": "workspace:*",
+    "@sainte-beuve/server": "workspace:*",
+    "hono": "^4.13.7",
+    "pino": "^10.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

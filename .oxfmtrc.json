@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "semi": false,
+  "ignorePatterns": ["**/*.generated.ts", "**/CHANGELOG.md", "**/.nuxt/**", "**/.output/**"]
+}

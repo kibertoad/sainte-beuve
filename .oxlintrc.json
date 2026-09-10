@@ -1,0 +1,52 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  // Size and shape budgets, set deliberately low for a greenfield tree. They are
+  // not style preferences: a 400-line file and a 60-line function are the sizes a
+  // reviewer can still hold in their head, and `max-params: 4` is what pushes a
+  // fifth argument into a named options object before the call sites grow
+  // positional booleans nobody can read. Raise one only with the reason in the
+  // diff; the point of setting them now is that the tree never grows past them
+  // quietly.
+  "rules": {
+    "complexity": ["error", { "max": 12 }],
+    "max-depth": ["error", { "max": 4 }],
+    "max-nested-callbacks": ["error", { "max": 3 }],
+    "max-params": ["error", { "max": 4 }],
+    "max-statements": ["error", { "max": 25 }],
+    "max-lines": ["error", { "max": 400 }],
+    "max-lines-per-function": ["error", { "max": 60 }]
+  },
+  "overrides": [
+    {
+      // A test file is a flat list of cases, so its length says nothing about how
+      // hard it is to read, and a `describe` block is a whole suite rather than a
+      // function. Budget them separately instead of pushing suites apart to satisfy
+      // a rule aimed at production code.
+      "files": ["**/*.test.ts", "**/*.spec.ts"],
+      "rules": {
+        "max-lines": ["error", { "max": 900 }],
+        "max-lines-per-function": ["error", { "max": 250 }],
+        "max-nested-callbacks": ["error", { "max": 5 }],
+        "max-statements": ["error", { "max": 60 }]
+      }
+    },
+    {
+      // Vue SFC setup blocks and Nuxt config objects are declarations, not control
+      // flow; the statement/length budgets misread both.
+      "files": ["frontend/**", "deploy/frontend/**", "**/nuxt.config.ts"],
+      "rules": {
+        "no-use-before-define": ["error", { "functions": false }],
+        "max-lines-per-function": ["error", { "max": 150 }],
+        "max-statements": ["error", { "max": 40 }]
+      }
+    }
+  ],
+  "ignorePatterns": ["**/*.generated.ts", "**/.nuxt/**", "**/.output/**"],
+  "env": {
+    "builtin": true
+  }
+}

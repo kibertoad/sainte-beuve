@@ -1,0 +1,43 @@
+{
+  "name": "@sainte-beuve/ai-review",
+  "version": "0.1.0",
+  "description": "The cat-factory AI-review gateway for sainte-beuve: turns a review request into a cat-factory task over the published @cat-factory/sdk, against either a local instance or a centralized one.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/packages/ai-review"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest --passWithNoTests",
+    "test:run": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@cat-factory/sdk": "^0.51.3",
+    "@sainte-beuve/contracts": "workspace:*",
+    "@sainte-beuve/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

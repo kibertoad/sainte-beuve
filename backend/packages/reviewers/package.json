@@ -1,0 +1,40 @@
+{
+  "name": "@sainte-beuve/reviewers",
+  "version": "0.1.0",
+  "description": "Reviewer selection for sainte-beuve: skill matching, availability and load-aware weighted random choice. Pure functions over a candidate list, so the policy is testable without a store.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/packages/reviewers"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@sainte-beuve/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

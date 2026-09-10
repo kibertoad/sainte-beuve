@@ -1,0 +1,21 @@
+{
+  "name": "@sainte-beuve/deploy-node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example Node.js service deployment of the @sainte-beuve/node-server library. Carries the Dockerfile and env config; copy this package to run the backend as a long-running service on your own infrastructure.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @sainte-beuve/node-server run build",
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "prestart": "pnpm --filter @sainte-beuve/node-server run build",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@sainte-beuve/node-server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "7.0.2"
+  }
+}

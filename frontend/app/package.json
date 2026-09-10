@@ -1,0 +1,41 @@
+{
+  "name": "@sainte-beuve/app",
+  "version": "0.1.0",
+  "description": "Reusable Nuxt layer for the sainte-beuve SPA (pages, components, composables). Consume it from a thin deployment app via `extends: ['@sainte-beuve/app']` and point it at your backend with NUXT_PUBLIC_API_BASE. See deploy/frontend for an example.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "frontend/app"
+  },
+  "files": [
+    "app",
+    "nuxt.config.ts"
+  ],
+  "type": "module",
+  "main": "./nuxt.config.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest --passWithNoTests",
+    "test:run": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@nuxt/ui": "^4.11.1",
+    "@sainte-beuve/contracts": "workspace:*",
+    "valibot": "^1.4.2",
+    "vue": "3.5.42"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.14.0",
+    "nuxt": "^4.5.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11",
+    "vue-tsc": "^3.3.11"
+  },
+  "peerDependencies": {
+    "nuxt": "^4.5.2"
+  }
+}

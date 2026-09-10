@@ -1,0 +1,21 @@
+{
+  "name": "@sainte-beuve/deploy-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example LOCAL-MODE deployment of @sainte-beuve/local-server: run the whole product on your own machine, against a local cat-factory and with no Slack or GitHub app registered. One command, no accounts.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @sainte-beuve/local-server run build",
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "prestart": "pnpm --filter @sainte-beuve/local-server run build",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@sainte-beuve/local-server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "typescript": "7.0.2"
+  }
+}
