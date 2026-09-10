@@ -24,9 +24,11 @@ the two is missing rather than showing an empty board.
 Copy `.env.example` to `.env` and fill in only the block you care about.
 
 - **cat-factory**: `CAT_FACTORY_BASE_URL` defaults to `http://localhost:8787`, where
-  a local cat-factory serves. Add an API key and a service id and the "AI review"
-  button starts filing real review tasks. Point the URL at the centralized instance
-  instead and nothing else changes: it is the same client either way.
+  a local cat-factory serves. Add an API key with the `decide` scope and a service
+  id, and the "AI review" button starts filing real review tasks: expand the board
+  row to read what came back, tick the findings worth a comment and post them.
+  Point the URL at the centralized instance instead and nothing else changes: it is
+  the same client either way.
 - **GitHub**: a personal access token is enough locally, and so is signing in with
   GitHub if you register an OAuth app with the loopback callback. Assignments then
   mirror onto the real pull request and the bot can comment on it. Whichever

@@ -32,12 +32,24 @@ export const errorResponses = {
 } as const
 
 /**
- * A path-params schema for a single string segment:
- * `singleStringParam('reviewId')` is `withObjectKeys(v.object({ reviewId: v.string() }))`.
- * The mapped type over the single literal key preserves exact per-key typing
- * (`{ reviewId: string }` rather than a widened `Record<string, string>`), so the
+ * A path-params schema over string segments:
+ * `stringParams('runId', 'findingId')` is
+ * `withObjectKeys(v.object({ runId: v.string(), findingId: v.string() }))`.
+ * The mapped type over the literal keys preserves exact per-key typing
+ * (`{ runId: string }` rather than a widened `Record<string, string>`), so the
  * handler's `c.req.valid('param')` and the client's `pathParams` stay precise.
  */
+export function stringParams<const K extends string>(...keys: K[]) {
+  return withObjectKeys(
+    v.object(
+      Object.fromEntries(keys.map((key) => [key, v.string()])) as {
+        [P in K]: v.StringSchema<undefined>
+      },
+    ),
+  )
+}
+
+/** The one-segment case, which is most of them. See {@link stringParams}. */
 export function singleStringParam<const K extends string>(key: K) {
-  return withObjectKeys(v.object({ [key]: v.string() } as { [P in K]: v.StringSchema<undefined> }))
+  return stringParams(key)
 }

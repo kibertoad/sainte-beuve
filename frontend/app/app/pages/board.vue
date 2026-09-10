@@ -36,8 +36,25 @@ async function assign(review: ReviewRequest) {
   await run(() => api.assignReviewers(review.id), 'Could not find a reviewer')
 }
 
+/**
+ * Which rows have their AI-review panel open.
+ *
+ * Open rather than always-on, because each open panel polls cat-factory while
+ * anything on it is moving, and a board of twenty rows all polling is twenty
+ * reviews a nobody is looking at. Delegating a review opens its own panel, since
+ * the findings are what the person who pressed the button is waiting for.
+ */
+const expanded = ref(new Set<string>())
+
+function toggle(reviewId: string) {
+  const next = new Set(expanded.value)
+  if (!next.delete(reviewId)) next.add(reviewId)
+  expanded.value = next
+}
+
 async function requestAiReview(review: ReviewRequest) {
-  await run(() => api.requestAiReview(review.id), 'Could not request an AI review')
+  const filed = await run(() => api.requestAiReview(review.id), 'Could not request an AI review')
+  if (filed) expanded.value = new Set(expanded.value).add(review.id)
 }
 </script>
 
@@ -94,7 +111,18 @@ async function requestAiReview(review: ReviewRequest) {
             </UBadge>
             <UButton size="sm" variant="soft" @click="assign(review)">Find a reviewer</UButton>
             <UButton size="sm" variant="ghost" @click="requestAiReview(review)">AI review</UButton>
+            <UButton
+              size="sm"
+              variant="ghost"
+              color="neutral"
+              :icon="expanded.has(review.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+              :aria-label="expanded.has(review.id) ? 'Hide the AI reviews' : 'Show the AI reviews'"
+              @click="toggle(review.id)"
+            />
           </div>
+        </div>
+        <div v-if="expanded.has(review.id)" class="mt-4 pt-4 border-t border-default">
+          <AiReviewPanel :review-id="review.id" />
         </div>
       </UCard>
     </div>

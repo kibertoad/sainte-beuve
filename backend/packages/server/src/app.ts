@@ -10,6 +10,7 @@ import { connectionsController } from './modules/connections/ConnectionsControll
 import { healthController } from './modules/health/HealthController.js'
 import { projectController } from './modules/projects/ProjectController.js'
 import { reviewerController } from './modules/reviewers/ReviewerController.js'
+import { aiReviewController } from './modules/reviews/AiReviewController.js'
 import { reviewController } from './modules/reviews/ReviewController.js'
 import { settingsController } from './modules/settings/SettingsController.js'
 import { webhookController } from './modules/webhooks/WebhookController.js'
@@ -140,6 +141,7 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/api/v1', attentionController())
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
+  app.route('/api/v1', aiReviewController())
   app.route('/api/v1', settingsController())
   app.route('/api/v1', connectionsController())
 

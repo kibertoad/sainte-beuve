@@ -1,4 +1,6 @@
 import type {
+  AiReviewResolution,
+  AiReviewRun,
   AttentionRequest,
   Connections,
   ConnectStart,
@@ -86,8 +88,23 @@ export function useSainteBeuveApi() {
         `/reviews/${reviewId}/assign`,
         { count },
       ),
+    // The AI-review loop. Filing is addressed by review; everything after it by
+    // the delegated RUN, the way cat-factory's own decision surface is.
     requestAiReview: (reviewId: string, instructions: string | null = null) =>
-      post<{ id: string; status: string }>(`/reviews/${reviewId}/ai-review`, { instructions }),
+      post<AiReviewRun>(`/reviews/${reviewId}/ai-review`, { instructions }),
+    /** Every delegated run for one review. Each in-flight one is POLLED to answer this. */
+    listAiReviewRuns: (reviewId: string) =>
+      get<{ runs: AiReviewRun[] }>(`/reviews/${reviewId}/ai-review`),
+    dismissAiReviewFinding: (runId: string, findingId: string) =>
+      post<AiReviewRun>(`/ai-review/runs/${runId}/findings/${findingId}/dismiss`, {}),
+    /**
+     * Act on the curated selection. The answer is the run having ACCEPTED the
+     * instruction: cat-factory posts asynchronously, and what landed shows up on a
+     * later read as the curation's `postReport`.
+     */
+    resolveAiReview: (runId: string, action: AiReviewResolution, findingIds: string[]) =>
+      post<AiReviewRun>(`/ai-review/runs/${runId}/resolve`, { action, findingIds }),
+    resumeAiReview: (runId: string) => post<AiReviewRun>(`/ai-review/runs/${runId}/resume`, {}),
 
     getIntegrationSettings: () =>
       get<{ integrations: IntegrationTokenStatus[] }>('/settings/integrations'),

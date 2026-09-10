@@ -1,5 +1,4 @@
 import type { ReviewRequest } from '@sainte-beuve/contracts'
-import type { AiReviewGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ReviewService } from '../src/modules/reviews/ReviewService.js'
 import {
@@ -9,6 +8,7 @@ import {
   everyHost,
   openReview,
   recordingVcs,
+  stubAiReview,
   stubGateways,
   type TestHarness,
 } from './helpers.js'
@@ -222,12 +222,8 @@ describe('GitHub webhook intake', () => {
   })
 
   it('delegates to cat-factory when the AI-review label lands on an untracked PR', async () => {
-    const aiReview: AiReviewGateway = {
-      requestReview: async () => ({ taskId: 'task-1', url: 'https://cat.example/task-1' }),
-      getStatus: async () => ({ status: 'running', summary: null, failureReason: null }),
-    }
     const delegating = buildHarness({
-      aiReview,
+      aiReview: stubAiReview(),
       github: harness.container.github,
     })
 

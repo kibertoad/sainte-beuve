@@ -2,19 +2,20 @@ import {
   assignReviewersContract,
   createReviewContract,
   getReviewContract,
-  listAiReviewRunsContract,
   listReviewsContract,
-  requestAiReviewContract,
   updateReviewStatusContract,
 } from '@sainte-beuve/contracts'
 import { assertFound } from '@sainte-beuve/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { AiReviewService } from './AiReviewService.js'
 import { ReviewService } from './ReviewService.js'
 
-/** The review board API: track a pull request, route it, delegate it, resolve it. */
+/**
+ * The review board API: track a pull request, route it, move it through its
+ * statuses. Delegating one to cat-factory and curating what came back are in
+ * AiReviewController, which is addressed by run rather than by review.
+ */
 export function reviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -48,19 +49,6 @@ export function reviewController(): Hono<AppEnv> {
     const { reviewId } = c.req.valid('param')
     const { count, excludeReviewerIds } = c.req.valid('json')
     return c.json(await service.assign(reviewId, { count, excludeReviewerIds }), 200)
-  })
-
-  // 202, not 201: cat-factory has accepted the task, and the verdict arrives later.
-  buildHonoRoute(app, requestAiReviewContract, async (c) => {
-    const service = new AiReviewService(c.get('container'))
-    const { reviewId } = c.req.valid('param')
-    return c.json(await service.request(reviewId, c.req.valid('json').instructions), 202)
-  })
-
-  buildHonoRoute(app, listAiReviewRunsContract, async (c) => {
-    const service = new AiReviewService(c.get('container'))
-    const { reviewId } = c.req.valid('param')
-    return c.json({ runs: await service.listByReview(reviewId) }, 200)
   })
 
   return app

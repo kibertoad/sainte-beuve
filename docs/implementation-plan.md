@@ -79,6 +79,13 @@ provider)` from that host's own credential. Above the adapter there is no
   comments, the account read, and a sign-in.
 - The review board API: register a pull request, list it, route it to a reviewer,
   move it through its statuses, delegate it to cat-factory, read the run back.
+- **The AI-review loop, end to end**: a `review` task filed on cat-factory, the
+  findings it parks with read back through cat-factory's decision surface, each
+  one dismissable, and the curated selection posted as inline pull-request
+  comments (or handed to a fixer, or closed having posted nothing). The receipt
+  for a posting pass comes back with it, so a pass that landed nothing is not
+  read as a review nobody has curated; a reviewer that wedged with every slice
+  reported can be resumed within the budget cat-factory enforces.
 - Reviewer selection, with the author and anyone already assigned excluded by the
   service rather than by the caller.
 - The reminder policy and the tick that fires it, on both runtimes.
@@ -110,7 +117,7 @@ provider)` from that host's own credential. Above the adapter there is no
 | `useSainteBeuveApi` calling routes by path | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                                                                                              |
 | Single cat-factory service id              | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
 | A stored credential is never re-checked    | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
-| No AI-review verdict on the pull request   | A run is filed and polled, and nothing posts the result back. That is the rest of slice 4.                                                                                                                                          |
+| An AI review is polled on the READ         | Nothing drives `refresh()` on a clock, so a review that parks while nobody is looking sits there until somebody opens the row. The reminder tick is where that belongs.                                                             |
 | The viewer is the deployment's credential  | Whoever the source-control token acts as is who the workspace renders for. Right for one person's local run, wrong for a shared deployment, and exactly what slice 6 replaces.                                                      |
 | The attention stream is per process        | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
 | No GitLab intake                           | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
@@ -196,22 +203,48 @@ slice decided, in short:
   inbox is not a broken stream: a page opened an hour later has to see the same
   thing, and the REST half is the one that is correct on every runtime.
 
-### Slice 4: the AI review loop
+### Slice 4: the AI review loop (mostly done)
 
-Today a run is filed and polled. The credential half landed with slice 3: every
-gateway is built per request from whatever credential the deployment holds, through
-one `GatewayFactory` each facade supplies, so a key entered in the SPA takes effect
-on the Worker and on the Node service alike. What is still missing is what happens
-when a run finishes:
+The loop runs: file, read the findings, curate, post. What it decided, in short:
 
-- Post the verdict back as a pull-request comment through the VCS port.
-- Drive `refresh()` from the same tick that drives reminders, so a completed run
-  updates without anyone opening the board.
+- **The verdict is not a comment we write.** cat-factory posts the review itself,
+  on the LINES the findings are about, from the same run that produced them, and
+  it knows which of them fall outside the diff and have to be folded into a
+  summary instead. Summarising the run into one comment through our own VCS port
+  is the obvious alternative and a worse one: a paragraph where there should be
+  eight line comments, and a second repository-write credential to hold.
+- **Nothing is posted without a person.** cat-factory parks on its findings, and
+  the selection is a decision, not a default: a run whose every finding went
+  straight onto the pull request would be a bot arguing with an author, and the
+  screen would have nothing to be for.
+- **The port is addressed by TASK to file and by RUN to curate.** That asymmetry
+  is cat-factory's: a task is accepted before its run exists, and the decision
+  surface is keyed on the run. A gateway taking a task id for the curation verbs
+  would re-resolve the run per call and could act on a different one than the
+  findings on screen came from.
+- **A posting pass has to leave a receipt.** A `post` that lands nothing re-parks
+  the review at `awaiting_selection` with the selection cleared, which is
+  byte-for-byte a review nobody has curated. Without `postReport` beside
+  `postAttempts` a caller reads back the state it held a moment earlier and
+  reports success, which is why the projection carries both and the screen shows
+  which comments bounced.
+- **A key needs `decide`, not `write`.** A review parks, so cat-factory refuses to
+  start one through a key that could not answer it. The refusal arrives when the
+  review is filed, and the message names the scope.
+
+What is left:
+
+- Drive `refresh()` from the same tick that drives reminders, so a review that
+  parks while nobody is looking reaches the board (and a reminder) by itself
+  rather than on the next read.
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
 - Per-repository cat-factory service mapping, replacing the single
   `CAT_FACTORY_SERVICE_ID`.
+- Challenging a finding (cat-factory dispatches an investigator that upholds or
+  retracts it). It is a fourth verb on the same surface; the loop is usable
+  without it and the screen has nowhere to put the verdict yet.
 
 ### Slice 5: durable persistence
 
