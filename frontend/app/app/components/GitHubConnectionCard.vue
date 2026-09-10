@@ -62,7 +62,10 @@ const active = computed(() => {
 })
 
 const offers = computed(() => ({
-  app: props.connection.availableMethods.includes('app'),
+  // The install button follows `appInstallable`, not the method list: an App can
+  // be the credential in force with no slug configured, and then there is no
+  // install page to send anybody to.
+  app: props.connection.appInstallable,
   oauth: props.connection.availableMethods.includes('oauth'),
   pat: props.connection.availableMethods.includes('pat'),
 }))
@@ -80,6 +83,18 @@ const shadowed = computed(
     props.patStatus.state === 'stored' &&
     !props.patStatus.inUse &&
     props.connection.activeMethod !== null,
+)
+
+/**
+ * What to do about a token that is stored and unread. Only a sign-in can be
+ * dropped from this screen: an App and `GITHUB_TOKEN` are deployment
+ * configuration, so telling an operator to "disconnect" one names a button that
+ * is not on the card.
+ */
+const shadowedAdvice = computed(() =>
+  props.connection.activeMethod === 'oauth'
+    ? 'Clear it, or disconnect above, to use it.'
+    : 'Clear it, or take the stronger credential off the deployment, to use it.',
 )
 </script>
 
@@ -143,7 +158,7 @@ const shadowed = computed(
       color="info"
       variant="subtle"
       title="The stored token is not the credential in use"
-      :description="`${active.label}, so the personal access token below is stored and unread. Clear it, or disconnect the stronger credential, to use it.`"
+      :description="`${active.label}, so the personal access token below is stored and unread. ${shadowedAdvice}`"
     />
 
     <CredentialField

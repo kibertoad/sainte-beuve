@@ -233,6 +233,44 @@ describe('interpretGitHubDelivery: bot mentions', () => {
       ),
     ).toBeNull()
   })
+
+  it('reads a blank bot login as no bot at all', () => {
+    // A deployment that ships `GITHUB_BOT_LOGIN=` and never fills it in: an
+    // empty login makes `@` on its own a mention of nobody, so the bot would
+    // answer a conversation it was never named in.
+    const blank = (body: string) =>
+      interpretGitHubDelivery(
+        {
+          event: 'issue_comment',
+          payload: issue({ action: 'created', comment: { body, user: { login: 'reviewer' } } }),
+        },
+        { labels: LABELS, botLogin: '' },
+      )
+    expect(blank('who owns this @')).toBeNull()
+    expect(blank('cc @ review')).toBeNull()
+  })
+
+  it('answers a GitHub App under either of its two logins', () => {
+    // An App comments as `sainte-beuve-bot[bot]` and is mentioned as
+    // `@sainte-beuve-bot`, so whichever form a deployment configured has to
+    // work for both the mention and the never-answer-itself check.
+    const suffixed: GitHubIntentContext = { labels: LABELS, botLogin: 'sainte-beuve-bot[bot]' }
+    const from = (login: string, context: GitHubIntentContext) =>
+      interpretGitHubDelivery(
+        {
+          event: 'issue_comment',
+          payload: issue({
+            action: 'created',
+            comment: { body: '@sainte-beuve-bot status', user: { login } },
+          }),
+        },
+        context,
+      )
+    expect(from('reviewer', suffixed)).toMatchObject({ verb: 'status' })
+    expect(from('sainte-beuve-bot[bot]', suffixed)).toBeNull()
+    // Configured WITHOUT the suffix, against the comment GitHub actually writes.
+    expect(from('sainte-beuve-bot[bot]', CONTEXT)).toBeNull()
+  })
 })
 
 describe('parseBotCommand', () => {
@@ -254,6 +292,21 @@ describe('parseBotCommand', () => {
 
   it('does not match a longer login that starts the same way', () => {
     expect(parseBotCommand('@bot-staging review', 'bot')).toBeNull()
+  })
+
+  it('reads the verb after an App mention that carries the [bot] suffix', () => {
+    // The suffix is consumed rather than tolerated: a mention that stopped
+    // before it would read `[bot]` as the verb and fall through to the
+    // bare-mention default, so `status` would silently assign a reviewer.
+    expect(parseBotCommand('@bot[bot] status', 'bot')).toBe('status')
+    expect(parseBotCommand('@bot[bot] status', 'bot[bot]')).toBe('status')
+    expect(parseBotCommand('@bot status', 'bot[bot]')).toBe('status')
+    expect(parseBotCommand('@bot[bot]', 'bot')).toBe('review')
+  })
+
+  it('answers nothing at all for a blank login', () => {
+    expect(parseBotCommand('is @ anybody there', '')).toBeNull()
+    expect(parseBotCommand('@ review', '   ')).toBeNull()
   })
 })
 

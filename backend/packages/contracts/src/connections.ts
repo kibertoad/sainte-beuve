@@ -56,8 +56,20 @@ export const githubConnectionSchema = v.object({
    * connected. `app` appears once an App id and private key are configured,
    * `oauth` once an OAuth client is, `pat` always (pasting one needs nothing but
    * an encryption key), `environment` when `GITHUB_TOKEN` is set.
+   *
+   * `activeMethod` is always one of these. A method that could be in force and
+   * is not listed here would leave a screen reporting a credential it also says
+   * the deployment cannot hold.
    */
   availableMethods: v.array(githubAuthMethodSchema),
+  /**
+   * Whether an App INSTALL can be offered, which needs `GITHUB_APP_SLUG` on top
+   * of the id and the key: the install page is addressed by the slug, so without
+   * one there is nowhere to send an operator. Separate from `app` in
+   * `availableMethods` because a deployment whose App is already installed
+   * authenticates with it perfectly well and has nothing left to install.
+   */
+  appInstallable: v.boolean(),
   /** The GitHub login behind the active credential, when it has one. */
   account: v.nullable(v.string()),
   /**

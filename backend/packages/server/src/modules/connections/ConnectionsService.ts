@@ -130,6 +130,7 @@ export class ConnectionsService {
     return {
       activeMethod: active?.source ?? null,
       availableMethods: this.availableMethods(),
+      appInstallable: this.appInstallable(),
       account: await this.accountFor(active?.source ?? null),
       webhooksReady: webhookSecret !== null,
       botLogin,
@@ -140,14 +141,21 @@ export class ConnectionsService {
   private availableMethods(): GitHubAuthMethod[] {
     const factory = this.container.gateways
     const offered: [GitHubAuthMethod, boolean][] = [
-      // The App needs a slug as well as a key: without one there is no page to
-      // send an operator to, so offering it would be a button that cannot work.
-      ['app', factory?.vcsAsApp != null && this.container.github.appSlug !== null],
+      // An App id and key alone: `resolveVcs` authenticates with those, so this
+      // list has to hold `app` on exactly the deployments where the App can win.
+      // The SLUG decides whether an install can be OFFERED, which is
+      // `appInstallable` and a different question.
+      ['app', factory?.vcsAsApp != null],
       ['oauth', factory?.githubSignIn != null && this.container.secrets !== null],
       ['pat', this.container.secrets !== null],
       ['environment', this.container.vcs !== null],
     ]
     return offered.filter(([, available]) => available).map(([method]) => method)
+  }
+
+  /** An install needs a page to send an operator to, and the slug addresses it. */
+  private appInstallable(): boolean {
+    return this.container.gateways?.vcsAsApp != null && this.container.github.appSlug !== null
   }
 
   /**

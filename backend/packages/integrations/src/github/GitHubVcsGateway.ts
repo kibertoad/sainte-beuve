@@ -29,7 +29,7 @@ export interface GitHubGatewayOptions {
 
 export class GitHubVcsGateway implements VcsGateway {
   private readonly options: GitHubGatewayOptions
-  /** Memoised, because `identify()` is read by a status screen that polls. */
+  /** Memoised for the life of this gateway, so repeated reads cost one round trip. */
   private identity?: Promise<string | null>
 
   constructor(options: GitHubGatewayOptions) {
@@ -40,6 +40,18 @@ export class GitHubVcsGateway implements VcsGateway {
     if (logins.length === 0) return
     await this.call(pr, {
       method: 'POST',
+      path: `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/requested_reviewers`,
+      body: { reviewers: logins },
+    })
+  }
+
+  async removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
+    if (logins.length === 0) return
+    await this.call(pr, {
+      method: 'DELETE',
+      // Same path as the request, minus the reviewers named in the body. GitHub
+      // answers 200 whether or not they were requested, so a reroll on a pull
+      // request nobody was requested on is not a failure.
       path: `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/requested_reviewers`,
       body: { reviewers: logins },
     })
@@ -62,7 +74,13 @@ export class GitHubVcsGateway implements VcsGateway {
    */
   async identify(): Promise<string | null> {
     if (!this.options.tokens.hasUser) return null
-    this.identity ??= this.readViewer()
+    // A FAILED read is not memoised: a rejected promise left in the field would
+    // answer every later call with the same rate limit or the same expired
+    // token, so a screen that polls could never recover without a redeploy.
+    this.identity ??= this.readViewer().catch((err: unknown) => {
+      this.identity = undefined
+      throw err
+    })
     return this.identity
   }
 
@@ -81,7 +99,7 @@ export class GitHubVcsGateway implements VcsGateway {
 
   private async call(
     pr: PullRequestRef,
-    request: { method: 'POST'; path: string; body: unknown },
+    request: { method: 'POST' | 'DELETE'; path: string; body: unknown },
   ): Promise<void> {
     await githubRequest({
       ...request,

@@ -37,7 +37,11 @@ export function webhookController(): Hono<AppEnv> {
       timestamp: c.req.header('X-Slack-Request-Timestamp') ?? null,
       signature: c.req.header('X-Slack-Signature') ?? null,
     })
-    return c.json(reply, 200)
+    // A null reply is an ack with an EMPTY body, and that is load-bearing rather
+    // than tidy: for a button press Slack treats a message here as a replacement
+    // for the message the button is on, so the service answers those on the
+    // interaction's `response_url` and leaves nothing for this to render.
+    return reply === null ? c.body(null, 200) : c.json(reply, 200)
   })
 
   return app

@@ -111,6 +111,22 @@ describe('GitHub and Slack connections', () => {
     // that has one uses it and the pasted token sits unused behind it.
     expect(state.github.activeMethod).toBe('app')
     expect(state.github.account).toBeNull()
+    expect(state.github.appInstallable).toBe(true)
+  })
+
+  it('reports an App with no slug as in force but not installable', async () => {
+    // The slug addresses the install PAGE; the id and the key are what calls are
+    // made with. A read that dropped `app` from the methods here would name an
+    // active credential it also said this deployment cannot hold, and the screen
+    // would offer a button that leads nowhere.
+    const slugless = keyed({
+      gateways: stubGateways({ vcsAsApp: recordingVcs() }),
+      github: { ...harness.container.github, appSlug: null },
+    })
+    const state = await connections(slugless)
+    expect(state.github.activeMethod).toBe('app')
+    expect(state.github.availableMethods).toContain('app')
+    expect(state.github.appInstallable).toBe(false)
   })
 
   it('sends the browser to GitHub with a state it can check on the way back', async () => {

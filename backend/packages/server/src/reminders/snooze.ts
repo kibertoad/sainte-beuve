@@ -33,13 +33,34 @@ export async function snoozeReview(
     // reminder is not asking to be chased differently, and a snooze that turned a
     // DM into a channel post would widen the audience as a reward for asking for
     // time.
-    kind: outstanding?.kind ?? (review.assignedReviewerIds.length === 0 ? 'unassigned' : 'pending'),
-    channel: outstanding?.channel ?? 'slack_channel',
-    reviewerId: outstanding?.reviewerId ?? review.assignedReviewerIds[0] ?? null,
+    ...(outstanding === undefined ? plannedTargetFor(review) : targetOf(outstanding)),
     dueAt: now + hours * 60 * 60 * 1000,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,
     createdAt: now,
   })
+}
+
+/** The three fields that decide who hears the nudge and how. */
+type ReminderTarget = Pick<Reminder, 'kind' | 'channel' | 'reviewerId'>
+
+function targetOf(reminder: Reminder): ReminderTarget {
+  return { kind: reminder.kind, channel: reminder.channel, reviewerId: reminder.reviewerId }
+}
+
+/**
+ * Where the nudge would have gone, for a review with nothing outstanding to copy:
+ * the ladder can be between rungs (the last nudge went out and the policy planned
+ * nothing after it), and a snooze then has to invent the target.
+ *
+ * It invents the SAME one `planNextReminder` does, which is the only way the
+ * invariant above holds: a channel post read out of an assigned review would
+ * turn a private nudge into a public one.
+ */
+function plannedTargetFor(review: ReviewRequest): ReminderTarget {
+  const [reviewerId] = review.assignedReviewerIds
+  return reviewerId === undefined
+    ? { kind: 'unassigned', channel: 'slack_channel', reviewerId: null }
+    : { kind: 'pending', channel: 'slack_dm', reviewerId }
 }

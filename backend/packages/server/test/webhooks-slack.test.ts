@@ -1,11 +1,13 @@
 import { SLACK_ACTIONS } from '@sainte-beuve/integrations'
 import type { AiReviewGateway } from '@sainte-beuve/kernel'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addReviewer,
+  assignReviewer,
   buildHarness,
   form,
   openReview,
+  PR,
   recordingChat,
   recordingVcs,
   type TestHarness,
@@ -42,8 +44,25 @@ async function signed(
       'X-Slack-Signature': `v0=${hex}`,
     }),
   )
-  const body_ = (await res.json()) as { text?: string }
-  return { status: res.status, text: body_.text ?? '' }
+  // The body is EMPTY for a button press: that reply goes to the interaction's
+  // `response_url`, because Slack reads a message here as replacing the message
+  // the button is on.
+  const raw = await res.text()
+  const parsed = raw.length === 0 ? {} : (JSON.parse(raw) as { text?: string })
+  return { status: res.status, text: parsed.text ?? '' }
+}
+
+const RESPONSE_URL = 'https://hooks.slack.com/actions/T1/1/abc'
+
+/** Captures what the service posted to an interaction's `response_url`. */
+function captureFollowUps(): { text: string; url: string }[] {
+  const posted: { text: string; url: string }[] = []
+  vi.stubGlobal('fetch', async (url: string | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { text: string }
+    posted.push({ text: body.text, url: String(url) })
+    return new Response('ok')
+  })
+  return posted
 }
 
 function command(text: string, userId = 'U-peer'): string {
@@ -55,6 +74,7 @@ function button(actionId: string, reviewId: string, userId = 'U-peer'): string {
     payload: JSON.stringify({
       user: { id: userId },
       actions: [{ action_id: actionId, value: reviewId }],
+      response_url: RESPONSE_URL,
     }),
   }).toString()
 }
@@ -68,6 +88,10 @@ describe('Slack interactivity', () => {
     harness = buildHarness({
       slack: { signingSecret: SECRET, announcementChannelId: 'C-reviews' },
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('refuses a request this deployment cannot verify', async () => {
@@ -118,25 +142,64 @@ describe('Slack interactivity', () => {
   it('treats a button press as the command it stands for', async () => {
     await addReviewer(harness, { displayName: 'Peer', slackUserId: 'U-peer' })
     const review = await openReview(harness)
+    const posted = captureFollowUps()
 
     const res = await signed(harness, button(SLACK_ACTIONS.claim, review.id))
-    expect(res.text).toContain('is yours')
+    // The HTTP body stays empty and the answer goes to the response URL:
+    // answering a button in the body would replace the announcement everybody
+    // else is looking at, buttons and all, with a note addressed to one person.
+    expect(res.status).toBe(200)
+    expect(res.text).toBe('')
+    expect(posted).toStrictEqual([{ url: RESPONSE_URL, text: expect.stringContaining('is yours') }])
   })
 
-  it('hands a reroll to somebody other than whoever has it', async () => {
-    await addReviewer(harness, { displayName: 'First', githubLogin: 'first' })
-    await addReviewer(harness, { displayName: 'Second', githubLogin: 'second' })
+  it('hands a reroll to somebody else, and takes it off whoever had it', async () => {
+    const first = await addReviewer(harness, { displayName: 'First', githubLogin: 'first' })
+    const second = await addReviewer(harness, { displayName: 'Second', githubLogin: 'second' })
     const review = await openReview(harness)
-    await harness.app.fetch(
-      new Request(`http://localhost/api/v1/reviews/${review.id}/assign`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ count: 1 }),
-      }),
-    )
+    await assignReviewer(harness, review.id)
+    const posted = captureFollowUps()
 
-    const res = await signed(harness, button(SLACK_ACTIONS.reroll, review.id))
-    expect(res.text).toContain('Second')
+    await signed(harness, button(SLACK_ACTIONS.reroll, review.id))
+    expect(posted.at(-1)?.text).toContain('Second')
+    // The half a reroll is actually for: First comes off the review, so the
+    // ladder stops chasing them and the router stops counting it as their load.
+    const stored = await harness.container.repositories.reviews.getById(review.id)
+    expect(stored?.assignedReviewerIds).toStrictEqual([second.id])
+    const reviewers = await harness.container.repositories.reviewers.list()
+    expect(reviewers.find((r) => r.id === first.id)?.outstandingReviews).toBe(0)
+    expect(reviewers.find((r) => r.id === second.id)?.outstandingReviews).toBe(1)
+  })
+
+  it('leaves the review where it is when there is nobody else to hand it to', async () => {
+    const only = await addReviewer(harness, { displayName: 'Only', githubLogin: 'only' })
+    const review = await openReview(harness)
+    await assignReviewer(harness, review.id)
+
+    const res = await signed(harness, command(`reroll ${review.id}`))
+    expect(res.text).toContain('stays where it is')
+    // "Nobody else is available" must not be a way to end up with a review
+    // nobody is on.
+    const stored = await harness.container.repositories.reviews.getById(review.id)
+    expect(stored?.assignedReviewerIds).toStrictEqual([only.id])
+    expect(stored?.status).toBe('assigned')
+  })
+
+  it('lists the reviews nobody is on before the ones somebody already has', async () => {
+    // The cap is what makes the order matter: the store answers newest-first, so
+    // on a busy board the reviews somebody reading `/review` could actually pick
+    // up are the ones that fall off the end of the message.
+    await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    const waiting = await openReview(harness)
+    harness.clock.advance(60_000)
+    const taken = await openReview(harness, {
+      pullRequest: { ...PR, number: 8, url: `${PR.url}8` },
+      title: 'A second pull request',
+    })
+    await assignReviewer(harness, taken.id)
+
+    const res = await signed(harness, command('list'))
+    expect(res.text.indexOf(waiting.id)).toBeLessThan(res.text.indexOf(taken.id))
   })
 
   it('pushes the next nudge out rather than cancelling it', async () => {

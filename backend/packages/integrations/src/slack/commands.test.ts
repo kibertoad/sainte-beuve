@@ -13,9 +13,17 @@ function command(text: string, userId = 'U123'): URLSearchParams {
   return new URLSearchParams({ command: '/review', text, user_id: userId })
 }
 
-function interaction(actionId: string, value: string, userId = 'U123'): URLSearchParams {
+function interaction(
+  actionId: string,
+  value: string,
+  extra: Record<string, unknown> = {},
+): URLSearchParams {
   return new URLSearchParams({
-    payload: JSON.stringify({ user: { id: userId }, actions: [{ action_id: actionId, value }] }),
+    payload: JSON.stringify({
+      user: { id: 'U123' },
+      actions: [{ action_id: actionId, value }],
+      ...extra,
+    }),
   })
 }
 
@@ -64,6 +72,8 @@ describe('parseSlackRequest', () => {
     expect(parseSlackRequest(command('take rev-1', 'U777'))).toStrictEqual({
       intent: { kind: 'claim', reviewId: 'rev-1' },
       userId: 'U777',
+      surface: 'command',
+      responseUrl: null,
     })
   })
 
@@ -71,10 +81,32 @@ describe('parseSlackRequest', () => {
     expect(parseSlackRequest(interaction(SLACK_ACTIONS.claim, 'rev-1'))).toStrictEqual({
       intent: { kind: 'claim', reviewId: 'rev-1' },
       userId: 'U123',
+      surface: 'action',
+      responseUrl: null,
     })
     expect(parseSlackRequest(interaction(SLACK_ACTIONS.snooze, 'rev-1'))).toMatchObject({
       intent: { kind: 'snooze', hours: DEFAULT_SNOOZE_HOURS },
     })
+  })
+
+  it('carries the surface and the URL an answer may go to', () => {
+    // The two surfaces are answered in different places: a slash command in the
+    // HTTP response, a button on its `response_url`, because Slack reads a
+    // message in the response to a button as replacing the message it is on.
+    const url = 'https://hooks.slack.com/actions/T1/1/abc'
+    expect(
+      parseSlackRequest(interaction(SLACK_ACTIONS.claim, 'rev-1', { response_url: url })),
+    ).toMatchObject({ surface: 'action', responseUrl: url })
+    expect(
+      parseSlackRequest(
+        new URLSearchParams({
+          command: '/review',
+          text: 'list',
+          user_id: 'U123',
+          response_url: url,
+        }),
+      ),
+    ).toMatchObject({ surface: 'command', responseUrl: url })
   })
 
   it('ignores anything else Slack posts to the same URL', () => {

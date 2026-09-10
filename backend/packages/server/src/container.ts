@@ -134,6 +134,40 @@ export interface ContainerOptions {
   appBaseUrl?: string | null
 }
 
+/**
+ * A configuration string, or null when there is nothing there.
+ *
+ * BLANK counts as absent, and this is the one place that decides it for every
+ * facade. Both example deployments ship every name with no value
+ * (`GITHUB_WEBHOOK_SECRET=`), so a copied file gives `''` rather than
+ * `undefined`, and `requireCapability` only refuses `null`: an empty webhook
+ * secret would sail past the 503 that names the missing variable and reach Web
+ * Crypto, which answers `DataError: Zero-length key is not supported`. GitHub
+ * would then be told 500 by a deployment reporting the capability as ready.
+ */
+function configured(value: string | null | undefined): string | null {
+  return value === undefined || value === null || value.trim().length === 0 ? null : value
+}
+
+/** The same rule for a value that has a default: blank falls back, it does not win. */
+function configuredOr(value: string | undefined, fallback: string): string {
+  return configured(value) ?? fallback
+}
+
+function githubWiring(options: Partial<GitHubWiring> | undefined): GitHubWiring {
+  const labels = options?.labels
+  return {
+    appSlug: configured(options?.appSlug),
+    webhookSecret: configured(options?.webhookSecret),
+    botLogin: configured(options?.botLogin),
+    labels: {
+      review: configuredOr(labels?.review, DEFAULT_GITHUB_LABELS.review),
+      aiReview: configuredOr(labels?.aiReview, DEFAULT_GITHUB_LABELS.aiReview),
+      skillPrefix: configuredOr(labels?.skillPrefix, DEFAULT_GITHUB_LABELS.skillPrefix),
+    },
+  }
+}
+
 export function createContainer(options: ContainerOptions): AppContainer {
   // Unpacked once rather than three times inline: the two capabilities and the
   // reason there are none arrive together from `secretsFrom`.
@@ -152,14 +186,11 @@ export function createContainer(options: ContainerOptions): AppContainer {
     secrets: secrets.cipher,
     states: secrets.states,
     secretsRejectedReason: secrets.rejectedReason,
-    github: {
-      appSlug: null,
-      webhookSecret: null,
-      botLogin: null,
-      labels: DEFAULT_GITHUB_LABELS,
-      ...options.github,
+    github: githubWiring(options.github),
+    slack: {
+      signingSecret: configured(options.slack?.signingSecret),
+      announcementChannelId: configured(options.slack?.announcementChannelId),
     },
-    slack: { signingSecret: null, announcementChannelId: null, ...options.slack },
-    appBaseUrl: options.appBaseUrl ?? null,
+    appBaseUrl: configured(options.appBaseUrl),
   }
 }

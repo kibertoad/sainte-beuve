@@ -23,12 +23,37 @@ export interface SlackMessage {
   blocks?: SlackBlock[]
 }
 
+/**
+ * Slack's `mrkdwn` control characters, escaped.
+ *
+ * Every message here carries third-party text: a pull-request title and a set of
+ * labels, both typed by whoever opened the pull request. `<...>` is Slack's link
+ * syntax, so a title of `<https://evil.example|Approve here>` would otherwise
+ * render in the announcement channel as a link the bot appears to vouch for, and
+ * `<!channel>` in one as a real broadcast ping. Slack asks for exactly these
+ * three, in this order.
+ */
+export function escapeSlackText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
+ * A Slack link with a safe label. The URL keeps its own escaping rules: `<`, `>`
+ * and `|` inside it would end the link or start the label early, so they are
+ * percent-encoded rather than entity-escaped.
+ */
+export function slackLink(url: string, label: string): string {
+  return `<${url.replace(/[<>|]/g, (char) => encodeURIComponent(char))}|${escapeSlackText(label)}>`
+}
+
 /** `owner/repo#7 Title`, linked, with the skills the review needs. */
 function reviewSummary(review: ReviewRequest): string {
-  const link = `<${review.pullRequest.url}|${formatPullRequest(review.pullRequest)}>`
+  const link = slackLink(review.pullRequest.url, formatPullRequest(review.pullRequest))
   const skills =
-    review.requiredSkills.length > 0 ? ` (needs ${review.requiredSkills.join(', ')})` : ''
-  return `${link} ${review.title}${skills}`
+    review.requiredSkills.length > 0
+      ? ` (needs ${escapeSlackText(review.requiredSkills.join(', '))})`
+      : ''
+  return `${link} ${escapeSlackText(review.title)}${skills}`
 }
 
 /**
@@ -63,7 +88,7 @@ export function reminderMessage(
   review: ReviewRequest,
   appBaseUrl: string | undefined,
 ): SlackMessage {
-  const link = `<${review.pullRequest.url}|${formatPullRequest(review.pullRequest)}>`
+  const link = slackLink(review.pullRequest.url, formatPullRequest(review.pullRequest))
   const board = appBaseUrl === undefined ? '' : ` ${appBaseUrl}/reviews/${review.id}`
   if (reminder.kind === 'unassigned') {
     return { text: `${link} is still waiting for a reviewer.${board}` }

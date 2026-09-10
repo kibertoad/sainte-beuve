@@ -1,7 +1,12 @@
 import type { ReviewRequest } from '@sainte-beuve/contracts'
 import { ForbiddenError, formatPullRequest, getErrorMessage } from '@sainte-beuve/kernel'
-import type { SlackIntent } from '@sainte-beuve/integrations'
-import { parseSlackRequest, verifySlackSignature } from '@sainte-beuve/integrations'
+import type { SlackIntent, SlackRequest } from '@sainte-beuve/integrations'
+import {
+  parseSlackRequest,
+  postSlackResponse,
+  slackLink,
+  verifySlackSignature,
+} from '@sainte-beuve/integrations'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { snoozeReview } from '../../reminders/snooze.js'
@@ -19,6 +24,12 @@ import { ReviewService } from '../reviews/ReviewService.js'
  * Every answer is EPHEMERAL. A slash command's reply is addressed to the person
  * who typed it, and a channel does not need to see somebody's typo, nor a second
  * copy of a message the bot is about to post properly.
+ *
+ * WHERE the answer goes differs by surface, and it is not a detail: a slash
+ * command is answered in the HTTP response, while a button press is answered on
+ * the interaction's own `response_url`, because Slack reads a message in the
+ * response to a `block_actions` request as a replacement for the message the
+ * button is on.
  */
 
 const NO_SECRET =
@@ -36,6 +47,9 @@ export interface SlackReply {
   text: string
 }
 
+/** How many reviews one Slack message lists before it says how many are left. */
+const LIST_LIMIT = 10
+
 export class SlackWebhookService {
   constructor(private readonly container: AppContainer) {}
 
@@ -43,7 +57,7 @@ export class SlackWebhookService {
     rawBody: string
     timestamp: string | null
     signature: string | null
-  }): Promise<SlackReply> {
+  }): Promise<SlackReply | null> {
     const secret = requireCapability(this.container.slack.signingSecret, NO_SECRET)
     const verified = await verifySlackSignature(
       secret,
@@ -60,13 +74,42 @@ export class SlackWebhookService {
     // callbacks a workspace admin subscribed to). Answering them with help text
     // would be noise, so an unrecognised shape gets a bare ack.
     if (request === null) return ephemeral('')
+    const reply = ephemeral(await this.answer(request))
+    if (request.surface === 'command') return reply
+    if (request.responseUrl === null) {
+      // An interaction is NEVER answered in the HTTP response, not even when
+      // Slack sent no URL to answer on: overwriting the announcement everybody
+      // is looking at is worse than one person seeing no confirmation.
+      this.container.logger.warn(
+        { intent: request.intent.kind },
+        'a Slack interaction carried no response_url, so its reply had nowhere to go',
+      )
+      return null
+    }
+    await this.followUp(request.responseUrl, reply)
+    return null
+  }
+
+  private async answer(request: SlackRequest): Promise<string> {
     try {
-      return ephemeral(await this.run(request.intent, request.userId))
+      return await this.run(request.intent, request.userId)
     } catch (err) {
       // Slack shows the reply and nothing else, so a refusal has to be the reply.
       // A non-200 would render as "operation timed out" and lose the message that
       // says which configuration is missing.
-      return ephemeral(`That did not work: ${getErrorMessage(err)}`)
+      return `That did not work: ${getErrorMessage(err)}`
+    }
+  }
+
+  /** Best-effort: the work is committed, and a reply that failed must not undo it. */
+  private async followUp(responseUrl: string, reply: SlackReply): Promise<void> {
+    try {
+      await postSlackResponse({ responseUrl, message: reply })
+    } catch (err) {
+      this.container.logger.warn(
+        { err },
+        'could not answer a Slack interaction on its response URL',
+      )
     }
   }
 
@@ -80,15 +123,12 @@ export class SlackWebhookService {
       const run = await new AiReviewService(this.container).request(review.id, null)
       return `Handed ${describe(review)} to cat-factory (${run.status}).`
     }
-    const result = await new ReviewService(this.container).assign(review.id, {
-      count: 1,
-      // A reroll must not hand the review back to whoever already has it, which
-      // is the whole point of asking for one.
-      excludeReviewerIds: review.assignedReviewerIds,
-    })
+    // A reroll takes the review OFF whoever has it, which is the whole point of
+    // asking for one, and leaves it with them when there is nobody else.
+    const result = await new ReviewService(this.container).reroll(review.id)
     const names = result.assigned.map((reviewer) => reviewer.displayName).join(', ')
     return names.length === 0
-      ? `Nobody else is available for ${describe(review)}.`
+      ? `Nobody else is available for ${describe(review)}, so it stays where it is.`
       : `${describe(review)} now goes to ${names}.`
   }
 
@@ -96,14 +136,19 @@ export class SlackWebhookService {
    * What is waiting, unassigned first. Capped, because a Slack message is
    * truncated somewhere the reader cannot see: a list that runs off the end looks
    * like a bug in the bot rather than a busy board.
+   *
+   * The ORDER is what makes the cap safe. The store answers newest-first, so a
+   * busy board would push the reviews nobody is on off the end, which are
+   * exactly the ones somebody reading `/review` can do something about.
    */
   private async list(): Promise<string> {
     const open = await this.container.repositories.reviews.list({
       status: ['open', 'assigned', 'in_review'],
     })
     if (open.length === 0) return 'Nothing is waiting for a review right now.'
-    const lines = open
-      .slice(0, 10)
+    const lines = [...open]
+      .sort(byNeedForAReviewer)
+      .slice(0, LIST_LIMIT)
       .map((review) => `- \`${review.id}\` ${describe(review)} (${review.status})`)
     const more = open.length > lines.length ? `\n...and ${open.length - lines.length} more.` : ''
     return `${lines.join('\n')}${more}`
@@ -150,6 +195,20 @@ function ephemeral(text: string): SlackReply {
   return { response_type: 'ephemeral', text }
 }
 
+/** Escaped, because `owner/repo` is a third party's name and `<` is Slack syntax. */
 function describe(review: ReviewRequest): string {
-  return `<${review.pullRequest.url}|${formatPullRequest(review.pullRequest)}>`
+  return slackLink(review.pullRequest.url, formatPullRequest(review.pullRequest))
+}
+
+/**
+ * Unassigned first, then the longest-waiting. Both halves answer the same
+ * question ("what needs somebody?"), and the second is what puts a review that
+ * has been sitting for a week above one opened this morning.
+ */
+function byNeedForAReviewer(left: ReviewRequest, right: ReviewRequest): number {
+  const unassigned = Number(left.assignedReviewerIds.length === 0)
+  const otherUnassigned = Number(right.assignedReviewerIds.length === 0)
+  return unassigned === otherUnassigned
+    ? left.createdAt - right.createdAt
+    : otherUnassigned - unassigned
 }

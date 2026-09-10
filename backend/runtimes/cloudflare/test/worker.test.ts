@@ -87,9 +87,14 @@ describe('sainte-beuve worker', () => {
         // one credential this Worker could hold.
         activeMethod: null,
         availableMethods: ['pat'],
+        appInstallable: false,
         account: null,
         webhooksReady: false,
         botLogin: null,
+        // `GITHUB_LABEL_REVIEW` is bound BLANK in this suite and reads as the
+        // default: an empty label would match nothing, so labelling a pull
+        // request would silently do nothing at all while the screen showed an
+        // empty `<code>` and no fault.
         labels: { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' },
       },
       slack: { ready: false, announcementChannelId: null, interactivityReady: false },
@@ -99,6 +104,12 @@ describe('sainte-beuve worker', () => {
   it('refuses an inbound delivery it has no secret to verify', async () => {
     // The route is registered in a GitHub App by hand, so it has to answer on
     // the runtime it is registered against, and answer honestly.
+    //
+    // The suite's `GITHUB_WEBHOOK_SECRET` is BLANK rather than absent, which is
+    // the state a copied `.dev.vars.example` leaves it in. A facade reading it
+    // with `??` would pass `''` to a guard that refuses only null, and workerd
+    // refuses a zero-length HMAC key: GitHub would be answered 500 by a Worker
+    // whose /health calls the capability ready.
     const res = await SELF.fetch('https://example.com/webhooks/github', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'X-GitHub-Event': 'ping' },

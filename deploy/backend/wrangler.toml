@@ -41,7 +41,9 @@ SLACK_CHANNEL_ID = "REPLACE_WITH_SLACK_CHANNEL_ID"
 # Configuration screen can offer an install.
 GITHUB_APP_ID = "REPLACE_WITH_GITHUB_APP_ID"
 GITHUB_APP_SLUG = "REPLACE_WITH_GITHUB_APP_SLUG"
-# The login the bot answers to when it is @-mentioned on a pull request.
+# The login the bot answers to when it is @-mentioned on a pull request. Either
+# form of an App's login works: GitHub writes its comments as
+# `sainte-beuve-bot[bot]` while people type `@sainte-beuve-bot`.
 GITHUB_BOT_LOGIN = "REPLACE_WITH_APP_BOT_LOGIN"
 # The labels that drive the board. These are the defaults; name your own.
 GITHUB_LABEL_REVIEW = "needs-review"

@@ -19,7 +19,15 @@ export default defineConfig({
       // own Web Crypto, which is the one adapter that ships INSIDE the bundle
       // rather than behind a network call.
       miniflare: {
-        bindings: { SETTINGS_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' },
+        bindings: {
+          SETTINGS_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+          // BLANK on purpose, which is the shape a copied `.dev.vars.example`
+          // arrives in: every name is there with no value. A facade that read
+          // these with `??` would hand the app an empty secret and an empty
+          // label, and both fail somewhere that does not name them.
+          GITHUB_WEBHOOK_SECRET: '',
+          GITHUB_LABEL_REVIEW: '',
+        },
       },
     }),
   ],

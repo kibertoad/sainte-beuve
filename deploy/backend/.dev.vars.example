@@ -21,6 +21,8 @@ GITHUB_OAUTH_CLIENT_ID=
 GITHUB_OAUTH_CLIENT_SECRET=
 GITHUB_TOKEN=
 GITHUB_WEBHOOK_SECRET=
+# Either form of a GitHub App's login works: it comments as `name[bot]` and is
+# mentioned as `@name`.
 GITHUB_BOT_LOGIN=
 
 SLACK_BOT_TOKEN=

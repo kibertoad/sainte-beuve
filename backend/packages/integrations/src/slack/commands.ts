@@ -26,6 +26,19 @@ export interface SlackRequest {
   intent: SlackIntent
   /** The Slack user id behind the request (`U…`), for resolving them to a reviewer. */
   userId: string
+  /**
+   * Which surface this arrived on, because it decides where the answer may go. A
+   * slash command is answered in the HTTP response; a button press must NOT be,
+   * since Slack reads a message there as a replacement for the message the
+   * button is on.
+   */
+  surface: 'command' | 'action'
+  /**
+   * Slack's own URL for a follow-up message, when the payload carried one. It
+   * needs no bot token, which is what lets a deployment with no Slack credential
+   * still answer its own buttons.
+   */
+  responseUrl: string | null
 }
 
 /** The action ids the announcement message's buttons carry. */
@@ -52,7 +65,12 @@ export function parseSlackRequest(form: URLSearchParams): SlackRequest | null {
   if (command === null) return null
   const userId = form.get('user_id') ?? ''
   if (userId.length === 0) return null
-  return { intent: parseCommandText(form.get('text') ?? ''), userId }
+  return {
+    intent: parseCommandText(form.get('text') ?? ''),
+    userId,
+    surface: 'command',
+    responseUrl: form.get('response_url'),
+  }
 }
 
 /**
@@ -92,9 +110,16 @@ function snoozeHours(value: string): number {
   return Math.min(parsed, MAX_SNOOZE_HOURS)
 }
 
+interface InteractionAction {
+  action_id?: string
+  value?: string
+}
+
 interface InteractionPayload {
   user?: { id?: string }
-  actions?: { action_id?: string; value?: string }[]
+  actions?: InteractionAction[]
+  /** Where a follow-up goes. Slack puts it on every interaction payload. */
+  response_url?: string
 }
 
 /**
@@ -103,18 +128,28 @@ interface InteractionPayload {
  * re-rendered, while the value is fixed when the button is created.
  */
 function parseInteraction(raw: string): SlackRequest | null {
-  let payload: InteractionPayload
+  const payload = readPayload(raw)
+  if (payload === null) return null
+  const userId = payload.user?.id ?? ''
+  const intent = actionIntent(payload.actions?.[0])
+  if (userId.length === 0 || intent === null) return null
+  return { intent, userId, surface: 'action', responseUrl: payload.response_url ?? null }
+}
+
+/** What one button stands for, or null when its id or its value is not one we set. */
+function actionIntent(action: InteractionAction | undefined): SlackIntent | null {
+  const reviewId = action?.value ?? ''
+  if (reviewId.length === 0) return null
+  return intentForAction(action?.action_id ?? '', reviewId)
+}
+
+/** Null rather than a throw: Slack posts non-interaction bodies to the same URL. */
+function readPayload(raw: string): InteractionPayload | null {
   try {
-    payload = JSON.parse(raw) as InteractionPayload
+    return JSON.parse(raw) as InteractionPayload
   } catch {
     return null
   }
-  const userId = payload.user?.id ?? ''
-  const action = payload.actions?.[0]
-  const reviewId = action?.value ?? ''
-  if (userId.length === 0 || reviewId.length === 0) return null
-  const intent = intentForAction(action?.action_id ?? '', reviewId)
-  return intent === null ? null : { intent, userId }
 }
 
 function intentForAction(actionId: string, reviewId: string): SlackIntent | null {

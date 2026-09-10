@@ -50,6 +50,11 @@ would be saving a request that is already cached.
 So the install callback stores nothing. The App becomes usable the moment GitHub
 says it is installed.
 
+The cached lookup is not permanent either: uninstalling and reinstalling the App
+mints a new installation id, so a mint that comes back 404 drops the cached entry
+and asks GitHub once more. A reinstall therefore needs no redeploy, and a genuine
+uninstall still reports itself as one.
+
 ### Signing in is not signing in
 
 "Sign in with GitHub" **connects GitHub**. It does not create a session, because
@@ -71,7 +76,7 @@ anybody close a review.
 | `pull_request` closed                    | The review is closed and the reminder clock stops                              |
 | `pull_request_review` submitted          | Resolved to `approved` or `changes_requested`; a bare comment resolves nothing |
 | the review label is added                | Tracked if it was not, and handed to a reviewer                                |
-| the AI-review label is added             | Handed to cat-factory                                                          |
+| the AI-review label is added             | Handed to cat-factory, or acked and logged when it is not configured           |
 | a comment @-mentions the bot             | The command in it runs, and the bot answers on the pull request                |
 
 Opening a pull request tracks it and leaves it unassigned on purpose: opening one
@@ -96,8 +101,11 @@ request.
 
 ### The bot
 
-Set `GITHUB_BOT_LOGIN` to the login the App posts as, and it answers when
-mentioned in a pull-request comment:
+Set `GITHUB_BOT_LOGIN` to the App's login, in either of the two forms it has:
+GitHub authors an App's comments as `sainte-beuve-bot[bot]` while a person types
+`@sainte-beuve-bot`, and both are accepted, because which one a deployment
+configured must not decide whether mentions work. It answers when mentioned in a
+pull-request comment:
 
 ```
 @sainte-beuve-bot            find a reviewer (a bare mention means the obvious thing)
@@ -112,9 +120,23 @@ The mention is the way in rather than a bare command word, because
 acted on "reroll" appearing in prose would act on a conversation about itself. It
 also never answers itself.
 
+A **reroll** hands the review to somebody else and takes it off whoever had it,
+in one write: the previous reviewer stops being chased, stops counting as busy,
+and has their request withdrawn on the pull request. When there is nobody else to
+hand it to, it stays where it is, because "nobody else is available" must not be
+a way to end up with a review nobody is on.
+
 It always answers, including when it refuses. A mention that produces silence is
 indistinguishable from a webhook that never arrived, and the person who typed it
-has no other way to tell.
+has no other way to tell. What it says about a refusal is narrower than what an
+operator gets: a pull request is public, and the message that names
+`SETTINGS_ENCRYPTION_KEY` or which half of cat-factory's configuration is missing
+belongs in the deployment's logs.
+
+A **label** it cannot honour is a different case, and is acked rather than
+refused. A 5xx makes GitHub redeliver, and tracking a pull request is idempotent
+where an AI-review run is not: every retry would write another run and, once
+cat-factory is configured, submit another paid job.
 
 ## What Slack can make it do
 
@@ -141,12 +163,27 @@ slash command and the buttons POST to `/webhooks/slack`.
 is no such row it says so and quotes the id to paste, because that is the state
 every fresh deployment is in.
 
+`/review` on its own lists what is waiting, the reviews nobody is on first and
+the longest-waiting before the rest, capped at ten. The order is what makes the
+cap safe: on a busy board the reviews somebody reading the list could actually
+pick up are the ones that would otherwise fall off the end of the message.
+
 A **snooze** defers the outstanding nudge and keeps its kind and its target. It is
 not a cancel, and it does not widen the audience: turning a DM into a channel post
-would make asking for time cost something.
+would make asking for time cost something. With nothing outstanding to copy it
+targets whatever the policy would have chased next, which for an assigned review
+is the reviewer's DM.
 
 Everything the bot says back is ephemeral. A slash command's reply is addressed to
 whoever typed it, and a channel does not need to see somebody's typo.
+
+**Where** the reply goes differs by surface. A slash command is answered in the
+HTTP response; a button is answered on the interaction's `response_url`, because
+Slack reads a message in the response to a button as a REPLACEMENT for the
+message the button is on. Answering a claim in the response body would overwrite
+the announcement, and everybody else's buttons with it, with a note addressed to
+one person. A response URL needs no bot token, so a deployment that can verify
+Slack requests can answer its own buttons whether or not it can post.
 
 ### Why plain `fetch` and no Bolt
 

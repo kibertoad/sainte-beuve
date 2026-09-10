@@ -70,7 +70,12 @@ export class GitHubAppAuth {
   private keyPromise?: Promise<CryptoKey>
   /** installationId -> token. Bounded by the number of orgs that installed the App. */
   private readonly tokens = new Map<number, CachedToken>()
-  /** `owner/repo` -> installation id. Immutable on GitHub, so it never needs invalidating. */
+  /**
+   * `owner/repo` -> installation id. Long-lived but NOT immutable: uninstalling
+   * and reinstalling the App on an organisation mints a new id, and the old one
+   * then answers 404 for ever. {@link tokenForRepo} drops the entry and asks
+   * again when that happens, so a reinstall does not need a redeploy.
+   */
   private readonly installations = new Map<string, number>()
 
   constructor(options: GitHubAppAuthOptions) {
@@ -99,7 +104,20 @@ export class GitHubAppAuth {
 
   /** A token authenticating as the installation that owns `owner/repo`. */
   async tokenForRepo(owner: string, repo: string): Promise<string> {
-    return this.installationToken(await this.installationForRepo(owner, repo))
+    const installationId = await this.installationForRepo(owner, repo)
+    try {
+      return await this.installationToken(installationId)
+    } catch (err) {
+      if (!isMissing(err)) throw err
+      // A cached id that GitHub no longer knows: the App was reinstalled, which
+      // mints a NEW installation. Retried ONCE against a fresh lookup, because
+      // the alternative is a warm isolate (or a long-lived process) answering
+      // "the App is not installed" to an operator who has just installed it. A
+      // genuine uninstall answers 404 again and that refusal is what they see.
+      this.installations.delete(`${owner}/${repo}`)
+      this.tokens.delete(installationId)
+      return this.installationToken(await this.installationForRepo(owner, repo))
+    }
   }
 
   /** Which installation covers a repository, cached for the life of the process. */
@@ -170,6 +188,11 @@ export class GitHubAppAuth {
       })
     return this.keyPromise
   }
+}
+
+/** GitHub saying it has no such thing: the install is gone, or was never there. */
+function isMissing(err: unknown): boolean {
+  return err instanceof GitHubApiError && (err.status === 404 || err.status === 410)
 }
 
 /** Turn GitHub's refusals of an App credential into the instruction that fixes each. */

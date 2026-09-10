@@ -92,7 +92,12 @@ export type GitHubIntent =
 
 export interface GitHubIntentContext {
   labels: GitHubLabelRules
-  /** The login the bot answers to when @-mentioned. Null turns comment commands off. */
+  /**
+   * The login the bot answers to when @-mentioned. Null (or blank) turns comment
+   * commands off. Either form of a GitHub App's login is accepted:
+   * `sainte-beuve` and `sainte-beuve[bot]` name the same bot, and which one a
+   * deployment configured must not decide whether mentions work.
+   */
   botLogin: string | null
 }
 
@@ -214,24 +219,51 @@ function fromComment(
   context: GitHubIntentContext,
 ): GitHubIntent | null {
   const issue = payload.issue
-  const requester = commentAuthor(payload, context)
-  if (payload.action !== 'created' || issue?.pull_request == null || requester === null) return null
-  const verb = parseBotCommand(payload.comment?.body ?? '', context.botLogin ?? '')
+  const bot = botMentionLogin(context.botLogin)
+  if (payload.action !== 'created' || issue?.pull_request == null || bot === null) return null
+  const requester = commentAuthor(payload, bot)
+  const verb = parseBotCommand(payload.comment?.body ?? '', bot)
   const ref = pullRequestRef(payload, issue.number, issue.pull_request.html_url ?? issue.html_url)
-  if (verb === null || ref === null) return null
+  if (requester === null || verb === null || ref === null) return null
   return { kind: 'command', pullRequest: ref, requester, verb }
 }
 
+/** GitHub's suffix on the login a GitHub App authors its comments under. */
+const BOT_SUFFIX = '[bot]'
+
 /**
- * Who wrote the comment, when it is somebody we would answer. Null covers three
- * cases that all mean "not for us": a deployment with no bot login configured, a
- * comment with no author, and the bot ITSELF, because a deployment whose bot is
- * also a reviewer would otherwise be one comment away from a loop.
+ * The login as a PERSON types it, or null when this deployment answers no
+ * mentions.
+ *
+ * A GitHub App has two logins for one identity: it comments as
+ * `sainte-beuve[bot]` and is mentioned as `@sainte-beuve`. One configured value
+ * has to serve both, so the suffix is stripped here and put back where the
+ * author check needs it. Blank counts as unconfigured rather than as a login:
+ * `@` on its own is not a mention of anybody, and an empty login would make the
+ * bot answer every comment that contains one.
  */
-function commentAuthor(payload: GitHubEventPayload, context: GitHubIntentContext): string | null {
+export function botMentionLogin(configured: string | null): string | null {
+  const trimmed = configured?.trim() ?? ''
+  if (trimmed.length === 0) return null
+  const bare = trimmed.toLowerCase().endsWith(BOT_SUFFIX)
+    ? trimmed.slice(0, -BOT_SUFFIX.length)
+    : trimmed
+  return bare.length === 0 ? null : bare
+}
+
+/**
+ * Who wrote the comment, when it is somebody we would answer. Null covers two
+ * cases that both mean "not for us": a comment with no author, and the bot
+ * ITSELF, because a deployment whose bot is also a reviewer would otherwise be
+ * one comment away from a loop. Both forms of the bot's own login are caught,
+ * since the comment carries the `[bot]` one whatever was configured.
+ */
+function commentAuthor(payload: GitHubEventPayload, bot: string): string | null {
   const requester = payload.comment?.user?.login
-  if (context.botLogin === null || requester === undefined) return null
-  return requester.toLowerCase() === context.botLogin.toLowerCase() ? null : requester
+  if (requester === undefined) return null
+  const lowered = requester.toLowerCase()
+  const bare = bot.toLowerCase()
+  return lowered === bare || lowered === `${bare}${BOT_SUFFIX}` ? null : requester
 }
 
 /**
@@ -240,11 +272,18 @@ function commentAuthor(payload: GitHubEventPayload, context: GitHubIntentContext
  * the answer to "why did nothing happen?" should be a test somebody can read.
  */
 export function parseBotCommand(body: string, botLogin: string): BotVerb | null {
+  const bare = botMentionLogin(botLogin)
+  if (bare === null) return null
   // The boundary is a negative lookahead over the login alphabet rather than
   // `\b`, because a GitHub login may contain a hyphen: `\b` matches between the
   // `t` and the `-` of `@bot-staging`, so a bot called `bot` would answer for a
   // different account with a longer name.
-  const mention = new RegExp(`@${escapeForRegExp(botLogin)}(?![a-z\\d-])`, 'i')
+  //
+  // The `[bot]` suffix is CONSUMED rather than merely tolerated: somebody who
+  // types `@sainte-beuve[bot] status` has named a verb, and a mention that
+  // stopped before the suffix would read the verb as `[bot]` and fall through to
+  // the bare-mention default.
+  const mention = new RegExp(`@${escapeForRegExp(bare)}(?:\\[bot\\])?(?![a-z\\d-])`, 'i')
   const match = mention.exec(body)
   if (match === null) return null
   const rest = body

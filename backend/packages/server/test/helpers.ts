@@ -109,14 +109,21 @@ export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFa
 export function recordingVcs(): VcsGateway & {
   comments: { body: string; number: number }[]
   requested: string[][]
+  withdrawn: string[][]
 } {
   const comments: { body: string; number: number }[] = []
   const requested: string[][] = []
+  const withdrawn: string[][] = []
   return {
     comments,
     requested,
+    withdrawn,
     requestReviewers: async (pr, logins) => {
       requested.push(logins)
+      void pr
+    },
+    removeRequestedReviewers: async (pr, logins) => {
+      withdrawn.push(logins)
       void pr
     },
     comment: async (pr, body) => {

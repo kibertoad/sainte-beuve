@@ -144,6 +144,38 @@ describe('GitHubAppAuth', () => {
     expect(calls.filter((call) => call.method === 'GET')).toHaveLength(1)
   })
 
+  it('resolves the installation again when a reinstall makes the cached one dead', async () => {
+    // Uninstalling and reinstalling on an organisation mints a NEW installation
+    // id, so the cached one answers 404 for ever. Without the retry a warm
+    // isolate tells an operator the App is not installed on the organisation
+    // they have just installed it on, until something recycles the process.
+    let installationId = 99
+    let now = CLOCK.now()
+    const minted: number[] = []
+    const fetchImpl = (async (url: string | URL) => {
+      const href = String(url)
+      if (href.endsWith('/installation')) return Response.json({ id: installationId })
+      const asked = Number(/\/app\/installations\/(\d+)\/access_tokens$/.exec(href)?.[1])
+      if (asked !== installationId) return new Response('{"message":"Not Found"}', { status: 404 })
+      minted.push(asked)
+      return Response.json({ token: `ghs_${asked}`, expires_at: new Date(now + 3_600_000) })
+    }) as typeof globalThis.fetch
+    const auth = new GitHubAppAuth({
+      appId: '1',
+      privateKeyPem,
+      clock: { now: () => now },
+      fetchImpl,
+    })
+
+    expect(await auth.tokenForRepo('kibertoad', 'sainte-beuve')).toBe('ghs_99')
+    // An hour on, the token has lapsed and the App has been reinstalled, so the
+    // mint is the first call to find out the cached installation is gone.
+    now += 60 * 60 * 1000
+    installationId = 4242
+    expect(await auth.tokenForRepo('kibertoad', 'sainte-beuve')).toBe('ghs_4242')
+    expect(minted).toStrictEqual([99, 4242])
+  })
+
   it('says the App is not installed rather than reporting a 404', async () => {
     const { fetchImpl } = stubFetch({})
     const auth = new GitHubAppAuth({ appId: '1', privateKeyPem, clock: CLOCK, fetchImpl })

@@ -13,6 +13,7 @@ export {
 export { appTokenSource, type GitHubTokenSource, staticTokenSource } from './github/credentials.js'
 export {
   type BotVerb,
+  botMentionLogin,
   type GitHubDelivery,
   type GitHubEventPayload,
   type GitHubIntent,
@@ -39,9 +40,12 @@ export {
 } from './slack/commands.js'
 export {
   announcementMessage,
+  escapeSlackText,
   reminderMessage,
   type SlackBlock,
+  slackLink,
   type SlackMessage,
 } from './slack/message.js'
+export { postSlackResponse, type SlackResponseMessage } from './slack/respond.js'
 export { SlackChatGateway, type SlackGatewayOptions } from './slack/SlackChatGateway.js'
 export { verifySlackSignature } from './slack/signature.js'

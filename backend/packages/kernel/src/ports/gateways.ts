@@ -19,6 +19,13 @@ export interface ChatGateway {
 export interface VcsGateway {
   /** Mirror the assignment onto the pull request, so the VCS stays the source of truth. */
   requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void>
+  /**
+   * Take the review request back off people who are no longer on the hook. The
+   * other half of `requestReviewers`: a reroll that only added the replacement
+   * would leave the previous reviewer with a pending request on the pull request
+   * and the notifications that come with it.
+   */
+  removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void>
   /** Post a nudge or an AI-review verdict as a pull-request comment. */
   comment(pr: PullRequestRef, body: string): Promise<void>
   /**

@@ -241,10 +241,36 @@ describe('GitHub webhook intake', () => {
     await deliver(harness, 'issue_comment', commentPayload('@sainte-beuve-bot review'))
     expect(vcs.comments.at(-1)?.body).toContain('Review requested from Peer')
 
-    // cat-factory is not configured here, and the refusal names the missing
-    // configuration where the person who asked is looking.
+    // cat-factory is not configured here. The bot still answers, because a
+    // mention that produces silence is indistinguishable from a webhook that
+    // never arrived.
     await deliver(harness, 'issue_comment', commentPayload('@sainte-beuve-bot ai'))
-    expect(vcs.comments.at(-1)?.body).toContain('cat-factory is not configured')
+    const refusal = vcs.comments.at(-1)?.body ?? ''
+    expect(refusal).toContain('not set up for that yet')
+    // What it must NOT do is read the operator's copy out on a public pull
+    // request: that message names which half of cat-factory's configuration is
+    // missing, and other refusals name environment variables.
+    expect(refusal).not.toContain('cat-factory')
+    expect(refusal).not.toContain('Configuration screen')
+  })
+
+  it('acks the AI-review label it cannot act on rather than making GitHub retry', async () => {
+    // cat-factory is unconfigured, so the label cannot be honoured. A 5xx would
+    // make GitHub redeliver, and `track` is idempotent where a run is not: every
+    // retry writes another run row and, once cat-factory is configured, submits
+    // another paid job.
+    const labelled = pullRequestPayload('labeled', { label: { name: 'ai-review' } })
+    const res = await deliver(harness, 'pull_request', labelled)
+    expect(res.status).toBe(202)
+    expect(await res.json()).toMatchObject({ action: 'ai_review:refused' })
+
+    const again = await deliver(harness, 'pull_request', labelled)
+    expect(again.status).toBe(202)
+    expect(await tracked(harness)).toHaveLength(1)
+    const [review] = await tracked(harness)
+    expect(
+      await harness.container.repositories.aiReviewRuns.listByReview(review?.id ?? ''),
+    ).toStrictEqual([])
   })
 
   it('reports the state of a tracked review, and offers to track an untracked one', async () => {
@@ -258,12 +284,19 @@ describe('GitHub webhook intake', () => {
 
   it('hands a reroll to somebody other than whoever already has it', async () => {
     const first = await addReviewer(harness, { displayName: 'First', githubLogin: 'first' })
-    await addReviewer(harness, { displayName: 'Second', githubLogin: 'second' })
+    const second = await addReviewer(harness, { displayName: 'Second', githubLogin: 'second' })
     const review = await openReview(harness)
     await new ReviewService(harness.container).claim(review.id, first.id)
 
     await deliver(harness, 'issue_comment', commentPayload('@sainte-beuve-bot reroll'))
     expect(vcs.comments.at(-1)?.body).toContain('Second')
+    // The pull request has to agree: a reroll that only added the replacement
+    // would leave First holding a review request on GitHub, and the
+    // notifications that come with it, for a review they no longer have.
+    const stored = await harness.container.repositories.reviews.getById(review.id)
+    expect(stored?.assignedReviewerIds).toStrictEqual([second.id])
+    expect(vcs.withdrawn).toStrictEqual([['first']])
+    expect(vcs.requested.at(-1)).toStrictEqual(['second'])
   })
 
   it('stays quiet for an event it does not read', async () => {

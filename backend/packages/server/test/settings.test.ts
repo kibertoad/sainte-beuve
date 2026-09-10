@@ -282,6 +282,7 @@ describe('a pasted GitHub credential', () => {
       gateways: stubGateways({
         vcsFromToken: () => ({
           requestReviewers: async () => {},
+          removeRequestedReviewers: async () => {},
           comment: async () => {},
           identify: async () => 'kibertoad',
         }),
@@ -303,6 +304,7 @@ describe('a pasted GitHub credential', () => {
       gateways: stubGateways({
         vcsFromToken: () => ({
           requestReviewers: async () => {},
+          removeRequestedReviewers: async () => {},
           comment: async () => {},
           identify: () => Promise.reject(refused),
         }),

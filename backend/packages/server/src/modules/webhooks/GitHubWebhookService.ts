@@ -1,5 +1,10 @@
 import type { PullRequestRef, ReviewRequest } from '@sainte-beuve/contracts'
-import { ForbiddenError, formatPullRequest, getErrorMessage } from '@sainte-beuve/kernel'
+import {
+  ForbiddenError,
+  formatPullRequest,
+  getErrorMessage,
+  isDomainError,
+} from '@sainte-beuve/kernel'
 import type { GitHubDelivery, GitHubIntent } from '@sainte-beuve/integrations'
 import { interpretGitHubDelivery, verifyGitHubSignature } from '@sainte-beuve/integrations'
 import type { AppContainer } from '../../container.js'
@@ -27,6 +32,20 @@ import { botReply } from './githubReplies.js'
 const NO_SECRET =
   'This deployment cannot verify GitHub deliveries: set GITHUB_WEBHOOK_SECRET to the secret ' +
   'configured on the GitHub App or repository webhook'
+
+/**
+ * The three faults a public comment states without describing. Each names who
+ * can fix it, because the person reading the comment usually cannot: an
+ * unconfigured integration is an operator's job, and telling a repository which
+ * variable is unset tells everybody who can read it.
+ */
+const NOT_CONFIGURED =
+  'this deployment is not set up for that yet. Whoever operates sainte-beuve can see what is ' +
+  'missing in its logs'
+const UPSTREAM_REFUSED =
+  'GitHub refused the request. Whoever operates sainte-beuve can see the refusal in its logs'
+const UNEXPECTED =
+  'something went wrong here. Whoever operates sainte-beuve can see what it was in the logs'
 
 /** What the delivery caused, for the ack body and the log line. */
 export interface GitHubWebhookOutcome {
@@ -117,8 +136,21 @@ export class GitHubWebhookService {
       priority: 'normal',
       dueAt: null,
     })
-    const run = await new AiReviewService(this.container).request(review.id, null)
-    return { action: `ai_review:${run.status}`, reviewId: review.id }
+    try {
+      const run = await new AiReviewService(this.container).request(review.id, null)
+      return { action: `ai_review:${run.status}`, reviewId: review.id }
+    } catch (err) {
+      // Acked, not raised. A label is not a request better credentials would
+      // fix, and a 5xx makes GitHub redeliver: `track` is idempotent but a run
+      // is not, so every retry would write another run row and, once
+      // cat-factory is configured, submit another paid job. The refusal is for
+      // an operator, so it goes to the log rather than onto the pull request.
+      this.container.logger.warn(
+        { err, reviewId: review.id },
+        'the AI-review label could not be delegated',
+      )
+      return { action: 'ai_review:refused', reviewId: review.id }
+    }
   }
 
   /**
@@ -145,15 +177,42 @@ export class GitHubWebhookService {
         const run = await new AiReviewService(this.container).request(review.id, null)
         return { body: botReply.aiRequested(run), reviewId: review.id }
       }
-      const exclude = intent.verb === 'reroll' ? review.assignedReviewerIds : []
-      const result = await reviews.assign(review.id, { count: 1, excludeReviewerIds: exclude })
+      if (intent.verb === 'reroll') {
+        const rerolled = await reviews.reroll(review.id)
+        return { body: botReply.rerolled(rerolled), reviewId: review.id }
+      }
+      const result = await reviews.assign(review.id, { count: 1, excludeReviewerIds: [] })
       return { body: botReply.assigned(result), reviewId: review.id }
     } catch (err) {
-      // The refusal is the answer. A 503 for an unconfigured cat-factory and a
-      // 404 for a reviewer somebody deleted both carry a message written for an
-      // operator, and the pull request is where the person who asked is looking.
-      return { body: botReply.failed(getErrorMessage(err)), reviewId: null }
+      // The refusal is the answer: a mention that produces silence is
+      // indistinguishable from a webhook that never arrived. What it may SAY is
+      // narrower than what an operator gets, because this comment is public.
+      return { body: botReply.failed(this.publicReason(err)), reviewId: null }
     }
+  }
+
+  /**
+   * What the bot is allowed to say about a failure.
+   *
+   * A pull-request comment is readable by anybody who can see the repository,
+   * and the refusals reaching here are written for an operator: a
+   * `requireCapability` message names GITHUB_WEBHOOK_SECRET,
+   * SETTINGS_ENCRYPTION_KEY or which half of cat-factory's configuration is
+   * missing, and an upstream failure carries GitHub's own words back. So the
+   * comment gets the SHAPE of the fault and the operator's copy stays in the
+   * log, which is where somebody who can act on it is looking.
+   *
+   * A `not_found` or a `validation` message is about the BOARD ("no reviewer
+   * rev-3"), which is the answer the person who asked actually needs, so it goes
+   * through unchanged.
+   */
+  private publicReason(err: unknown): string {
+    const code = isDomainError(err) ? err.code : 'internal'
+    this.container.logger.warn({ err, code }, 'a bot command was refused')
+    if (code === 'unavailable') return NOT_CONFIGURED
+    if (code === 'upstream_failed') return UPSTREAM_REFUSED
+    if (code === 'internal') return UNEXPECTED
+    return getErrorMessage(err)
   }
 
   private async status(pullRequest: PullRequestRef): Promise<{

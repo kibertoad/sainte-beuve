@@ -26,6 +26,23 @@ export const botReply = {
           'board unassigned.'
   },
 
+  /**
+   * A reroll, which has a second outcome an assign does not: nobody else could
+   * take it. The review then STAYS with whoever has it, so the line has to say
+   * that rather than reporting an unassigned board, which is what a reroll that
+   * found nobody used to leave behind.
+   */
+  rerolled(result: AssignReviewersResult): string {
+    if (result.assigned.length > 0) {
+      const names = result.assigned.map((reviewer) => reviewer.displayName).join(', ')
+      return `Handed over to ${names}, and taken off whoever had it.`
+    }
+    return result.shortfallReason === 'no_candidates'
+      ? 'Nobody in the reviewer pool holds every skill this review needs, so it stays where it ' +
+          'is. Add the skill to a reviewer, or drop it from the request.'
+      : 'There is nobody else to hand this to, so it stays with whoever has it.'
+  },
+
   aiRequested(run: AiReviewRun): string {
     const link = run.catFactoryUrl === null ? '' : ` Follow it at ${run.catFactoryUrl}.`
     return `Handed this to cat-factory (run \`${run.id}\`, ${run.status}).${link}`

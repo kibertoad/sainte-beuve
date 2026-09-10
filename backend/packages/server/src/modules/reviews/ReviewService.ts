@@ -1,6 +1,7 @@
 import type {
   AssignReviewersResult,
   CreateReviewRequest,
+  Reviewer,
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
@@ -78,7 +79,7 @@ export class ReviewService {
    * is not in a position to overrule.
    */
   async claim(reviewId: string, reviewerId: string): Promise<ReviewRequest> {
-    const { repositories, clock } = this.container
+    const { repositories } = this.container
     const review = assertFound(
       await repositories.reviews.getById(reviewId),
       `No review request ${reviewId}`,
@@ -88,8 +89,8 @@ export class ReviewService {
       `No reviewer ${reviewerId}`,
     )
     if (review.assignedReviewerIds.includes(reviewerId)) return review
-    const updated = await this.recordAssignment(review, [reviewerId], clock.now())
-    await this.mirrorToVcs(updated, [reviewer.githubLogin])
+    const updated = await this.recordAssignment(review, { assign: [reviewerId], release: [] })
+    await this.mirrorToVcs(updated, { request: [reviewer.githubLogin], withdraw: [] })
     return updated
   }
 
@@ -97,11 +98,37 @@ export class ReviewService {
     reviewId: string,
     input: { count: number; excludeReviewerIds: string[] },
   ): Promise<AssignReviewersResult> {
-    const { repositories, clock, random } = this.container
-    const review = assertFound(
-      await repositories.reviews.getById(reviewId),
-      `No review request ${reviewId}`,
-    )
+    const review = await this.require(reviewId)
+    return this.handOver(review, { count: input.count, exclude: input.excludeReviewerIds })
+  }
+
+  /**
+   * Hand the review to somebody else: whoever holds it comes OFF as the
+   * replacement goes on.
+   *
+   * A reroll is not an assign with an exclusion list. Excluding the incumbent is
+   * only half the gesture; the other half is taking the review off them, and
+   * appending instead would leave two people assigned, the first still counted
+   * as busy and still being chased by the reminder ladder, while the reply named
+   * only the second.
+   *
+   * When nobody else can take it, the incumbent KEEPS it. "Nobody else is
+   * available" must not be a way to end up with a review nobody is on.
+   */
+  async reroll(reviewId: string): Promise<AssignReviewersResult> {
+    const review = await this.require(reviewId)
+    return this.handOver(review, {
+      count: 1,
+      exclude: review.assignedReviewerIds,
+      release: review.assignedReviewerIds,
+    })
+  }
+
+  private async handOver(
+    review: ReviewRequest,
+    input: { count: number; exclude: string[]; release?: string[] },
+  ): Promise<AssignReviewersResult> {
+    const { repositories, random } = this.container
     const candidates = await repositories.reviewers.list()
     const result = selectReviewers(
       {
@@ -111,7 +138,7 @@ export class ReviewService {
         // than by the caller: a client that forgot would otherwise get a reviewer
         // reviewing their own pull request, which the router must never produce.
         excludeReviewerIds: [
-          ...input.excludeReviewerIds,
+          ...input.exclude,
           ...review.assignedReviewerIds,
           ...candidates
             .filter((r) => isSameGithubLogin(r.githubLogin, review.authorLogin))
@@ -121,21 +148,20 @@ export class ReviewService {
       },
       random,
     )
-
-    const updated = await this.recordAssignment(
-      review,
-      result.selected.map((r) => r.id),
-      clock.now(),
-    )
-    await this.mirrorToVcs(
-      updated,
-      result.selected.map((r) => r.githubLogin),
-    )
-    return {
-      review: updated,
-      assigned: result.selected.map((r) => ({ reviewerId: r.id, displayName: r.displayName })),
-      shortfallReason: result.shortfallReason,
+    const assigned = result.selected.map((r) => ({ reviewerId: r.id, displayName: r.displayName }))
+    if (result.selected.length === 0) {
+      return { review, assigned, shortfallReason: result.shortfallReason }
     }
+    const release = input.release ?? []
+    const updated = await this.recordAssignment(review, {
+      assign: result.selected.map((r) => r.id),
+      release,
+    })
+    await this.mirrorToVcs(updated, {
+      request: result.selected.map((r) => r.githubLogin),
+      withdraw: loginsOf(candidates, release),
+    })
+    return { review: updated, assigned, shortfallReason: result.shortfallReason }
   }
 
   async updateStatus(reviewId: string, status: ReviewStatus): Promise<ReviewRequest> {
@@ -157,15 +183,27 @@ export class ReviewService {
     return updated
   }
 
-  /** Write the assignment and move the reviewers' outstanding counters with it. */
+  /**
+   * Write who is on the hook and move the reviewers' outstanding counters with
+   * it, in one update: the assignment and the counters are the same fact, and a
+   * release that landed without the decrement would leave whoever was rerolled
+   * looking permanently busier than they are, which is a load the router keeps
+   * reading for ever.
+   */
   private async recordAssignment(
     review: ReviewRequest,
-    reviewerIds: string[],
-    now: number,
+    change: { assign: string[]; release: string[] },
   ): Promise<ReviewRequest> {
-    const { repositories } = this.container
-    if (reviewerIds.length === 0) return review
-    const assignedReviewerIds = [...review.assignedReviewerIds, ...reviewerIds]
+    const { repositories, clock } = this.container
+    if (change.assign.length === 0 && change.release.length === 0) return review
+    const now = clock.now()
+    // Only the ids that were actually on the review are released, so a caller
+    // handing over a stale list cannot decrement a counter twice.
+    const released = new Set(review.assignedReviewerIds.filter((id) => change.release.includes(id)))
+    const assignedReviewerIds = [
+      ...review.assignedReviewerIds.filter((id) => !released.has(id)),
+      ...change.assign,
+    ]
     const updated = assertFound(
       await repositories.reviews.update(review.id, {
         assignedReviewerIds,
@@ -175,7 +213,10 @@ export class ReviewService {
       }),
       `No review request ${review.id}`,
     )
-    for (const reviewerId of reviewerIds) {
+    for (const reviewerId of released) {
+      await repositories.reviewers.adjustOutstanding(reviewerId, -1)
+    }
+    for (const reviewerId of change.assign) {
       await repositories.reviewers.adjustOutstanding(reviewerId, 1)
     }
     await scheduleNextReminder(this.container, updated)
@@ -183,22 +224,39 @@ export class ReviewService {
   }
 
   /**
-   * Mirror the assignment onto the pull request. Best-effort on purpose: GitHub
-   * being down must not lose an assignment we have already committed, and the
-   * reviewer still gets their Slack nudge. The failure is logged, not swallowed
-   * silently.
+   * Mirror the assignment onto the pull request: the new reviewers requested,
+   * and the ones who no longer hold it withdrawn.
+   *
+   * Best-effort on purpose: GitHub being down must not lose an assignment we
+   * have already committed, and the reviewer still gets their Slack nudge. The
+   * failure is logged, not swallowed silently. The withdrawal goes first, so the
+   * last notification GitHub sends is the one that puts somebody ON the hook.
    */
-  private async mirrorToVcs(review: ReviewRequest, logins: (string | null)[]): Promise<void> {
+  private async mirrorToVcs(
+    review: ReviewRequest,
+    change: { request: (string | null)[]; withdraw: (string | null)[] },
+  ): Promise<void> {
     const { logger } = this.container
-    const known = logins.filter((login): login is string => login !== null)
-    if (known.length === 0) return
+    const request = known(change.request)
+    const withdraw = known(change.withdraw).filter((login) => !request.includes(login))
+    if (request.length === 0 && withdraw.length === 0) return
     const vcs = await resolveVcs(this.container)
     if (vcs === null) return
     try {
-      await vcs.gateway.requestReviewers(review.pullRequest, known)
+      if (withdraw.length > 0) {
+        await vcs.gateway.removeRequestedReviewers(review.pullRequest, withdraw)
+      }
+      if (request.length > 0) await vcs.gateway.requestReviewers(review.pullRequest, request)
     } catch (err) {
       logger.warn({ err, reviewId: review.id }, 'could not mirror the assignment to the PR')
     }
+  }
+
+  private async require(reviewId: string): Promise<ReviewRequest> {
+    return assertFound(
+      await this.container.repositories.reviews.getById(reviewId),
+      `No review request ${reviewId}`,
+    )
   }
 
   /**
@@ -220,4 +278,14 @@ export class ReviewService {
 
 function isTerminal(status: ReviewStatus): boolean {
   return status === 'approved' || status === 'changes_requested' || status === 'closed'
+}
+
+/** The GitHub logins of the named reviewers, for the mirror. */
+function loginsOf(candidates: Reviewer[], reviewerIds: string[]): (string | null)[] {
+  return reviewerIds.map((id) => candidates.find((r) => r.id === id)?.githubLogin ?? null)
+}
+
+/** A reviewer with no GitHub login cannot be mirrored, and is not a failure. */
+function known(logins: (string | null)[]): string[] {
+  return logins.filter((login): login is string => login !== null)
 }

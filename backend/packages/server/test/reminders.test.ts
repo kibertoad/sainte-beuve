@@ -1,6 +1,7 @@
 import type { Reminder, Reviewer, ReviewRequest } from '@sainte-beuve/contracts'
 import type { ChatGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { snoozeReview } from '../src/reminders/snooze.js'
 import { runReminderTick } from '../src/reminders/tick.js'
 import {
   type TestHarness,
@@ -139,6 +140,29 @@ describe('reminder tick', () => {
     expect(failed.map((r) => r.failureReason)).toStrictEqual([
       'the assigned reviewer has no Slack user id',
     ])
+  })
+
+  it('keeps a snoozed nudge private when the ladder had nothing outstanding', async () => {
+    // The ladder can be between rungs: the last nudge went out and the policy
+    // planned nothing behind it. A snooze then has to invent the target, and
+    // inventing a CHANNEL post for an assigned review would widen the audience
+    // as a reward for asking for time.
+    const { review, reviewer } = await assignedReview(harness)
+    await harness.container.repositories.reminders.cancelScheduledForReview(review.id)
+    // Re-read, because the assignment is what the snooze has to see: this is the
+    // row the Slack command resolves before it defers anything.
+    const assigned = await harness.container.repositories.reviews.getById(review.id)
+
+    const snoozed = await snoozeReview(harness.container, assigned!, 2)
+    expect(snoozed).toMatchObject({
+      kind: 'pending',
+      channel: 'slack_dm',
+      reviewerId: reviewer.id,
+    })
+
+    harness.clock.advance(2 * HOUR)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
+    expect(chat.delivered).toStrictEqual([{ kind: 'pending', target: 'U123' }])
   })
 
   it('stops chasing a review that has been answered', async () => {
