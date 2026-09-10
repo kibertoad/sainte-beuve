@@ -4,6 +4,7 @@
 export {
   createInMemoryRepositories,
   InMemoryAiReviewRunRepository,
+  InMemoryIntegrationTokenRepository,
   InMemoryReminderRepository,
   InMemoryReviewerRepository,
   InMemoryReviewRequestRepository,

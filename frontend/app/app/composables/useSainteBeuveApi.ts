@@ -1,4 +1,9 @@
-import type { Reviewer, ReviewRequest } from '@sainte-beuve/contracts'
+import type {
+  IntegrationId,
+  IntegrationTokenStatus,
+  Reviewer,
+  ReviewRequest,
+} from '@sainte-beuve/contracts'
 
 /**
  * The SPA's single door to the backend.
@@ -24,6 +29,14 @@ export function useSainteBeuveApi() {
     return $fetch<T>(`${apiBase}/api/v1${path}`, { method: 'POST', body })
   }
 
+  async function put<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    return $fetch<T>(`${apiBase}/api/v1${path}`, { method: 'PUT', body })
+  }
+
+  async function del<T>(path: string): Promise<T> {
+    return $fetch<T>(`${apiBase}/api/v1${path}`, { method: 'DELETE' })
+  }
+
   return {
     apiBase,
     listReviews: () => get<{ reviews: ReviewRequest[] }>('/reviews'),
@@ -35,6 +48,14 @@ export function useSainteBeuveApi() {
       ),
     requestAiReview: (reviewId: string, instructions: string | null = null) =>
       post<{ id: string; status: string }>(`/reviews/${reviewId}/ai-review`, { instructions }),
+    getIntegrationSettings: () =>
+      get<{ integrations: IntegrationTokenStatus[] }>('/settings/integrations'),
+    // A token goes out and never comes back: what returns is the integration's
+    // state, which is all the screen renders.
+    setIntegrationToken: (integrationId: IntegrationId, token: string) =>
+      put<IntegrationTokenStatus>(`/settings/integrations/${integrationId}/token`, { token }),
+    clearIntegrationToken: (integrationId: IntegrationId) =>
+      del<IntegrationTokenStatus>(`/settings/integrations/${integrationId}/token`),
   }
 }
 

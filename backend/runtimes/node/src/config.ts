@@ -17,6 +17,11 @@ export interface NodeConfig {
   github: { token: string; baseUrl?: string } | null
   slack: { botToken: string; channelId: string | null } | null
   appBaseUrl: string | undefined
+  /**
+   * Master key for the credentials entered on the Configuration screen, base64,
+   * 32 bytes or more (`openssl rand -base64 32`). Null leaves the capability off.
+   */
+  encryptionKey: string | null
 }
 
 type Env = Record<string, string | undefined>
@@ -46,6 +51,9 @@ export function loadConfig(env: Env = process.env): NodeConfig {
       ? { botToken: env.SLACK_BOT_TOKEN, channelId: env.SLACK_CHANNEL_ID ?? null }
       : null,
     appBaseUrl: env.APP_BASE_URL,
+    // `||`, not `??`: an empty variable is one somebody left blank, not one they
+    // set, and `.env.example` ships the name with no value for exactly that.
+    encryptionKey: env.SETTINGS_ENCRYPTION_KEY || null,
   }
 }
 

@@ -13,6 +13,10 @@ pnpm dev:node
 Serves on `http://localhost:8788`. `GET /health` reports which optional capabilities
 this process actually wired.
 
+Set `SETTINGS_ENCRYPTION_KEY` (`openssl rand -base64 32`) for the SPA's Configuration
+screen to be able to store credentials, and keep it across deploys: rotating it makes
+every token sealed under it unreadable, which the screen then says out loud.
+
 ## Deploy it
 
 Build the image from the repo root (the Dockerfile's context is the whole workspace,

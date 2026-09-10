@@ -55,17 +55,20 @@ Two rules hold the shape:
   service rather than by the caller.
 - The reminder policy and the tick that fires it, on both runtimes.
 - Three facades that boot: Worker (smoke-tested inside workerd), Node, local mode.
-- A Nuxt SPA with the board and the reviewer directory.
+- A Nuxt SPA with the board and the reviewer directory behind a side navigation.
+- A Configuration screen: the integration credentials a deployment holds, sealed
+  with AES-256-GCM before they are stored and never readable back out of the API.
 - `GET /health` reporting which optional capabilities the process actually wired.
 
 ## What is a placeholder, and why it is still here
 
-| Placeholder                                     | Why it exists now                                                                                                              |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /webhooks/github`, `POST /webhooks/slack` | Answer 501, but the paths get registered in a GitHub App and a Slack app by hand. Adding them later means re-registering both. |
-| In-memory persistence                           | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.              |
-| `useSainteBeuveApi` calling routes by path      | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.         |
-| Single cat-factory service id                   | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                        |
+| Placeholder                                     | Why it exists now                                                                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /webhooks/github`, `POST /webhooks/slack` | Answer 501, but the paths get registered in a GitHub App and a Slack app by hand. Adding them later means re-registering both.                               |
+| In-memory persistence                           | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.                                            |
+| `useSainteBeuveApi` calling routes by path      | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                       |
+| Single cat-factory service id                   | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                      |
+| A stored cat-factory token nothing reads yet    | The screen seals and stores it; the gateway is still built from the environment at boot, so the API reports it stored and NOT in use. Slice 4 joins the two. |
 
 ## Slices, in order
 
@@ -119,6 +122,11 @@ Today a run is filed and polled. What is missing is what happens when it finishe
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
+- Build the gateway from the token the Configuration screen stored, falling back to
+  the environment. The credential is already sealed, and readable through the
+  `SecretCipher` port; what is missing is a container that resolves a gateway per
+  request on the Worker AND after boot on Node, because a token that takes effect
+  on one runtime and not the other is the asymmetry this layout exists to prevent.
 - Per-repository cat-factory service mapping, replacing the single
   `CAT_FACTORY_SERVICE_ID`.
 
@@ -144,6 +152,13 @@ is the guard that keeps them one behaviour instead of three.
 Everything above is single-tenant and unauthenticated, which is fine for local mode
 and wrong for a hosted deployment. Sessions, an org boundary around the reviewer pool
 and the board, and API keys for the machine callers.
+
+The configuration routes are the ones this is most overdue for, because they hold a
+credential rather than a board row. Until it lands they are guarded by two things
+that are not authentication: a token can be written and never read back, and
+`/api/v1/settings` is excluded from the wildcard CORS default, so a page the operator
+happens to visit cannot preflight a write into the token store. A caller that reaches
+the deployment directly still can, and that is what a session closes.
 
 Deliberately last: it is the slice whose shape depends most on how the first five are
 actually used, and the least useful one to guess at now.

@@ -9,10 +9,12 @@ import type {
 import type {
   AiReviewRunRepository,
   EpochMs,
+  IntegrationTokenRepository,
   ReminderRepository,
   Repositories,
   ReviewerRepository,
   ReviewRequestRepository,
+  StoredIntegrationToken,
 } from '@sainte-beuve/kernel'
 
 /**
@@ -195,12 +197,41 @@ export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
   }
 }
 
-/** One call for the four stores a runtime has to supply. */
+/**
+ * Sealed integration credentials. The rows hold an envelope and never a
+ * plaintext, so this store is no more sensitive than the durable one that
+ * replaces it; what it does lose on a restart is the token an operator entered,
+ * which is the same trade the rest of this adapter makes.
+ */
+export class InMemoryIntegrationTokenRepository implements IntegrationTokenRepository {
+  private readonly rows = new Map<string, StoredIntegrationToken>()
+
+  async list(): Promise<StoredIntegrationToken[]> {
+    return [...this.rows.values()].map(clone)
+  }
+
+  async get(integrationId: string): Promise<StoredIntegrationToken | null> {
+    const row = this.rows.get(integrationId)
+    return row === undefined ? null : clone(row)
+  }
+
+  async put(token: StoredIntegrationToken): Promise<StoredIntegrationToken> {
+    this.rows.set(token.integrationId, clone(token))
+    return clone(token)
+  }
+
+  async delete(integrationId: string): Promise<void> {
+    this.rows.delete(integrationId)
+  }
+}
+
+/** One call for the stores a runtime has to supply. */
 export function createInMemoryRepositories(): Repositories {
   return {
     reviewers: new InMemoryReviewerRepository(),
     reviews: new InMemoryReviewRequestRepository(),
     reminders: new InMemoryReminderRepository(),
     aiReviewRuns: new InMemoryAiReviewRunRepository(),
+    integrationTokens: new InMemoryIntegrationTokenRepository(),
   }
 }

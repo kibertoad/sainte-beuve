@@ -19,7 +19,13 @@ capabilities are off.
 2. Set the `[vars]` in `wrangler.toml` to your own origins and ids.
 3. Set the secrets: `wrangler secret put CAT_FACTORY_API_KEY`, and the same for
    `GITHUB_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`.
-4. `pnpm --filter @sainte-beuve/deploy-backend deploy`
+   Add `SETTINGS_ENCRYPTION_KEY` (`openssl rand -base64 32`) if the Configuration
+   screen should be able to store credentials; keep it, because rotating it makes
+   every token stored under it unreadable.
+4. Name the SPA's origin in `CORS_ORIGINS`. The board is happy with `*`; the
+   configuration routes are not, because a credential write reachable from any
+   origin is one any page the operator visits can make.
+5. `pnpm --filter @sainte-beuve/deploy-backend deploy`
 
 Persistence is in-memory today, so an isolate recycle loses the board. The D1 adapter
 is slice 5 of [the plan](../../docs/implementation-plan.md); do not run this against a

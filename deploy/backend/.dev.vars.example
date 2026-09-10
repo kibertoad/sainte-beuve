@@ -9,3 +9,9 @@ SLACK_BOT_TOKEN=
 SLACK_SIGNING_SECRET=
 SLACK_CHANNEL_ID=
 APP_BASE_URL=http://localhost:3000
+
+# Seals the credentials entered on the SPA's Configuration screen. Generate one
+# with `openssl rand -base64 32`. Without it the screen refuses to store a token
+# rather than writing it in the clear; rotating it makes every stored token
+# unreadable, which the screen reports as such.
+SETTINGS_ENCRYPTION_KEY=

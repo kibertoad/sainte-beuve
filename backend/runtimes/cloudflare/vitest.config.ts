@@ -13,6 +13,14 @@ export default defineConfig({
       // account attached.
       remoteBindings: false,
       wrangler: { configPath: './wrangler.toml' },
+      // A credential-encryption key for the suite only, never in wrangler.toml:
+      // a key committed as a `[vars]` default is a key somebody deploys with.
+      // With it set, the suite can prove the at-rest cipher runs on workerd's
+      // own Web Crypto, which is the one adapter that ships INSIDE the bundle
+      // rather than behind a network call.
+      miniflare: {
+        bindings: { SETTINGS_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' },
+      },
     }),
   ],
 })

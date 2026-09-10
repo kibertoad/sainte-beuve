@@ -27,4 +27,13 @@ export interface WorkerEnv {
 
   /** Base URL of the sainte-beuve SPA, so a chat message can link back to a review. */
   APP_BASE_URL?: string
+
+  /**
+   * Master key for the credentials an operator enters on the Configuration
+   * screen, base64, 32 bytes or more (`openssl rand -base64 32`). Without it the
+   * screen refuses to store anything rather than writing a token in the clear.
+   * Rotating it makes every token sealed under the old key unreadable, which the
+   * screen reports as such.
+   */
+  SETTINGS_ENCRYPTION_KEY?: string
 }

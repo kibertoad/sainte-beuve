@@ -9,6 +9,12 @@ describe('loadConfig', () => {
     expect(config.catFactory).toBeNull()
     expect(config.github).toBeNull()
     expect(config.slack).toBeNull()
+    expect(config.encryptionKey).toBeNull()
+  })
+
+  it('reads an empty encryption key as no key at all', () => {
+    expect(loadConfig({ SETTINGS_ENCRYPTION_KEY: '' }).encryptionKey).toBeNull()
+    expect(loadConfig({ SETTINGS_ENCRYPTION_KEY: 'a-key' }).encryptionKey).toBe('a-key')
   })
 
   it('treats a partly configured cat-factory as not configured', () => {

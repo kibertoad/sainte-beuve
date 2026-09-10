@@ -39,6 +39,7 @@ export async function start(config: NodeConfig = loadConfig()): Promise<RunningS
       catFactory: config.catFactory === null ? 'not configured' : config.catFactory.baseUrl,
       slack: config.slack === null ? 'not configured' : 'configured',
       github: config.github === null ? 'not configured' : 'configured',
+      secrets: config.encryptionKey === null ? 'not configured' : 'configured',
     },
     'sainte-beuve server listening',
   )

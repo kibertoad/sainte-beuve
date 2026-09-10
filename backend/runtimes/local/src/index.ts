@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { type NodeConfig, type RunningServer, loadConfig, start } from '@sainte-beuve/node-server'
 
 /**
@@ -15,6 +16,15 @@ import { type NodeConfig, type RunningServer, loadConfig, start } from '@sainte-
  *     to use that one instead; the rest of the wiring is identical either way.
  *   - The reminder clock still runs, just faster, so a developer can watch a nudge
  *     fire in a minute rather than in four hours.
+ *   - The credential-encryption key is generated at boot, so the Configuration
+ *     screen works with nothing set. It is EPHEMERAL, and that is the honest
+ *     default here: local mode's store is in-memory, so a token entered in the
+ *     SPA does not outlive the process either way. Set SETTINGS_ENCRYPTION_KEY
+ *     to pin it to the one a hosted deployment uses. A blank one in a copied
+ *     `.env` counts as unset, not as a key.
+ *   - CORS opens to `*` for the board; the configuration routes read that as
+ *     loopback only, which is the local SPA and nothing else. See `allowedOrigin`
+ *     in @sainte-beuve/server.
  *
  * Everything a hosted deployment configures is still configurable here, and nothing
  * is required. That is the property that matters: a local run exercises the same
@@ -26,9 +36,10 @@ export interface LocalOptions {
 }
 
 const LOCAL_CAT_FACTORY_BASE_URL = 'http://localhost:8787'
+const ENCRYPTION_KEY_BYTES = 32
 
 export function localConfig(env: Record<string, string | undefined> = process.env): NodeConfig {
-  const config = loadConfig({
+  return loadConfig({
     PORT: '8788',
     CORS_ORIGINS: '*',
     LOG_LEVEL: 'debug',
@@ -36,8 +47,16 @@ export function localConfig(env: Record<string, string | undefined> = process.en
     REMINDER_INTERVAL_MS: '15000',
     CAT_FACTORY_BASE_URL: LOCAL_CAT_FACTORY_BASE_URL,
     ...env,
+    // AFTER the spread, and `||`: `.env.example` ships `SETTINGS_ENCRYPTION_KEY=`
+    // for a developer to fill in, `--env-file` reads that blank line as `''`, and
+    // a default placed BEFORE the spread would be overwritten by it. Copying the
+    // example file would then turn the Configuration screen off, which is the
+    // opposite of what local mode promises. A fresh key per boot, because nothing
+    // sealed under it has to survive a restart: nothing in the in-memory store
+    // does either.
+    SETTINGS_ENCRYPTION_KEY:
+      env.SETTINGS_ENCRYPTION_KEY || randomBytes(ENCRYPTION_KEY_BYTES).toString('base64'),
   })
-  return config
 }
 
 export async function startLocal(options: LocalOptions = {}): Promise<RunningServer> {
