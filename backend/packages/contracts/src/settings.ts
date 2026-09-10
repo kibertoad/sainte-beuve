@@ -28,9 +28,37 @@ export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
 export const integrationTokenStateSchema = v.picklist(['absent', 'stored', 'unreadable'])
 export type IntegrationTokenState = v.InferOutput<typeof integrationTokenStateSchema>
 
+/**
+ * Why a stored token cannot be opened. Three faults with three different fixes:
+ * the deployment has no usable encryption key at all (`no_key`), the key it has
+ * is not the one this token was sealed under (`key_mismatch`), or the stored
+ * value is not an envelope this scheme wrote (`corrupt`). Rolled into one state
+ * they would be reported as whichever the screen happened to name, which sends
+ * an operator after a key that was never rotated.
+ */
+export const integrationTokenUnreadableReasonSchema = v.picklist([
+  'no_key',
+  'key_mismatch',
+  'corrupt',
+])
+export type IntegrationTokenUnreadableReason = v.InferOutput<
+  typeof integrationTokenUnreadableReasonSchema
+>
+
 export const integrationTokenStatusSchema = v.object({
   integrationId: integrationIdSchema,
   state: integrationTokenStateSchema,
+  /** Set exactly when `state` is `unreadable`, so the screen names the actual fault. */
+  unreadableReason: v.nullable(integrationTokenUnreadableReasonSchema),
+  /**
+   * Whether the deployment is currently REACHING this integration. Holding a
+   * credential and using it are two different facts today: the gateways are built
+   * from the environment at boot, so a stored token can sit beside an integration
+   * nothing is wired to, and a screen reporting only "stored" would show it as
+   * configured while every request through it answers 503. Slice 4 joins the two
+   * (docs/implementation-plan.md).
+   */
+  inUse: v.boolean(),
   /** The last four characters of the stored token. Null when there is nothing stored. */
   hint: v.nullable(v.string()),
   updatedAt: v.nullable(v.number()),

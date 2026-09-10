@@ -23,7 +23,10 @@ head_sampling_rate = 1
 crons = ["0 * * * *"]
 
 [vars]
-# Origins the SPA is served from. Comma-separated; `*` only for a preview.
+# Origins the SPA is served from. Comma-separated; `*` only for a preview, and
+# even then the Configuration screen needs the SPA's own origin named here: the
+# routes that hold a credential are excluded from the wildcard, so that a page an
+# operator visits cannot preflight a write into this deployment's token store.
 CORS_ORIGINS = "https://sainte-beuve.example.com"
 # Where the SPA lives, so a Slack message can link back to a review.
 APP_BASE_URL = "https://sainte-beuve.example.com"

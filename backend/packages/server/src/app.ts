@@ -41,16 +41,34 @@ export interface AppOptions {
 
 const WILDCARD = '*'
 
+/** The routes that read and write a credential. See SettingsController. */
+const CONFIGURATION_PATH = '/api/v1/settings'
+
+/** The SPA in local development, on whatever port Nuxt settled for. */
+const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/
+
 /**
  * What to echo back as `Access-Control-Allow-Origin`. The wildcard is answered with
  * the literal `*`: Hono matches a configured LIST against the request's origin, so a
  * list holding `'*'` matches no real origin and the response carries no CORS header
  * at all, which is the browser-side symptom of "the API is up and the SPA cannot
  * reach it".
+ *
+ * The wildcard stops at the configuration routes. Those write a credential and
+ * carry no session to check, so answering `*` there would let any page an operator
+ * happens to visit preflight a PUT and overwrite this deployment's tokens. They
+ * answer an origin the deployment NAMED, plus loopback, which is the local SPA and
+ * is already code running on the operator's own machine. A hosted deployment
+ * therefore has to list its SPA origin in CORS_ORIGINS for the Configuration screen
+ * to work, which is the trade this makes on purpose.
  */
-function allowedOrigin(configured: readonly string[], origin: string): string | null {
-  if (configured.includes(WILDCARD)) return WILDCARD
-  return configured.includes(origin) ? origin : null
+function allowedOrigin(configured: readonly string[], origin: string, path: string): string | null {
+  if (configured.includes(origin)) return origin
+  if (!configured.includes(WILDCARD)) return null
+  if (path.startsWith(CONFIGURATION_PATH)) {
+    return LOOPBACK_ORIGIN.test(origin) ? origin : null
+  }
+  return WILDCARD
 }
 
 function scopeOf(c: Context<AppEnv>): RequestScope {
@@ -65,7 +83,12 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
 
   // No `Access-Control-Allow-Credentials`: the API carries no cookie session, and
   // the header is invalid beside a wildcard origin, which is the default.
-  app.use('*', cors({ origin: (origin, c) => allowedOrigin(originsFor(scopeOf(c)), origin) }))
+  app.use(
+    '*',
+    cors({
+      origin: (origin, c) => allowedOrigin(originsFor(scopeOf(c)), origin, c.req.path),
+    }),
+  )
 
   app.use('*', async (c, next) => {
     c.set('container', await options.resolveContainer(scopeOf(c)))

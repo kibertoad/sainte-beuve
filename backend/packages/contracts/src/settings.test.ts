@@ -19,6 +19,8 @@ describe('integrationTokenStatusSchema', () => {
     expect(Object.keys(integrationTokenStatusSchema.entries)).toStrictEqual([
       'integrationId',
       'state',
+      'unreadableReason',
+      'inUse',
       'hint',
       'updatedAt',
     ])
@@ -29,6 +31,8 @@ describe('integrationTokenStatusSchema', () => {
       v.parse(integrationTokenStatusSchema, {
         integrationId: 'nope',
         state: 'absent',
+        unreadableReason: null,
+        inUse: false,
         hint: null,
         updatedAt: null,
       }),

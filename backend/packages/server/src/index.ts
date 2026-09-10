@@ -6,6 +6,7 @@ export { type AppContainer, type ContainerOptions, createContainer } from './con
 export type { AppEnv } from './http/env.js'
 export {
   secretCipherFrom,
+  type SecretCipherWiring,
   WebCryptoSecretCipher,
   type WebCryptoSecretCipherOptions,
 } from './crypto/WebCryptoSecretCipher.js'

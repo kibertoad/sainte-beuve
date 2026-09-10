@@ -15,7 +15,13 @@ export {
   ValidationError,
 } from './domain/errors.js'
 export { DEFAULT_REMINDER_POLICY, type EpochMs, formatPullRequest } from './domain/types.js'
-export type { SecretCipher } from './ports/crypto.js'
+export {
+  isSecretDecryptError,
+  type SecretCipher,
+  SecretDecryptError,
+  type SecretDecryptFailure,
+  type SecretEnvelopeState,
+} from './ports/crypto.js'
 export type {
   AiReviewGateway,
   AiReviewHandle,

@@ -1,5 +1,13 @@
-import type { Logger, SecretCipher } from '@sainte-beuve/kernel'
+import {
+  getErrorMessage,
+  isSecretDecryptError,
+  type Logger,
+  type SecretCipher,
+  SecretDecryptError,
+  type SecretEnvelopeState,
+} from '@sainte-beuve/kernel'
 import { base64url, base64urlToBytes } from './encoding.js'
+import { formatEnvelope, IV_BYTES, KEY_ID_BYTES, parseEnvelope, SALT_BYTES } from './envelope.js'
 
 /**
  * The `SecretCipher` every facade wires: AES-256-GCM over Web Crypto, which
@@ -9,25 +17,35 @@ import { base64url, base64urlToBytes } from './encoding.js'
  * One master key comes from the deployment's configuration and is imported once
  * for HKDF; every record then derives its own AES key from a random salt and is
  * sealed under a random IV, so two records sealed from the same token share no
- * key material and neither reveals that they hold the same value.
+ * key material and neither reveals that they hold the same value. The record's
+ * CONTEXT (the integration id) is bound as additional authenticated data, so a
+ * sealed value carried from one row to another stops opening: an envelope is a
+ * credential for one integration and for nothing else.
  *
- *   envelope = "v1." + base64url(salt) + "." + base64url(iv) + "." + base64url(ciphertext|tag)
+ * The envelope also carries an id for the key that sealed it (see envelope.ts),
+ * which is what lets a status read answer "this deployment cannot open that"
+ * from the envelope alone, deriving no key and holding no credential.
  *
- * The version tag is what makes a later scheme change readable: an envelope
- * written by a different version is refused as corrupt instead of being fed to
- * the wrong parser.
+ * An instance is worth CACHING per master key: the HKDF import and the key id
+ * are memoised on it, so a facade that builds one per request pays for both
+ * again on every request.
  */
 
-const VERSION = 'v1'
-const SALT_BYTES = 16
-const IV_BYTES = 12
 const MIN_KEY_BYTES = 32
 /** HKDF domain separation, so this key derives nothing usable for another purpose. */
 const INFO = 'sainte-beuve:integration-tokens'
+/** A second HKDF label, so the key id cannot collide with a record's own key. */
+const KEY_ID_INFO = 'sainte-beuve:integration-tokens:key-id'
+/** HKDF reads a zero-length salt as all-zeros, which is what a DETERMINISTIC id needs. */
+const NO_SALT = new Uint8Array(0)
 
 export interface WebCryptoSecretCipherOptions {
   /** The deployment's master key, base64 (32 bytes or more, decoded). */
   masterKeyBase64: string
+}
+
+function utf8(value: string): Uint8Array<ArrayBuffer> {
+  return new TextEncoder().encode(value) as Uint8Array<ArrayBuffer>
 }
 
 export class WebCryptoSecretCipher implements SecretCipher {
@@ -36,54 +54,80 @@ export class WebCryptoSecretCipher implements SecretCipher {
   private readonly masterKey: Uint8Array<ArrayBuffer>
   private readonly info: Uint8Array<ArrayBuffer>
   private baseKeyPromise?: Promise<CryptoKey>
+  private keyIdPromise?: Promise<string>
 
   constructor({ masterKeyBase64 }: WebCryptoSecretCipherOptions) {
     this.masterKey = decodeKey(masterKeyBase64)
-    this.info = new TextEncoder().encode(INFO) as Uint8Array<ArrayBuffer>
+    this.info = utf8(INFO)
   }
 
-  async encrypt(plaintext: string): Promise<string> {
+  async encrypt(plaintext: string, context: string): Promise<string> {
     const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES))
     const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES))
     const sealed = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv, additionalData: utf8(context) },
       await this.deriveKey(salt),
-      new TextEncoder().encode(plaintext),
+      utf8(plaintext),
     )
-    return [VERSION, base64url(salt), base64url(iv), base64url(new Uint8Array(sealed))].join('.')
+    const keyId = await this.keyId()
+    return formatEnvelope({ keyId, salt, iv, ciphertext: new Uint8Array(sealed) })
   }
 
-  async decrypt(envelope: string): Promise<string> {
-    const { salt, iv, ciphertext } = parseEnvelope(envelope)
+  async decrypt(envelope: string, context: string): Promise<string> {
+    const { keyId, salt, iv, ciphertext } = parseEnvelope(envelope)
+    if (keyId !== (await this.keyId())) throw rotatedKey()
     let plain: ArrayBuffer
     try {
       plain = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
+        { name: 'AES-GCM', iv, additionalData: utf8(context) },
         await this.deriveKey(salt),
         ciphertext,
       )
     } catch (err) {
-      // AES-GCM authentication failed, which in practice means the encryption
-      // key is not the one this envelope was sealed under: it was rotated or
-      // regenerated, and everything sealed under the old one is unrecoverable.
-      // Web Crypto's own failure is the opaque "operation failed for an
+      // The key that sealed this IS this one, and AES-GCM still refused: the
+      // envelope was sealed for a different context, or its stored bytes were
+      // altered. Web Crypto's own failure is the opaque "operation failed for an
       // operation-specific reason" DOMException, so say what an operator can act
       // on and keep the original as `cause`.
-      throw new Error(
-        'A stored token could not be decrypted: the encryption key does not match the one it ' +
-          'was sealed under, most likely because the key was rotated. Restore the previous key, ' +
-          'or enter the token again to seal it under the current one.',
+      throw new SecretDecryptError(
+        'corrupt',
+        'A stored token failed authentication: it was sealed for a different integration, or ' +
+          'its stored bytes were altered. Enter the token again to re-seal it.',
         { cause: err },
       )
     }
     return new TextDecoder().decode(plain)
   }
 
+  async inspect(envelope: string): Promise<SecretEnvelopeState> {
+    try {
+      return parseEnvelope(envelope).keyId === (await this.keyId()) ? 'readable' : 'key_mismatch'
+    } catch (err) {
+      if (isSecretDecryptError(err)) return err.failure
+      throw err
+    }
+  }
+
   private baseKey(): Promise<CryptoKey> {
     this.baseKeyPromise ??= crypto.subtle.importKey('raw', this.masterKey, 'HKDF', false, [
       'deriveKey',
+      'deriveBits',
     ])
     return this.baseKeyPromise
+  }
+
+  private keyId(): Promise<string> {
+    this.keyIdPromise ??= this.deriveKeyId()
+    return this.keyIdPromise
+  }
+
+  private async deriveKeyId(): Promise<string> {
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt: NO_SALT, info: utf8(KEY_ID_INFO) },
+      await this.baseKey(),
+      KEY_ID_BYTES * 8,
+    )
+    return base64url(new Uint8Array(bits))
   }
 
   private async deriveKey(salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
@@ -97,30 +141,49 @@ export class WebCryptoSecretCipher implements SecretCipher {
   }
 }
 
+function rotatedKey(): SecretDecryptError {
+  return new SecretDecryptError(
+    'key_mismatch',
+    'A stored token could not be decrypted: it was sealed under a different encryption key, ' +
+      'most likely because SETTINGS_ENCRYPTION_KEY was rotated. Restore the previous key, or ' +
+      'enter the token again to seal it under the current one.',
+  )
+}
+
 /**
- * Wire the cipher a facade's configuration asks for, or leave the capability off
- * with the reason in the log. Shared by every facade so the three answer a
- * missing or mistyped key identically.
+ * The cipher a facade's configuration asks for, or the reason there is none.
+ *
+ * Shared by every facade so the three answer a missing or mistyped key
+ * identically, and the reason is CARRIED rather than only logged: "no key is
+ * configured" and "the key you configured was refused" are different
+ * instructions, and an operator told the first when the second is true re-sets
+ * the same bad value and loops.
  *
  * A bad key must not take the deployment down: storing a credential is one
  * optional capability among several, and a board that refuses to serve because
  * an encryption key was mistyped is a worse outcome than a Configuration screen
  * reporting itself unavailable. `/health` says `secrets: false` either way.
  */
+export interface SecretCipherWiring {
+  cipher: SecretCipher | null
+  /** Null when no key was configured at all, which is not a fault to report. */
+  rejectedReason: string | null
+}
+
 export function secretCipherFrom(options: {
   masterKeyBase64: string | null | undefined
   logger: Logger
-}): SecretCipher | null {
+}): SecretCipherWiring {
   const { masterKeyBase64, logger } = options
-  if (!masterKeyBase64) return null
+  if (!masterKeyBase64) return { cipher: null, rejectedReason: null }
   try {
-    return new WebCryptoSecretCipher({ masterKeyBase64 })
+    return { cipher: new WebCryptoSecretCipher({ masterKeyBase64 }), rejectedReason: null }
   } catch (err) {
     logger.error(
       { err },
       'SETTINGS_ENCRYPTION_KEY is set but unusable; storing integration tokens stays off',
     )
-    return null
+    return { cipher: null, rejectedReason: getErrorMessage(err) }
   }
 }
 
@@ -142,37 +205,4 @@ function decodeKey(masterKeyBase64: string): Uint8Array<ArrayBuffer> {
     )
   }
   return bytes
-}
-
-interface ParsedEnvelope {
-  salt: Uint8Array<ArrayBuffer>
-  iv: Uint8Array<ArrayBuffer>
-  ciphertext: Uint8Array<ArrayBuffer>
-}
-
-/**
- * Split the envelope before any key is involved. A wrong structure and an
- * undecodable segment are the same fault, and a different one from a key
- * mismatch: the ciphertext never reaches decryption, so the value is corrupt
- * (a truncated column, or a value written by another scheme) rather than
- * locked.
- */
-function parseEnvelope(envelope: string): ParsedEnvelope {
-  try {
-    const parts = envelope.split('.')
-    if (parts.length !== 4 || parts[0] !== VERSION) {
-      throw new Error(`unexpected envelope structure (${parts.length} segments)`)
-    }
-    return {
-      salt: base64urlToBytes(parts[1]!),
-      iv: base64urlToBytes(parts[2]!),
-      ciphertext: base64urlToBytes(parts[3]!),
-    }
-  } catch (err) {
-    throw new Error(
-      'A stored token is not a valid encryption envelope: it is truncated, corrupted, or was ' +
-        'written by a different encryption scheme. Enter the token again to re-seal it.',
-      { cause: err },
-    )
-  }
 }

@@ -23,3 +23,8 @@ pnpm --filter @sainte-beuve/deploy-frontend deploy
 
 The API base is baked in at build time (`ssr: false`), so it is a build variable,
 not a runtime one.
+
+The backend has to name this deployment's own origin in `CORS_ORIGINS`. A board
+served from an origin the API does not list still loads and reaches nothing, and the
+Configuration screen needs the origin named even where the board runs on `*`: the
+routes that hold a credential are excluded from the wildcard.

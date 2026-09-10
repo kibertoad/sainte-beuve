@@ -35,4 +35,13 @@ describe('localConfig', () => {
       'from-the-env',
     )
   })
+
+  it('still generates one when a copied .env carries the name with no value', () => {
+    // `deploy/local/.env.example` ships `SETTINGS_ENCRYPTION_KEY=`, and
+    // `--env-file` reads that as `''`. Treated as a value, it would override the
+    // per-boot key and turn the Configuration screen off in the one mode that
+    // promises it needs no configuration at all.
+    const key = localConfig({ SETTINGS_ENCRYPTION_KEY: '' }).encryptionKey ?? ''
+    expect(Buffer.from(key, 'base64')).toHaveLength(32)
+  })
 })

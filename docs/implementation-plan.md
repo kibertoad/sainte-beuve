@@ -62,13 +62,13 @@ Two rules hold the shape:
 
 ## What is a placeholder, and why it is still here
 
-| Placeholder                                     | Why it exists now                                                                                                              |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /webhooks/github`, `POST /webhooks/slack` | Answer 501, but the paths get registered in a GitHub App and a Slack app by hand. Adding them later means re-registering both. |
-| In-memory persistence                           | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.              |
-| `useSainteBeuveApi` calling routes by path      | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.         |
-| Single cat-factory service id                   | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                        |
-| A stored cat-factory token nothing reads yet    | The screen seals and stores it; the gateway is still built from the environment at boot. Slice 4 joins the two.                |
+| Placeholder                                     | Why it exists now                                                                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /webhooks/github`, `POST /webhooks/slack` | Answer 501, but the paths get registered in a GitHub App and a Slack app by hand. Adding them later means re-registering both.                               |
+| In-memory persistence                           | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.                                            |
+| `useSainteBeuveApi` calling routes by path      | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                       |
+| Single cat-factory service id                   | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                      |
+| A stored cat-factory token nothing reads yet    | The screen seals and stores it; the gateway is still built from the environment at boot, so the API reports it stored and NOT in use. Slice 4 joins the two. |
 
 ## Slices, in order
 
@@ -152,6 +152,13 @@ is the guard that keeps them one behaviour instead of three.
 Everything above is single-tenant and unauthenticated, which is fine for local mode
 and wrong for a hosted deployment. Sessions, an org boundary around the reviewer pool
 and the board, and API keys for the machine callers.
+
+The configuration routes are the ones this is most overdue for, because they hold a
+credential rather than a board row. Until it lands they are guarded by two things
+that are not authentication: a token can be written and never read back, and
+`/api/v1/settings` is excluded from the wildcard CORS default, so a page the operator
+happens to visit cannot preflight a write into the token store. A caller that reaches
+the deployment directly still can, and that is what a session closes.
 
 Deliberately last: it is the slice whose shape depends most on how the first five are
 actually used, and the least useful one to guess at now.

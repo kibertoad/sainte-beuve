@@ -51,7 +51,8 @@ export function loadConfig(env: Env = process.env): NodeConfig {
       ? { botToken: env.SLACK_BOT_TOKEN, channelId: env.SLACK_CHANNEL_ID ?? null }
       : null,
     appBaseUrl: env.APP_BASE_URL,
-    // `||`, not `??`: an empty variable is a variable somebody meant to set.
+    // `||`, not `??`: an empty variable is one somebody left blank, not one they
+    // set, and `.env.example` ships the name with no value for exactly that.
     encryptionKey: env.SETTINGS_ENCRYPTION_KEY || null,
   }
 }

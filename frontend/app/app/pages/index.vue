@@ -21,29 +21,19 @@ const statusColor: Record<ReviewRequest['status'], BadgeColor> = {
   closed: 'neutral',
 }
 
-const toast = useToast()
-
-/**
- * Run one board action and say what happened. Both of these routes refuse for
- * reasons a viewer can act on (503 while cat-factory is unconfigured, which is
- * every fresh deployment; 404 for a review somebody else has closed), and an
- * unhandled rejection would leave the button looking simply dead.
- */
-async function act(action: () => Promise<unknown>, title: string) {
-  try {
-    await action()
-    await refresh()
-  } catch (err) {
-    toast.add({ color: 'error', title, description: apiErrorMessage(err) })
-  }
-}
+// Both of these routes refuse for reasons a viewer can act on (503 while
+// cat-factory is unconfigured, which is every fresh deployment; 404 for a review
+// somebody else has closed), which is what `useApiAction` is for: it toasts the
+// API's own message and refreshes the board. One copy, shared with the
+// Configuration screen, so a change to how a refusal is shown lands in one file.
+const { run } = useApiAction({ refresh })
 
 async function assign(review: ReviewRequest) {
-  await act(() => api.assignReviewers(review.id), 'Could not find a reviewer')
+  await run(() => api.assignReviewers(review.id), 'Could not find a reviewer')
 }
 
 async function requestAiReview(review: ReviewRequest) {
-  await act(() => api.requestAiReview(review.id), 'Could not request an AI review')
+  await run(() => api.requestAiReview(review.id), 'Could not request an AI review')
 }
 </script>
 
