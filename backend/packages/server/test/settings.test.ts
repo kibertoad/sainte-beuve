@@ -1,9 +1,10 @@
-import type { IntegrationTokenStatus } from '@sainte-beuve/contracts'
+import type { IntegrationId, IntegrationTokenStatus } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, SecretCipher } from '@sainte-beuve/kernel'
+import { UpstreamFailedError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.js'
 import { WebCryptoSecretCipher } from '../src/crypto/WebCryptoSecretCipher.js'
-import { type TestHarness, buildHarness, del, put } from './helpers.js'
+import { type TestHarness, buildHarness, del, put, stubGateways } from './helpers.js'
 
 // The Configuration screen's API, through the app: the contract validation, the
 // service and the error envelope together.
@@ -26,6 +27,7 @@ function status(overrides: Partial<IntegrationTokenStatus> = {}): IntegrationTok
     unreadableReason: null,
     inUse: false,
     hint: null,
+    subject: null,
     updatedAt: null,
     ...overrides,
   }
@@ -37,6 +39,21 @@ async function listIntegrations(harness: TestHarness): Promise<IntegrationTokenS
   return ((await res.json()) as { integrations: IntegrationTokenStatus[] }).integrations
 }
 
+/**
+ * One integration's row, found by id rather than by position. The list carries
+ * every known integration, so an index would have to be renumbered every time
+ * one is added, and that renumbering is exactly the edit that silently moves a
+ * case onto a different row.
+ */
+async function statusOf(
+  harness: TestHarness,
+  integrationId: IntegrationId = 'cat-factory',
+): Promise<IntegrationTokenStatus> {
+  const found = (await listIntegrations(harness)).find((row) => row.integrationId === integrationId)
+  expect(found).toBeDefined()
+  return found as IntegrationTokenStatus
+}
+
 describe('integration configuration API', () => {
   let harness: TestHarness
 
@@ -45,7 +62,12 @@ describe('integration configuration API', () => {
   })
 
   it('lists every known integration, configured or not', async () => {
-    expect(await listIntegrations(harness)).toStrictEqual([status()])
+    expect((await listIntegrations(harness)).map((row) => row.integrationId)).toStrictEqual([
+      'github-pat',
+      'slack-bot-token',
+      'cat-factory',
+    ])
+    expect(await statusOf(harness)).toStrictEqual(status())
   })
 
   it('stores a token and reports it by its last four characters only', async () => {
@@ -55,9 +77,9 @@ describe('integration configuration API', () => {
       status({ state: 'stored', hint: '5b4a', updatedAt: harness.clock.now() }),
     )
 
-    expect(await listIntegrations(harness)).toStrictEqual([
+    expect(await statusOf(harness)).toStrictEqual(
       status({ state: 'stored', hint: '5b4a', updatedAt: harness.clock.now() }),
-    ])
+    )
   })
 
   it('never hands the token back, and never stores it in the clear', async () => {
@@ -80,7 +102,7 @@ describe('integration configuration API', () => {
     expect(await harness.container.secrets?.decrypt(stored!.sealed, 'cat-factory')).toBe(
       'cf_live_0000zzzz',
     )
-    expect((await listIntegrations(harness))[0]?.hint).toBe('zzzz')
+    expect((await statusOf(harness)).hint).toBe('zzzz')
   })
 
   it('reads a status without ever opening a credential', async () => {
@@ -96,19 +118,34 @@ describe('integration configuration API', () => {
     const listing = buildHarness({ secrets: sealOnly })
 
     await listing.app.fetch(put(TOKEN_PATH, { token: TOKEN }))
-    expect((await listIntegrations(listing))[0]).toMatchObject({ state: 'stored', hint: '5b4a' })
+    expect(await statusOf(listing)).toMatchObject({ state: 'stored', hint: '5b4a' })
   })
 
-  it('reports a stored token as not in use while the gateway comes from the environment', async () => {
+  it('reports a stored token as in use once the deployment can build a gateway from it', async () => {
+    // No factory at all: the credential is stored and nothing reads it, which is
+    // what a facade that wired no adapters looks like.
     await harness.app.fetch(put(TOKEN_PATH, { token: TOKEN }))
-    expect((await listIntegrations(harness))[0]).toMatchObject({ state: 'stored', inUse: false })
+    expect(await statusOf(harness)).toMatchObject({ state: 'stored', inUse: false })
 
     const wired = buildHarness({
       repositories: harness.container.repositories,
       secrets: cipherFor(KEY),
-      aiReview: {} as AiReviewGateway,
+      gateways: stubGateways({ aiReview: () => ({}) as AiReviewGateway }),
     })
-    expect((await listIntegrations(wired))[0]).toMatchObject({ state: 'stored', inUse: true })
+    expect(await statusOf(wired)).toMatchObject({ state: 'stored', inUse: true })
+  })
+
+  it('reports a stored key as not in use when the rest of the integration is missing', async () => {
+    // A cat-factory key with no base URL and no service id names an instance
+    // nothing can reach, and the factory answers null for it. Reporting that as
+    // in use is how a green badge comes to sit beside a route answering 503.
+    await harness.app.fetch(put(TOKEN_PATH, { token: TOKEN }))
+    const halfWired = buildHarness({
+      repositories: harness.container.repositories,
+      secrets: cipherFor(KEY),
+      gateways: stubGateways({ aiReview: () => null }),
+    })
+    expect(await statusOf(halfWired)).toMatchObject({ state: 'stored', inUse: false })
   })
 
   it('refuses to store anything when the deployment configured no encryption key', async () => {
@@ -142,7 +179,7 @@ describe('integration configuration API', () => {
       repositories: harness.container.repositories,
       secrets: cipherFor(ROTATED_KEY),
     })
-    expect((await listIntegrations(rotated))[0]).toStrictEqual(
+    expect(await statusOf(rotated)).toStrictEqual(
       status({
         state: 'unreadable',
         unreadableReason: 'key_mismatch',
@@ -158,7 +195,7 @@ describe('integration configuration API', () => {
     // No cipher at all: the fix is to configure a key, and re-entering the token
     // cannot work either, so this must not read as a rotation.
     const unkeyed = buildHarness({ repositories: harness.container.repositories })
-    expect((await listIntegrations(unkeyed))[0]).toMatchObject({
+    expect(await statusOf(unkeyed)).toMatchObject({
       state: 'unreadable',
       unreadableReason: 'no_key',
     })
@@ -169,9 +206,10 @@ describe('integration configuration API', () => {
       integrationId: 'cat-factory',
       sealed: 'v1.',
       hint: '5b4a',
+      subject: null,
       updatedAt: harness.clock.now(),
     })
-    expect((await listIntegrations(harness))[0]).toMatchObject({
+    expect(await statusOf(harness)).toMatchObject({
       state: 'unreadable',
       unreadableReason: 'corrupt',
     })
@@ -184,7 +222,7 @@ describe('integration configuration API', () => {
     const res = await unkeyed.app.fetch(del(TOKEN_PATH))
     expect(res.status).toBe(200)
     expect(await res.json()).toStrictEqual(status())
-    expect(await listIntegrations(unkeyed)).toStrictEqual([status()])
+    expect(await statusOf(unkeyed)).toStrictEqual(status())
   })
 
   it('keeps the routes that hold a credential off the wildcard origin', async () => {
@@ -229,5 +267,51 @@ describe('integration configuration API', () => {
   it('refuses a token too short to be one', async () => {
     const res = await harness.app.fetch(put(TOKEN_PATH, { token: 'oops' }))
     expect(res.status).toBe(400)
+  })
+})
+
+/**
+ * A pasted GitHub token is the one credential that is CHECKED on the way in, so
+ * it gets its own suite: storing it asks GitHub whose it is, which no other
+ * credential has a port to answer.
+ */
+describe('a pasted GitHub credential', () => {
+  it('records which account a pasted GitHub token belongs to', async () => {
+    const github = buildHarness({
+      secrets: cipherFor(KEY),
+      gateways: stubGateways({
+        vcsFromToken: () => ({
+          requestReviewers: async () => {},
+          comment: async () => {},
+          identify: async () => 'kibertoad',
+        }),
+      }),
+    })
+    const res = await github.app.fetch(
+      put(`${PATH}/github-pat/token`, { token: 'ghp_0123456789abcd' }),
+    )
+    expect(res.status).toBe(200)
+    // Named, so the screen can say whose credential this deployment uses; the
+    // check that produced it also proves GitHub accepts the token.
+    expect(await res.json()).toMatchObject({ subject: 'kibertoad', hint: 'abcd', inUse: true })
+  })
+
+  it('refuses a GitHub token GitHub itself refuses, rather than storing it', async () => {
+    const refused = new UpstreamFailedError('GitHub answered 401 for GET /user')
+    const github = buildHarness({
+      secrets: cipherFor(KEY),
+      gateways: stubGateways({
+        vcsFromToken: () => ({
+          requestReviewers: async () => {},
+          comment: async () => {},
+          identify: () => Promise.reject(refused),
+        }),
+      }),
+    })
+    const res = await github.app.fetch(
+      put(`${PATH}/github-pat/token`, { token: 'ghp_0123456789abcd' }),
+    )
+    expect(res.status).toBe(502)
+    expect(await statusOf(github, 'github-pat')).toMatchObject({ state: 'absent' })
   })
 })

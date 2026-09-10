@@ -36,14 +36,38 @@ CAT_FACTORY_BASE_URL = "https://cat-factory.example.com"
 CAT_FACTORY_SERVICE_ID = "REPLACE_WITH_CAT_FACTORY_SERVICE_ID"
 # Slack channel new reviews are announced in.
 SLACK_CHANNEL_ID = "REPLACE_WITH_SLACK_CHANNEL_ID"
+# The GitHub App, by the two names it has. GITHUB_APP_ID signs the JWT and
+# GITHUB_APP_SLUG addresses the public install page; both are needed before the
+# Configuration screen can offer an install.
+GITHUB_APP_ID = "REPLACE_WITH_GITHUB_APP_ID"
+GITHUB_APP_SLUG = "REPLACE_WITH_GITHUB_APP_SLUG"
+# The login the bot answers to when it is @-mentioned on a pull request.
+GITHUB_BOT_LOGIN = "REPLACE_WITH_APP_BOT_LOGIN"
+# The labels that drive the board. These are the defaults; name your own.
+GITHUB_LABEL_REVIEW = "needs-review"
+GITHUB_LABEL_AI_REVIEW = "ai-review"
+GITHUB_LABEL_SKILL_PREFIX = "skill:"
 
 # SECRETS, set with `wrangler secret put <NAME>`, never in this file:
-#   CAT_FACTORY_API_KEY   a cat-factory public-API key (cf_live_<keyId>.<secret>)
-#   GITHUB_TOKEN          a PAT today; a GitHub App installation token in slice 3
-#   GITHUB_WEBHOOK_SECRET the shared secret the webhook signature is checked against
-#   SLACK_BOT_TOKEN       xoxb-… for the Slack bot
-#   SLACK_SIGNING_SECRET  the secret Slack signs its requests with
+#   CAT_FACTORY_API_KEY        a cat-factory public-API key (cf_live_<keyId>.<secret>)
+#   GITHUB_APP_PRIVATE_KEY     the App's private key, PKCS#8 PEM. GitHub issues
+#                              PKCS#1; convert it once with
+#                              `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pk8.pem`
+#   GITHUB_OAUTH_CLIENT_ID     the App's own OAuth client, for "Sign in with GitHub"
+#   GITHUB_OAUTH_CLIENT_SECRET
+#   GITHUB_TOKEN               a personal access token, for a deployment with no App
+#   GITHUB_WEBHOOK_SECRET      the shared secret the webhook signature is checked against
+#   SLACK_BOT_TOKEN            xoxb-… for the Slack bot
+#   SLACK_SIGNING_SECRET       the secret Slack signs its requests with
+#   SETTINGS_ENCRYPTION_KEY    seals the credentials entered on the Configuration
+#                              screen and signs the connect round trips
+#                              (`openssl rand -base64 32`)
 #
 # Every one of them is OPTIONAL. A Worker with none of them set still serves the
 # board and reports the gaps on /health, which is what makes the first deploy
 # possible before any app registration exists.
+#
+# The three GitHub credentials are not alternatives to choose between at deploy
+# time: whichever are configured are offered on the Configuration screen, and the
+# strongest present is what calls are made with (the App, then a sign-in, then a
+# stored token, then GITHUB_TOKEN).

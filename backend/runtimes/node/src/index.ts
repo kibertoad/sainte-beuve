@@ -33,12 +33,17 @@ export async function start(config: NodeConfig = loadConfig()): Promise<RunningS
   // by the HTTP server closing, not by a timer nobody is waiting on.
   timer.unref()
 
+  // One line naming every optional capability, because "which integrations did
+  // this process actually wire?" is the first question a deploy raises and the
+  // answer is otherwise spread across `/health` and three screens. GitHub reports
+  // the METHODS it can offer rather than a boolean: a deployment with an App and
+  // no token is configured, and a boolean would call it unconfigured.
   container.logger.info(
     {
       port: config.port,
       catFactory: config.catFactory === null ? 'not configured' : config.catFactory.baseUrl,
-      slack: config.slack === null ? 'not configured' : 'configured',
-      github: config.github === null ? 'not configured' : 'configured',
+      slack: slackSummary(config),
+      github: githubSummary(config),
       secrets: config.encryptionKey === null ? 'not configured' : 'configured',
     },
     'sainte-beuve server listening',
@@ -52,5 +57,25 @@ export async function start(config: NodeConfig = loadConfig()): Promise<RunningS
   }
 }
 
-export { type NodeConfig, loadConfig } from './config.js'
+/** Which GitHub credentials this process can offer, in the order they win. */
+function githubSummary(config: NodeConfig): string {
+  const offered = [
+    config.github.app === null ? null : 'app',
+    config.github.oauth === null ? null : 'sign-in',
+    config.github.token === null ? null : 'token',
+    config.github.webhookSecret === null ? null : 'webhooks',
+  ].filter((entry): entry is string => entry !== null)
+  return offered.length === 0 ? 'not configured' : offered.join(', ')
+}
+
+function slackSummary(config: NodeConfig): string {
+  const offered = [
+    config.slack.botToken === null ? null : 'bot token',
+    config.slack.signingSecret === null ? null : 'interactivity',
+    config.slack.channelId === null ? null : 'announcements',
+  ].filter((entry): entry is string => entry !== null)
+  return offered.length === 0 ? 'not configured' : offered.join(', ')
+}
+
+export { type GitHubConfig, type NodeConfig, loadConfig } from './config.js'
 export { buildContainer } from './container.js'

@@ -1,5 +1,4 @@
-import { SecretDecryptError } from '@sainte-beuve/kernel'
-import { base64url, base64urlToBytes } from './encoding.js'
+import { base64url, base64urlToBytes, SecretDecryptError } from '@sainte-beuve/kernel'
 
 /**
  * The envelope `WebCryptoSecretCipher` writes, and the only place that knows its

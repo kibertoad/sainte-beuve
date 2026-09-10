@@ -1,6 +1,7 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
 import { getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../container.js'
+import { resolveChat } from '../integrations/resolve.js'
 import { scheduleNextReminder } from './schedule.js'
 
 /**
@@ -52,12 +53,12 @@ async function deliver(
     await container.repositories.reminders.updateStatus(reminder.id, 'cancelled')
     return 'skipped'
   }
-  const { chat } = container
+  const chat = await resolveChat(container)
   if (chat === null) return fail(container, reminder, 'chat is not configured for this deployment')
   const target = await resolveTarget(container, reminder)
   if (target === null) return fail(container, reminder, unresolvedTargetReason(reminder))
   try {
-    await chat.sendReminder(reminder, review, target)
+    await chat.gateway.sendReminder(reminder, review, target)
     return await markSent(container, reminder, review)
   } catch (err) {
     return fail(container, reminder, getErrorMessage(err))
@@ -107,7 +108,7 @@ async function markSent(
 
 /** A DM goes to the reviewer's Slack id; anything else goes to the announcement channel. */
 async function resolveTarget(container: AppContainer, reminder: Reminder): Promise<string | null> {
-  if (reminder.channel !== 'slack_dm') return container.announcementChannelId
+  if (reminder.channel !== 'slack_dm') return container.slack.announcementChannelId
   if (reminder.reviewerId === null) return null
   const reviewer = await container.repositories.reviewers.getById(reminder.reviewerId)
   return reviewer?.slackUserId ?? null

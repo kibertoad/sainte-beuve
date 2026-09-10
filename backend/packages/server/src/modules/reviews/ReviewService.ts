@@ -7,7 +7,9 @@ import type {
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
 import { isSameGithubLogin, selectReviewers } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { resolveVcs } from '../../integrations/resolve.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
+import { announceReview } from './announce.js'
 
 /**
  * Review-request use cases: register a pull request, hand it to reviewers, move it
@@ -46,7 +48,49 @@ export class ReviewService {
       dueAt: input.dueAt,
     })
     await scheduleNextReminder(this.container, review)
+    await announceReview(this.container, review)
     return review
+  }
+
+  /**
+   * The review request for a pull request, creating it if this is the first we
+   * have heard of it.
+   *
+   * The idempotent twin of `create`, for the callers that are not a person
+   * clicking a button: GitHub redelivers, a webhook fires for `opened` and again
+   * when a label lands, and both have to converge on one row rather than on a
+   * 409. `created` is returned because the two cases read differently to whoever
+   * asked (a bot reply says "tracked" or "already tracked"), and because only the
+   * first one is worth announcing.
+   */
+  async track(input: CreateReviewRequest): Promise<{ review: ReviewRequest; created: boolean }> {
+    const existing = await this.container.repositories.reviews.getByPullRequest(input.pullRequest)
+    if (existing !== null) return { review: existing, created: false }
+    return { review: await this.create(input), created: true }
+  }
+
+  /**
+   * Put one named person on the hook, rather than asking the router to pick.
+   *
+   * This is what "I will take it" means, from a Slack button or a pull-request
+   * comment. It deliberately skips the skill gate the router applies: somebody
+   * volunteering has made a judgement about their own competence that a label map
+   * is not in a position to overrule.
+   */
+  async claim(reviewId: string, reviewerId: string): Promise<ReviewRequest> {
+    const { repositories, clock } = this.container
+    const review = assertFound(
+      await repositories.reviews.getById(reviewId),
+      `No review request ${reviewId}`,
+    )
+    const reviewer = assertFound(
+      await repositories.reviewers.getById(reviewerId),
+      `No reviewer ${reviewerId}`,
+    )
+    if (review.assignedReviewerIds.includes(reviewerId)) return review
+    const updated = await this.recordAssignment(review, [reviewerId], clock.now())
+    await this.mirrorToVcs(updated, [reviewer.githubLogin])
+    return updated
   }
 
   async assign(
@@ -145,11 +189,13 @@ export class ReviewService {
    * silently.
    */
   private async mirrorToVcs(review: ReviewRequest, logins: (string | null)[]): Promise<void> {
-    const { vcs, logger } = this.container
+    const { logger } = this.container
     const known = logins.filter((login): login is string => login !== null)
-    if (vcs === null || known.length === 0) return
+    if (known.length === 0) return
+    const vcs = await resolveVcs(this.container)
+    if (vcs === null) return
     try {
-      await vcs.requestReviewers(review.pullRequest, known)
+      await vcs.gateway.requestReviewers(review.pullRequest, known)
     } catch (err) {
       logger.warn({ err, reviewId: review.id }, 'could not mirror the assignment to the PR')
     }

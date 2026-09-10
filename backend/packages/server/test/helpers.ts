@@ -4,12 +4,13 @@ import type {
   Reviewer,
   ReviewRequest,
 } from '@sainte-beuve/contracts'
-import type { Logger } from '@sainte-beuve/kernel'
+import type { ChatGateway, GatewayFactory, Logger, VcsGateway } from '@sainte-beuve/kernel'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
 import type { Hono } from 'hono'
 import { expect } from 'vitest'
 import { createApp } from '../src/app.js'
 import { type AppContainer, createContainer } from '../src/container.js'
+import { secretsFrom } from '../src/crypto/WebCryptoSecretCipher.js'
 import type { AppEnv } from '../src/http/env.js'
 
 /** A logger that keeps quiet unless a test wants to read what was logged. */
@@ -43,7 +44,20 @@ export interface TestHarness {
   clock: ReturnType<typeof fixedClock>
 }
 
-export function buildHarness(overrides: Partial<AppContainer> = {}): TestHarness {
+export interface HarnessOptions {
+  /**
+   * The deployment's encryption key, base64. Wires the cipher AND the state
+   * signer from it, both against the harness clock, which is what a connect
+   * round trip needs: the state is minted at the harness's "now", so a signer
+   * reading real time would treat it as expired the moment it is presented.
+   */
+  encryptionKey?: string
+}
+
+export function buildHarness(
+  overrides: Partial<AppContainer> = {},
+  options: HarnessOptions = {},
+): TestHarness {
   const clock = fixedClock()
   const container: AppContainer = {
     ...createContainer({
@@ -53,10 +67,78 @@ export function buildHarness(overrides: Partial<AppContainer> = {}): TestHarness
       ids: sequentialIds(),
       // A fixed draw so an assertion can name the reviewer the router picked.
       random: () => 0,
+      secrets:
+        options.encryptionKey === undefined
+          ? null
+          : secretsFrom({
+              masterKeyBase64: options.encryptionKey,
+              logger: silentLogger(),
+              clock,
+            }),
     }),
     ...overrides,
   }
   return { app: createApp({ resolveContainer: () => container }), container, clock }
+}
+
+/**
+ * A gateway factory over whatever a case cares about.
+ *
+ * Every member is optional and the defaults throw, because a case that stores a
+ * Slack token and asserts on GitHub should fail loudly rather than pass against
+ * a gateway that quietly does nothing. `vcsAsApp` and `githubSignIn` default to
+ * NULL rather than throwing: absent is a real deployment state for both, and it
+ * is the state most cases want.
+ */
+export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFactory {
+  return {
+    chat: () => {
+      throw new Error('this case wired no chat gateway')
+    },
+    vcsFromToken: () => {
+      throw new Error('this case wired no VCS gateway')
+    },
+    vcsAsApp: null,
+    aiReview: () => null,
+    githubSignIn: null,
+    ...overrides,
+  }
+}
+
+/** A VCS gateway that records what it was asked to do and answers nothing. */
+export function recordingVcs(): VcsGateway & {
+  comments: { body: string; number: number }[]
+  requested: string[][]
+} {
+  const comments: { body: string; number: number }[] = []
+  const requested: string[][] = []
+  return {
+    comments,
+    requested,
+    requestReviewers: async (pr, logins) => {
+      requested.push(logins)
+      void pr
+    },
+    comment: async (pr, body) => {
+      comments.push({ body, number: pr.number })
+    },
+    identify: async () => 'sainte-beuve-bot',
+  }
+}
+
+/** A chat gateway that records what it posted where. */
+export function recordingChat(): ChatGateway & { posted: { target: string; kind: string }[] } {
+  const posted: { target: string; kind: string }[] = []
+  return {
+    posted,
+    announceReview: async (_review, channelId) => {
+      posted.push({ target: channelId, kind: 'announcement' })
+      return { messageId: 'ts-1' }
+    },
+    sendReminder: async (reminder, _review, target) => {
+      posted.push({ target, kind: reminder.kind })
+    },
+  }
 }
 
 function json(method: string, path: string, body: unknown): Request {
@@ -72,6 +154,16 @@ export const patch = (path: string, body: unknown) => json('PATCH', path, body)
 export const put = (path: string, body: unknown) => json('PUT', path, body)
 export const del = (path: string): Request =>
   new Request(`http://localhost${path}`, { method: 'DELETE' })
+export const get = (path: string): Request => new Request(`http://localhost${path}`)
+
+/** A form-encoded POST, which is the only shape Slack sends. */
+export function form(path: string, body: string, headers: Record<string, string> = {}): Request {
+  return new Request(`http://localhost${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
+    body,
+  })
+}
 
 /** The pull request every suite tracks, unless it needs a second one. */
 export const PR: CreateReviewRequestInput['pullRequest'] = {

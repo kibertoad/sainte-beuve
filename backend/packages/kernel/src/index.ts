@@ -15,6 +15,7 @@ export {
   ValidationError,
 } from './domain/errors.js'
 export { DEFAULT_REMINDER_POLICY, type EpochMs, formatPullRequest } from './domain/types.js'
+export { base64url, base64urlText, base64urlToBytes, timingSafeEqual } from './encoding.js'
 export {
   isSecretDecryptError,
   type SecretCipher,
@@ -27,7 +28,9 @@ export type {
   AiReviewHandle,
   AiReviewReport,
   ChatGateway,
+  GatewayFactory,
   VcsGateway,
+  VcsIdentityGateway,
 } from './ports/gateways.js'
 export type {
   AiReviewRunRepository,
@@ -38,6 +41,7 @@ export type {
   ReviewRequestRepository,
   StoredIntegrationToken,
 } from './ports/repositories.js'
+export type { RoundTripState, StateSigner } from './ports/state.js'
 export {
   type Clock,
   type IdGenerator,

@@ -22,6 +22,9 @@ describe('integrationTokenStatusSchema', () => {
       'unreadableReason',
       'inUse',
       'hint',
+      // `subject` names the ACCOUNT a credential belongs to, which is a fact a
+      // screen needs and the credential itself is not.
+      'subject',
       'updatedAt',
     ])
   })
@@ -34,6 +37,7 @@ describe('integrationTokenStatusSchema', () => {
         unreadableReason: null,
         inUse: false,
         hint: null,
+        subject: null,
         updatedAt: null,
       }),
     ).toThrow()

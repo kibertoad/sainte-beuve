@@ -4,6 +4,8 @@ import { cors } from 'hono/cors'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
 import { errorBody, handleError } from './http/errors.js'
+import { connectController } from './modules/connections/ConnectController.js'
+import { connectionsController } from './modules/connections/ConnectionsController.js'
 import { healthController } from './modules/health/HealthController.js'
 import { reviewerController } from './modules/reviewers/ReviewerController.js'
 import { reviewController } from './modules/reviews/ReviewController.js'
@@ -18,9 +20,11 @@ import { webhookController } from './modules/webhooks/WebhookController.js'
  * from growing separate route tables, and it is why a Worker can build this app
  * ONCE per isolate rather than once per request.
  *
- * The API is versioned under `/api/v1` from the first commit. The webhook routes sit
- * OUTSIDE it deliberately: their URLs are registered in GitHub and Slack by hand, so
- * they must survive an API version bump.
+ * The API is versioned under `/api/v1` from the first commit. Two groups of routes
+ * sit OUTSIDE it deliberately, and for the same reason: the webhook paths are
+ * registered in a GitHub App and a Slack app by hand, and the connect callbacks
+ * are typed into a GitHub App's settings. Both have to survive an API version
+ * bump. See `@sainte-beuve/contracts/routes/webhooks`.
  */
 export interface RequestScope {
   /** The incoming request, for a facade that keys its container off a host or a header. */
@@ -97,9 +101,11 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
 
   app.route('/', healthController())
   app.route('/', webhookController())
+  app.route('/', connectController())
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
   app.route('/api/v1', settingsController())
+  app.route('/api/v1', connectionsController())
 
   app.notFound((c) => c.json(errorBody('not_found', `No route for ${c.req.path}`), 404))
   app.onError(handleError)

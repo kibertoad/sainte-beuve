@@ -54,7 +54,10 @@ describe('reminder tick', () => {
 
   beforeEach(() => {
     chat = recordingChat()
-    harness = buildHarness({ chat, announcementChannelId: 'C-reviews' })
+    harness = buildHarness({
+      chat,
+      slack: { signingSecret: null, announcementChannelId: 'C-reviews' },
+    })
   })
 
   it('chases an unclaimed review in the channel once its wait is up', async () => {

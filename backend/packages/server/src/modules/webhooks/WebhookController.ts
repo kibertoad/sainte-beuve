@@ -1,43 +1,43 @@
+import { GITHUB_WEBHOOK_PATH, SLACK_WEBHOOK_PATH } from '@sainte-beuve/contracts'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { errorBody } from '../../http/errors.js'
+import { GitHubWebhookService } from './GitHubWebhookService.js'
+import { SlackWebhookService } from './SlackWebhookService.js'
 
 /**
  * Inbound webhooks from GitHub and Slack.
  *
- * PLACEHOLDER: the routes exist, are mounted, and answer honestly; the handlers
- * are not wired to the services yet. They are here from the first commit because
- * their SHAPE is load-bearing for the deployment story: a GitHub App and a Slack
- * app both need a stable callback URL registered before anything can be tested
- * end to end, and adding a path later means re-registering both.
+ * Both routes read the RAW body, because both signature schemes are computed
+ * over the exact bytes sent and parsing first re-serialises them. That is the
+ * only thing this controller does beyond handing over: the verification, the
+ * interpretation and the writes belong to the two services, so the shape of a
+ * refusal is decided in one place with every other error.
  *
- * Both routes read the RAW body, because both signature schemes are computed over
- * the exact bytes sent. Parsing first and re-serializing changes them.
- *
- * What lands here next (docs/implementation-plan.md, slice 3):
- *   - GitHub: `pull_request` opens/closes a review request, `pull_request_review`
- *     resolves it, `check_suite` gates the AI review trigger.
- *   - Slack: the `/review` slash command and the assign/snooze action buttons.
+ * They sit OUTSIDE `/api/v1`: their URLs are registered in a GitHub App and a
+ * Slack app by hand, so they have to survive an API version bump.
  */
 export function webhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.post('/webhooks/github', async (c) => {
-    const rawBody = await c.req.text()
-    c.get('container').logger.info(
-      { event: c.req.header('X-GitHub-Event') ?? 'unknown', bytes: rawBody.length },
-      'github webhook received (not yet handled)',
-    )
-    return c.json(errorBody('not_implemented', 'GitHub webhook intake is not wired yet'), 501)
+  app.post(GITHUB_WEBHOOK_PATH, async (c) => {
+    const outcome = await new GitHubWebhookService(c.get('container')).handle({
+      event: c.req.header('X-GitHub-Event') ?? 'unknown',
+      rawBody: await c.req.text(),
+      signature: c.req.header('X-Hub-Signature-256') ?? null,
+    })
+    // 202, not 200: what the delivery asked for has been done, and GitHub's
+    // delivery log is not the place to read a review board out of. The outcome
+    // rides along because it is what makes a redelivery from that log legible.
+    return c.json(outcome, 202)
   })
 
-  app.post('/webhooks/slack', async (c) => {
-    const rawBody = await c.req.text()
-    c.get('container').logger.info(
-      { bytes: rawBody.length },
-      'slack webhook received (not yet handled)',
-    )
-    return c.json(errorBody('not_implemented', 'Slack interactivity is not wired yet'), 501)
+  app.post(SLACK_WEBHOOK_PATH, async (c) => {
+    const reply = await new SlackWebhookService(c.get('container')).handle({
+      rawBody: await c.req.text(),
+      timestamp: c.req.header('X-Slack-Request-Timestamp') ?? null,
+      signature: c.req.header('X-Slack-Signature') ?? null,
+    })
+    return c.json(reply, 200)
   })
 
   return app

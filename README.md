@@ -8,6 +8,11 @@ answer. GitHub is where a review starts; Slack is where the nudge arrives; the A
 review runs on a [cat-factory](https://github.com/kibertoad/cat-factory) instance,
 local or centralized.
 
+Label a pull request `needs-review` and it lands on the board with a reviewer on it.
+Mention the bot in a comment and it answers there. Take the review from a Slack
+button, or snooze it with `/review snooze`. How all of that is wired, and what has
+to be registered where, is [docs/integrations.md](./docs/integrations.md).
+
 ## Try it in one command
 
 ```bash
@@ -32,7 +37,7 @@ a reduced build.
 | `backend/packages/kernel`             | `@sainte-beuve/kernel`             | Domain errors and port interfaces                               |
 | `backend/packages/reviewers`          | `@sainte-beuve/reviewers`          | Reviewer selection (pure)                                       |
 | `backend/packages/reminders`          | `@sainte-beuve/reminders`          | Reminder cadence and escalation (pure)                          |
-| `backend/packages/integrations`       | `@sainte-beuve/integrations`       | GitHub and Slack adapters                                       |
+| `backend/packages/integrations`       | `@sainte-beuve/integrations`       | GitHub and Slack adapters, and the protocols they speak         |
 | `backend/packages/ai-review`          | `@sainte-beuve/ai-review`          | The cat-factory gateway                                         |
 | `backend/packages/persistence-memory` | `@sainte-beuve/persistence-memory` | In-memory repositories                                          |
 | `backend/packages/server`             | `@sainte-beuve/server`             | The runtime-neutral Hono app                                    |
@@ -46,7 +51,25 @@ a reduced build.
 | `deploy/frontend`                     | `@sainte-beuve/deploy-frontend`    | Example Cloudflare Pages deployment                             |
 
 Read [docs/implementation-plan.md](./docs/implementation-plan.md) for what is built,
-what is a placeholder, and what lands next.
+what is a placeholder, and what lands next, and
+[docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design.
+
+## Connecting GitHub and Slack
+
+Three ways to connect GitHub, and they are not alternatives to pick between at
+deploy time: whichever are configured are offered on the Configuration screen, and
+the strongest one present is what calls are made with.
+
+- a **GitHub App**, which mints an installation token per repository and is the
+  only credential that is not a person's;
+- **Sign in with GitHub**, which stores the token a live authorisation produced;
+- a **personal access token**, pasted on the Configuration screen or set as
+  `GITHUB_TOKEN`.
+
+Slack needs a bot token to post, and separately a signing secret to trust the
+`/review` command and the message buttons coming back. Every URL that has to be
+registered is shown on the Configuration screen with this deployment's own base
+URL filled in. Full setup: [docs/integrations.md](./docs/integrations.md).
 
 ## Hosting it
 
