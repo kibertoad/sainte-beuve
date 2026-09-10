@@ -16,6 +16,13 @@ import type {
   ReviewRequestRepository,
   StoredIntegrationToken,
 } from '@sainte-beuve/kernel'
+import { clone, patched } from './clone.js'
+import {
+  InMemoryAttentionRepository,
+  InMemoryIdentityRepository,
+  InMemoryProjectRepository,
+  InMemoryReviewCommitmentRepository,
+} from './workspace-stores.js'
 
 /**
  * In-memory implementations of the repository ports.
@@ -26,24 +33,9 @@ import type {
  * keeps them coarse enough for D1 and Postgres to implement without an N+1. The
  * durable adapters land in slice 5; see docs/implementation-plan.md.
  *
- * Every read returns a COPY. A caller that mutates what it got back must not
- * silently rewrite the store, because no durable adapter would behave that way and
- * a test passing against this one would then fail against those.
+ * Every read returns a COPY (see `clone.ts` for why). The workspace stores live
+ * in `workspace-stores.ts`; the split is a size budget, not a boundary.
  */
-
-function clone<T>(value: T): T {
-  return structuredClone(value)
-}
-
-/**
- * Apply a patch to a stored row. Cloned on the way IN as well as out: a patch
- * carrying an array or an object would otherwise be held by reference, and a caller
- * that mutates it afterwards would rewrite the store, which no durable adapter
- * would let it do. The id is never patchable.
- */
-function patched<T extends { id: string }>(row: T, patch: Partial<T>): T {
-  return clone({ ...row, ...patch, id: row.id })
-}
 
 export class InMemoryReviewerRepository implements ReviewerRepository {
   private readonly rows = new Map<string, Reviewer>()
@@ -233,5 +225,9 @@ export function createInMemoryRepositories(): Repositories {
     reminders: new InMemoryReminderRepository(),
     aiReviewRuns: new InMemoryAiReviewRunRepository(),
     integrationTokens: new InMemoryIntegrationTokenRepository(),
+    projects: new InMemoryProjectRepository(),
+    identities: new InMemoryIdentityRepository(),
+    attention: new InMemoryAttentionRepository(),
+    commitments: new InMemoryReviewCommitmentRepository(),
   }
 }

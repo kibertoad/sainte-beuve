@@ -53,6 +53,21 @@ export interface WorkerEnv {
   GITHUB_LABEL_AI_REVIEW?: string
   GITHUB_LABEL_SKILL_PREFIX?: string
 
+  /**
+   * GitLab. One base URL configures the whole connection, because a GitLab
+   * install serves its API and its OAuth endpoints under the same root; that is
+   * the difference from GitHub, where the two live on separate hosts. Defaults
+   * to gitlab.com.
+   */
+  GITLAB_BASE_URL?: string
+  /** A personal or group access token. There is no App equivalent on GitLab. */
+  GITLAB_TOKEN?: string
+  /** The OAuth application behind "Sign in with GitLab". */
+  GITLAB_OAUTH_CLIENT_ID?: string
+  GITLAB_OAUTH_CLIENT_SECRET?: string
+  /** Scopes the sign-in asks for. `read_api` by default, which is what listing needs. */
+  GITLAB_OAUTH_SCOPE?: string
+
   /** Slack. */
   SLACK_BOT_TOKEN?: string
   SLACK_SIGNING_SECRET?: string

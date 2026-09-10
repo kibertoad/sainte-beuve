@@ -1,10 +1,20 @@
 import type {
-  ConnectStart,
+  AttentionRequest,
   Connections,
+  ConnectStart,
+  CreateAttentionRequestInput,
+  CreateProjectInput,
   IntegrationId,
   IntegrationTokenStatus,
+  Project,
+  PullRequestRef,
+  ReviewCommitment,
   Reviewer,
   ReviewRequest,
+  UpdateProject,
+  VcsProvider,
+  Viewer,
+  Workspace,
 } from '@sainte-beuve/contracts'
 
 /**
@@ -31,6 +41,10 @@ export function useSainteBeuveApi() {
     return $fetch<T>(`${apiBase}/api/v1${path}`, { method: 'POST', body })
   }
 
+  async function patch<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    return $fetch<T>(`${apiBase}/api/v1${path}`, { method: 'PATCH', body })
+  }
+
   async function put<T>(path: string, body: Record<string, unknown>): Promise<T> {
     return $fetch<T>(`${apiBase}/api/v1${path}`, { method: 'PUT', body })
   }
@@ -41,6 +55,30 @@ export function useSainteBeuveApi() {
 
   return {
     apiBase,
+    /** Where an `EventSource` attaches. Not `$fetch`: the browser opens it itself. */
+    attentionStreamUrl: `${apiBase}/api/v1/attention/stream`,
+
+    getViewer: () => get<Viewer>('/me'),
+    getWorkspace: () => get<Workspace>('/workspace'),
+
+    listProjects: () => get<{ projects: Project[] }>('/projects'),
+    addProject: (project: CreateProjectInput) =>
+      post<Project>('/projects', project as unknown as Record<string, unknown>),
+    updateProject: (projectId: string, patchBody: UpdateProject) =>
+      patch<Project>(`/projects/${projectId}`, patchBody as Record<string, unknown>),
+    removeProject: (projectId: string) => del<{ projects: Project[] }>(`/projects/${projectId}`),
+
+    listAttention: () => get<{ requests: AttentionRequest[] }>('/attention'),
+    requestAttention: (request: CreateAttentionRequestInput) =>
+      post<AttentionRequest>('/attention', request as unknown as Record<string, unknown>),
+    commitToAttention: (attentionId: string) =>
+      post<AttentionRequest>(`/attention/${attentionId}/commit`, {}),
+    cancelAttention: (attentionId: string) => del<AttentionRequest>(`/attention/${attentionId}`),
+    commitToPullRequest: (pullRequest: PullRequestRef, title: string) =>
+      post<ReviewCommitment>('/commitments', { pullRequest, title }),
+    releaseCommitment: (commitmentId: string) =>
+      del<{ commitments: ReviewCommitment[] }>(`/commitments/${commitmentId}`),
+
     listReviews: () => get<{ reviews: ReviewRequest[] }>('/reviews'),
     listReviewers: () => get<{ reviewers: Reviewer[] }>('/reviewers'),
     assignReviewers: (reviewId: string, count = 1) =>
@@ -50,6 +88,7 @@ export function useSainteBeuveApi() {
       ),
     requestAiReview: (reviewId: string, instructions: string | null = null) =>
       post<{ id: string; status: string }>(`/reviews/${reviewId}/ai-review`, { instructions }),
+
     getIntegrationSettings: () =>
       get<{ integrations: IntegrationTokenStatus[] }>('/settings/integrations'),
     // A token goes out and never comes back: what returns is the integration's
@@ -66,8 +105,10 @@ export function useSainteBeuveApi() {
      * a poll happened to produce.
      */
     startGitHubAppInstall: () => get<ConnectStart>('/settings/connections/github/app-install'),
-    startGitHubSignIn: () => get<ConnectStart>('/settings/connections/github/sign-in'),
-    disconnectGitHubSignIn: () => del<Connections>('/settings/connections/github/sign-in'),
+    startSignIn: (provider: VcsProvider) =>
+      get<ConnectStart>(`/settings/connections/${provider}/sign-in`),
+    disconnectSignIn: (provider: VcsProvider) =>
+      del<Connections>(`/settings/connections/${provider}/sign-in`),
   }
 }
 

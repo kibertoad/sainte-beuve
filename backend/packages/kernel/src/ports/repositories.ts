@@ -1,8 +1,14 @@
 import type {
   AiReviewRun,
+  AttentionRequest,
+  AttentionStatus,
+  IdentityProvider,
+  LinkedIdentity,
+  Project,
   Reminder,
   ReminderStatus,
   Reviewer,
+  ReviewCommitment,
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
@@ -92,6 +98,73 @@ export interface AiReviewRunRepository {
   update(runId: string, patch: Partial<AiReviewRun>): Promise<AiReviewRun | null>
 }
 
+/** The projects a workspace sweeps. Keyed by id; unique on `(provider, owner, repo)`. */
+export interface ProjectRepository {
+  list(): Promise<Project[]>
+  getById(projectId: string): Promise<Project | null>
+  /** The registered project for a repository, so registering it twice updates one row. */
+  getByRef(ref: { provider: string; owner: string; repo: string }): Promise<Project | null>
+  create(project: Project): Promise<Project>
+  update(projectId: string, patch: Partial<Project>): Promise<Project | null>
+  delete(projectId: string): Promise<void>
+}
+
+/**
+ * The accounts a person is known by on the source-control hosts, keyed on
+ * `(provider, subject)`.
+ *
+ * A side table rather than columns on the reviewer, for the reason the identity
+ * contract gives: one person holds several, and the handle a host shows is not
+ * the thing to key on. The `reviewerId` is the canonical person.
+ */
+export interface IdentityRepository {
+  /** The person behind one external account, or null. */
+  findReviewerId(provider: IdentityProvider, subject: string): Promise<string | null>
+  listForReviewer(reviewerId: string): Promise<LinkedIdentity[]>
+  /**
+   * Attach an account to a person, and answer whose it is NOW.
+   *
+   * The key `(provider, subject)` is claimed by the first caller and the answer
+   * is the reviewer holding it, which is not always the one that was passed in.
+   * That return value is the store's uniqueness rule made usable: two first
+   * requests that both found no row and both created one are how a directory
+   * forks into two people with one account between them, and the loser needs to
+   * be told which row won rather than keeping its own.
+   *
+   * A caller that already owns the key refreshes the handle with it, so the
+   * write is an upsert for its own row and a no-op for anybody else's.
+   */
+  link(reviewerId: string, identity: LinkedIdentity): Promise<string>
+}
+
+export interface AttentionRepository {
+  list(filter?: { status?: AttentionStatus[] }): Promise<AttentionRequest[]>
+  getById(attentionId: string): Promise<AttentionRequest | null>
+  create(request: AttentionRequest): Promise<AttentionRequest>
+  update(attentionId: string, patch: Partial<AttentionRequest>): Promise<AttentionRequest | null>
+}
+
+export interface ReviewCommitmentRepository {
+  listByReviewer(reviewerId: string): Promise<ReviewCommitment[]>
+  getById(commitmentId: string): Promise<ReviewCommitment | null>
+  /**
+   * What one person already promised about one pull request, so a second click
+   * is a no-op.
+   *
+   * The `provider` is part of the key, not decoration: `platform/api#12` on
+   * GitHub and `platform/api#12` on GitLab are two different changes, and a
+   * lookup that matched on the path alone would answer the second with the
+   * first, leave no commitment row for it, and put the wrong host's pull
+   * request on somebody's workspace.
+   */
+  find(
+    reviewerId: string,
+    pullRequest: { provider: string; owner: string; repo: string; number: number },
+  ): Promise<ReviewCommitment | null>
+  create(commitment: ReviewCommitment): Promise<ReviewCommitment>
+  delete(commitmentId: string): Promise<void>
+}
+
 /** The stores a runtime has to supply, handed to the services as one object. */
 export interface Repositories {
   reviewers: ReviewerRepository
@@ -99,4 +172,8 @@ export interface Repositories {
   reminders: ReminderRepository
   aiReviewRuns: AiReviewRunRepository
   integrationTokens: IntegrationTokenRepository
+  projects: ProjectRepository
+  identities: IdentityRepository
+  attention: AttentionRepository
+  commitments: ReviewCommitmentRepository
 }

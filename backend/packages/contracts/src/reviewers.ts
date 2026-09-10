@@ -1,14 +1,16 @@
 import * as v from 'valibot'
+import { NO_VCS_HANDLES, vcsHandlesSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // Reviewer wire contracts.
 //
-// A reviewer is a person the router may hand a pull request to. The row carries
-// the three things selection needs and nothing else: what they can review
-// (`skills`), whether they can review at all right now (`availability`), and how
-// much of the load they should take (`weight`). Identity is deliberately split
-// per system: a GitHub login and a Slack user id are different namespaces, and
-// a reviewer may be reachable in one without the other.
+// A reviewer is a person the router may hand a pull request to, and the
+// canonical person the workspace renders for. The row carries the three things
+// selection needs (what they can review, whether they can review at all right
+// now, and how much of the load they should take) plus how to reach them.
+// Identity is deliberately split per system: a handle on each source-control
+// host and a Slack user id are different namespaces, and a reviewer may be
+// reachable in one without the others.
 // ---------------------------------------------------------------------------
 
 /** A skill tag. Free-form on purpose: teams name their own areas ('typescript', 'payments'). */
@@ -26,10 +28,17 @@ export type ReviewerAvailability = v.InferOutput<typeof reviewerAvailabilitySche
 export const reviewerSchema = v.object({
   id: v.string(),
   displayName: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
-  /** VCS handle, e.g. a GitHub login. Null when the person is only reachable in chat. */
-  githubLogin: v.nullable(v.string()),
+  /** The person's handle on each host. Empty when they are only reachable in chat. */
+  handles: vcsHandlesSchema,
   /** Slack user id (`U…`), the address reminders are delivered to. */
   slackUserId: v.nullable(v.string()),
+  /**
+   * The team this person belongs to. Free-form, like a skill, and nullable
+   * because a directory is useful before anybody has drawn the org chart. It is
+   * a GATE rather than a label: an attention request can ask to stay inside the
+   * requester's own team, and a reviewer with no team is then outside everyone's.
+   */
+  team: v.nullable(v.string()),
   skills: v.array(skillSchema),
   availability: reviewerAvailabilitySchema,
   /**
@@ -44,11 +53,16 @@ export const reviewerSchema = v.object({
 })
 export type Reviewer = v.InferOutput<typeof reviewerSchema>
 
+// The object and array defaults below are FACTORIES. Valibot hands a plain
+// default value back by reference, so every row parsed without the field would
+// share one map and one array with every other, and the first caller to write
+// into what it was given would change the shape of rows it never saw.
 export const createReviewerSchema = v.object({
   displayName: reviewerSchema.entries.displayName,
-  githubLogin: v.optional(v.nullable(v.string()), null),
+  handles: v.optional(vcsHandlesSchema, () => ({ ...NO_VCS_HANDLES })),
   slackUserId: v.optional(v.nullable(v.string()), null),
-  skills: v.optional(v.array(skillSchema), []),
+  team: v.optional(v.nullable(v.string()), null),
+  skills: v.optional(v.array(skillSchema), () => []),
   availability: v.optional(reviewerAvailabilitySchema, 'available'),
   weight: v.optional(reviewerSchema.entries.weight, 1),
 })
@@ -63,8 +77,10 @@ export type CreateReviewerInput = v.InferInput<typeof createReviewerSchema>
 export const updateReviewerSchema = v.partial(
   v.object({
     displayName: reviewerSchema.entries.displayName,
-    githubLogin: v.nullable(v.string()),
+    /** Replaces the whole map: a patch naming one host clears the other. */
+    handles: vcsHandlesSchema,
     slackUserId: v.nullable(v.string()),
+    team: v.nullable(v.string()),
     skills: v.array(skillSchema),
     availability: reviewerAvailabilitySchema,
     weight: reviewerSchema.entries.weight,

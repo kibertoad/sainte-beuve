@@ -2,12 +2,19 @@ import { CatFactoryAiReviewGateway } from '@sainte-beuve/ai-review'
 import {
   createGatewayFactory,
   GitHubVcsGateway,
+  GitLabVcsGateway,
   SlackChatGateway,
   staticTokenSource,
 } from '@sainte-beuve/integrations'
 import type { AiReviewGateway, GatewayFactory, Logger } from '@sainte-beuve/kernel'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
-import { type AppContainer, createContainer, secretsFrom } from '@sainte-beuve/server'
+import {
+  type AppContainer,
+  createContainer,
+  type EnvironmentVcsGateways,
+  InMemoryAttentionBus,
+  secretsFrom,
+} from '@sainte-beuve/server'
 import { pino } from 'pino'
 import type { NodeConfig } from './config.js'
 
@@ -37,16 +44,13 @@ export function buildContainer(config: NodeConfig): AppContainer {
             botToken: config.slack.botToken,
             appBaseUrl: config.appBaseUrl,
           }),
-    vcs:
-      config.github.token === null
-        ? null
-        : new GitHubVcsGateway({
-            tokens: staticTokenSource(config.github.token),
-            baseUrl: config.github.baseUrl,
-          }),
+    vcs: environmentVcs(config),
     aiReview:
       config.catFactoryApiKey === null ? null : aiReviewFrom(config, config.catFactoryApiKey),
     gateways: gatewaysFor(config),
+    // Built once, with the container, because this facade is one process: every
+    // stream a page opens against it is on the same bus.
+    bus: new InMemoryAttentionBus(),
     secrets: secretsFrom({ masterKeyBase64: config.encryptionKey, logger }),
     github: {
       appSlug: config.github.appSlug,
@@ -62,11 +66,31 @@ export function buildContainer(config: NodeConfig): AppContainer {
   })
 }
 
+/** The environment's own credential per host: what a stored one takes precedence over. */
+function environmentVcs(config: NodeConfig): EnvironmentVcsGateways {
+  return {
+    github:
+      config.github.token === null
+        ? null
+        : new GitHubVcsGateway({
+            tokens: staticTokenSource(config.github.token),
+            baseUrl: config.github.baseUrl,
+          }),
+    gitlab:
+      config.gitlab.token === null
+        ? null
+        : new GitLabVcsGateway({ token: config.gitlab.token, baseUrl: config.gitlab.baseUrl }),
+  }
+}
+
 function gatewaysFor(config: NodeConfig): GatewayFactory {
   return createGatewayFactory({
-    githubApiBaseUrl: config.github.baseUrl,
-    githubApp: config.github.app,
-    githubOAuth: config.github.oauth,
+    github: {
+      apiBaseUrl: config.github.baseUrl,
+      app: config.github.app,
+      oauth: config.github.oauth,
+    },
+    gitlab: { baseUrl: config.gitlab.baseUrl, oauth: config.gitlab.oauth },
     appBaseUrl: config.appBaseUrl,
     aiReview: (apiKey) => aiReviewFrom(config, apiKey),
   })

@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import type {
-  GitHubAuthMethod,
-  GitHubConnection,
-  IntegrationTokenStatus,
-} from '@sainte-beuve/contracts'
+import type { IntegrationTokenStatus, VcsAuthMethod, VcsConnection } from '@sainte-beuve/contracts'
+import { signInCallbackPath, vcsDisplayName } from '@sainte-beuve/contracts'
 
-// How this deployment reaches GitHub. Three ways to connect, one of them in
-// force, and the card's whole job is to say WHICH: a screen that only reported
-// "GitHub: configured" would leave an operator with a stored token they cannot
-// tell is being shadowed by an App.
+// How this deployment reaches one source-control host. Several ways to
+// connect, one of them in force, and the card's whole job is to say WHICH: a
+// screen that only reported "GitHub: configured" would leave an operator with
+// a stored token they cannot tell is being shadowed by an App.
+//
+// One component for every host. What differs between them is data the API
+// already reports (`appInstallable`, `inboundIntake`, `availableMethods`), so a
+// third host renders here with no change.
 const props = defineProps<{
-  connection: GitHubConnection
+  connection: VcsConnection
   /** The pasted-token credential, so the card can offer that method too. */
   patStatus: IntegrationTokenStatus
   /** Where the API is served from, so the URLs to register can be shown. */
@@ -35,17 +36,19 @@ function clearDraft() {
 
 defineExpose({ clearDraft })
 
+const hostName = computed(() => vcsDisplayName(props.connection.provider))
+
 /**
  * What the deployment is authenticating as, in one line. The order the methods
- * win in is the API's (`githubAuthMethodSchema`), so this only has to render the
+ * win in is the API's (`vcsAuthMethodSchema`), so this only has to render the
  * answer rather than work it out.
  */
 const ACTIVE_LABEL = {
   app: 'Connected as the GitHub App',
   oauth: 'Signed in',
   pat: 'Using a personal access token',
-  environment: 'Using GITHUB_TOKEN from the deployment environment',
-} satisfies Record<GitHubAuthMethod, string>
+  environment: 'Using the token from the deployment environment',
+} satisfies Record<VcsAuthMethod, string>
 
 function lookup<T>(table: Record<string, T | undefined>, key: string): T | undefined {
   return table[key]
@@ -71,12 +74,14 @@ const offers = computed(() => ({
 }))
 
 /**
- * The two URLs a GitHub App has to be given. Shown rather than described,
- * because they are typed into a form on github.com by hand and a wrong one fails
- * silently: GitHub records a delivery nobody here ever sees.
+ * The URLs the host has to be given. Shown rather than described, because they
+ * are typed into a form on the host by hand and a wrong one fails silently: the
+ * host records a delivery nobody here ever sees.
  */
-const webhookUrl = computed(() => `${props.apiBase}/webhooks/github`)
-const callbackUrl = computed(() => `${props.apiBase}/connect/github/callback`)
+const webhookUrl = computed(() => `${props.apiBase}/webhooks/${props.connection.provider}`)
+const callbackUrl = computed(
+  () => `${props.apiBase}${signInCallbackPath(props.connection.provider)}`,
+)
 
 const shadowed = computed(
   () =>
@@ -87,7 +92,7 @@ const shadowed = computed(
 
 /**
  * What to do about a token that is stored and unread. Only a sign-in can be
- * dropped from this screen: an App and `GITHUB_TOKEN` are deployment
+ * dropped from this screen: an App and an environment token are deployment
  * configuration, so telling an operator to "disconnect" one names a button that
  * is not on the card.
  */
@@ -102,7 +107,7 @@ const shadowedAdvice = computed(() =>
   <UCard>
     <div class="flex items-start justify-between gap-4 mb-4">
       <div class="min-w-0">
-        <p class="font-medium">GitHub</p>
+        <p class="font-medium">{{ hostName }}</p>
         <p class="text-sm text-muted">
           Where a review starts, and where the verdict has to land. Pick whichever way of connecting
           suits the deployment: they are not exclusive, and the strongest one configured is the one
@@ -117,8 +122,8 @@ const shadowedAdvice = computed(() =>
       class="mb-4"
       color="warning"
       variant="subtle"
-      title="This deployment cannot hold a GitHub credential yet"
-      description="Storing one needs an encryption key: set SETTINGS_ENCRYPTION_KEY, or set GITHUB_TOKEN to reach GitHub straight from the environment."
+      :title="`This deployment cannot hold a ${hostName} credential yet`"
+      description="Storing one needs an encryption key: set SETTINGS_ENCRYPTION_KEY, or set the host's token on the deployment to reach it straight from the environment."
     />
 
     <div v-if="offers.app || offers.oauth" class="flex flex-wrap items-center gap-2 mb-4">
@@ -138,7 +143,7 @@ const shadowedAdvice = computed(() =>
         :loading="busy"
         @click="emit('signIn')"
       >
-        Sign in with GitHub
+        Sign in with {{ hostName }}
       </UButton>
       <UButton
         v-if="connection.activeMethod === 'oauth'"
@@ -166,8 +171,8 @@ const shadowedAdvice = computed(() =>
       ref="pat"
       :status="patStatus"
       :busy="busy"
-      placeholder="ghp_… or github_pat_…"
-      description="A personal access token. The weakest of the three: it is long-lived and carries whatever scopes the person who made it granted, which is why a GitHub App or a sign-in takes precedence over it."
+      :placeholder="connection.provider === 'github' ? 'ghp_… or github_pat_…' : 'glpat-…'"
+      description="A personal access token. The weakest way to connect: it is long-lived and carries whatever scopes the person who made it granted, which is why an app or a live sign-in takes precedence over it."
       @save="emit('savePat', $event)"
       @clear="emit('clearPat')"
     />
@@ -175,50 +180,56 @@ const shadowedAdvice = computed(() =>
     <USeparator class="my-4" />
 
     <div class="text-sm">
-      <p class="font-medium mb-1">What GitHub has to be told</p>
+      <p class="font-medium mb-1">What {{ hostName }} has to be told</p>
       <UAlert
-        v-if="!connection.webhooksReady"
+        v-if="connection.inboundIntake && !connection.webhooksReady"
         class="mb-3"
         color="warning"
         variant="subtle"
         title="Inbound deliveries are refused"
-        description="Nothing arriving from GitHub can be verified until GITHUB_WEBHOOK_SECRET matches the secret set on the App or repository webhook. Every delivery is answered 503 until then."
+        description="Nothing arriving from the host can be verified until GITHUB_WEBHOOK_SECRET matches the secret set on the App or repository webhook. Every delivery is answered 503 until then."
       />
       <dl class="grid grid-cols-[10rem_1fr] gap-x-4 gap-y-1 text-muted">
-        <dt>Webhook URL</dt>
-        <dd>
-          <code>{{ webhookUrl }}</code>
-        </dd>
+        <template v-if="connection.inboundIntake">
+          <dt>Webhook URL</dt>
+          <dd>
+            <code>{{ webhookUrl }}</code>
+          </dd>
+        </template>
         <dt>Callback URL</dt>
         <dd>
           <code>{{ callbackUrl }}</code>
         </dd>
-        <dt>Bot mention</dt>
-        <dd>
-          <code v-if="connection.botLogin">@{{ connection.botLogin }} review</code>
-          <span v-else>not configured (set GITHUB_BOT_LOGIN to answer mentions)</span>
-        </dd>
+        <template v-if="connection.inboundIntake">
+          <dt>Bot mention</dt>
+          <dd>
+            <code v-if="connection.botLogin">@{{ connection.botLogin }} review</code>
+            <span v-else>not configured (set GITHUB_BOT_LOGIN to answer mentions)</span>
+          </dd>
+        </template>
       </dl>
     </div>
 
-    <USeparator class="my-4" />
+    <template v-if="connection.inboundIntake">
+      <USeparator class="my-4" />
 
-    <div class="text-sm">
-      <p class="font-medium mb-1">Labels that do something</p>
-      <dl class="grid grid-cols-[10rem_1fr] gap-x-4 gap-y-1 text-muted">
-        <dt>
-          <code>{{ connection.labels.review }}</code>
-        </dt>
-        <dd>opens a review request and finds it a reviewer</dd>
-        <dt>
-          <code>{{ connection.labels.aiReview }}</code>
-        </dt>
-        <dd>hands the pull request to cat-factory</dd>
-        <dt>
-          <code>{{ connection.labels.skillPrefix }}payments</code>
-        </dt>
-        <dd>makes <code>payments</code> a skill the reviewer must have</dd>
-      </dl>
-    </div>
+      <div class="text-sm">
+        <p class="font-medium mb-1">Labels that do something</p>
+        <dl class="grid grid-cols-[10rem_1fr] gap-x-4 gap-y-1 text-muted">
+          <dt>
+            <code>{{ connection.labels.review }}</code>
+          </dt>
+          <dd>opens a review request and finds it a reviewer</dd>
+          <dt>
+            <code>{{ connection.labels.aiReview }}</code>
+          </dt>
+          <dd>hands the pull request to cat-factory</dd>
+          <dt>
+            <code>{{ connection.labels.skillPrefix }}payments</code>
+          </dt>
+          <dd>makes <code>payments</code> a skill the reviewer must have</dd>
+        </dl>
+      </div>
+    </template>
   </UCard>
 </template>

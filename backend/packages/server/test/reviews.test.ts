@@ -11,6 +11,9 @@ import {
   post,
 } from './helpers.js'
 
+/** The header the CORS cases are all about. */
+const ALLOW_ORIGIN = 'access-control-allow-origin'
+
 describe('review board API', () => {
   let harness: TestHarness
 
@@ -29,7 +32,7 @@ describe('review board API', () => {
       status: 'ok',
       capabilities: {
         chat: false,
-        vcs: false,
+        vcs: { github: false, gitlab: false },
         aiReview: false,
         secrets: false,
         githubWebhooks: false,
@@ -64,12 +67,12 @@ describe('review board API', () => {
   it('assigns a reviewer with the required skill and never the author', async () => {
     const author = await addReviewer(harness, {
       displayName: 'Author',
-      githubLogin: 'author',
+      handles: { github: 'author' },
       skills: ['typescript'],
     })
     const peer = await addReviewer(harness, {
       displayName: 'Peer',
-      githubLogin: 'peer',
+      handles: { github: 'peer' },
       skills: ['typescript'],
     })
     const review = await openReview(harness, { requiredSkills: ['typescript'] })
@@ -88,7 +91,11 @@ describe('review board API', () => {
   })
 
   it('says why it could not fill the request instead of assigning the wrong person', async () => {
-    await addReviewer(harness, { displayName: 'Gopher', githubLogin: 'gopher', skills: ['go'] })
+    await addReviewer(harness, {
+      displayName: 'Gopher',
+      handles: { github: 'gopher' },
+      skills: ['go'],
+    })
     const review = await openReview(harness, { requiredSkills: ['rust'] })
 
     const res = await assignReviewer(harness, review.id)
@@ -110,7 +117,10 @@ describe('review board API', () => {
   })
 
   it('never assigns the author, whatever case their login is spelled in', async () => {
-    const author = await addReviewer(harness, { displayName: 'Author', githubLogin: 'kibertoad' })
+    const author = await addReviewer(harness, {
+      displayName: 'Author',
+      handles: { github: 'kibertoad' },
+    })
     const review = await openReview(harness, { authorLogin: 'Kibertoad' })
 
     const body = (await (await assignReviewer(harness, review.id)).json()) as {
@@ -123,7 +133,10 @@ describe('review board API', () => {
   })
 
   it('releases a reviewer once, however many times the same close is replayed', async () => {
-    const reviewer = await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    const reviewer = await addReviewer(harness, {
+      displayName: 'Peer',
+      handles: { github: 'peer' },
+    })
     const review = await openReview(harness)
     await assignReviewer(harness, review.id)
     expect(await outstanding(harness, reviewer.id)).toBe(1)
@@ -137,7 +150,10 @@ describe('review board API', () => {
   })
 
   it('puts the reviewers back on the hook when a closed review is reopened', async () => {
-    const reviewer = await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    const reviewer = await addReviewer(harness, {
+      displayName: 'Peer',
+      handles: { github: 'peer' },
+    })
     const review = await openReview(harness)
     await assignReviewer(harness, review.id)
     await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'closed' }))
@@ -155,6 +171,25 @@ describe('review board API', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
     // A wildcard and credentials are invalid together, so the pair is never sent.
     expect(res.headers.get('access-control-allow-credentials')).toBeNull()
+  })
+
+  it('does not let the wildcard cover a write', async () => {
+    // No route carries a session yet, so `*` on a write would let any page an
+    // operator happens to visit empty this deployment's project registry.
+    const preflight = (origin: string) =>
+      harness.app.fetch(
+        new Request('http://localhost/api/v1/projects/p-1', {
+          method: 'OPTIONS',
+          headers: { origin, 'access-control-request-method': 'DELETE' },
+        }),
+      )
+
+    expect((await preflight('https://evil.example.com')).headers.get(ALLOW_ORIGIN)).toBeNull()
+    // Loopback still passes: that is the local SPA, which is already code
+    // running on the operator's own machine.
+    expect((await preflight('http://localhost:3000')).headers.get(ALLOW_ORIGIN)).toBe(
+      'http://localhost:3000',
+    )
   })
 
   it('answers only the origins a deployment listed', async () => {

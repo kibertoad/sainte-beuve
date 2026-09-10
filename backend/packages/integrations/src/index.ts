@@ -2,7 +2,13 @@
 // ports. Everything here is replaceable: the domain packages know the port, never
 // the vendor.
 
-export { createGatewayFactory, type GatewayFactoryConfig } from './factory.js'
+export {
+  createGatewayFactory,
+  type GatewayFactoryConfig,
+  type GitHubFactoryConfig,
+  type GitLabFactoryConfig,
+  type OAuthClientConfig,
+} from './factory.js'
 export {
   GITHUB_API_BASE_URL,
   GITHUB_WEB_BASE_URL,
@@ -30,6 +36,18 @@ export {
 } from './github/GitHubIdentityGateway.js'
 export { type GitHubGatewayOptions, GitHubVcsGateway } from './github/GitHubVcsGateway.js'
 export { verifyGitHubSignature } from './github/webhooks.js'
+export {
+  GITLAB_BASE_URL,
+  GitLabApiError,
+  gitlabApiStatusOf,
+  gitlabRequest,
+  projectPath,
+} from './gitlab/client.js'
+export {
+  GitLabIdentityGateway,
+  type GitLabIdentityGatewayOptions,
+} from './gitlab/GitLabIdentityGateway.js'
+export { type GitLabGatewayOptions, GitLabVcsGateway } from './gitlab/GitLabVcsGateway.js'
 export {
   DEFAULT_SNOOZE_HOURS,
   parseCommandText,

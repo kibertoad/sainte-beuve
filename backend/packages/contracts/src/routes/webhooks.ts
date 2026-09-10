@@ -14,14 +14,27 @@
 // App and a Slack app by hand, so they have to survive an API version bump.
 // ---------------------------------------------------------------------------
 
+import type { VcsProvider } from '../vcs.js'
+
 /** Signed GitHub deliveries (`X-Hub-Signature-256`). */
 export const GITHUB_WEBHOOK_PATH = '/webhooks/github'
 
 /** Slack slash commands and message actions (`X-Slack-Signature`). */
 export const SLACK_WEBHOOK_PATH = '/webhooks/slack'
 
-/** Where GitHub returns the browser after a "Sign in with GitHub". */
-export const GITHUB_SIGN_IN_CALLBACK_PATH = '/connect/github/callback'
+/**
+ * Where a host returns the browser after a sign-in. One path per host, so an
+ * OAuth client registered against one cannot have its code spent by the other's
+ * callback, and each is a fixed string an operator types into a settings page.
+ */
+export const SIGN_IN_CALLBACK_PATHS = {
+  github: '/connect/github/callback',
+  gitlab: '/connect/gitlab/callback',
+} as const satisfies Record<VcsProvider, string>
+
+export function signInCallbackPath(provider: VcsProvider): string {
+  return SIGN_IN_CALLBACK_PATHS[provider]
+}
 
 /**
  * Where GitHub returns the browser after the App is installed. It carries an

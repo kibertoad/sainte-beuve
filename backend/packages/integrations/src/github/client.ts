@@ -73,8 +73,14 @@ export async function githubRequest<T>(request: GitHubRequest): Promise<T> {
   return (await parse(response)) as T
 }
 
+/**
+ * `||` rather than `??`: a base URL somebody left BLANK is one they did not
+ * set. Every example deployment ships the name with no value, so a copied file
+ * gives `''`, and `''` as the base would build every path relative and fail as
+ * `TypeError: Failed to parse URL`.
+ */
 function trimBase(baseUrl: string | undefined): string {
-  return (baseUrl ?? GITHUB_API_BASE_URL).replace(/\/+$/, '')
+  return (baseUrl || GITHUB_API_BASE_URL).replace(/\/+$/, '')
 }
 
 async function parse(response: Response): Promise<unknown> {

@@ -1,8 +1,14 @@
 <script setup lang="ts">
 // The layer's root: a side rail of destinations, and the page beside it. A
 // consuming deployment inherits this unless it ships its own.
+//
+// The workspace is first and is the landing route, because it is the only
+// screen about the person in front of it: the board, the directory and the
+// configuration are all about the deployment.
 const links = [
-  { label: 'Reviews', to: '/', icon: 'i-lucide-git-pull-request' },
+  { label: 'Workspace', to: '/', icon: 'i-lucide-layout-dashboard' },
+  { label: 'Projects', to: '/projects', icon: 'i-lucide-folder-git-2' },
+  { label: 'Board', to: '/board', icon: 'i-lucide-git-pull-request' },
   { label: 'Reviewers', to: '/reviewers', icon: 'i-lucide-users' },
   { label: 'Configuration', to: '/configuration', icon: 'i-lucide-settings' },
 ]

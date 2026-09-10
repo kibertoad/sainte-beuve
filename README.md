@@ -2,16 +2,43 @@
 
 Centralized review solution to make reviews fun and easy.
 
-Three jobs: find a reviewer who actually holds the skills a change needs, keep the
-reminders honest, and hand the pull request to an AI reviewer when that is the faster
-answer. GitHub is where a review starts; Slack is where the nudge arrives; the AI
-review runs on a [cat-factory](https://github.com/kibertoad/cat-factory) instance,
-local or centralized.
+Open it and you get your **workspace**: the pull requests you have out, the ones
+waiting on your review, and the ones you said you would review. Register the
+GitHub or GitLab projects you work in and all three fill themselves.
+
+You do not review a pull request here. Every row links out to the review page on
+its host, because that is where the diff, the threads and the approve button
+live. What sainte-beuve does is decide who should look, and get them there.
+
+Four jobs: hand somebody the three lists they actually have to act on, find a
+reviewer who holds the skills a change needs, keep the reminders honest, and
+hand the pull request to an AI reviewer when that is the faster answer. GitHub
+and GitLab are where reviews live; Slack is where the nudge arrives; the AI
+review runs on a [cat-factory](https://github.com/kibertoad/cat-factory)
+instance, local or centralized.
 
 Label a pull request `needs-review` and it lands on the board with a reviewer on it.
 Mention the bot in a comment and it answers there. Take the review from a Slack
 button, or snooze it with `/review snooze`. How all of that is wired, and what has
 to be registered where, is [docs/integrations.md](./docs/integrations.md).
+
+## Asking for attention
+
+A pull request that nobody has picked up is the thing the workspace exists to
+fix. Press **Ask for attention** on one of yours and say what a reviewer needs:
+which skills (from the project's own vocabulary, `Backend` and `Frontend` until
+a team names its own), how many people you want, and whether the ask should stay
+inside your team.
+
+Everyone available who holds all of those skills is asked, two ways at once. A
+page already open is pushed the request over server-sent events; a page opened
+an hour later fetches the same thing over REST. Neither is a fallback for the
+other, and both carry the same payload.
+
+The ask ANSWERS ITSELF. Once enough people have said they will review, it is
+resolved and disappears from everybody's inbox, including the people who never
+got round to it. An ask that stayed up after it was answered would train the
+team to ignore the next one.
 
 ## Try it in one command
 
@@ -35,9 +62,9 @@ a reduced build.
 | ------------------------------------- | ---------------------------------- | --------------------------------------------------------------- |
 | `backend/packages/contracts`          | `@sainte-beuve/contracts`          | Valibot wire contracts, shared by the frontend and every facade |
 | `backend/packages/kernel`             | `@sainte-beuve/kernel`             | Domain errors and port interfaces                               |
-| `backend/packages/reviewers`          | `@sainte-beuve/reviewers`          | Reviewer selection (pure)                                       |
+| `backend/packages/reviewers`          | `@sainte-beuve/reviewers`          | Reviewer selection, attention audiences, workspace cuts (pure)  |
 | `backend/packages/reminders`          | `@sainte-beuve/reminders`          | Reminder cadence and escalation (pure)                          |
-| `backend/packages/integrations`       | `@sainte-beuve/integrations`       | GitHub and Slack adapters, and the protocols they speak         |
+| `backend/packages/integrations`       | `@sainte-beuve/integrations`       | GitHub, GitLab and Slack adapters, and the protocols they speak |
 | `backend/packages/ai-review`          | `@sainte-beuve/ai-review`          | The cat-factory gateway                                         |
 | `backend/packages/persistence-memory` | `@sainte-beuve/persistence-memory` | In-memory repositories                                          |
 | `backend/packages/server`             | `@sainte-beuve/server`             | The runtime-neutral Hono app                                    |
@@ -54,7 +81,12 @@ Read [docs/implementation-plan.md](./docs/implementation-plan.md) for what is bu
 what is a placeholder, and what lands next, and
 [docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design.
 
-## Connecting GitHub and Slack
+## Connecting GitHub, GitLab and Slack
+
+Every source-control host goes through one facade: an adapter behind
+`VcsGateway`, resolved per host from whichever credential that host has. Nothing
+above the adapter knows a merge request from a pull request, and adding a third
+host adds no code outside its own directory.
 
 Three ways to connect GitHub, and they are not alternatives to pick between at
 deploy time: whichever are configured are offered on the Configuration screen, and
@@ -65,6 +97,11 @@ the strongest one present is what calls are made with.
 - **Sign in with GitHub**, which stores the token a live authorisation produced;
 - a **personal access token**, pasted on the Configuration screen or set as
   `GITHUB_TOKEN`.
+
+GitLab has the same order minus the App, which it has no equivalent of: a
+sign-in, then a pasted token, then `GITLAB_TOKEN`. One `GITLAB_BASE_URL`
+configures a self-managed install, because GitLab serves its API and its OAuth
+endpoints under the same root.
 
 Slack needs a bot token to post, and separately a signing secret to trust the
 `/review` command and the message buttons coming back. Every URL that has to be

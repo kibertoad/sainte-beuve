@@ -41,7 +41,7 @@ async function assignedReview(
 ): Promise<{ review: ReviewRequest; reviewer: Reviewer }> {
   const reviewer = await addReviewer(harness, {
     displayName: 'Peer',
-    githubLogin: 'peer',
+    handles: { github: 'peer' },
     slackUserId: 'U123',
   })
   const review = await openReview(harness)
@@ -97,7 +97,7 @@ describe('reminder tick', () => {
     const now = harness.clock.now()
     const reviewer = await addReviewer(harness, {
       displayName: 'Peer',
-      githubLogin: 'peer',
+      handles: { github: 'peer' },
       slackUserId: 'U123',
     })
     const review = await openReview(harness, { dueAt: now + 2 * DAY })
@@ -130,7 +130,7 @@ describe('reminder tick', () => {
   })
 
   it('says which reviewer could not be reached when a DM has no address', async () => {
-    await addReviewer(harness, { displayName: 'Peer', githubLogin: 'peer' })
+    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' } })
     const review = await openReview(harness)
     await assignReviewer(harness, review.id)
 

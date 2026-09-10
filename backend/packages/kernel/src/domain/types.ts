@@ -1,4 +1,5 @@
 import type { PullRequestRef, ReminderPolicy } from '@sainte-beuve/contracts'
+import { formatPullRequestRef } from '@sainte-beuve/contracts'
 
 /** Milliseconds since the epoch. Every timestamp on the wire and in a port is this. */
 export type EpochMs = number
@@ -17,7 +18,11 @@ export const DEFAULT_REMINDER_POLICY: ReminderPolicy = {
   maxPendingReminders: 3,
 }
 
-/** `owner/repo#number`, the form used in log lines and chat messages. */
+/**
+ * `owner/repo#number`, the form used in log lines and chat messages. The
+ * contract owns the formatting so the SPA renders the same string; this is the
+ * name the backend has always called it by.
+ */
 export function formatPullRequest(pr: PullRequestRef): string {
-  return `${pr.owner}/${pr.repo}#${pr.number}`
+  return formatPullRequestRef(pr)
 }

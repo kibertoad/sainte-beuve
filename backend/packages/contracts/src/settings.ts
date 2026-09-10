@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { VcsProvider } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // Integration configuration wire contracts.
@@ -18,23 +19,39 @@ import * as v from 'valibot'
  * The integrations a token can be PASTED for.
  *
  * Every credential this deployment holds lives in one keyed store, but not every
- * key belongs on this list: a GitHub sign-in produces a credential too, and it
- * arrives from a redirect rather than from a text input. Keeping the picklist to
- * the pasteable ones is what lets the write route refuse an unknown id at the
+ * key belongs on this list: a sign-in produces a credential too, and it arrives
+ * from a redirect rather than from a text input. Keeping the picklist to the
+ * pasteable ones is what lets the write route refuse an unknown id at the
  * contract boundary, and what stops the Configuration screen from rendering a
  * "paste a token" field beside a credential nobody can paste. The sign-in
- * credential is {@link GITHUB_OAUTH_CREDENTIAL_KEY}, reported through
- * {@link githubConnectionSchema} instead.
+ * credentials are {@link vcsOauthCredentialKey}, reported through
+ * {@link vcsConnectionSchema} instead.
  */
-export const integrationIdSchema = v.picklist(['github-pat', 'slack-bot-token', 'cat-factory'])
+export const integrationIdSchema = v.picklist([
+  'github-pat',
+  'gitlab-pat',
+  'slack-bot-token',
+  'cat-factory',
+])
 export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
 
+/** The store keys a sign-in credential is held under, one per source-control host. */
+export const vcsOauthCredentialKeySchema = v.picklist(['github-oauth', 'gitlab-oauth'])
+export type VcsOauthCredentialKey = v.InferOutput<typeof vcsOauthCredentialKeySchema>
+
 /**
- * The store key the GitHub sign-in credential is held under. Named here, beside
- * the pasteable ids, so the whole credential key space is one file: a second key
- * invented in a service is a key nothing else can find to clear.
+ * The whole credential key space is derived here rather than spelled out at the
+ * point of use, so a second host cannot arrive with a key invented in a service
+ * that nothing else knows to clear.
  */
-export const GITHUB_OAUTH_CREDENTIAL_KEY = 'github-oauth'
+export function vcsOauthCredentialKey(provider: VcsProvider): VcsOauthCredentialKey {
+  return provider === 'github' ? 'github-oauth' : 'gitlab-oauth'
+}
+
+/** The store key a pasted token for one host is held under. */
+export function vcsPatCredentialKey(provider: VcsProvider): IntegrationId {
+  return provider === 'github' ? 'github-pat' : 'gitlab-pat'
+}
 
 /**
  * `unreadable` is the state that earns this a picklist rather than a boolean: a

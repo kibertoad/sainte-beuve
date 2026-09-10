@@ -37,28 +37,35 @@ export interface SelectionResult {
 }
 
 /** Case-insensitive skill comparison: 'TypeScript' and 'typescript' are one skill. */
-function normalizeSkill(skill: string): string {
+export function normalizeSkill(skill: string): string {
   return skill.trim().toLowerCase()
 }
 
 /**
- * Whether two GitHub logins name the same account. GitHub logins are
- * case-insensitive, and the same person arrives spelled two ways: a webhook
- * carries the casing GitHub stores, a reviewer registered by hand carries whatever
- * was typed. Compared exactly, `Kibertoad` and `kibertoad` are two people, and the
- * author lands in their own review's candidate pool.
+ * Whether two handles name the same account. GitHub and GitLab handles are both
+ * case-insensitive, and the same person arrives spelled two ways: a webhook or a
+ * listing carries the casing the host stores, a reviewer registered by hand
+ * carries whatever was typed. Compared exactly, `Kibertoad` and `kibertoad` are
+ * two people, and the author lands in their own review's candidate pool.
  */
-export function isSameGithubLogin(left: string | null, right: string | null): boolean {
+export function isSameHandle(left: string | null, right: string | null): boolean {
   if (left === null || right === null) return false
   return left.trim().toLowerCase() === right.trim().toLowerCase()
 }
 
 /**
- * Whether a reviewer can take this review at all. Skills are an ALL-of gate, not a
- * ranking: a review that needs `payments` should not fall to somebody who merely
- * knows `typescript`, because a partial match here reads to the author as a real
- * review and is not one.
+ * Whether a reviewer holds every named skill. An ALL-of gate, not a ranking: a
+ * review that needs `payments` should not fall to somebody who merely knows
+ * `typescript`, because a partial match reads to the author as a real review and
+ * is not one. An empty requirement matches everybody.
  */
+export function hasAllSkills(reviewer: Reviewer, requiredSkills: readonly string[]): boolean {
+  if (requiredSkills.length === 0) return true
+  const owned = new Set(reviewer.skills.map(normalizeSkill))
+  return requiredSkills.every((skill) => owned.has(normalizeSkill(skill)))
+}
+
+/** Whether the router may hand this review to this reviewer at all. */
 export function isEligible(
   reviewer: Reviewer,
   requiredSkills: readonly string[],
@@ -67,9 +74,7 @@ export function isEligible(
   if (excluded.has(reviewer.id)) return false
   if (reviewer.availability !== 'available') return false
   if (reviewer.weight <= 0) return false
-  if (requiredSkills.length === 0) return true
-  const owned = new Set(reviewer.skills.map(normalizeSkill))
-  return requiredSkills.every((skill) => owned.has(normalizeSkill(skill)))
+  return hasAllSkills(reviewer, requiredSkills)
 }
 
 /**

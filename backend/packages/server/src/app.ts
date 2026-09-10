@@ -4,13 +4,16 @@ import { cors } from 'hono/cors'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
 import { errorBody, handleError } from './http/errors.js'
+import { attentionController } from './modules/attention/AttentionController.js'
 import { connectController } from './modules/connections/ConnectController.js'
 import { connectionsController } from './modules/connections/ConnectionsController.js'
 import { healthController } from './modules/health/HealthController.js'
+import { projectController } from './modules/projects/ProjectController.js'
 import { reviewerController } from './modules/reviewers/ReviewerController.js'
 import { reviewController } from './modules/reviews/ReviewController.js'
 import { settingsController } from './modules/settings/SettingsController.js'
 import { webhookController } from './modules/webhooks/WebhookController.js'
+import { workspaceController } from './modules/workspace/WorkspaceController.js'
 
 /**
  * The Hono app every facade serves. It owns the route table, the error envelope and
@@ -48,6 +51,9 @@ const WILDCARD = '*'
 /** The routes that read and write a credential. See SettingsController. */
 const CONFIGURATION_PATH = '/api/v1/settings'
 
+/** The methods that change nothing, and so are safe to answer to any origin. */
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
 /** The SPA in local development, on whatever port Nuxt settled for. */
 const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/
 
@@ -58,21 +64,43 @@ const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/
  * at all, which is the browser-side symptom of "the API is up and the SPA cannot
  * reach it".
  *
- * The wildcard stops at the configuration routes. Those write a credential and
- * carry no session to check, so answering `*` there would let any page an operator
- * happens to visit preflight a PUT and overwrite this deployment's tokens. They
- * answer an origin the deployment NAMED, plus loopback, which is the local SPA and
- * is already code running on the operator's own machine. A hosted deployment
- * therefore has to list its SPA origin in CORS_ORIGINS for the Configuration screen
- * to work, which is the trade this makes on purpose.
+ * The wildcard opens READS. It stops at every request that changes something,
+ * and at the configuration routes whether they are read or written, because no
+ * route here carries a session to check: `*` on a write would let any page an
+ * operator happens to visit preflight a `DELETE /api/v1/projects/<id>` and empty
+ * the registry, or resolve somebody else's attention request, or overwrite this
+ * deployment's tokens. Those answer an origin the deployment NAMED, plus loopback,
+ * which is the local SPA and is already code running on the operator's own
+ * machine. A hosted deployment therefore has to list its SPA origin in
+ * CORS_ORIGINS to do anything but read, which is the trade this makes on purpose.
+ *
+ * An inbound webhook is unaffected: GitHub and Slack send no `Origin`, and a
+ * missing `Access-Control-Allow-Origin` is a rule for browsers rather than a
+ * refusal.
  */
-function allowedOrigin(configured: readonly string[], origin: string, path: string): string | null {
-  if (configured.includes(origin)) return origin
+function allowedOrigin(
+  configured: readonly string[],
+  request: { origin: string; path: string; method: string },
+): string | null {
+  if (configured.includes(request.origin)) return request.origin
   if (!configured.includes(WILDCARD)) return null
-  if (path.startsWith(CONFIGURATION_PATH)) {
-    return LOOPBACK_ORIGIN.test(origin) ? origin : null
-  }
+  if (isGuarded(request)) return LOOPBACK_ORIGIN.test(request.origin) ? request.origin : null
   return WILDCARD
+}
+
+/** Whether this is a request the wildcard does not cover. */
+function isGuarded(request: { path: string; method: string }): boolean {
+  return request.path.startsWith(CONFIGURATION_PATH) || !SAFE_METHODS.has(request.method)
+}
+
+/**
+ * What the browser is asking to do. On a preflight that is the header rather
+ * than the method: the preflight itself is an OPTIONS, and reading the method
+ * off it would report every write as safe.
+ */
+function intendedMethod(c: Context<AppEnv>): string {
+  if (c.req.method !== 'OPTIONS') return c.req.method
+  return (c.req.header('access-control-request-method') ?? c.req.method).toUpperCase()
 }
 
 function scopeOf(c: Context<AppEnv>): RequestScope {
@@ -90,7 +118,12 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.use(
     '*',
     cors({
-      origin: (origin, c) => allowedOrigin(originsFor(scopeOf(c)), origin, c.req.path),
+      origin: (origin, c) =>
+        allowedOrigin(originsFor(scopeOf(c)), {
+          origin,
+          path: c.req.path,
+          method: intendedMethod(c),
+        }),
     }),
   )
 
@@ -102,6 +135,9 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/', healthController())
   app.route('/', webhookController())
   app.route('/', connectController())
+  app.route('/api/v1', workspaceController())
+  app.route('/api/v1', projectController())
+  app.route('/api/v1', attentionController())
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
   app.route('/api/v1', settingsController())

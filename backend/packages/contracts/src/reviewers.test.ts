@@ -7,12 +7,21 @@ describe('createReviewerSchema', () => {
     const parsed = v.parse(createReviewerSchema, { displayName: 'Ada' })
     expect(parsed).toStrictEqual({
       displayName: 'Ada',
-      githubLogin: null,
+      handles: { github: null, gitlab: null },
       slackUserId: null,
+      team: null,
       skills: [],
       availability: 'available',
       weight: 1,
     })
+  })
+
+  it('takes one host handle and leaves the other unset', () => {
+    const parsed = v.parse(createReviewerSchema, {
+      displayName: 'Ada',
+      handles: { gitlab: 'ada' },
+    })
+    expect(parsed.handles).toStrictEqual({ github: null, gitlab: 'ada' })
   })
 
   it('trims a display name rather than storing the whitespace', () => {
@@ -33,8 +42,9 @@ describe('reviewerSchema', () => {
     const row = {
       id: 'r1',
       displayName: 'Ada',
-      githubLogin: null,
+      handles: { github: null, gitlab: null },
       slackUserId: null,
+      team: null,
       skills: [],
       availability: 'available',
       weight: 1,

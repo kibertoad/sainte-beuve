@@ -9,3 +9,9 @@ export {
   InMemoryReviewerRepository,
   InMemoryReviewRequestRepository,
 } from './stores.js'
+export {
+  InMemoryAttentionRepository,
+  InMemoryIdentityRepository,
+  InMemoryProjectRepository,
+  InMemoryReviewCommitmentRepository,
+} from './workspace-stores.js'

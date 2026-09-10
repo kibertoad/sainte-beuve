@@ -1,4 +1,9 @@
-import { UpstreamFailedError, type VcsIdentityGateway, getErrorMessage } from '@sainte-beuve/kernel'
+import {
+  UpstreamFailedError,
+  type VcsAccount,
+  type VcsIdentityGateway,
+  getErrorMessage,
+} from '@sainte-beuve/kernel'
 import { GITHUB_WEB_BASE_URL, githubRequest } from './client.js'
 
 /**
@@ -47,7 +52,7 @@ export class GitHubIdentityGateway implements VcsIdentityGateway {
   constructor(private readonly options: GitHubIdentityGatewayOptions) {}
 
   authorizeUrl(input: { redirectUri: string; state: string }): string {
-    const url = new URL('/login/oauth/authorize', this.options.webBaseUrl ?? GITHUB_WEB_BASE_URL)
+    const url = new URL('/login/oauth/authorize', this.options.webBaseUrl || GITHUB_WEB_BASE_URL)
     url.searchParams.set('client_id', this.options.clientId)
     url.searchParams.set('redirect_uri', input.redirectUri)
     url.searchParams.set('state', input.state)
@@ -60,19 +65,32 @@ export class GitHubIdentityGateway implements VcsIdentityGateway {
   async exchangeCode(input: {
     code: string
     redirectUri: string
-  }): Promise<{ token: string; login: string }> {
+  }): Promise<{ token: string; account: VcsAccount }> {
     const token = await this.postForToken(input)
-    const user = await githubRequest<{ login?: string }>({
+    const user = await githubRequest<{
+      id: number
+      login: string
+      name?: string | null
+      avatar_url?: string | null
+    }>({
       path: '/user',
       token,
       baseUrl: this.options.apiBaseUrl,
       fetchImpl: this.options.fetchImpl,
     })
-    return { token, login: user.login ?? 'unknown' }
+    return {
+      token,
+      account: {
+        subject: String(user.id),
+        username: user.login,
+        displayName: user.name ?? null,
+        avatarUrl: user.avatar_url ?? null,
+      },
+    }
   }
 
   private async postForToken(input: { code: string; redirectUri: string }): Promise<string> {
-    const url = new URL('/login/oauth/access_token', this.options.webBaseUrl ?? GITHUB_WEB_BASE_URL)
+    const url = new URL('/login/oauth/access_token', this.options.webBaseUrl || GITHUB_WEB_BASE_URL)
     let response: Response
     try {
       response = await (this.options.fetchImpl ?? globalThis.fetch)(url, {

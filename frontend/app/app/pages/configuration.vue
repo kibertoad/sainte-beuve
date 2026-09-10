@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { IntegrationId, IntegrationTokenStatus } from '@sainte-beuve/contracts'
+import type { IntegrationId, IntegrationTokenStatus, VcsProvider } from '@sainte-beuve/contracts'
+import { isVcsProvider, vcsDisplayName, vcsPatCredentialKey } from '@sainte-beuve/contracts'
 
 // Configuration: how this deployment reaches the systems it depends on.
 //
 // The page owns every API call and both reads, because the two are ENTANGLED:
-// storing one GitHub credential can change which other one is in force, and
-// disconnecting a sign-in can hand GitHub back to a pasted token. A card that
+// storing one credential for a host can change which other one is in force, and
+// disconnecting a sign-in can hand the host back to a pasted token. A card that
 // refreshed only its own half would report a state that never existed.
 //
 // Credentials are write-only here, because they are write-only in the API: the
@@ -25,14 +26,39 @@ const { data, pending, error, refresh } = await useAsyncData('configuration', as
 
 const { busy, run } = useApiAction({ refresh })
 
+// The credential inputs, so a successful save can clear the one it landed on.
+// Held on the page rather than inside each field because only the page knows
+// the call succeeded, and clearing on a refusal throws away what was pasted.
+
+/** What the page needs of a credential input: a way to clear the draft in it. */
+interface DraftHolder {
+  clearDraft: () => void
+}
+
+const slack = ref<DraftHolder | null>(null)
+const catFactory = ref<DraftHolder | null>(null)
+
 /**
- * The three credential inputs, so a successful save can clear the one it landed
- * on. Held here rather than inside each field because only the page knows the
- * call succeeded, and clearing on a refusal throws away what was pasted.
+ * The host cards, keyed by HOST rather than by position in the loop.
+ *
+ * Vue does not promise that a `ref` array inside a `v-for` is in the source
+ * order, so an index would let the GitLab save clear the GitHub card, wiping a
+ * token somebody had just typed into the other one while leaving the saved one
+ * on screen. Not reactive: nothing renders from it, a save reads it.
  */
-const github = ref<{ clearDraft: () => void } | null>(null)
-const slack = ref<{ clearDraft: () => void } | null>(null)
-const catFactory = ref<{ clearDraft: () => void } | null>(null)
+const hostCards: Partial<Record<VcsProvider, DraftHolder | null>> = {}
+const hostCardBinders = new Map<VcsProvider, (el: unknown) => void>()
+
+/** One stable binder per host, so a re-render does not re-bind every card. */
+function bindHostCard(provider: VcsProvider): (el: unknown) => void {
+  const held = hostCardBinders.get(provider)
+  if (held !== undefined) return held
+  const bind = (el: unknown): void => {
+    hostCards[provider] = el as DraftHolder | null
+  }
+  hostCardBinders.set(provider, bind)
+  return bind
+}
 
 /**
  * One integration's row, by id. A state this build has never heard of is absent
@@ -53,11 +79,7 @@ function statusOf(integrationId: IntegrationId): IntegrationTokenStatus {
   )
 }
 
-async function save(
-  integrationId: IntegrationId,
-  token: string,
-  field: { clearDraft: () => void } | null,
-) {
+async function save(integrationId: IntegrationId, token: string, field: DraftHolder | null) {
   const stored = await run(
     () => api.setIntegrationToken(integrationId, token),
     'Could not store the credential',
@@ -93,17 +115,25 @@ async function connect(start: () => Promise<{ url: string }>, failure: string, k
   if (started && url !== null) window.location.assign(url)
 }
 
-async function signOut() {
-  await run(() => api.disconnectGitHubSignIn(), 'Could not disconnect GitHub', 'github-sign-out')
+async function signOut(provider: VcsProvider) {
+  await run(
+    () => api.disconnectSignIn(provider),
+    `Could not disconnect ${vcsDisplayName(provider)}`,
+    `${provider}-sign-out`,
+  )
 }
 
-// The connect callbacks send the browser back here with `?connected=github`, and
-// the page has just loaded fresh, so the state is already the new one: this only
-// has to say that the round trip finished. Without it a redirect back to an
-// unchanged-looking screen reads as a flow that silently did nothing.
+// The connect callbacks send the browser back here with `?connected=<host>`,
+// and the page has just loaded fresh, so the state is already the new one: this
+// only has to say that the round trip finished. Without it a redirect back to
+// an unchanged-looking screen reads as a flow that silently did nothing.
 onMounted(() => {
-  if (route.query.connected === 'github') {
-    toast.add({ color: 'success', title: 'GitHub connection updated' })
+  const connected = route.query.connected
+  // Named, and CHECKED: the value is whatever the URL carries, so a slug this
+  // build does not know is not worth echoing into a toast, and `github` in a
+  // sentence reads like a bug report where GitHub reads like a product.
+  if (typeof connected === 'string' && isVcsProvider(connected)) {
+    toast.add({ color: 'success', title: `${vcsDisplayName(connected)} connection updated` })
   }
 })
 </script>
@@ -134,19 +164,33 @@ onMounted(() => {
     />
 
     <div v-else-if="data" class="flex flex-col gap-4">
-      <GitHubConnectionCard
-        ref="github"
-        :connection="data.connections.github"
-        :pat-status="statusOf('github-pat')"
+      <VcsConnectionCard
+        v-for="connection in data.connections.vcs"
+        :key="connection.provider"
+        :ref="bindHostCard(connection.provider)"
+        :connection="connection"
+        :pat-status="statusOf(vcsPatCredentialKey(connection.provider))"
         :api-base="api.apiBase"
         :busy="busy !== null"
         @install-app="
           connect(api.startGitHubAppInstall, 'Could not start the App install', 'github-app')
         "
-        @sign-in="connect(api.startGitHubSignIn, 'Could not start the sign-in', 'github-sign-in')"
-        @sign-out="signOut()"
-        @save-pat="save('github-pat', $event, github)"
-        @clear-pat="clear('github-pat')"
+        @sign-in="
+          connect(
+            () => api.startSignIn(connection.provider),
+            'Could not start the sign-in',
+            `${connection.provider}-sign-in`,
+          )
+        "
+        @sign-out="signOut(connection.provider)"
+        @save-pat="
+          save(
+            vcsPatCredentialKey(connection.provider),
+            $event,
+            hostCards[connection.provider] ?? null,
+          )
+        "
+        @clear-pat="clear(vcsPatCredentialKey(connection.provider))"
       />
 
       <SlackConnectionCard

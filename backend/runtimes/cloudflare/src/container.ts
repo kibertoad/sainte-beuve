@@ -2,21 +2,18 @@ import { CatFactoryAiReviewGateway } from '@sainte-beuve/ai-review'
 import {
   createGatewayFactory,
   GitHubVcsGateway,
+  GitLabVcsGateway,
   SlackChatGateway,
   staticTokenSource,
 } from '@sainte-beuve/integrations'
-import type {
-  AiReviewGateway,
-  ChatGateway,
-  GatewayFactory,
-  Logger,
-  VcsGateway,
-} from '@sainte-beuve/kernel'
+import type { AiReviewGateway, ChatGateway, GatewayFactory, Logger } from '@sainte-beuve/kernel'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
 import {
   type AppContainer,
   createContainer,
   DEFAULT_GITHUB_LABELS,
+  type EnvironmentVcsGateways,
+  InMemoryAttentionBus,
   type SecretsWiring,
   secretsFrom,
 } from '@sainte-beuve/server'
@@ -32,6 +29,19 @@ import type { WorkerEnv } from './env.js'
  * docs/implementation-plan.md.
  */
 const repositories = createInMemoryRepositories()
+
+/**
+ * The attention fan-out, held per ISOLATE for the same reason the store is: the
+ * container is rebuilt per request here, and a bus built with it would have one
+ * subscriber and no publisher.
+ *
+ * What that buys on this runtime is honest and limited: an event reaches the
+ * streams attached to THIS isolate and no other. The REST inbox
+ * (`GET /api/v1/attention`) is what makes the feature correct everywhere, and it
+ * carries the same payload. Cross-isolate delivery is a Durable Object behind
+ * the same port, and it changes nothing above it.
+ */
+const bus = new InMemoryAttentionBus()
 
 /** `console` is the Workers-native logger; Workers Logs picks up structured lines. */
 const workerLogger: Logger = {
@@ -95,6 +105,10 @@ function gatewayKey(env: WorkerEnv): string {
     env.GITHUB_OAUTH_CLIENT_SECRET,
     env.GITHUB_OAUTH_SCOPE,
     env.GITHUB_API_BASE_URL,
+    env.GITLAB_BASE_URL,
+    env.GITLAB_OAUTH_CLIENT_ID,
+    env.GITLAB_OAUTH_CLIENT_SECRET,
+    env.GITLAB_OAUTH_SCOPE,
     env.CAT_FACTORY_BASE_URL,
     env.CAT_FACTORY_SERVICE_ID,
     env.CAT_FACTORY_PIPELINE_ID,
@@ -112,20 +126,36 @@ function gatewaysFor(env: WorkerEnv): GatewayFactory {
 
 function buildGateways(env: WorkerEnv): GatewayFactory {
   return createGatewayFactory({
-    githubApiBaseUrl: env.GITHUB_API_BASE_URL,
-    githubApp:
-      env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY
-        ? { appId: env.GITHUB_APP_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY }
-        : null,
-    githubOAuth:
-      env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET
-        ? {
-            clientId: env.GITHUB_OAUTH_CLIENT_ID,
-            clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET,
-            scope: env.GITHUB_OAUTH_SCOPE,
-          }
-        : null,
-    appBaseUrl: env.APP_BASE_URL,
+    github: {
+      // `|| undefined` throughout, for the reason `containerFor` gives below: a
+      // binding left blank is one nobody set, and `''` as a base URL builds
+      // every path relative rather than falling back to the host's own root.
+      apiBaseUrl: env.GITHUB_API_BASE_URL || undefined,
+      app:
+        env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY
+          ? { appId: env.GITHUB_APP_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY }
+          : null,
+      oauth:
+        env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET
+          ? {
+              clientId: env.GITHUB_OAUTH_CLIENT_ID,
+              clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET,
+              scope: env.GITHUB_OAUTH_SCOPE || undefined,
+            }
+          : null,
+    },
+    gitlab: {
+      baseUrl: env.GITLAB_BASE_URL || undefined,
+      oauth:
+        env.GITLAB_OAUTH_CLIENT_ID && env.GITLAB_OAUTH_CLIENT_SECRET
+          ? {
+              clientId: env.GITLAB_OAUTH_CLIENT_ID,
+              clientSecret: env.GITLAB_OAUTH_CLIENT_SECRET,
+              scope: env.GITLAB_OAUTH_SCOPE || undefined,
+            }
+          : null,
+    },
+    appBaseUrl: env.APP_BASE_URL || undefined,
     aiReview: (apiKey) => aiReviewFrom(env, apiKey),
   })
 }
@@ -138,7 +168,7 @@ function aiReviewFrom(env: WorkerEnv, apiKey: string): AiReviewGateway | null {
     baseUrl: CAT_FACTORY_BASE_URL,
     apiKey,
     serviceId: CAT_FACTORY_SERVICE_ID,
-    pipelineId: env.CAT_FACTORY_PIPELINE_ID,
+    pipelineId: env.CAT_FACTORY_PIPELINE_ID || undefined,
   })
 }
 
@@ -148,15 +178,28 @@ function buildAiReview(env: WorkerEnv): AiReviewGateway | null {
 
 function buildChat(env: WorkerEnv): ChatGateway | null {
   if (!env.SLACK_BOT_TOKEN) return null
-  return new SlackChatGateway({ botToken: env.SLACK_BOT_TOKEN, appBaseUrl: env.APP_BASE_URL })
+  return new SlackChatGateway({
+    botToken: env.SLACK_BOT_TOKEN,
+    appBaseUrl: env.APP_BASE_URL || undefined,
+  })
 }
 
-function buildVcs(env: WorkerEnv): VcsGateway | null {
-  if (!env.GITHUB_TOKEN) return null
-  return new GitHubVcsGateway({
-    tokens: staticTokenSource(env.GITHUB_TOKEN),
-    baseUrl: env.GITHUB_API_BASE_URL,
-  })
+/** The environment's own credential per host: what a stored one takes precedence over. */
+function buildVcs(env: WorkerEnv): EnvironmentVcsGateways {
+  return {
+    github: env.GITHUB_TOKEN
+      ? new GitHubVcsGateway({
+          tokens: staticTokenSource(env.GITHUB_TOKEN),
+          baseUrl: env.GITHUB_API_BASE_URL || undefined,
+        })
+      : null,
+    gitlab: env.GITLAB_TOKEN
+      ? new GitLabVcsGateway({
+          token: env.GITLAB_TOKEN,
+          baseUrl: env.GITLAB_BASE_URL || undefined,
+        })
+      : null,
+  }
 }
 
 export function containerFor(env: WorkerEnv): AppContainer {
@@ -167,6 +210,7 @@ export function containerFor(env: WorkerEnv): AppContainer {
     vcs: buildVcs(env),
     aiReview: buildAiReview(env),
     gateways: gatewaysFor(env),
+    bus,
     secrets: secretsFor(env),
     // `||` throughout, not `??`, exactly as the Node facade's `loadConfig` does
     // it: a binding left blank is one somebody has not set, `.dev.vars.example`

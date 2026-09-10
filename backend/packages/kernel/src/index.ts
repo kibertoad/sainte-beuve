@@ -29,14 +29,20 @@ export type {
   AiReviewReport,
   ChatGateway,
   GatewayFactory,
+  VcsAccount,
   VcsGateway,
   VcsIdentityGateway,
 } from './ports/gateways.js'
+export type { AttentionBus } from './ports/realtime.js'
 export type {
   AiReviewRunRepository,
+  AttentionRepository,
+  IdentityRepository,
   IntegrationTokenRepository,
+  ProjectRepository,
   ReminderRepository,
   Repositories,
+  ReviewCommitmentRepository,
   ReviewerRepository,
   ReviewRequestRepository,
   StoredIntegrationToken,

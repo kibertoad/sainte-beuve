@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { skillSchema } from './reviewers.js'
+import { pullRequestRefSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // Review-request wire contracts.
@@ -8,10 +9,6 @@ import { skillSchema } from './reviewers.js'
 // aggregate everything else hangs off: assignments point at it, reminders fire
 // against its clock, and an AI review run records what cat-factory said about it.
 // ---------------------------------------------------------------------------
-
-/** The source-control host a review lives on. GitHub is the only one wired today. */
-export const vcsProviderSchema = v.picklist(['github'])
-export type VcsProvider = v.InferOutput<typeof vcsProviderSchema>
 
 /**
  * Where a review request is in its life.
@@ -33,17 +30,6 @@ export type ReviewStatus = v.InferOutput<typeof reviewStatusSchema>
 /** How urgently the review should be picked up. Drives the reminder cadence. */
 export const reviewPrioritySchema = v.picklist(['low', 'normal', 'high'])
 export type ReviewPriority = v.InferOutput<typeof reviewPrioritySchema>
-
-/** The pull request a review request points at. */
-export const pullRequestRefSchema = v.object({
-  provider: vcsProviderSchema,
-  /** Repository owner: a GitHub org or user. */
-  owner: v.pipe(v.string(), v.trim(), v.minLength(1)),
-  repo: v.pipe(v.string(), v.trim(), v.minLength(1)),
-  number: v.pipe(v.number(), v.integer(), v.minValue(1)),
-  url: v.pipe(v.string(), v.url()),
-})
-export type PullRequestRef = v.InferOutput<typeof pullRequestRefSchema>
 
 export const reviewRequestSchema = v.object({
   id: v.string(),
@@ -69,7 +55,9 @@ export const createReviewRequestSchema = v.object({
   pullRequest: pullRequestRefSchema,
   title: reviewRequestSchema.entries.title,
   authorLogin: v.string(),
-  requiredSkills: v.optional(v.array(skillSchema), []),
+  // A FACTORY default: valibot hands a plain default back by reference, so
+  // every review parsed without the field would share one array.
+  requiredSkills: v.optional(v.array(skillSchema), () => []),
   priority: v.optional(reviewPrioritySchema, 'normal'),
   dueAt: v.optional(v.nullable(v.number()), null),
 })
@@ -84,7 +72,7 @@ export type CreateReviewRequestInput = v.InferInput<typeof createReviewRequestSc
  */
 export const assignReviewersSchema = v.object({
   count: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(5)), 1),
-  excludeReviewerIds: v.optional(v.array(v.string()), []),
+  excludeReviewerIds: v.optional(v.array(v.string()), () => []),
 })
 export type AssignReviewers = v.InferOutput<typeof assignReviewersSchema>
 

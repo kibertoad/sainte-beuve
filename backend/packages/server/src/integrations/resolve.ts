@@ -1,5 +1,10 @@
-import type { GitHubAuthMethod, IntegrationId } from '@sainte-beuve/contracts'
-import { GITHUB_OAUTH_CREDENTIAL_KEY } from '@sainte-beuve/contracts'
+import type {
+  IntegrationId,
+  VcsAuthMethod,
+  VcsOauthCredentialKey,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
+import { vcsOauthCredentialKey, vcsPatCredentialKey } from '@sainte-beuve/contracts'
 import {
   type AiReviewGateway,
   type ChatGateway,
@@ -38,24 +43,100 @@ export interface Resolved<TGateway, TSource> {
 export type CredentialSource = 'stored' | 'environment'
 
 /**
- * The GitHub credential in force, by the precedence `githubAuthMethodSchema`
- * documents: App, then a sign-in, then a pasted token, then the environment.
+ * The credential in force for one source-control host, by the precedence
+ * `vcsAuthMethodSchema` documents: an app, then a sign-in, then a pasted token,
+ * then the environment.
+ *
+ * Every step can answer null on its own, and not only for want of a credential:
+ * a build with no adapter for the host has no factory member to call, so a
+ * stored GitLab token on a deployment that wired only GitHub resolves to
+ * nothing rather than to a gateway that cannot be built.
  */
 export async function resolveVcs(
   container: AppContainer,
-): Promise<Resolved<VcsGateway, GitHubAuthMethod> | null> {
-  const factory = container.gateways
-  if (factory?.vcsAsApp != null) return { gateway: factory.vcsAsApp, source: 'app' }
+  provider: VcsProvider,
+): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
+  const asApp = container.gateways?.vcsAsApp(provider) ?? null
+  if (asApp !== null) return { gateway: asApp, source: 'app' }
+  return resolveVcsAsPerson(container, provider)
+}
 
-  const signedIn = await openCredential(container, GITHUB_OAUTH_CREDENTIAL_KEY)
-  if (signedIn !== null && factory !== null) {
-    return { gateway: factory.vcsFromToken(signedIn), source: 'oauth' }
+/**
+ * The credential in force for one host that acts as a PERSON: a sign-in, then a
+ * pasted token, then the environment's own.
+ *
+ * The App step of the precedence is missing on purpose, and this is not a
+ * shortcut: an installation token identifies nobody (`identify()` answers null
+ * without a request), so asking `resolveVcs` who is looking answers "nobody" on
+ * a deployment that holds an App AND a sign-in. Every route that needs a viewer
+ * would then 503 with a message telling the operator to sign in, which is the
+ * thing they already did, while their stored credential sat unreachable.
+ *
+ * Which credential a call is MADE with is a different question, and `resolveVcs`
+ * is still the answer to it: the App is the stronger credential for reaching a
+ * repository, it is just not a person.
+ */
+async function resolveVcsAsPerson(
+  container: AppContainer,
+  provider: VcsProvider,
+): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
+  const signedIn = await gatewayFromStored(container, provider, vcsOauthCredentialKey(provider))
+  if (signedIn !== null) return { gateway: signedIn, source: 'oauth' }
+
+  const pasted = await gatewayFromStored(container, provider, vcsPatCredentialKey(provider))
+  if (pasted !== null) return { gateway: pasted, source: 'pat' }
+
+  const fromEnvironment = container.vcs[provider]
+  return fromEnvironment === null ? null : { gateway: fromEnvironment, source: 'environment' }
+}
+
+/**
+ * The resolutions made while answering ONE request, so a call chain that needs
+ * the same host twice opens its sealed credential once.
+ *
+ * A workspace read needs GitHub for the viewer and again for the sweep, and
+ * every resolution is an HKDF derivation plus an AES-GCM open. Deliberately not
+ * cached on the container: the Node facade builds one container at boot, so a
+ * cache with that lifetime would keep answering with the token a Configuration
+ * screen has already replaced, which is the property `resolveVcs` runs per
+ * request to protect.
+ *
+ * Only the person chain is memoised. `vcsAsApp` is a lookup of a gateway the
+ * factory built once, so there is nothing there to save.
+ */
+export class VcsResolutions {
+  private readonly asPersonByProvider = new Map<
+    VcsProvider,
+    Promise<Resolved<VcsGateway, VcsAuthMethod> | null>
+  >()
+
+  constructor(private readonly container: AppContainer) {}
+
+  /** The gateway calls to this host are made with. See {@link resolveVcs}. */
+  async acting(provider: VcsProvider): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
+    const asApp = this.container.gateways?.vcsAsApp(provider) ?? null
+    if (asApp !== null) return { gateway: asApp, source: 'app' }
+    return this.asPerson(provider)
   }
-  const pasted = await openCredential(container, 'github-pat')
-  if (pasted !== null && factory !== null) {
-    return { gateway: factory.vcsFromToken(pasted), source: 'pat' }
+
+  /** The gateway that can say who is looking. See {@link resolveVcsAsPerson}. */
+  async asPerson(provider: VcsProvider): Promise<Resolved<VcsGateway, VcsAuthMethod> | null> {
+    const pending =
+      this.asPersonByProvider.get(provider) ?? resolveVcsAsPerson(this.container, provider)
+    this.asPersonByProvider.set(provider, pending)
+    return pending
   }
-  return container.vcs === null ? null : { gateway: container.vcs, source: 'environment' }
+}
+
+/** A gateway built from one stored credential, or null when there is no usable pair of the two. */
+async function gatewayFromStored(
+  container: AppContainer,
+  provider: VcsProvider,
+  key: IntegrationId | VcsOauthCredentialKey,
+): Promise<VcsGateway | null> {
+  const token = await openCredential(container, key)
+  if (token === null) return null
+  return container.gateways?.vcsFromToken(provider, token) ?? null
 }
 
 /** The Slack bot token in force: a stored one, else the deployment's own. */
@@ -97,7 +178,7 @@ export async function resolveAiReview(
  */
 export async function openCredential(
   container: AppContainer,
-  key: IntegrationId | typeof GITHUB_OAUTH_CREDENTIAL_KEY,
+  key: IntegrationId | VcsOauthCredentialKey,
 ): Promise<string | null> {
   const { secrets, repositories, logger } = container
   if (secrets === null) return null
