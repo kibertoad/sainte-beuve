@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@sainte-beuve/contracts": "workspace:*",
+    "@sainte-beuve/integrations": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*",
     "@sainte-beuve/reminders": "workspace:*",
     "@sainte-beuve/reviewers": "workspace:*",

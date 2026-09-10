@@ -1,4 +1,5 @@
 import type { Reminder, Reviewer } from '@sainte-beuve/contracts'
+import type { StoredIntegrationToken } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   InMemoryIntegrationTokenRepository,
@@ -112,19 +113,32 @@ describe('InMemoryReminderRepository', () => {
 })
 
 describe('InMemoryIntegrationTokenRepository', () => {
+  const row = (overrides: Partial<StoredIntegrationToken> = {}): StoredIntegrationToken => ({
+    integrationId: 'cat-factory',
+    sealed: 'v1.a',
+    hint: 'aaaa',
+    subject: null,
+    updatedAt: 1,
+    ...overrides,
+  })
+
   it('replaces the token of an integration instead of keeping a second row', async () => {
     const repo = new InMemoryIntegrationTokenRepository()
-    await repo.put({ integrationId: 'cat-factory', sealed: 'v1.a', hint: 'aaaa', updatedAt: 1 })
-    await repo.put({ integrationId: 'cat-factory', sealed: 'v1.b', hint: 'bbbb', updatedAt: 2 })
+    await repo.put(row())
+    await repo.put(row({ sealed: 'v1.b', hint: 'bbbb', updatedAt: 2 }))
 
-    expect(await repo.list()).toStrictEqual([
-      { integrationId: 'cat-factory', sealed: 'v1.b', hint: 'bbbb', updatedAt: 2 },
-    ])
+    expect(await repo.list()).toStrictEqual([row({ sealed: 'v1.b', hint: 'bbbb', updatedAt: 2 })])
+  })
+
+  it('keeps whose credential it is, for a screen that has to name the account', async () => {
+    const repo = new InMemoryIntegrationTokenRepository()
+    await repo.put(row({ integrationId: 'github-oauth', subject: 'kibertoad' }))
+    expect(await repo.get('github-oauth')).toMatchObject({ subject: 'kibertoad' })
   })
 
   it('reads back nothing for an integration that was cleared', async () => {
     const repo = new InMemoryIntegrationTokenRepository()
-    await repo.put({ integrationId: 'cat-factory', sealed: 'v1.a', hint: 'aaaa', updatedAt: 1 })
+    await repo.put(row())
     await repo.delete('cat-factory')
     expect(await repo.get('cat-factory')).toBeNull()
   })

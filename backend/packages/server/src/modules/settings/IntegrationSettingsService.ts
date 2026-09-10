@@ -1,4 +1,5 @@
 import type {
+  GitHubAuthMethod,
   IntegrationId,
   IntegrationTokenStatus,
   IntegrationTokenUnreadableReason,
@@ -7,6 +8,13 @@ import { integrationIdSchema } from '@sainte-beuve/contracts'
 import type { StoredIntegrationToken } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
+import { hintOf } from '../../integrations/credentials.js'
+import {
+  type CredentialSource,
+  resolveAiReview,
+  resolveChat,
+  resolveVcs,
+} from '../../integrations/resolve.js'
 
 /**
  * The credentials a deployment attaches to its integrations, entered in the SPA
@@ -20,23 +28,20 @@ import { requireCapability } from '../../http/errors.js'
  * decrypting every credential the deployment holds on a read-only path.
  */
 
-/** Enough of the token to recognise it, and far too little to use it. */
-const HINT_LENGTH = 4
-
 const NO_KEY =
   'Storing an integration token needs an encryption key: set SETTINGS_ENCRYPTION_KEY on the deployment'
 const KEY_REJECTED =
   'Storing an integration token needs a usable encryption key, and SETTINGS_ENCRYPTION_KEY was refused'
 
 /**
- * Whether the deployment is REACHING an integration, which is a different fact
- * from holding a credential for it: the gateways are still built from the
- * environment at boot, so a token stored here changes nothing until slice 4
- * joins the two (docs/implementation-plan.md). One entry per integration id, so
- * adding an integration to the picklist without answering this fails the build.
+ * Which credential each capability is actually authenticating with, read once per
+ * request rather than per row: the answer for one GitHub credential depends on
+ * whether another shadows it, so it cannot be decided a row at a time.
  */
-const IN_USE: Record<IntegrationId, (container: AppContainer) => boolean> = {
-  'cat-factory': (container) => container.aiReview !== null,
+interface ActiveCredentials {
+  github: GitHubAuthMethod | null
+  chat: CredentialSource | null
+  aiReview: CredentialSource | null
 }
 
 export class IntegrationSettingsService {
@@ -44,10 +49,13 @@ export class IntegrationSettingsService {
 
   /** Every known integration, stored or not, so the screen renders from one call. */
   async list(): Promise<IntegrationTokenStatus[]> {
-    const stored = await this.container.repositories.integrationTokens.list()
+    const [stored, active] = await Promise.all([
+      this.container.repositories.integrationTokens.list(),
+      this.activeCredentials(),
+    ])
     const byId = new Map(stored.map((row) => [row.integrationId, row]))
     return Promise.all(
-      integrationIdSchema.options.map((id) => this.statusOf(id, byId.get(id) ?? null)),
+      integrationIdSchema.options.map((id) => this.statusOf(id, byId.get(id) ?? null, active)),
     )
   }
 
@@ -59,16 +67,19 @@ export class IntegrationSettingsService {
       // for no other, so a value copied between rows cannot become a credential
       // the wrong gateway authenticates with.
       sealed: await cipher.encrypt(token, integrationId),
-      hint: token.slice(-HINT_LENGTH),
+      hint: hintOf(token),
+      subject: await this.subjectOf(integrationId, token),
       updatedAt: this.container.clock.now(),
     })
-    // Readable by construction: it was sealed by the cipher that just ran.
+    // Readable by construction: it was sealed by the cipher that just ran. The
+    // active credentials are re-read because this write may have CHANGED them.
     return {
       integrationId,
       state: 'stored',
       unreadableReason: null,
-      inUse: this.inUse(integrationId),
+      inUse: inUse(integrationId, await this.activeCredentials()),
       hint: stored.hint,
+      subject: stored.subject,
       updatedAt: stored.updatedAt,
     }
   }
@@ -83,13 +94,50 @@ export class IntegrationSettingsService {
     return this.absent(integrationId)
   }
 
+  /**
+   * Who a credential belongs to, when storing it is also the moment that can be
+   * found out. A pasted GitHub token is checked against `GET /user`, which does
+   * two things worth the round trip: the screen can then say which account is
+   * connected, and a token GitHub refuses fails the write instead of being stored
+   * and reported as configured until the next assignment quietly fails.
+   *
+   * Every other credential returns null, because nothing on their ports answers
+   * the question. A deployment with no gateway factory (a suite, or a facade that
+   * wired no adapters) also returns null rather than refusing the write: the
+   * store is the capability being exercised, not GitHub.
+   */
+  private async subjectOf(integrationId: IntegrationId, token: string): Promise<string | null> {
+    const factory = this.container.gateways
+    if (integrationId !== 'github-pat' || factory === null) return null
+    return factory.vcsFromToken(token).identify()
+  }
+
+  private async activeCredentials(): Promise<ActiveCredentials> {
+    const [vcs, chat, aiReview] = await Promise.all([
+      resolveVcs(this.container),
+      resolveChat(this.container),
+      resolveAiReview(this.container),
+    ])
+    return {
+      github: vcs?.source ?? null,
+      chat: chat?.source ?? null,
+      aiReview: aiReview?.source ?? null,
+    }
+  }
+
+  /**
+   * Nothing stored, and therefore nothing in use: every id's answer to `inUse` is
+   * "this row is the one in force", which an absent row cannot be. Stated as a
+   * literal rather than routed through the lookup, so the two cannot disagree.
+   */
   private absent(integrationId: IntegrationId): IntegrationTokenStatus {
     return {
       integrationId,
       state: 'absent',
       unreadableReason: null,
-      inUse: this.inUse(integrationId),
+      inUse: false,
       hint: null,
+      subject: null,
       updatedAt: null,
     }
   }
@@ -97,6 +145,7 @@ export class IntegrationSettingsService {
   private async statusOf(
     integrationId: IntegrationId,
     row: StoredIntegrationToken | null,
+    active: ActiveCredentials,
   ): Promise<IntegrationTokenStatus> {
     if (row === null) return this.absent(integrationId)
     const unreadableReason = await this.unreadableReason(integrationId, row.sealed)
@@ -104,8 +153,9 @@ export class IntegrationSettingsService {
       integrationId,
       state: unreadableReason === null ? 'stored' : 'unreadable',
       unreadableReason,
-      inUse: this.inUse(integrationId),
+      inUse: inUse(integrationId, active),
       hint: row.hint,
+      subject: row.subject,
       updatedAt: row.updatedAt,
     }
   }
@@ -129,12 +179,22 @@ export class IntegrationSettingsService {
     return state
   }
 
-  private inUse(integrationId: IntegrationId): boolean {
-    return IN_USE[integrationId](this.container)
-  }
-
   private noCipherMessage(): string {
     const rejected = this.container.secretsRejectedReason
     return rejected === null ? NO_KEY : `${KEY_REJECTED}: ${rejected}`
   }
+}
+
+/**
+ * Whether this row is the credential in force. One entry per integration id, so
+ * adding an integration to the picklist without answering the question fails the
+ * build rather than shipping a row that always reports itself unused.
+ */
+function inUse(integrationId: IntegrationId, active: ActiveCredentials): boolean {
+  const ANSWERS: Record<IntegrationId, boolean> = {
+    'github-pat': active.github === 'pat',
+    'slack-bot-token': active.chat === 'stored',
+    'cat-factory': active.aiReview === 'stored',
+  }
+  return ANSWERS[integrationId]
 }

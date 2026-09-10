@@ -65,6 +65,14 @@ export interface StoredIntegrationToken {
   sealed: string
   /** The last four characters of the token, so an operator can tell which one is stored. */
   hint: string
+  /**
+   * Whose credential this is, when the flow that stored it knows: the GitHub
+   * login behind a sign-in, say. Null for a credential somebody pasted, because
+   * a pasted token names nobody. It is here rather than derived from the token
+   * because deriving it means holding the credential, and a status read must
+   * not.
+   */
+  subject: string | null
   updatedAt: EpochMs
 }
 

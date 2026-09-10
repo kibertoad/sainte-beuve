@@ -1,0 +1,17 @@
+# Source is text, and git has to be told so.
+#
+# Git calls a blob binary when it finds a NUL byte on EITHER side of a diff, so
+# one stray control character in a string literal hides a whole file behind
+# "Bin 3834 -> 6556 bytes": the change is unreviewable, and `git blame`,
+# `git add -p` and patch-based merges all degrade with it. Naming the `diff`
+# attribute keeps these formats textual whatever ends up inside them.
+*.ts diff
+*.tsx diff
+*.js diff
+*.vue diff
+*.json diff
+*.jsonc diff
+*.md diff
+*.toml diff
+*.yaml diff
+*.yml diff

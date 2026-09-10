@@ -1,4 +1,6 @@
 import type {
+  ConnectStart,
+  Connections,
   IntegrationId,
   IntegrationTokenStatus,
   Reviewer,
@@ -56,6 +58,16 @@ export function useSainteBeuveApi() {
       put<IntegrationTokenStatus>(`/settings/integrations/${integrationId}/token`, { token }),
     clearIntegrationToken: (integrationId: IntegrationId) =>
       del<IntegrationTokenStatus>(`/settings/integrations/${integrationId}/token`),
+    getConnections: () => get<Connections>('/settings/connections'),
+    /**
+     * Where to send the browser to start a connect round trip. Fetched rather
+     * than navigated to, because each call MINTS a signed state with a few
+     * minutes of life: the URL has to be the one the operator clicks, not the one
+     * a poll happened to produce.
+     */
+    startGitHubAppInstall: () => get<ConnectStart>('/settings/connections/github/app-install'),
+    startGitHubSignIn: () => get<ConnectStart>('/settings/connections/github/sign-in'),
+    disconnectGitHubSignIn: () => del<Connections>('/settings/connections/github/sign-in'),
   }
 }
 

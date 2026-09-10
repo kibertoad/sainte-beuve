@@ -1,12 +1,16 @@
+import type { Clock } from '@sainte-beuve/kernel'
 import {
+  base64url,
+  base64urlToBytes,
   getErrorMessage,
   isSecretDecryptError,
   type Logger,
   type SecretCipher,
   SecretDecryptError,
   type SecretEnvelopeState,
+  type StateSigner,
 } from '@sainte-beuve/kernel'
-import { base64url, base64urlToBytes } from './encoding.js'
+import { HmacStateSigner } from './HmacStateSigner.js'
 import { formatEnvelope, IV_BYTES, KEY_ID_BYTES, parseEnvelope, SALT_BYTES } from './envelope.js'
 
 /**
@@ -151,7 +155,14 @@ function rotatedKey(): SecretDecryptError {
 }
 
 /**
- * The cipher a facade's configuration asks for, or the reason there is none.
+ * What a facade's encryption key buys it, or the reason it bought nothing.
+ *
+ * Two capabilities come off ONE configured key: sealing the credentials an
+ * operator enters, and signing the state carried through a connect round trip.
+ * They are built together because they are useless apart: a sign-in whose
+ * callback cannot store the token it got is a round trip to nowhere, and the two
+ * derive separate keys from the master through HKDF so sharing the configuration
+ * does not mean sharing key material.
  *
  * Shared by every facade so the three answer a missing or mistyped key
  * identically, and the reason is CARRIED rather than only logged: "no key is
@@ -164,26 +175,36 @@ function rotatedKey(): SecretDecryptError {
  * an encryption key was mistyped is a worse outcome than a Configuration screen
  * reporting itself unavailable. `/health` says `secrets: false` either way.
  */
-export interface SecretCipherWiring {
+export interface SecretsWiring {
   cipher: SecretCipher | null
+  /** Signs the connect round trips. Null exactly when `cipher` is. */
+  states: StateSigner | null
   /** Null when no key was configured at all, which is not a fault to report. */
   rejectedReason: string | null
 }
 
-export function secretCipherFrom(options: {
+const NOTHING: SecretsWiring = { cipher: null, states: null, rejectedReason: null }
+
+export function secretsFrom(options: {
   masterKeyBase64: string | null | undefined
   logger: Logger
-}): SecretCipherWiring {
-  const { masterKeyBase64, logger } = options
-  if (!masterKeyBase64) return { cipher: null, rejectedReason: null }
+  /** The clock the signed states expire against. Defaults to the system one. */
+  clock?: Clock
+}): SecretsWiring {
+  const { masterKeyBase64, logger, clock } = options
+  if (!masterKeyBase64) return NOTHING
   try {
-    return { cipher: new WebCryptoSecretCipher({ masterKeyBase64 }), rejectedReason: null }
+    return {
+      cipher: new WebCryptoSecretCipher({ masterKeyBase64 }),
+      states: new HmacStateSigner({ masterKeyBase64, clock }),
+      rejectedReason: null,
+    }
   } catch (err) {
     logger.error(
       { err },
       'SETTINGS_ENCRYPTION_KEY is set but unusable; storing integration tokens stays off',
     )
-    return { cipher: null, rejectedReason: getErrorMessage(err) }
+    return { ...NOTHING, rejectedReason: getErrorMessage(err) }
   }
 }
 

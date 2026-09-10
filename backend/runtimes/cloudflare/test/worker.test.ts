@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 // workerd and that the facade's own wiring (routes mounted, capabilities read off
 // the env) survives the runtime.
 const TOKEN_URL = 'https://example.com/api/v1/settings/integrations/cat-factory/token'
+const CONNECTIONS_URL = 'https://example.com/api/v1/settings/connections'
 
 describe('sainte-beuve worker', () => {
   // The store is module-level in this facade, and the pool's isolated storage
@@ -21,8 +22,17 @@ describe('sainte-beuve worker', () => {
     expect(await res.json()).toStrictEqual({
       status: 'ok',
       // The suite's env carries an encryption key and nothing else, so the flags
-      // are read off the bindings rather than reported from a fixed table.
-      capabilities: { chat: false, vcs: false, aiReview: false, secrets: true },
+      // are read off the bindings rather than reported from a fixed table. The
+      // inbound pair is separate from the outbound one: posting to Slack needs a
+      // bot token, and trusting a slash command needs the signing secret.
+      capabilities: {
+        chat: false,
+        vcs: false,
+        aiReview: false,
+        secrets: true,
+        githubWebhooks: false,
+        slackInteractivity: false,
+      },
     })
   })
 
@@ -55,9 +65,70 @@ describe('sainte-beuve worker', () => {
     // covers HKDF, the key id and AES-GCM inside workerd. `inUse` stays false
     // because this Worker's bindings wire no cat-factory gateway.
     const listed = await SELF.fetch('https://example.com/api/v1/settings/integrations')
-    expect(await listed.json()).toMatchObject({
-      integrations: [{ integrationId: 'cat-factory', state: 'stored', hint: '5b4a', inUse: false }],
+    const { integrations } = (await listed.json()) as {
+      integrations: { integrationId: string; state: string; hint: string | null; inUse: boolean }[]
+    }
+    expect(integrations.find((row) => row.integrationId === 'cat-factory')).toMatchObject({
+      state: 'stored',
+      hint: '5b4a',
+      inUse: false,
     })
+  })
+
+  it('offers only the connections its bindings can actually make', async () => {
+    // The one thing only this suite can prove about the connect surface: the
+    // Worker resolves it from the per-request `env`, so a facade that forgot to
+    // pass the bindings through would report a deployment it is not.
+    const res = await SELF.fetch(CONNECTIONS_URL)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toStrictEqual({
+      github: {
+        // An encryption key is set and nothing else, so a pasted token is the
+        // one credential this Worker could hold.
+        activeMethod: null,
+        availableMethods: ['pat'],
+        appInstallable: false,
+        account: null,
+        webhooksReady: false,
+        botLogin: null,
+        // `GITHUB_LABEL_REVIEW` is bound BLANK in this suite and reads as the
+        // default: an empty label would match nothing, so labelling a pull
+        // request would silently do nothing at all while the screen showed an
+        // empty `<code>` and no fault.
+        labels: { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' },
+      },
+      slack: { ready: false, announcementChannelId: null, interactivityReady: false },
+    })
+  })
+
+  it('refuses an inbound delivery it has no secret to verify', async () => {
+    // The route is registered in a GitHub App by hand, so it has to answer on
+    // the runtime it is registered against, and answer honestly.
+    //
+    // The suite's `GITHUB_WEBHOOK_SECRET` is BLANK rather than absent, which is
+    // the state a copied `.dev.vars.example` leaves it in. A facade reading it
+    // with `??` would pass `''` to a guard that refuses only null, and workerd
+    // refuses a zero-length HMAC key: GitHub would be answered 500 by a Worker
+    // whose /health calls the capability ready.
+    const res = await SELF.fetch('https://example.com/webhooks/github', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-GitHub-Event': 'ping' },
+      body: '{}',
+    })
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({
+      error: { code: 'unavailable', message: expect.stringContaining('GITHUB_WEBHOOK_SECRET') },
+    })
+  })
+
+  it('signs a connect state with the runtime Web Crypto and refuses a forged one', async () => {
+    // HKDF plus HMAC inside workerd, which is the other adapter that ships
+    // INSIDE the bundle rather than behind a network call. The Worker has no
+    // OAuth client, so the sign-in route is the wrong probe; the callback is
+    // where a state is checked.
+    const res = await SELF.fetch('https://example.com/connect/github/callback?code=x&state=forged')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: { code: 'validation' } })
   })
 
   it('keeps the credential routes off the wildcard its bindings list', async () => {

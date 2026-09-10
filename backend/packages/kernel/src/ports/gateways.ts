@@ -19,8 +19,41 @@ export interface ChatGateway {
 export interface VcsGateway {
   /** Mirror the assignment onto the pull request, so the VCS stays the source of truth. */
   requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void>
+  /**
+   * Take the review request back off people who are no longer on the hook. The
+   * other half of `requestReviewers`: a reroll that only added the replacement
+   * would leave the previous reviewer with a pending request on the pull request
+   * and the notifications that come with it.
+   */
+  removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void>
   /** Post a nudge or an AI-review verdict as a pull-request comment. */
   comment(pr: PullRequestRef, body: string): Promise<void>
+  /**
+   * The login this gateway's credential acts as, for a screen that has to say
+   * which account a deployment is reaching GitHub with. `null` when the
+   * credential has no user behind it, which is what a GitHub App installation
+   * token is: it acts as the App, not as a person.
+   */
+  identify(): Promise<string | null>
+}
+
+/**
+ * The user-facing half of a VCS connection: the browser round trip that turns a
+ * sign-in into a credential this deployment holds.
+ *
+ * Separate from {@link VcsGateway} because the two are configured
+ * independently. An OAuth client can be registered on a deployment that has no
+ * credential yet (that is the point: it is how the credential arrives), and a
+ * deployment given a token by hand needs no OAuth client at all.
+ */
+export interface VcsIdentityGateway {
+  /** Where to send the browser to authorise. `state` comes back on the callback. */
+  authorizeUrl(input: { redirectUri: string; state: string }): string
+  /** Turn the callback's `code` into a durable credential, and say whose it is. */
+  exchangeCode(input: {
+    code: string
+    redirectUri: string
+  }): Promise<{ token: string; login: string }>
 }
 
 /** The handle a delegated AI review is tracked by. */
@@ -52,4 +85,36 @@ export interface AiReviewGateway {
   }): Promise<AiReviewHandle>
   /** Poll one delegated run. The Worker cron and the Node scheduler both drive this. */
   getStatus(taskId: string): Promise<AiReviewReport>
+}
+
+/**
+ * Builds a gateway from a credential that was resolved at request time.
+ *
+ * The port exists because a credential can arrive AFTER boot: a token entered on
+ * the Configuration screen has to take effect without a redeploy, and a gateway
+ * built once at startup cannot be authenticated with something that did not exist
+ * yet. So the runtime supplies a factory over the adapters it wired, and the
+ * request layer asks it for a gateway once it knows which credential wins.
+ *
+ * The two argument-free members are FIELDS rather than methods on purpose. Both
+ * carry a cache worth keeping across requests: the App path memoises an imported
+ * RSA key and the installation tokens it mints, and a method would invite a fresh
+ * instance per call that throws them both away.
+ */
+export interface GatewayFactory {
+  /** Chat, authenticated with a Slack bot token. */
+  chat(botToken: string): ChatGateway
+  /** Source control, authenticated with a token belonging to somebody: a PAT, or a sign-in. */
+  vcsFromToken(token: string): VcsGateway
+  /** Source control, authenticated as the deployment's own app. Null when none is configured. */
+  readonly vcsAsApp: VcsGateway | null
+  /**
+   * The AI reviewer, from an API key. Null when the REST of its configuration is
+   * missing: a key with no base URL and no service id names an instance nothing
+   * can reach, and reporting that as configured is how a stored credential comes
+   * to sit beside a route that answers 503.
+   */
+  aiReview(apiKey: string): AiReviewGateway | null
+  /** The sign-in round trip. Null when no OAuth client is configured. */
+  readonly githubSignIn: VcsIdentityGateway | null
 }

@@ -27,7 +27,7 @@ Mirrors cat-factory's layout, for the same reasons it works there.
 | `backend/packages/kernel`             | Domain errors and PORT interfaces. Nothing here reaches a network or a database.                              |
 | `backend/packages/reviewers`          | Reviewer selection: skill matching, load-aware weighted random. Pure.                                         |
 | `backend/packages/reminders`          | Reminder cadence and escalation. Pure.                                                                        |
-| `backend/packages/integrations`       | GitHub and Slack adapters behind the kernel ports.                                                            |
+| `backend/packages/integrations`       | GitHub and Slack adapters behind the kernel ports, plus the vendor protocols (signatures, events, commands).  |
 | `backend/packages/ai-review`          | The cat-factory gateway. The only package that knows cat-factory exists.                                      |
 | `backend/packages/persistence-memory` | In-memory repositories: what every runtime boots with today.                                                  |
 | `backend/packages/server`             | The runtime-neutral Hono app: controllers, services, error envelope.                                          |
@@ -55,20 +55,34 @@ Two rules hold the shape:
   service rather than by the caller.
 - The reminder policy and the tick that fires it, on both runtimes.
 - Three facades that boot: Worker (smoke-tested inside workerd), Node, local mode.
-- A Nuxt SPA with the board and the reviewer directory behind a side navigation.
-- A Configuration screen: the integration credentials a deployment holds, sealed
-  with AES-256-GCM before they are stored and never readable back out of the API.
-- `GET /health` reporting which optional capabilities the process actually wired.
+- A Nuxt SPA with the board, the reviewer directory and the Configuration screen
+  behind a side navigation.
+- **GitHub, three ways**: a GitHub App (installation tokens minted per repository
+  on Web Crypto), a "Sign in with GitHub" round trip, and a pasted personal access
+  token. Whichever are configured are offered; the strongest present is used. See
+  [integrations.md](./integrations.md).
+- **GitHub intake**: `pull_request` opens and closes a review, `pull_request_review`
+  resolves it, the review label routes it, the AI-review label delegates it, a
+  `skill:` label becomes a required skill, and a comment that @-mentions the bot
+  gets an answer on the pull request.
+- **Slack, both directions**: announcements with buttons, the reminder deliveries,
+  and the `/review` slash command (list, take, reroll, snooze, ai) behind Slack's
+  own request signing.
+- Credentials sealed with AES-256-GCM before they are stored and never readable
+  back out of the API, resolved PER REQUEST so one entered in the SPA takes effect
+  without a redeploy.
+- `GET /health` reporting which optional capabilities the process actually wired,
+  outbound and inbound separately.
 
 ## What is a placeholder, and why it is still here
 
-| Placeholder                                     | Why it exists now                                                                                                                                            |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /webhooks/github`, `POST /webhooks/slack` | Answer 501, but the paths get registered in a GitHub App and a Slack app by hand. Adding them later means re-registering both.                               |
-| In-memory persistence                           | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.                                            |
-| `useSainteBeuveApi` calling routes by path      | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                       |
-| Single cat-factory service id                   | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                      |
-| A stored cat-factory token nothing reads yet    | The screen seals and stores it; the gateway is still built from the environment at boot, so the API reports it stored and NOT in use. Slice 4 joins the two. |
+| Placeholder                                | Why it exists now                                                                                                                                      |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| In-memory persistence                      | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.                                      |
+| `useSainteBeuveApi` calling routes by path | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.                                 |
+| Single cat-factory service id              | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                |
+| A stored credential is never re-checked    | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it. |
+| No AI-review verdict on the pull request   | A run is filed and polled, and nothing posts the result back. That is the rest of slice 4.                                                             |
 
 ## Slices, in order
 
@@ -86,35 +100,38 @@ client boundary instead of three components later.
 
 Also: reviewer CRUD in the SPA, so the pool is manageable without curl.
 
-### Slice 3: GitHub and Slack, for real
+### Slice 3: GitHub and Slack, for real (done)
 
-**GitHub.** Move from a PAT to a GitHub App: an installation token per org, so a
-hosted deployment needs no human's credential. Wire the webhook intake that already
-has its route:
+Both intakes are wired, both credential paths exist, and the design is
+[integrations.md](./integrations.md). What that slice decided, in short:
 
-- `pull_request` `opened`/`ready_for_review` opens a review request; `closed` closes
-  it. The mapping function and the signature check already exist and are tested.
-- `pull_request_review` `submitted` resolves it to `approved` or
-  `changes_requested`, which is what stops the reminder clock.
-- Required skills come from the changed paths, matched against a per-repo
-  path-to-skill map. This is the piece with real design left in it: the map has to be
-  editable by the team, and a change that touches nothing mapped must fall back to
-  "anyone available" rather than to nobody.
+- **Required skills come from LABELS, not from changed paths.** A per-repo
+  path-to-skill map was the original plan, and it is the wrong first move: it is a
+  second configuration surface to build and maintain, it needs a fallback rule for
+  a change that touches nothing mapped, and it is invisible to whoever opened the
+  pull request. `skill:payments` is a gesture a team already knows, it is visible
+  on the pull request, and it needs no store. A path map is worth revisiting once
+  teams are actually annoyed at typing labels, and then it becomes a source that
+  ADDS to them rather than a replacement.
+- **A label, not `opened`, is what asks for a reviewer.** Opening a pull request
+  tracks it and leaves it unassigned, which is the state the reminder ladder exists
+  to shorten. Auto-routing every pull request would put the board in the way of
+  people who opened one to look at CI.
+- **No installation table.** An App installation is resolved from the repository it
+  is used for and cached in memory, so nothing has to be kept in step with what
+  somebody later changes on GitHub.
 
-**Slack.** Two inbound surfaces on the route that already exists, both signed
-(`verifySlackSignature`, written and tested):
-
-- `/review` slash command: register a PR, reroll the reviewer, snooze a reminder.
-- Action buttons on the announcement message: take it, decline it, snooze a day.
-
-Slack is reached with plain `fetch`, not `@slack/web-api`: the official client pulls
-in `node:os`, which workerd does not provide, so importing it makes the Worker bundle
-fail to load. Bolt is not the alternative either, because it owns a server and a
-socket and the Worker has neither.
+What is left over from it: a `decline` button on the announcement (rerolling covers
+it, and "not me" is a different signal worth recording), and per-repository
+overrides for the label names.
 
 ### Slice 4: the AI review loop
 
-Today a run is filed and polled. What is missing is what happens when it finishes:
+Today a run is filed and polled. The credential half landed with slice 3: every
+gateway is built per request from whatever credential the deployment holds, through
+one `GatewayFactory` each facade supplies, so a key entered in the SPA takes effect
+on the Worker and on the Node service alike. What is still missing is what happens
+when a run finishes:
 
 - Post the verdict back as a pull-request comment through the VCS port.
 - Drive `refresh()` from the same tick that drives reminders, so a completed run
@@ -122,11 +139,6 @@ Today a run is filed and polled. What is missing is what happens when it finishe
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
-- Build the gateway from the token the Configuration screen stored, falling back to
-  the environment. The credential is already sealed, and readable through the
-  `SecretCipher` port; what is missing is a container that resolves a gateway per
-  request on the Worker AND after boot on Node, because a token that takes effect
-  on one runtime and not the other is the asymmetry this layout exists to prevent.
 - Per-repository cat-factory service mapping, replacing the single
   `CAT_FACTORY_SERVICE_ID`.
 
@@ -155,10 +167,18 @@ and the board, and API keys for the machine callers.
 
 The configuration routes are the ones this is most overdue for, because they hold a
 credential rather than a board row. Until it lands they are guarded by two things
-that are not authentication: a token can be written and never read back, and
+that are not authentication: a credential can be written and never read back, and
 `/api/v1/settings` is excluded from the wildcard CORS default, so a page the operator
 happens to visit cannot preflight a write into the token store. A caller that reaches
 the deployment directly still can, and that is what a session closes.
+
+The connect flows raise the stakes and do not change the shape of the answer. A
+sign-in is signed end to end (the state is HMAC'd under a key derived from the
+deployment's own, checked before the code is spent, and scoped to its flow so one
+callback cannot accept another's), so nobody can bind their GitHub account to this
+deployment by handing an operator a link. What they still cannot do is prove WHO
+started the flow, because there is no identity to bind it to yet. That is the same
+gap, on a route that now stores a repository-write credential.
 
 Deliberately last: it is the slice whose shape depends most on how the first five are
 actually used, and the least useful one to guess at now.
@@ -182,6 +202,19 @@ drift from what we send. Reimplementing the wire format would give up exactly th
 board, and the route that needs one answers 503 naming what is missing. This is what
 makes the first deploy possible before any app registration exists, and it is what
 makes local mode the same app rather than a reduced one.
+
+**A credential's precedence is documented on the contract, not in the resolver.**
+Which of three GitHub credentials wins is the one thing an operator has to be able
+to predict, so the order lives on `githubAuthMethodSchema` with the reason for each
+step, and the resolver implements it. The Configuration screen then says which one
+is in force and which are being shadowed, because "stored" and "in use" are
+different facts and a screen that conflates them reports a capability the
+deployment does not have.
+
+**An unsigned inbound request is refused, not trusted.** A deployment with no
+webhook secret answers 503 to every GitHub delivery and every Slack command,
+naming the variable. The alternative, acting on an unverified body, would let
+anybody who can find the URL close a review or reassign one.
 
 **In-memory persistence is the first adapter, not a test double.** Writing the ports
 against a store that cannot cheat is what keeps them coarse enough for D1 and

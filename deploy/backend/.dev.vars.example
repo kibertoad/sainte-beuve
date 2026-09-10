@@ -1,17 +1,39 @@
 # Copy to `.dev.vars` for `wrangler dev`. Every value is optional: leave one out and
 # the capability it powers reports as off on /health instead of failing a request.
+# The names match the Node service's `.env.example` one for one, because a
+# variable that exists on one runtime and not the other is a capability that
+# works on one deployment and not the other.
 CAT_FACTORY_BASE_URL=http://localhost:8787
-CAT_FACTORY_API_KEY=
 CAT_FACTORY_SERVICE_ID=
+CAT_FACTORY_API_KEY=
+
+# GitHub, in the three shapes a deployment can be connected in. Whichever are
+# configured are offered on the Configuration screen, and the strongest present
+# is what calls are made with: the App, then a sign-in, then a stored token, then
+# GITHUB_TOKEN.
+#
+# The App private key must be PKCS#8; GitHub issues PKCS#1, so convert it once:
+#   openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pk8.pem
+GITHUB_APP_ID=
+GITHUB_APP_SLUG=
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_OAUTH_CLIENT_ID=
+GITHUB_OAUTH_CLIENT_SECRET=
 GITHUB_TOKEN=
 GITHUB_WEBHOOK_SECRET=
+# Either form of a GitHub App's login works: it comments as `name[bot]` and is
+# mentioned as `@name`.
+GITHUB_BOT_LOGIN=
+
 SLACK_BOT_TOKEN=
 SLACK_SIGNING_SECRET=
 SLACK_CHANNEL_ID=
 APP_BASE_URL=http://localhost:3000
 
-# Seals the credentials entered on the SPA's Configuration screen. Generate one
-# with `openssl rand -base64 32`. Without it the screen refuses to store a token
-# rather than writing it in the clear; rotating it makes every stored token
-# unreadable, which the screen reports as such.
+# Seals the credentials entered on the SPA's Configuration screen, and signs the
+# state carried through a connect round trip. Generate one with
+# `openssl rand -base64 32`. Without it the screen refuses to store a token
+# rather than writing it in the clear, and the connect buttons refuse to start;
+# rotating it makes every stored token unreadable, which the screen reports as
+# such.
 SETTINGS_ENCRYPTION_KEY=

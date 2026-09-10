@@ -2,11 +2,50 @@
 // ports. Everything here is replaceable: the domain packages know the port, never
 // the vendor.
 
-export { type GitHubGatewayOptions, GitHubVcsGateway } from './github/GitHubVcsGateway.js'
+export { createGatewayFactory, type GatewayFactoryConfig } from './factory.js'
 export {
-  type PullRequestEventPayload,
-  reviewRequestFromPullRequestEvent,
-  verifyGitHubSignature,
-} from './github/webhooks.js'
+  GITHUB_API_BASE_URL,
+  GITHUB_WEB_BASE_URL,
+  GitHubApiError,
+  githubApiStatusOf,
+  githubRequest,
+} from './github/client.js'
+export { appTokenSource, type GitHubTokenSource, staticTokenSource } from './github/credentials.js'
+export {
+  type BotVerb,
+  botMentionLogin,
+  type GitHubDelivery,
+  type GitHubEventPayload,
+  type GitHubIntent,
+  type GitHubIntentContext,
+  type GitHubIssuePayload,
+  type GitHubPullRequestPayload,
+  interpretGitHubDelivery,
+  parseBotCommand,
+} from './github/events.js'
+export { GitHubAppAuth, type GitHubAppAuthOptions } from './github/GitHubAppAuth.js'
+export {
+  GitHubIdentityGateway,
+  type GitHubIdentityGatewayOptions,
+} from './github/GitHubIdentityGateway.js'
+export { type GitHubGatewayOptions, GitHubVcsGateway } from './github/GitHubVcsGateway.js'
+export { verifyGitHubSignature } from './github/webhooks.js'
+export {
+  DEFAULT_SNOOZE_HOURS,
+  parseCommandText,
+  parseSlackRequest,
+  SLACK_ACTIONS,
+  type SlackIntent,
+  type SlackRequest,
+} from './slack/commands.js'
+export {
+  announcementMessage,
+  escapeSlackText,
+  reminderMessage,
+  type SlackBlock,
+  slackLink,
+  type SlackMessage,
+} from './slack/message.js'
+export { postSlackResponse, type SlackResponseMessage } from './slack/respond.js'
 export { SlackChatGateway, type SlackGatewayOptions } from './slack/SlackChatGateway.js'
 export { verifySlackSignature } from './slack/signature.js'

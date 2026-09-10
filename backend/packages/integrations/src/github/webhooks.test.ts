@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import {
-  type PullRequestEventPayload,
-  reviewRequestFromPullRequestEvent,
-  verifyGitHubSignature,
-} from './webhooks.js'
+import { verifyGitHubSignature } from './webhooks.js'
+
+// The gate every inbound delivery passes. What a verified delivery MEANS is
+// events.test.ts.
 
 const SECRET = 'github-webhook-secret'
 const BODY = '{"action":"opened"}'
@@ -21,21 +20,6 @@ async function sign(body: string, secret = SECRET): Promise<string> {
   return `sha256=${hex}`
 }
 
-function payload(overrides: Partial<PullRequestEventPayload> = {}): PullRequestEventPayload {
-  return {
-    action: 'opened',
-    pull_request: {
-      number: 42,
-      title: 'Add a health check',
-      html_url: 'https://github.com/kibertoad/sainte-beuve/pull/42',
-      draft: false,
-      user: { login: 'kibertoad' },
-    },
-    repository: { name: 'sainte-beuve', owner: { login: 'kibertoad' } },
-    ...overrides,
-  }
-}
-
 describe('verifyGitHubSignature', () => {
   it('accepts a correctly signed body', async () => {
     expect(await verifyGitHubSignature(SECRET, BODY, await sign(BODY))).toBe(true)
@@ -45,39 +29,18 @@ describe('verifyGitHubSignature', () => {
     expect(await verifyGitHubSignature(SECRET, BODY, await sign(BODY, 'other'))).toBe(false)
   })
 
+  it('rejects a body that was altered after signing', async () => {
+    const signature = await sign(BODY)
+    expect(await verifyGitHubSignature(SECRET, '{"action":"closed"}', signature)).toBe(false)
+  })
+
   it('rejects a missing or malformed header', async () => {
+    // A signature of the wrong LENGTH answers false rather than throwing, which
+    // is why the compare is hand-rolled instead of using `crypto.subtle.verify`.
     expect(await verifyGitHubSignature(SECRET, BODY, null)).toBe(false)
     expect(await verifyGitHubSignature(SECRET, BODY, 'sha1=deadbeef')).toBe(false)
     expect(await verifyGitHubSignature(SECRET, BODY, 'sha256=zz')).toBe(false)
-  })
-})
-
-describe('reviewRequestFromPullRequestEvent', () => {
-  it('opens a review for a newly opened pull request', () => {
-    const created = reviewRequestFromPullRequestEvent(payload())
-    expect(created?.pullRequest).toStrictEqual({
-      provider: 'github',
-      owner: 'kibertoad',
-      repo: 'sainte-beuve',
-      number: 42,
-      url: 'https://github.com/kibertoad/sainte-beuve/pull/42',
-    })
-    expect(created?.authorLogin).toBe('kibertoad')
-  })
-
-  it('ignores drafts and untracked actions', () => {
-    expect(
-      reviewRequestFromPullRequestEvent(
-        payload({ pull_request: { ...payload().pull_request, draft: true } }),
-      ),
-    ).toBeNull()
-    expect(reviewRequestFromPullRequestEvent(payload({ action: 'labeled' }))).toBeNull()
-  })
-
-  it('marks the author unknown rather than dropping a PR from a deleted account', () => {
-    const created = reviewRequestFromPullRequestEvent(
-      payload({ pull_request: { ...payload().pull_request, user: null } }),
-    )
-    expect(created?.authorLogin).toBe('unknown')
+    expect(await verifyGitHubSignature(SECRET, BODY, 'sha256=')).toBe(false)
+    expect(await verifyGitHubSignature(SECRET, BODY, 'sha256=abc')).toBe(false)
   })
 })

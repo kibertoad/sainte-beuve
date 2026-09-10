@@ -1,25 +1,22 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
-import {
-  type ChatGateway,
-  UpstreamFailedError,
-  formatPullRequest,
-  getErrorMessage,
-} from '@sainte-beuve/kernel'
+import { type ChatGateway, UpstreamFailedError, getErrorMessage } from '@sainte-beuve/kernel'
+import { announcementMessage, reminderMessage, type SlackMessage } from './message.js'
 
 /**
  * The Slack side of the chat port: announce a review, deliver a nudge.
  *
- * Plain `fetch` against Slack's Web API rather than `@slack/web-api`. Two reasons,
- * and the first one is not negotiable: the official client reaches for `node:os`
- * (through its instrumentation layer), which workerd does not provide, so importing
- * it makes the Worker bundle fail to load. The second is that the surface we use is
- * two POSTs of JSON, and a client that ships an HTTP stack, retry policy and
- * telemetry to cover them is a lot of dependency for `chat.postMessage`.
+ * Plain `fetch` against Slack's Web API rather than `@slack/web-api`. Two
+ * reasons, and the first one is not negotiable: the official client reaches for
+ * `node:os` (through its instrumentation layer), which workerd does not provide,
+ * so importing it makes the Worker bundle fail to load. The second is that the
+ * surface we use is two POSTs of JSON, and a client that ships an HTTP stack,
+ * retry policy and telemetry to cover them is a lot of dependency for
+ * `chat.postMessage`.
  *
- * `@slack/bolt` is not the alternative: it owns a server and a socket, which is the
- * wrong shape for a Worker and duplicates the HTTP layer we already have on Node.
- * Interactivity arrives as plain signed POSTs to our own routes instead; see
- * `verifySlackSignature`.
+ * `@slack/bolt` is not the alternative: it owns a server and a socket, which is
+ * the wrong shape for a Worker and duplicates the HTTP layer we already have on
+ * Node. Interactivity arrives as plain signed POSTs to our own routes instead;
+ * see `verifySlackSignature` and `parseSlackRequest`.
  */
 export interface SlackGatewayOptions {
   botToken: string
@@ -50,18 +47,15 @@ export class SlackChatGateway implements ChatGateway {
   }
 
   async announceReview(review: ReviewRequest, channelId: string): Promise<{ messageId: string }> {
-    const skills =
-      review.requiredSkills.length > 0 ? ` (needs ${review.requiredSkills.join(', ')})` : ''
-    const text = `Review wanted: <${review.pullRequest.url}|${formatPullRequest(review.pullRequest)}> ${review.title}${skills}`
-    const result = await this.postMessage(channelId, text)
+    const result = await this.postMessage(channelId, announcementMessage(review))
     return { messageId: result.ts ?? '' }
   }
 
   async sendReminder(reminder: Reminder, review: ReviewRequest, target: string): Promise<void> {
-    await this.postMessage(target, this.reminderText(reminder, review))
+    await this.postMessage(target, reminderMessage(reminder, review, this.options.appBaseUrl))
   }
 
-  private async postMessage(channel: string, text: string): Promise<SlackResponse> {
+  private async postMessage(channel: string, message: SlackMessage): Promise<SlackResponse> {
     const url = `${this.options.apiBaseUrl ?? SLACK_API_BASE_URL}/chat.postMessage`
     let response: Response
     try {
@@ -71,7 +65,7 @@ export class SlackChatGateway implements ChatGateway {
           authorization: `Bearer ${this.options.botToken}`,
           'content-type': 'application/json; charset=utf-8',
         },
-        body: JSON.stringify({ channel, text }),
+        body: JSON.stringify({ channel, ...message }),
       })
     } catch (err) {
       throw new UpstreamFailedError(`Could not reach Slack: ${getErrorMessage(err)}`)
@@ -82,8 +76,8 @@ export class SlackChatGateway implements ChatGateway {
   /**
    * Slack reports application failures as a 200 with `ok: false`, so the status
    * code alone is not the answer. Both halves are checked, and the `error` slug
-   * (`channel_not_found`, `not_in_channel`) is carried through: it is the one piece
-   * of the reply an operator can act on.
+   * (`channel_not_found`, `not_in_channel`) is carried through: it is the one
+   * piece of the reply an operator can act on.
    */
   private async readResult(response: Response): Promise<SlackResponse> {
     if (!response.ok) {
@@ -94,16 +88,5 @@ export class SlackChatGateway implements ChatGateway {
       throw new UpstreamFailedError(`Slack refused the message: ${body.error ?? 'unknown error'}`)
     }
     return body
-  }
-
-  private reminderText(reminder: Reminder, review: ReviewRequest): string {
-    const link = `<${review.pullRequest.url}|${formatPullRequest(review.pullRequest)}>`
-    const board =
-      this.options.appBaseUrl === undefined
-        ? ''
-        : ` ${this.options.appBaseUrl}/reviews/${review.id}`
-    if (reminder.kind === 'unassigned') return `${link} is still waiting for a reviewer.${board}`
-    if (reminder.kind === 'escalation') return `${link} is past its review deadline.${board}`
-    return `Reminder: ${link} is waiting on your review.${board}`
   }
 }

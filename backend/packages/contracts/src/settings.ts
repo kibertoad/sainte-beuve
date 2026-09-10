@@ -14,9 +14,27 @@ import * as v from 'valibot'
 // tell which token they are looking at.
 // ---------------------------------------------------------------------------
 
-/** The integrations a token can be stored for. cat-factory is the only one today. */
-export const integrationIdSchema = v.picklist(['cat-factory'])
+/**
+ * The integrations a token can be PASTED for.
+ *
+ * Every credential this deployment holds lives in one keyed store, but not every
+ * key belongs on this list: a GitHub sign-in produces a credential too, and it
+ * arrives from a redirect rather than from a text input. Keeping the picklist to
+ * the pasteable ones is what lets the write route refuse an unknown id at the
+ * contract boundary, and what stops the Configuration screen from rendering a
+ * "paste a token" field beside a credential nobody can paste. The sign-in
+ * credential is {@link GITHUB_OAUTH_CREDENTIAL_KEY}, reported through
+ * {@link githubConnectionSchema} instead.
+ */
+export const integrationIdSchema = v.picklist(['github-pat', 'slack-bot-token', 'cat-factory'])
 export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
+
+/**
+ * The store key the GitHub sign-in credential is held under. Named here, beside
+ * the pasteable ids, so the whole credential key space is one file: a second key
+ * invented in a service is a key nothing else can find to clear.
+ */
+export const GITHUB_OAUTH_CREDENTIAL_KEY = 'github-oauth'
 
 /**
  * `unreadable` is the state that earns this a picklist rather than a boolean: a
@@ -51,16 +69,20 @@ export const integrationTokenStatusSchema = v.object({
   /** Set exactly when `state` is `unreadable`, so the screen names the actual fault. */
   unreadableReason: v.nullable(integrationTokenUnreadableReasonSchema),
   /**
-   * Whether the deployment is currently REACHING this integration. Holding a
-   * credential and using it are two different facts today: the gateways are built
-   * from the environment at boot, so a stored token can sit beside an integration
-   * nothing is wired to, and a screen reporting only "stored" would show it as
-   * configured while every request through it answers 503. Slice 4 joins the two
-   * (docs/implementation-plan.md).
+   * Whether this row is the credential the deployment is currently AUTHENTICATING
+   * with. Holding a credential and using it stay two different facts, for two
+   * reasons that both survive the gateways being resolved per request: the rest
+   * of an integration's configuration may be missing (a cat-factory key with no
+   * base URL reaches nothing), and a credential can be SHADOWED by a stronger one
+   * (a pasted GitHub token sits unused behind a configured GitHub App). A screen
+   * reporting only "stored" would show both as configured while neither is what
+   * the next request uses.
    */
   inUse: v.boolean(),
   /** The last four characters of the stored token. Null when there is nothing stored. */
   hint: v.nullable(v.string()),
+  /** The account the credential belongs to, when the flow that stored it knew one. */
+  subject: v.nullable(v.string()),
   updatedAt: v.nullable(v.number()),
 })
 export type IntegrationTokenStatus = v.InferOutput<typeof integrationTokenStatusSchema>

@@ -6,9 +6,10 @@ import { type NodeConfig, type RunningServer, loadConfig, start } from '@sainte-
  * anywhere.
  *
  * This is not a stripped-down build. It is the same app, the same routes and the
- * same reminder clock the Node facade serves; what local mode changes is the
- * DEFAULTS, so that running it requires no Slack workspace, no GitHub App and no
- * cat-factory account:
+ * same reminder clock the Node facade serves, and every credential path a hosted
+ * deployment has (a GitHub App, a sign-in, a pasted token) is configurable here
+ * too. What local mode changes is the DEFAULTS, so that running it requires no
+ * Slack workspace, no GitHub App and no cat-factory account:
  *
  *   - CORS opens to `*`, because the SPA is on a different localhost port.
  *   - cat-factory defaults to `http://localhost:8787`, which is where a local

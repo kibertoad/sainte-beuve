@@ -1,62 +1,111 @@
 import type { PullRequestRef } from '@sainte-beuve/contracts'
-import { UpstreamFailedError, type VcsGateway, getErrorMessage } from '@sainte-beuve/kernel'
-import { Octokit } from 'octokit'
+import type { VcsGateway } from '@sainte-beuve/kernel'
+import { githubRequest } from './client.js'
+import type { GitHubTokenSource } from './credentials.js'
 
 /**
- * The GitHub side of the VCS port: mirror an assignment onto the pull request and
- * post comments.
+ * The GitHub side of the VCS port: mirror an assignment onto the pull request,
+ * and post comments.
  *
- * Mirroring matters more than it looks. sainte-beuve picks the reviewer, but GitHub
- * is where the reviewer actually gets their notification and where the PR page shows
- * who is on the hook, so an assignment that lives only in our store is an assignment
- * half the team never sees.
+ * Mirroring matters more than it looks. sainte-beuve picks the reviewer, but
+ * GitHub is where the reviewer gets their notification and where the PR page
+ * shows who is on the hook, so an assignment that lives only in our store is an
+ * assignment half the team never sees.
  *
- * Authentication is a token today (a PAT locally, a GitHub App installation token in
- * a hosted deployment). The App path is the next slice: see
- * docs/implementation-plan.md.
+ * Authentication is a {@link GitHubTokenSource}, so the same gateway serves all
+ * three ways a deployment can be connected: a personal access token, the token a
+ * "Sign in with GitHub" produced, or an App installation token minted per
+ * repository. Which one a deployment uses is resolved above this line; nothing
+ * here knows or cares.
  */
 export interface GitHubGatewayOptions {
-  token: string
+  /** How to authenticate. `staticTokenSource(token)` covers a plain token. */
+  tokens: GitHubTokenSource
   /** Override for GitHub Enterprise Server. Defaults to github.com. */
   baseUrl?: string
+  /** Swap the HTTP implementation. Defaults to the global `fetch`. */
+  fetchImpl?: typeof globalThis.fetch
 }
 
 export class GitHubVcsGateway implements VcsGateway {
-  private readonly octokit: Octokit
+  private readonly options: GitHubGatewayOptions
+  /** Memoised for the life of this gateway, so repeated reads cost one round trip. */
+  private identity?: Promise<string | null>
 
   constructor(options: GitHubGatewayOptions) {
-    this.octokit = new Octokit({ auth: options.token, baseUrl: options.baseUrl })
+    this.options = options
   }
 
   async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
     if (logins.length === 0) return
-    try {
-      await this.octokit.rest.pulls.requestReviewers({
-        owner: pr.owner,
-        repo: pr.repo,
-        pull_number: pr.number,
-        reviewers: logins,
-      })
-    } catch (err) {
-      throw new UpstreamFailedError(
-        `GitHub refused the reviewer request for ${pr.owner}/${pr.repo}#${pr.number}: ${getErrorMessage(err)}`,
-      )
-    }
+    await this.call(pr, {
+      method: 'POST',
+      path: `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/requested_reviewers`,
+      body: { reviewers: logins },
+    })
+  }
+
+  async removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
+    if (logins.length === 0) return
+    await this.call(pr, {
+      method: 'DELETE',
+      // Same path as the request, minus the reviewers named in the body. GitHub
+      // answers 200 whether or not they were requested, so a reroll on a pull
+      // request nobody was requested on is not a failure.
+      path: `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/requested_reviewers`,
+      body: { reviewers: logins },
+    })
   }
 
   async comment(pr: PullRequestRef, body: string): Promise<void> {
-    try {
+    await this.call(pr, {
+      method: 'POST',
       // A pull request IS an issue for the comments API; `issue_number` is the PR number.
-      await this.octokit.rest.issues.createComment({
-        owner: pr.owner,
-        repo: pr.repo,
-        issue_number: pr.number,
-        body,
-      })
-    } catch (err) {
-      throw new UpstreamFailedError(
-        `GitHub refused the comment on ${pr.owner}/${pr.repo}#${pr.number}: ${getErrorMessage(err)}`,
-      )
-    }
+      path: `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments`,
+      body: { body },
+    })
+  }
+
+  /**
+   * Who this credential acts as, or null when it acts as no person. An App
+   * installation token is the null case, and it is answered WITHOUT a request:
+   * `GET /user` under an installation token is a 403, which would otherwise be
+   * reported to an operator as a broken connection.
+   */
+  async identify(): Promise<string | null> {
+    if (!this.options.tokens.hasUser) return null
+    // A FAILED read is not memoised: a rejected promise left in the field would
+    // answer every later call with the same rate limit or the same expired
+    // token, so a screen that polls could never recover without a redeploy.
+    this.identity ??= this.readViewer().catch((err: unknown) => {
+      this.identity = undefined
+      throw err
+    })
+    return this.identity
+  }
+
+  private async readViewer(): Promise<string | null> {
+    // No repository in play, so the source is asked for its unscoped token. A
+    // static source ignores both arguments; an App source never reaches here.
+    const token = await this.options.tokens.tokenFor('', '')
+    const user = await githubRequest<{ login?: string }>({
+      path: '/user',
+      token,
+      baseUrl: this.options.baseUrl,
+      fetchImpl: this.options.fetchImpl,
+    })
+    return user.login ?? null
+  }
+
+  private async call(
+    pr: PullRequestRef,
+    request: { method: 'POST' | 'DELETE'; path: string; body: unknown },
+  ): Promise<void> {
+    await githubRequest({
+      ...request,
+      token: await this.options.tokens.tokenFor(pr.owner, pr.repo),
+      baseUrl: this.options.baseUrl,
+      fetchImpl: this.options.fetchImpl,
+    })
   }
 }

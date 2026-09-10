@@ -21,9 +21,20 @@ describe('review board API', () => {
   it('reports which capabilities the deployment wired', async () => {
     const res = await harness.app.fetch(new Request('http://localhost/health'))
     expect(res.status).toBe(200)
+    // The outbound flags and the inbound ones are separate: posting to Slack
+    // needs a bot token and trusting a slash command needs the signing secret,
+    // so a deployment with one and not the other is half wired and has to look
+    // like it.
     expect(await res.json()).toStrictEqual({
       status: 'ok',
-      capabilities: { chat: false, vcs: false, aiReview: false, secrets: false },
+      capabilities: {
+        chat: false,
+        vcs: false,
+        aiReview: false,
+        secrets: false,
+        githubWebhooks: false,
+        slackInteractivity: false,
+      },
     })
   })
 

@@ -2,6 +2,7 @@ import type { AiReviewRun } from '@sainte-beuve/contracts'
 import { assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
+import { resolveAiReview } from '../../integrations/resolve.js'
 
 /**
  * Delegating a review to cat-factory.
@@ -16,9 +17,10 @@ export class AiReviewService {
 
   async request(reviewId: string, instructions: string | null): Promise<AiReviewRun> {
     const { repositories, clock, ids } = this.container
-    const gateway = requireCapability(
-      this.container.aiReview,
-      'cat-factory is not configured for this deployment',
+    const resolved = requireCapability(
+      await resolveAiReview(this.container),
+      'cat-factory is not configured for this deployment: it needs a base URL, a service id and ' +
+        'an API key (the key can be entered on the Configuration screen)',
     )
     const review = assertFound(
       await repositories.reviews.getById(reviewId),
@@ -37,7 +39,7 @@ export class AiReviewService {
     })
 
     try {
-      const handle = await gateway.requestReview({
+      const handle = await resolved.gateway.requestReview({
         pullRequest: review.pullRequest,
         title: review.title,
         instructions,
@@ -75,12 +77,13 @@ export class AiReviewService {
    */
   async refresh(runId: string): Promise<AiReviewRun | null> {
     const { repositories, clock } = this.container
-    const gateway = this.container.aiReview
     const run = await repositories.aiReviewRuns.getById(runId)
-    if (gateway === null || run === null || run.catFactoryTaskId === null) return run
+    if (run === null || run.catFactoryTaskId === null) return run
     if (run.status !== 'running' && run.status !== 'requested') return run
+    const resolved = await resolveAiReview(this.container)
+    if (resolved === null) return run
 
-    const reported = await gateway.getStatus(run.catFactoryTaskId)
+    const reported = await resolved.gateway.getStatus(run.catFactoryTaskId)
     const finished = reported.status !== 'running'
     return repositories.aiReviewRuns.update(runId, {
       status: reported.status,
