@@ -6,6 +6,7 @@ import type {
   IdGenerator,
   Logger,
   Repositories,
+  SecretCipher,
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { DEFAULT_REMINDER_POLICY, systemClock, uuidGenerator } from '@sainte-beuve/kernel'
@@ -33,6 +34,12 @@ export interface AppContainer {
   chat: ChatGateway | null
   vcs: VcsGateway | null
   aiReview: AiReviewGateway | null
+  /**
+   * Seals the integration credentials an operator enters in the SPA. Null when
+   * the deployment configured no encryption key, and then storing one is refused
+   * rather than done in the clear.
+   */
+  secrets: SecretCipher | null
   /** Slack channel new reviews are announced in. Null when chat is not configured. */
   announcementChannelId: string | null
 }
@@ -47,6 +54,7 @@ export interface ContainerOptions {
   chat?: ChatGateway | null
   vcs?: VcsGateway | null
   aiReview?: AiReviewGateway | null
+  secrets?: SecretCipher | null
   announcementChannelId?: string | null
 }
 
@@ -61,6 +69,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     chat: options.chat ?? null,
     vcs: options.vcs ?? null,
     aiReview: options.aiReview ?? null,
+    secrets: options.secrets ?? null,
     announcementChannelId: options.announcementChannelId ?? null,
   }
 }

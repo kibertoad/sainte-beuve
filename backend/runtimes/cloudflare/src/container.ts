@@ -2,7 +2,7 @@ import { CatFactoryAiReviewGateway } from '@sainte-beuve/ai-review'
 import { GitHubVcsGateway, SlackChatGateway } from '@sainte-beuve/integrations'
 import type { AiReviewGateway, ChatGateway, Logger, VcsGateway } from '@sainte-beuve/kernel'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
-import { type AppContainer, createContainer } from '@sainte-beuve/server'
+import { type AppContainer, createContainer, secretCipherFrom } from '@sainte-beuve/server'
 import type { WorkerEnv } from './env.js'
 
 /**
@@ -52,6 +52,10 @@ export function containerFor(env: WorkerEnv): AppContainer {
     chat: buildChat(env),
     vcs: buildVcs(env),
     aiReview: buildAiReview(env),
+    secrets: secretCipherFrom({
+      masterKeyBase64: env.SETTINGS_ENCRYPTION_KEY,
+      logger: workerLogger,
+    }),
     announcementChannelId: env.SLACK_CHANNEL_ID ?? null,
   })
 }

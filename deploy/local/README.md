@@ -25,5 +25,10 @@ Copy `.env.example` to `.env` and fill in only the block you care about.
 - **Slack**: a bot token and a channel id, and the reminder clock (every 15s in local
   mode, rather than hourly) delivers to a real channel.
 
+The Configuration screen needs nothing: local mode generates a credential-encryption
+key at boot. It is ephemeral on purpose, because the store behind it is in-memory, so
+a token entered in the SPA does not survive a restart either way. Set
+`SETTINGS_ENCRYPTION_KEY` to pin it.
+
 Local mode is the same app the hosted deployments serve, with different defaults,
 not a reduced build. A bug you find here is a bug in production.

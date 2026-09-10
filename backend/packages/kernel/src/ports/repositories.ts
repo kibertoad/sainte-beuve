@@ -54,6 +54,29 @@ export interface ReminderRepository {
   cancelScheduledForReview(reviewId: string): Promise<void>
 }
 
+/**
+ * One integration's credential, as it sits in the store: SEALED, plus the two
+ * things a configuration screen can show without opening it. The plaintext never
+ * reaches a repository, so a store dump carries no usable credential.
+ */
+export interface StoredIntegrationToken {
+  integrationId: string
+  /** The envelope produced by the deployment's `SecretCipher`. */
+  sealed: string
+  /** The last four characters of the token, so an operator can tell which one is stored. */
+  hint: string
+  updatedAt: EpochMs
+}
+
+/** One row per integration that has a token. Keyed by integration id, not by a surrogate. */
+export interface IntegrationTokenRepository {
+  list(): Promise<StoredIntegrationToken[]>
+  get(integrationId: string): Promise<StoredIntegrationToken | null>
+  /** Store or replace the token for one integration. */
+  put(token: StoredIntegrationToken): Promise<StoredIntegrationToken>
+  delete(integrationId: string): Promise<void>
+}
+
 export interface AiReviewRunRepository {
   listByReview(reviewId: string): Promise<AiReviewRun[]>
   getById(runId: string): Promise<AiReviewRun | null>
@@ -61,10 +84,11 @@ export interface AiReviewRunRepository {
   update(runId: string, patch: Partial<AiReviewRun>): Promise<AiReviewRun | null>
 }
 
-/** The four stores a runtime has to supply, handed to the services as one object. */
+/** The stores a runtime has to supply, handed to the services as one object. */
 export interface Repositories {
   reviewers: ReviewerRepository
   reviews: ReviewRequestRepository
   reminders: ReminderRepository
   aiReviewRuns: AiReviewRunRepository
+  integrationTokens: IntegrationTokenRepository
 }

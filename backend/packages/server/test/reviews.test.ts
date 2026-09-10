@@ -23,7 +23,7 @@ describe('review board API', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toStrictEqual({
       status: 'ok',
-      capabilities: { chat: false, vcs: false, aiReview: false },
+      capabilities: { chat: false, vcs: false, aiReview: false, secrets: false },
     })
   })
 

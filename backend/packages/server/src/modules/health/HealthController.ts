@@ -20,6 +20,7 @@ export function healthController(): Hono<AppEnv> {
         chat: container.chat !== null,
         vcs: container.vcs !== null,
         aiReview: container.aiReview !== null,
+        secrets: container.secrets !== null,
       },
     })
   })

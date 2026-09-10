@@ -22,4 +22,17 @@ describe('localConfig', () => {
     expect(config.github).toBeNull()
     expect(config.corsOrigins).toStrictEqual(['*'])
   })
+
+  it('generates a per-boot encryption key, so the Configuration screen works unset', () => {
+    // 32 bytes, base64: what the cipher refuses to run on anything shorter than.
+    const key = localConfig({}).encryptionKey ?? ''
+    expect(Buffer.from(key, 'base64')).toHaveLength(32)
+    expect(localConfig({}).encryptionKey).not.toBe(key)
+  })
+
+  it('pins the key to the environment when a deployment supplies one', () => {
+    expect(localConfig({ SETTINGS_ENCRYPTION_KEY: 'from-the-env' }).encryptionKey).toBe(
+      'from-the-env',
+    )
+  })
 })

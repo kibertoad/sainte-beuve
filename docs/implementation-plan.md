@@ -55,7 +55,9 @@ Two rules hold the shape:
   service rather than by the caller.
 - The reminder policy and the tick that fires it, on both runtimes.
 - Three facades that boot: Worker (smoke-tested inside workerd), Node, local mode.
-- A Nuxt SPA with the board and the reviewer directory.
+- A Nuxt SPA with the board and the reviewer directory behind a side navigation.
+- A Configuration screen: the integration credentials a deployment holds, sealed
+  with AES-256-GCM before they are stored and never readable back out of the API.
 - `GET /health` reporting which optional capabilities the process actually wired.
 
 ## What is a placeholder, and why it is still here
@@ -66,6 +68,7 @@ Two rules hold the shape:
 | In-memory persistence                           | Deliberately not durable, so the missing adapter cannot be forgotten. An isolate recycle loses the board, loudly.              |
 | `useSainteBeuveApi` calling routes by path      | The contracts already carry method, path and response schema; swapping in `sendByApiContract` is a change in one file.         |
 | Single cat-factory service id                   | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                        |
+| A stored cat-factory token nothing reads yet    | The screen seals and stores it; the gateway is still built from the environment at boot. Slice 4 joins the two.                |
 
 ## Slices, in order
 
@@ -119,6 +122,11 @@ Today a run is filed and polled. What is missing is what happens when it finishe
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
+- Build the gateway from the token the Configuration screen stored, falling back to
+  the environment. The credential is already sealed, and readable through the
+  `SecretCipher` port; what is missing is a container that resolves a gateway per
+  request on the Worker AND after boot on Node, because a token that takes effect
+  on one runtime and not the other is the asymmetry this layout exists to prevent.
 - Per-repository cat-factory service mapping, replacing the single
   `CAT_FACTORY_SERVICE_ID`.
 

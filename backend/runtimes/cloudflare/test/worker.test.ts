@@ -11,8 +11,9 @@ describe('sainte-beuve worker', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toStrictEqual({
       status: 'ok',
-      // Nothing is configured in the test env, so every optional capability is off.
-      capabilities: { chat: false, vcs: false, aiReview: false },
+      // The suite's env carries an encryption key and nothing else, so the flags
+      // are read off the bindings rather than reported from a fixed table.
+      capabilities: { chat: false, vcs: false, aiReview: false, secrets: true },
     })
   })
 
@@ -30,6 +31,26 @@ describe('sainte-beuve worker', () => {
       headers: { origin: 'http://localhost:3000' },
     })
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
+  })
+
+  it('seals and reads back a credential with the runtime Web Crypto', async () => {
+    const stored = await SELF.fetch(
+      'https://example.com/api/v1/settings/integrations/cat-factory/token',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: 'cf_live_9f8e7d6c5b4a' }),
+      },
+    )
+    expect(stored.status).toBe(200)
+
+    // `stored` (rather than `unreadable`) is the assertion that matters: the
+    // screen only reports it after the envelope has been opened again, so this
+    // covers AES-GCM and HKDF in both directions inside workerd.
+    const listed = await SELF.fetch('https://example.com/api/v1/settings/integrations')
+    expect(await listed.json()).toMatchObject({
+      integrations: [{ integrationId: 'cat-factory', state: 'stored', hint: '5b4a' }],
+    })
   })
 
   it('answers the error envelope for an unknown route', async () => {

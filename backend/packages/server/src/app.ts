@@ -7,6 +7,7 @@ import { errorBody, handleError } from './http/errors.js'
 import { healthController } from './modules/health/HealthController.js'
 import { reviewerController } from './modules/reviewers/ReviewerController.js'
 import { reviewController } from './modules/reviews/ReviewController.js'
+import { settingsController } from './modules/settings/SettingsController.js'
 import { webhookController } from './modules/webhooks/WebhookController.js'
 
 /**
@@ -75,6 +76,7 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/', webhookController())
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
+  app.route('/api/v1', settingsController())
 
   app.notFound((c) => c.json(errorBody('not_found', `No route for ${c.req.path}`), 404))
   app.onError(handleError)

@@ -1,6 +1,7 @@
 import type { Reminder, Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
+  InMemoryIntegrationTokenRepository,
   InMemoryReminderRepository,
   InMemoryReviewerRepository,
   createInMemoryRepositories,
@@ -110,12 +111,32 @@ describe('InMemoryReminderRepository', () => {
   })
 })
 
+describe('InMemoryIntegrationTokenRepository', () => {
+  it('replaces the token of an integration instead of keeping a second row', async () => {
+    const repo = new InMemoryIntegrationTokenRepository()
+    await repo.put({ integrationId: 'cat-factory', sealed: 'v1.a', hint: 'aaaa', updatedAt: 1 })
+    await repo.put({ integrationId: 'cat-factory', sealed: 'v1.b', hint: 'bbbb', updatedAt: 2 })
+
+    expect(await repo.list()).toStrictEqual([
+      { integrationId: 'cat-factory', sealed: 'v1.b', hint: 'bbbb', updatedAt: 2 },
+    ])
+  })
+
+  it('reads back nothing for an integration that was cleared', async () => {
+    const repo = new InMemoryIntegrationTokenRepository()
+    await repo.put({ integrationId: 'cat-factory', sealed: 'v1.a', hint: 'aaaa', updatedAt: 1 })
+    await repo.delete('cat-factory')
+    expect(await repo.get('cat-factory')).toBeNull()
+  })
+})
+
 describe('createInMemoryRepositories', () => {
-  it('hands back four independent stores', async () => {
+  it('hands back independent stores', async () => {
     const repos = createInMemoryRepositories()
     await repos.reviewers.create(reviewer('a'))
     expect(await repos.reviewers.list()).toHaveLength(1)
     expect(await repos.reviews.list()).toStrictEqual([])
     expect(await repos.aiReviewRuns.listByReview('rev-1')).toStrictEqual([])
+    expect(await repos.integrationTokens.list()).toStrictEqual([])
   })
 })

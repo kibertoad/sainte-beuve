@@ -69,6 +69,9 @@ function json(method: string, path: string, body: unknown): Request {
 
 export const post = (path: string, body: unknown) => json('POST', path, body)
 export const patch = (path: string, body: unknown) => json('PATCH', path, body)
+export const put = (path: string, body: unknown) => json('PUT', path, body)
+export const del = (path: string): Request =>
+  new Request(`http://localhost${path}`, { method: 'DELETE' })
 
 /** The pull request every suite tracks, unless it needs a second one. */
 export const PR: CreateReviewRequestInput['pullRequest'] = {

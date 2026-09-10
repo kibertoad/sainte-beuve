@@ -15,6 +15,7 @@ export {
   ValidationError,
 } from './domain/errors.js'
 export { DEFAULT_REMINDER_POLICY, type EpochMs, formatPullRequest } from './domain/types.js'
+export type { SecretCipher } from './ports/crypto.js'
 export type {
   AiReviewGateway,
   AiReviewHandle,
@@ -24,10 +25,12 @@ export type {
 } from './ports/gateways.js'
 export type {
   AiReviewRunRepository,
+  IntegrationTokenRepository,
   ReminderRepository,
   Repositories,
   ReviewerRepository,
   ReviewRequestRepository,
+  StoredIntegrationToken,
 } from './ports/repositories.js'
 export {
   type Clock,

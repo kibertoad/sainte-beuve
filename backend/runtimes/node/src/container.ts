@@ -2,7 +2,7 @@ import { CatFactoryAiReviewGateway } from '@sainte-beuve/ai-review'
 import { GitHubVcsGateway, SlackChatGateway } from '@sainte-beuve/integrations'
 import type { Logger } from '@sainte-beuve/kernel'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
-import { type AppContainer, createContainer } from '@sainte-beuve/server'
+import { type AppContainer, createContainer, secretCipherFrom } from '@sainte-beuve/server'
 import { pino } from 'pino'
 import type { NodeConfig } from './config.js'
 
@@ -28,6 +28,7 @@ export function buildContainer(config: NodeConfig): AppContainer {
           }),
     vcs: config.github === null ? null : new GitHubVcsGateway(config.github),
     aiReview: config.catFactory === null ? null : new CatFactoryAiReviewGateway(config.catFactory),
+    secrets: secretCipherFrom({ masterKeyBase64: config.encryptionKey, logger }),
     announcementChannelId: config.slack?.channelId ?? null,
   })
 }
