@@ -48,27 +48,44 @@ const severityColor: Record<AiReviewSeverity, BadgeColor> = {
 const curation = computed(() => props.run.curation)
 const findings = computed<AiReviewFinding[]>(() => curation.value?.findings ?? [])
 
-/** Which findings are going onto the pull request. Everything blocking, to start. */
-const selected = ref(new Set<string>())
-const seeded = ref(false)
+/** The states a run has stopped in. Its curation is a record, not a control. */
+const SETTLED = new Set<AiReviewRun['status']>(['completed', 'failed', 'cancelled'])
+const settled = computed(() => SETTLED.has(props.run.status))
 
-watchEffect(() => {
-  if (seeded.value || findings.value.length === 0) return
-  seeded.value = true
-  // A default of "the ones the reviewer called blocking or high" rather than all
-  // or nothing: an empty list makes somebody tick eight boxes to do the obvious
+/**
+ * Which boxes somebody has ticked, or null while nobody has touched them.
+ *
+ * Null rather than a snapshot seeded on first render, because the findings do not
+ * all arrive at once: a card can render while slices are still reporting, and a
+ * selection captured then would leave every blocker that landed afterwards
+ * unticked while the footer counted it. Once a person ticks anything their set
+ * stands, arrivals included.
+ */
+const ticked = ref<Set<string> | null>(null)
+
+/** What is ticked with nobody having said otherwise. */
+const preselected = computed(() => {
+  const state = curation.value
+  if (state === null) return new Set<string>()
+  // The selection cat-factory recorded wins, so two people looking at one parked
+  // review do not see different boxes ticked.
+  if (state.selectedFindingIds.length > 0) return new Set(state.selectedFindingIds)
+  // Otherwise the ones the reviewer called blocking or high, rather than all or
+  // nothing: an empty list makes somebody tick eight boxes to do the obvious
   // thing, and a full one makes Post the button that publishes the nits too.
-  selected.value = new Set(
-    findings.value
+  return new Set(
+    state.findings
       .filter((finding) => finding.severity === 'blocker' || finding.severity === 'high')
       .map((finding) => finding.findingId),
   )
 })
 
+const selected = computed(() => ticked.value ?? preselected.value)
+
 function toggle(findingId: string): void {
   const next = new Set(selected.value)
   if (!next.delete(findingId)) next.add(findingId)
-  selected.value = next
+  ticked.value = next
 }
 
 const selectedIds = computed(() =>
@@ -107,6 +124,22 @@ const reportLine = computed(() => {
   return `${attempt} posted ${it.posted} of ${it.attempted} comments${folded}.`
 })
 
+/**
+ * Whether the last pass left anything off the pull request.
+ *
+ * A false `bodyPosted` counts. A finding whose line is outside the diff is folded
+ * into the summary comment rather than failing, so a pass can fold every one of
+ * them and then lose the comment that carried them: nothing reached the pull
+ * request, `failures` is empty, and reporting that as posted is the one way this
+ * card can lie about what is up there. A null `bodyPosted` is the other case and
+ * not a failure, because no summary was attempted.
+ */
+const postFailed = computed(() => {
+  const it = report.value
+  if (it === null) return false
+  return it.failures.length > 0 || it.bodyError !== null || it.bodyPosted === false
+})
+
 function lineOf(finding: { path: string; line: number | null }): string {
   return finding.line === null ? finding.path : `${finding.path}:${finding.line}`
 }
@@ -121,13 +154,19 @@ function lineOf(finding: { path: string; line: number | null }): string {
             <UBadge :color="statusColor[run.status]" variant="subtle">
               {{ run.status.replace('_', ' ') }}
             </UBadge>
+            <!--
+              Both of these say where the review is RIGHT NOW, so neither is shown
+              on a run that has stopped: the curation on a settled row is the
+              receipt the poll that settled it left behind, and the phase it was
+              in a moment before the end is not where it is.
+            -->
             <span
-              v-if="curation && curation.status !== 'awaiting_selection'"
+              v-if="curation && !settled && curation.status !== 'awaiting_selection'"
               class="text-xs text-muted"
             >
               {{ curation.status }}
             </span>
-            <span v-if="curation && curation.sliceCount > 0" class="text-xs text-muted">
+            <span v-if="curation && !settled && curation.sliceCount > 0" class="text-xs text-muted">
               {{ curation.reportedSliceCount }}/{{ curation.sliceCount }} slices in
             </span>
           </div>
@@ -161,7 +200,7 @@ function lineOf(finding: { path: string; line: number | null }): string {
     </template>
 
     <UAlert
-      v-if="report && (report.failures.length > 0 || report.bodyError)"
+      v-if="report && postFailed"
       class="mb-4"
       color="error"
       variant="subtle"
@@ -171,6 +210,9 @@ function lineOf(finding: { path: string; line: number | null }): string {
       <template #description>
         <p>{{ reportLine }}</p>
         <p v-if="report.bodyError" class="mt-1">Summary comment: {{ report.bodyError }}</p>
+        <p v-else-if="report.bodyPosted === false" class="mt-1">
+          The summary comment did not land, so anything folded into it is not on the pull request.
+        </p>
         <ul v-if="report.failures.length > 0" class="mt-2 list-disc pl-4">
           <li v-for="failure in report.failures" :key="failure.findingId">
             <span class="font-mono text-xs">{{ lineOf(failure) }}</span

@@ -230,7 +230,14 @@ The loop runs: file, read the findings, curate, post. What it decided, in short:
   which comments bounced.
 - **A key needs `decide`, not `write`.** A review parks, so cat-factory refuses to
   start one through a key that could not answer it. The refusal arrives when the
-  review is filed, and the message names the scope.
+  review is filed, and the message names the scope. Filing is translated through
+  the same refusal table as the curation verbs for exactly that reason.
+- **The receipt outlives the decision.** cat-factory drops a decision from the
+  run's list when the loop it belongs to settles, so the poll that sees a review
+  FINISH is the poll that sees no decision. A row therefore keeps the curation it
+  holds when a report carries none, or the post report and the findings would be
+  destroyed at the moment somebody wants to read what landed, and nothing could
+  recover them.
 
 What is left:
 

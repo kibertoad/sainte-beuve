@@ -28,12 +28,31 @@ of them are worth a comment. That middle step is now a surface rather than a gap
 - Four routes under `/api/v1/ai-review/runs/:runId`, mounted through their
   contracts: read one run, dismiss a finding, resolve, resume. Every read POLLS
   whatever is still in flight, because cat-factory calls nothing back and a list
-  served from the store would show a review that parked an hour ago as running.
-- A cat-factory refusal keeps its shape: 409 for a review that moved on, 404 for a
-  finding a stale screen clicked twice, 403 naming the `decide` scope a key needs,
-  400 for a rule it broke. Only a fault is reported as upstream.
+  served from the store would show a review that parked an hour ago as running. A
+  poll writes onto the row as it stands rather than the one it started from, so
+  the older of two answers in flight cannot walk a settled run back into flight,
+  and a poll that was refused leaves the reason on the row instead of only in a
+  log line nobody reading the board will see.
+- The receipt outlives the decision. cat-factory drops a decision from the run's
+  list the moment the loop settles, so the poll that sees a review finish is the
+  poll that sees no decision, and a row that wrote that through would lose the
+  post report and the findings at the moment somebody wants to read what landed.
+- A cat-factory refusal keeps its shape, filing included: 409 for a review that
+  moved on, 404 for a finding a stale screen clicked twice, 403 naming the
+  `decide` scope a key needs, 403 for a key that has been revoked, 503 for an
+  instance at capacity (where making the same call again is the answer) or one
+  missing a credential of its own, 400 for a rule it broke. Only a fault is
+  reported as upstream. A run whose cat-factory run has not appeared yet answers
+  409 rather than 404, because "poll again" and "this is gone" are opposite
+  instructions.
+- The AI-review reads sit behind the same CORS rule as a write, not the wildcard
+  that covers reads: answering one polls cat-factory with the deployment's key and
+  writes what it learns, so a page an operator happens to visit must not be able
+  to lift a private pull request's findings or loop the request.
 - The board expands a row onto its reviews: severities, the line each finding is
-  about, the suggested fix, checkboxes (blockers and highs pre-ticked), and the
-  three ways out. A failed pass says which comments bounced and why.
+  about, the suggested fix, checkboxes (the recorded selection, else blockers and
+  highs), and the three ways out. A failed pass says which comments bounced and
+  why, a summary comment that did not land included. A review waiting on a person
+  is polled at a slower cadence than one a model is working on.
 - `@cat-factory/sdk` moves to ^0.52.0, which is where the resume route and the
   post receipt are published.

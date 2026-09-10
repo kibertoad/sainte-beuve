@@ -35,18 +35,41 @@ const SETTLED = new Set<AiReviewRun['status']>(['completed', 'failed', 'cancelle
  */
 const inFlight = computed(() => runs.value.some((entry) => !SETTLED.has(entry.status)))
 
-const POLL_MS = 5000
-let timer: ReturnType<typeof setInterval> | null = null
+/**
+ * Whether a MACHINE is working on any of this, which is what earns the fast
+ * cadence.
+ *
+ * A run at `awaiting_selection` is waiting on a person, and nothing but a click
+ * on this card moves it, so reading it every five seconds spends two cat-factory
+ * calls a tick against the deployment's key to be told what is already on the
+ * screen. A review nobody curates stays open for hours. Acting on one turns it
+ * back into work (cat-factory reports the review `posting`, which reads as
+ * `running`), and the refresh the action does itself is what picks the cadence
+ * back up, so a receipt still arrives seconds after a Post.
+ */
+const working = computed(() =>
+  runs.value.some((entry) => !SETTLED.has(entry.status) && entry.status !== 'awaiting_selection'),
+)
 
-onMounted(() => {
-  timer = setInterval(() => {
-    // Only while something is moving, and never on top of a call already out.
-    if (inFlight.value && busy.value === null) void refresh()
-  }, POLL_MS)
-})
+const WORKING_POLL_MS = 5000
+const PARKED_POLL_MS = 30000
+let timer: ReturnType<typeof setTimeout> | null = null
+
+function schedule(): void {
+  timer = setTimeout(
+    () => {
+      // Only while something is moving, and never on top of a call already out.
+      if (inFlight.value && busy.value === null) void refresh()
+      schedule()
+    },
+    working.value ? WORKING_POLL_MS : PARKED_POLL_MS,
+  )
+}
+
+onMounted(schedule)
 
 onUnmounted(() => {
-  if (timer !== null) clearInterval(timer)
+  if (timer !== null) clearTimeout(timer)
 })
 
 async function dismiss(runId: string, findingId: string): Promise<void> {

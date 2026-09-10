@@ -1,6 +1,7 @@
 import type { ReviewRequest } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ReviewService } from '../src/modules/reviews/ReviewService.js'
+import { stubAiReview } from './ai-review-doubles.js'
 import {
   addReviewer,
   buildHarness,
@@ -8,7 +9,6 @@ import {
   everyHost,
   openReview,
   recordingVcs,
-  stubAiReview,
   stubGateways,
   type TestHarness,
 } from './helpers.js'

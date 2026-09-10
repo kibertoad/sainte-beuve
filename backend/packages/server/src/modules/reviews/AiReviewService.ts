@@ -1,6 +1,6 @@
-import type { AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
-import type { AiReviewGateway } from '@sainte-beuve/kernel'
-import { ValidationError, assertFound, getErrorMessage } from '@sainte-beuve/kernel'
+import type { AiReviewCuration, AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
+import { ConflictError, ValidationError, assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { type Resolved, resolveAiReview } from '../../integrations/resolve.js'
@@ -18,10 +18,11 @@ import type { CredentialSource } from '../../integrations/resolve.js'
  * asynchronously and calls nothing back: a Worker deployment has no stable
  * inbound URL for it to reach during local development, and a webhook that only
  * works in production is a seam that breaks the day it matters. So every read
- * here refreshes what is still in flight, and every curation verb is followed by
- * a refresh, which is what keeps a row's status and its findings from being two
- * different moments. A cat-factory-side callback is a later OPTIMISATION over
- * this, never a replacement: see docs/implementation-plan.md, slice 4.
+ * here refreshes what is still in flight, and each asynchronous curation verb is
+ * followed by a refresh, which is what keeps a row's status and its findings from
+ * being two different moments. A cat-factory-side callback is a later
+ * OPTIMISATION over this, never a replacement: see docs/implementation-plan.md,
+ * slice 4.
  */
 
 /** The message a route answers with when cat-factory is not configured at all. */
@@ -33,6 +34,18 @@ const NOT_CONFIGURED =
 const IN_FLIGHT = new Set<AiReviewRun['status']>(['requested', 'running', 'awaiting_selection'])
 
 export class AiReviewService {
+  /**
+   * The cat-factory resolution for THIS request, made at most once.
+   *
+   * One service instance answers one route, which is the lifetime this may be
+   * cached for and no longer: a key entered on the Configuration screen has to
+   * take effect without a redeploy. Within the request it is worth caching,
+   * because every resolution is a credential read plus an HKDF derivation plus an
+   * AES-GCM open, and a review with four runs on it would otherwise pay for all
+   * four. `VcsResolutions` does the same job for source control.
+   */
+  private resolution: Promise<Resolved<AiReviewGateway, CredentialSource> | null> | null = null
+
   constructor(private readonly container: AppContainer) {}
 
   async request(reviewId: string, instructions: string | null): Promise<AiReviewRun> {
@@ -102,20 +115,31 @@ export class AiReviewService {
   /**
    * Poll one in-flight run and write back what cat-factory reports.
    *
-   * Answers null for a run there is nothing to learn about (settled, or never
-   * acknowledged), so a caller can tell "polled, unchanged" from "not polled".
+   * Answers null for a run there was nothing to ask about (no such run, settled,
+   * or never acknowledged), so a caller sweeping rows can tell "polled" from "not
+   * polled" instead of reading a row nobody asked about as fresh state. A poll
+   * that was made and refused answers with the row, which carries the reason.
    */
   async refresh(runId: string): Promise<AiReviewRun | null> {
     const run = await this.container.repositories.aiReviewRuns.getById(runId)
-    if (run === null) return null
-    return (await this.refreshed(run)) ?? run
+    return run === null ? null : this.refreshed(run)
   }
 
-  /** Drop one finding from the parked review, then re-read the run. */
+  /**
+   * Drop one finding from the parked review.
+   *
+   * No re-poll, unlike the two verbs below it: the drop is synchronous and
+   * cat-factory answers with the decision as the drop left it, so that answer IS
+   * the fresh row.
+   */
   async dismissFinding(runId: string, findingId: string): Promise<AiReviewRun> {
     const { gateway, catFactoryRunId } = await this.curating(runId)
-    await gateway.dismissFinding({ runId: catFactoryRunId, findingId })
-    return this.get(runId)
+    const curation = await gateway.dismissFinding({ runId: catFactoryRunId, findingId })
+    if (curation === null) return this.get(runId)
+    return this.assertRun(
+      await this.container.repositories.aiReviewRuns.update(runId, { curation }),
+      runId,
+    )
   }
 
   /**
@@ -151,27 +175,32 @@ export class AiReviewService {
   /**
    * The gateway and the cat-factory run id a curation verb needs.
    *
-   * A run with no cat-factory run id yet is a CONFLICT rather than a fault: the
-   * task was accepted and its run has not appeared, so there is nothing to curate
-   * and the answer is to poll again. It comes out as a 404 naming the local run,
-   * which is what a caller reaching for a run that never started should see.
+   * A run with no cat-factory run id yet is a CONFLICT rather than a fault, and
+   * it answers 409 rather than 404 so a caller can act on the difference: the
+   * task was accepted and its run has not appeared, so the answer is to poll
+   * again in a moment, where a 404 says the run is gone and to stop.
    */
   private async curating(
     runId: string,
   ): Promise<{ gateway: AiReviewGateway; catFactoryRunId: string }> {
     const run = this.assertRun(await this.container.repositories.aiReviewRuns.getById(runId), runId)
     const { gateway } = await this.gateway()
-    return {
-      gateway,
-      catFactoryRunId: assertFound(
-        run.catFactoryRunId,
-        `AI review run ${runId} has no cat-factory run yet, so there is nothing to curate`,
-      ),
+    if (run.catFactoryRunId === null) {
+      throw new ConflictError(
+        `AI review run ${runId} has no cat-factory run yet, so there is nothing to curate. Poll it again in a moment`,
+      )
     }
+    return { gateway, catFactoryRunId: run.catFactoryRunId }
   }
 
   private async gateway(): Promise<Resolved<AiReviewGateway, CredentialSource>> {
-    return requireCapability(await resolveAiReview(this.container), NOT_CONFIGURED)
+    return requireCapability(await this.resolved(), NOT_CONFIGURED)
+  }
+
+  /** The resolution this request is working with. See {@link resolution}. */
+  private async resolved(): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
+    this.resolution ??= resolveAiReview(this.container)
+    return this.resolution
   }
 
   private assertRun(run: AiReviewRun | null, runId: string): AiReviewRun {
@@ -181,46 +210,85 @@ export class AiReviewService {
   /**
    * The run as cat-factory reports it now, or null when there was nothing to ask.
    *
-   * A cat-factory that cannot be reached leaves the row as it was rather than
-   * failing the read: a board showing four reviews must not 502 because the
-   * instance behind one of them is down, and the next poll settles it. The
-   * refusal is logged, because "the findings never arrived" is otherwise a silent
-   * symptom.
+   * A cat-factory that cannot be reached leaves the row's STATUS as it was rather
+   * than failing the read: a board showing four reviews must not 502 because the
+   * instance behind one of them is down, and the next poll settles it.
    */
   private async refreshed(run: AiReviewRun): Promise<AiReviewRun | null> {
     if (run.catFactoryTaskId === null || !IN_FLIGHT.has(run.status)) return null
-    const resolved = await resolveAiReview(this.container)
+    const resolved = await this.resolved()
     if (resolved === null) return null
     try {
       return await this.write(run, await resolved.gateway.getStatus(run.catFactoryTaskId))
     } catch (err) {
-      this.container.logger.warn(
-        { runId: run.id, taskId: run.catFactoryTaskId },
-        `could not read the AI review from cat-factory: ${getErrorMessage(err)}`,
-      )
-      return null
+      return this.pollRefused(run, err)
     }
+  }
+
+  /**
+   * A poll that was refused, recorded ON the row.
+   *
+   * The status is left alone, because a cat-factory that is down for a minute
+   * must not turn a running review into a failed one. What is not left alone is
+   * the silence: a revoked key, or one that lost the `decide` scope, refuses every
+   * poll the same way for ever, and a row that goes on saying `running` with
+   * nothing beside it is indistinguishable on the board from a reviewer that is
+   * merely slow. A log line reaches nobody who pressed the button. The next poll
+   * that succeeds clears the reason along with everything else it writes.
+   */
+  private async pollRefused(run: AiReviewRun, err: unknown): Promise<AiReviewRun | null> {
+    const reason = getErrorMessage(err)
+    this.container.logger.warn(
+      { runId: run.id, taskId: run.catFactoryTaskId },
+      `could not read the AI review from cat-factory: ${reason}`,
+    )
+    return this.container.repositories.aiReviewRuns.update(run.id, {
+      failureReason: `the AI review could not be read from cat-factory: ${reason}`,
+    })
   }
 
   /**
    * What a poll writes back.
    *
+   * Onto the row as it stands NOW rather than the one the poll started from. Two
+   * reads of one review can have polls in flight at once and the slower answer is
+   * the older one: a `running` report landing after a `completed` one would walk a
+   * settled run back into flight, throw away the verdict text already recorded,
+   * and re-stamp `completedAt` from a later clock reading on the poll after that.
+   * So a settled row refuses an in-flight report, and `completedAt` is stamped
+   * once.
+   *
    * `catFactoryRunId` is written once and never cleared, because it is the
    * address every curation verb is sent to: a poll that raced a run being rebuilt
    * would otherwise take the loop's only handle away mid-curation.
    */
-  private async write(
-    run: AiReviewRun,
-    reported: Awaited<ReturnType<AiReviewGateway['getStatus']>>,
-  ): Promise<AiReviewRun | null> {
+  private async write(run: AiReviewRun, reported: AiReviewReport): Promise<AiReviewRun | null> {
+    const current = await this.container.repositories.aiReviewRuns.getById(run.id)
+    if (current === null) return null
     const settled = reported.status !== 'running' && reported.status !== 'awaiting_selection'
+    if (!settled && !IN_FLIGHT.has(current.status)) return current
     return this.container.repositories.aiReviewRuns.update(run.id, {
       status: reported.status,
-      catFactoryRunId: reported.runId ?? run.catFactoryRunId,
+      catFactoryRunId: reported.runId ?? current.catFactoryRunId,
       summary: reported.summary,
       failureReason: reported.failureReason,
-      curation: reported.curation,
-      completedAt: settled ? this.container.clock.now() : null,
+      curation: curationFor(reported, current),
+      completedAt: settled ? (current.completedAt ?? this.container.clock.now()) : null,
     })
   }
+}
+
+/**
+ * The curation a poll writes, which KEEPS what the row already holds when the
+ * report carries none.
+ *
+ * cat-factory drops the decision from a run's list the moment the loop it belongs
+ * to settles, so the poll that sees a review finish is the poll that sees no
+ * decision. Writing that through would destroy the post receipt, the findings and
+ * the recorded selection at exactly the moment somebody wants to read what
+ * landed, and nothing could recover them: the receipt would only ever be visible
+ * in the accidental window between the post and the run settling.
+ */
+function curationFor(reported: AiReviewReport, current: AiReviewRun): AiReviewCuration | null {
+  return reported.curation ?? current.curation
 }

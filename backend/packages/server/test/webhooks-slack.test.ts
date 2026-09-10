@@ -1,5 +1,6 @@
 import { SLACK_ACTIONS } from '@sainte-beuve/integrations'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { stubAiReview } from './ai-review-doubles.js'
 import {
   addReviewer,
   assignReviewer,
@@ -10,7 +11,6 @@ import {
   PR,
   recordingChat,
   recordingVcs,
-  stubAiReview,
   type TestHarness,
 } from './helpers.js'
 

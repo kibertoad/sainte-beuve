@@ -4,9 +4,7 @@ import {
   type AiReviewGateway,
   type AiReviewHandle,
   type AiReviewReport,
-  UpstreamFailedError,
   formatPullRequest,
-  getErrorMessage,
 } from '@sainte-beuve/kernel'
 import { curationOf } from './curation.js'
 import { refusalFor } from './refusals.js'
@@ -127,10 +125,10 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
         this.options.pipelineId === undefined ? {} : { pipelineId: this.options.pipelineId },
       )
     } catch (err) {
-      throw new UpstreamFailedError(
-        `cat-factory accepted the review task but refused to start it: ${getErrorMessage(err)}`,
-        { taskId: task.taskId },
-      )
+      // Through the same translation as every other call, because this is where a
+      // `write`-scope key is turned away: the run would park, so cat-factory will
+      // not start one the caller could not answer. See `refusalFor`.
+      throw refusalFor(err, `start the review task ${task.taskId} it had accepted`)
     }
     return { taskId: task.taskId, url: `${this.options.baseUrl}/tasks/${task.taskId}` }
   }
@@ -151,9 +149,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
         taskType: 'review',
       })
     } catch (err) {
-      throw new UpstreamFailedError(
-        `cat-factory refused the review task for ${ref}: ${getErrorMessage(err)}`,
-      )
+      throw refusalFor(err, `file a review task for ${ref}`)
     }
   }
 
@@ -184,25 +180,44 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
       // A task that has been filed but whose run has not been created yet has no
       // run to read. That is the normal first poll, not a fault.
       if (err instanceof CatFactoryNotFoundError) return null
-      throw new UpstreamFailedError(
-        `cat-factory refused the run status for task ${taskId}: ${getErrorMessage(err)}`,
-      )
+      throw refusalFor(err, `report the run status for task ${taskId}`)
     }
   }
 
+  /**
+   * The decision the run is parked on, or null when there is none to read.
+   *
+   * A 404 is null for the same reason it is on the run: it is an ORDINARY answer
+   * here, not a fault. cat-factory prunes a run's decisions, a rotated key sees a
+   * run outside its workspace, and an older instance may not serve the route at
+   * all. Every one of those means "nothing to curate", and raising them would
+   * fail the whole poll of a review whose findings are sitting right there.
+   */
   private async readCuration(runId: string): Promise<AiReviewCuration | null> {
     try {
       return curationOf(await this.client.decisions.list(runId))
     } catch (err) {
-      throw new UpstreamFailedError(
-        `cat-factory refused the decisions for run ${runId}: ${getErrorMessage(err)}`,
-      )
+      if (err instanceof CatFactoryNotFoundError) return null
+      throw refusalFor(err, `report the decisions for run ${runId}`)
     }
   }
 
-  async dismissFinding(input: { runId: string; findingId: string }): Promise<void> {
-    await this.curating(`dismiss finding ${input.findingId}`, input.runId, () =>
-      this.client.decisions.dismissPrReviewFinding(input.runId, input.findingId),
+  /**
+   * Drop one finding, and answer with the review as the drop left it.
+   *
+   * The answer is KEPT here and discarded by the two verbs below, and the
+   * difference is upstream's: dismissal is synchronous curation that leaves the
+   * run parked, so the list cat-factory hands back is the whole effect and the
+   * caller has nothing left to learn by re-reading it.
+   */
+  async dismissFinding(input: {
+    runId: string
+    findingId: string
+  }): Promise<AiReviewCuration | null> {
+    return curationOf(
+      await this.curating(`dismiss finding ${input.findingId}`, input.runId, () =>
+        this.client.decisions.dismissPrReviewFinding(input.runId, input.findingId),
+      ),
     )
   }
 
@@ -228,18 +243,18 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
   /**
    * One curation verb, with its refusal translated.
    *
-   * The answer is DISCARDED, and that is the point: cat-factory hands back the
-   * decision list as it stands the instant the verb landed, and every one of
-   * these verbs is asynchronous, so writing that snapshot into the row would
-   * record a review as `posting` a moment before the post report exists. The
-   * caller re-polls instead, through the one path that maps a run
-   * (`getStatus`), so a row is never assembled two different ways.
+   * `resolveReview` and `resumeReview` throw the answer away, and that is the
+   * point for those two: cat-factory ACCEPTS the instruction and acts on it
+   * afterwards, so the list it hands back records a review as `posting` a moment
+   * before the post report exists. Those two re-poll instead, through the one
+   * path that maps a run (`getStatus`), so a row is never assembled two
+   * different ways. `dismissFinding` is synchronous and keeps it.
    */
-  private async curating(what: string, runId: string, verb: () => Promise<unknown>): Promise<void> {
+  private async curating<T>(what: string, runId: string, verb: () => Promise<T>): Promise<T> {
     try {
-      await verb()
+      return await verb()
     } catch (err) {
-      throw refusalFor(err, what, runId)
+      throw refusalFor(err, `${what} on run ${runId}`)
     }
   }
 }

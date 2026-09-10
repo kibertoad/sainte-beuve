@@ -52,7 +52,16 @@ const WILDCARD = '*'
 /** The routes that read and write a credential. See SettingsController. */
 const CONFIGURATION_PATH = '/api/v1/settings'
 
-/** The methods that change nothing, and so are safe to answer to any origin. */
+/**
+ * The AI-review routes, whose reads are not reads. Answering one POLLS
+ * cat-factory with this deployment's key and writes what it learns onto the run,
+ * so the method says nothing about what the request costs. See AiReviewService.
+ */
+const AI_REVIEW_PATH = '/api/v1/ai-review'
+/** The same routes addressed by review: `/api/v1/reviews/<id>/ai-review`. */
+const AI_REVIEW_SUFFIX = '/ai-review'
+
+/** The methods that change nothing. A path can still be guarded on its own. */
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /** The SPA in local development, on whatever port Nuxt settled for. */
@@ -65,15 +74,18 @@ const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/
  * at all, which is the browser-side symptom of "the API is up and the SPA cannot
  * reach it".
  *
- * The wildcard opens READS. It stops at every request that changes something,
- * and at the configuration routes whether they are read or written, because no
- * route here carries a session to check: `*` on a write would let any page an
- * operator happens to visit preflight a `DELETE /api/v1/projects/<id>` and empty
- * the registry, or resolve somebody else's attention request, or overwrite this
- * deployment's tokens. Those answer an origin the deployment NAMED, plus loopback,
- * which is the local SPA and is already code running on the operator's own
- * machine. A hosted deployment therefore has to list its SPA origin in
- * CORS_ORIGINS to do anything but read, which is the trade this makes on purpose.
+ * The wildcard opens READS. It stops at every request that changes something, at
+ * the configuration routes whether they are read or written, and at the AI-review
+ * routes whose GETs spend the deployment's cat-factory key, because no route here
+ * carries a session to check: `*` on a write would let any page an operator
+ * happens to visit preflight a `DELETE /api/v1/projects/<id>` and empty the
+ * registry, or resolve somebody else's attention request, or overwrite this
+ * deployment's tokens, and `*` on an AI-review read would let it lift the
+ * findings of a private pull request and loop the request to burn the key. Those
+ * answer an origin the deployment NAMED, plus loopback, which is the local SPA
+ * and is already code running on the operator's own machine. A hosted deployment
+ * therefore has to list its SPA origin in CORS_ORIGINS to do anything but read,
+ * which is the trade this makes on purpose.
  *
  * An inbound webhook is unaffected: GitHub and Slack send no `Origin`, and a
  * missing `Access-Control-Allow-Origin` is a rule for browsers rather than a
@@ -91,7 +103,8 @@ function allowedOrigin(
 
 /** Whether this is a request the wildcard does not cover. */
 function isGuarded(request: { path: string; method: string }): boolean {
-  return request.path.startsWith(CONFIGURATION_PATH) || !SAFE_METHODS.has(request.method)
+  if (request.path.startsWith(CONFIGURATION_PATH) || !SAFE_METHODS.has(request.method)) return true
+  return request.path.startsWith(AI_REVIEW_PATH) || request.path.endsWith(AI_REVIEW_SUFFIX)
 }
 
 /**

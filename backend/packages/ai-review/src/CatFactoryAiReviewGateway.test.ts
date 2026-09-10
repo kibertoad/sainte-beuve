@@ -70,6 +70,20 @@ function run(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function task(overrides: Record<string, unknown> = {}) {
+  return {
+    taskId: 'task-1',
+    serviceId: 'svc-1',
+    title: 'Review kibertoad/sainte-beuve#7',
+    status: 'planned',
+    runId: null,
+    progress: 0,
+    prUrl: null,
+    createdAt: 0,
+    ...overrides,
+  }
+}
+
 function finding(overrides: Record<string, unknown> = {}) {
   return {
     findingId: 'f-1',
@@ -121,6 +135,96 @@ function decisions(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
+
+/** One pull request to file a review of. Only the fields the brief is built from. */
+const PULL_REQUEST = {
+  provider: 'github' as const,
+  owner: 'kibertoad',
+  repo: 'sainte-beuve',
+  number: 7,
+  url: 'https://github.com/kibertoad/sainte-beuve/pull/7',
+}
+
+function filing(gateway: CatFactoryAiReviewGateway) {
+  return gateway.requestReview({
+    pullRequest: PULL_REQUEST,
+    title: 'Poll on the read',
+    instructions: null,
+  })
+}
+
+describe('CatFactoryAiReviewGateway.requestReview', () => {
+  it('files the task and starts it, and reports the handle the loop is tracked by', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/tasks': { body: task() },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    expect(await filing(gateway)).toStrictEqual({
+      taskId: 'task-1',
+      url: 'https://cat-factory.example.com/tasks/task-1',
+    })
+    expect(calls.map((call) => call.path)).toStrictEqual([
+      '/api/v1/services/svc-1/tasks',
+      '/api/v1/tasks/task-1/start',
+    ])
+  })
+
+  /**
+   * The refusal a deployment meets FIRST, and the one this translation exists
+   * for: a review parks, so cat-factory will not start one on a key that could
+   * not answer the decision. Reported as an upstream fault it would send an
+   * operator to read cat-factory's logs about their own key.
+   */
+  it('names the scope when a key too low to drive a review is refused at filing', async () => {
+    const { gateway } = gatewayOver({
+      '/tasks': { body: task() },
+      '/start': {
+        status: 403,
+        body: { error: { code: 'insufficient_scope', message: 'needs decide' } },
+      },
+    })
+
+    await expect(filing(gateway)).rejects.toMatchObject({
+      code: 'forbidden',
+      message: /`decide` scope/,
+    })
+  })
+
+  it('reports a revoked key as a refusal to fix here, not as a cat-factory fault', async () => {
+    const { gateway } = gatewayOver({
+      '/tasks': {
+        status: 401,
+        body: { error: { code: 'unauthorized', message: 'no such key' } },
+      },
+    })
+
+    await expect(filing(gateway)).rejects.toMatchObject({
+      code: 'forbidden',
+      message: /Configuration screen/,
+    })
+  })
+
+  /** The one refusal where making the same call again IS the answer. */
+  it('reports a full cat-factory as unavailable rather than as a fault', async () => {
+    const { gateway } = gatewayOver({
+      '/tasks': {
+        status: 429,
+        body: { error: { code: 'too_many_active_runs', message: 'at capacity' } },
+      },
+    })
+
+    await expect(filing(gateway)).rejects.toMatchObject({
+      code: 'unavailable',
+      message: /worth making again/,
+    })
+  })
+
+  it('reports a cat-factory fault at filing as upstream', async () => {
+    const gateway = gatewayAnswering(500, { error: { code: 'internal', message: 'boom' } })
+    await expect(filing(gateway)).rejects.toMatchObject({ code: 'upstream_failed' })
+  })
+})
 
 describe('CatFactoryAiReviewGateway.getStatus', () => {
   it('reports the verdict of a finished run as its summary', async () => {
@@ -181,7 +285,32 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
 
   it('refuses upstream faults rather than reporting a verdict it does not have', async () => {
     const gateway = gatewayAnswering(500, { error: { code: 'internal', message: 'boom' } })
-    await expect(gateway.getStatus('task-1')).rejects.toThrow(/cat-factory refused the run status/)
+    await expect(gateway.getStatus('task-1')).rejects.toThrow(/could not report the run status/)
+  })
+
+  /**
+   * The decision read is the second call of a poll, and a 404 on it is as
+   * ordinary as a 404 on the first: cat-factory prunes decisions, a rotated key
+   * sees a run outside its workspace. Raising it would fail every poll of a
+   * review whose findings are sitting right there.
+   */
+  it('treats a run with no decisions left to read as carrying no curation', async () => {
+    const { gateway } = gatewayOver({
+      '/run': { body: run({ status: 'blocked' }) },
+      '/decisions': { status: 404, body: { error: { code: 'not_found', message: 'no run' } } },
+    })
+
+    const reported = await gateway.getStatus('task-1')
+    expect(reported.status).toBe('running')
+    expect(reported.curation).toBeNull()
+  })
+
+  it('reports a fault on the decision read as upstream, not as an empty review', async () => {
+    const { gateway } = gatewayOver({
+      '/run': { body: run({ status: 'blocked' }) },
+      '/decisions': { status: 500, body: { error: { code: 'internal', message: 'boom' } } },
+    })
+    await expect(gateway.getStatus('task-1')).rejects.toMatchObject({ code: 'upstream_failed' })
   })
 
   it('reports a review parked on its findings as awaiting a selection', async () => {
@@ -307,10 +436,23 @@ describe('CatFactoryAiReviewGateway curation', () => {
     ])
   })
 
-  it('dismisses one finding by id and leaves the review parked', async () => {
-    const { gateway, calls } = gatewayOver({ '/dismiss': { body: decisions() } })
-    await gateway.dismissFinding({ runId: 'run-1', findingId: 'f-1' })
+  /**
+   * The dismissal answer is KEPT, unlike the two asynchronous verbs: the drop is
+   * synchronous curation that leaves the run parked, so the list cat-factory
+   * hands back is the whole effect and a re-poll would spend two more calls to
+   * learn the same thing.
+   */
+  it('dismisses one finding by id and answers with the review the drop left', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/dismiss': { body: decisions({ decisions: [decision({ findings: [] })] }) },
+    })
+
+    const curation = await gateway.dismissFinding({ runId: 'run-1', findingId: 'f-1' })
+
+    expect(calls).toHaveLength(1)
     expect(calls[0]?.path).toBe('/api/v1/runs/run-1/decisions/pr-review/findings/f-1/dismiss')
+    expect(curation?.status).toBe('awaiting_selection')
+    expect(curation?.findings).toStrictEqual([])
   })
 
   it('resumes a stalled review without saying which slices to redo', async () => {

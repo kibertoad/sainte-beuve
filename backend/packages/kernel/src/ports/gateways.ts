@@ -145,8 +145,15 @@ export interface AiReviewGateway {
   }): Promise<AiReviewHandle>
   /** Poll one delegated run. The Worker cron and the Node scheduler both drive this. */
   getStatus(taskId: string): Promise<AiReviewReport>
-  /** Drop one finding from the parked review. The review stays parked. */
-  dismissFinding(input: { runId: string; findingId: string }): Promise<void>
+  /**
+   * Drop one finding from the parked review. The review stays parked.
+   *
+   * SYNCHRONOUS, and it answers with the curation the drop left behind, which is
+   * the whole effect: a caller that re-polled after this would spend two more
+   * upstream calls to be told what this answer already says. Null for a run that
+   * came back carrying no review to curate.
+   */
+  dismissFinding(input: { runId: string; findingId: string }): Promise<AiReviewCuration | null>
   /**
    * Record the curated selection and act on it. ASYNCHRONOUS: it resolves once
    * cat-factory has ACCEPTED the instruction, and what actually landed arrives on
