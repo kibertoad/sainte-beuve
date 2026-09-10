@@ -1,0 +1,46 @@
+# Backend deployment: Cloudflare Worker.
+#
+# This is the production-shaped EXAMPLE deployment of the @sainte-beuve/worker
+# library. The Worker code IS the library (re-exported from src/index.ts); this file
+# is all the per-deployment configuration. Copy this package, fill in the values
+# below, and run `pnpm deploy`.
+#
+# It is a TEMPLATE, not a live deployment: every origin below is an example.com
+# placeholder, and every credential is set with `wrangler secret put` rather than
+# written here.
+name = "sainte-beuve-backend"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# The reminder clock. Hourly matches the cadence the policy works in; a finer
+# trigger only buys invocations that find nothing due.
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+# Origins the SPA is served from. Comma-separated; `*` only for a preview.
+CORS_ORIGINS = "https://sainte-beuve.example.com"
+# Where the SPA lives, so a Slack message can link back to a review.
+APP_BASE_URL = "https://sainte-beuve.example.com"
+# The cat-factory instance AI reviews are delegated to. Point this at your own
+# local cat-factory (http://localhost:8787) or at the org's centralized one.
+CAT_FACTORY_BASE_URL = "https://cat-factory.example.com"
+CAT_FACTORY_SERVICE_ID = "REPLACE_WITH_CAT_FACTORY_SERVICE_ID"
+# Slack channel new reviews are announced in.
+SLACK_CHANNEL_ID = "REPLACE_WITH_SLACK_CHANNEL_ID"
+
+# SECRETS, set with `wrangler secret put <NAME>`, never in this file:
+#   CAT_FACTORY_API_KEY   a cat-factory public-API key (cf_live_<keyId>.<secret>)
+#   GITHUB_TOKEN          a PAT today; a GitHub App installation token in slice 3
+#   GITHUB_WEBHOOK_SECRET the shared secret the webhook signature is checked against
+#   SLACK_BOT_TOKEN       xoxb-… for the Slack bot
+#   SLACK_SIGNING_SECRET  the secret Slack signs its requests with
+#
+# Every one of them is OPTIONAL. A Worker with none of them set still serves the
+# board and reports the gaps on /health, which is what makes the first deploy
+# possible before any app registration exists.

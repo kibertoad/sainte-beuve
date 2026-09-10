@@ -1,0 +1,42 @@
+{
+  "name": "@sainte-beuve/contracts",
+  "version": "0.1.0",
+  "description": "Valibot wire contracts shared between the sainte-beuve frontend and backend: the review, reviewer, reminder and AI-review models plus the route contracts every facade mounts.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/packages/contracts"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@toad-contracts/core": "0.4.0",
+    "@toad-contracts/valibot": "0.5.0",
+    "valibot": "^1.4.2"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

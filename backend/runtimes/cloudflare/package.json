@@ -1,0 +1,48 @@
+{
+  "name": "@sainte-beuve/worker",
+  "version": "0.1.0",
+  "description": "Reusable Cloudflare Worker library for sainte-beuve: the fetch handler over the shared @sainte-beuve/server Hono app, plus the scheduled handler that drives the reminder clock. A deployment supplies wrangler.toml and re-exports this.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/runtimes/cloudflare"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "dev": "wrangler dev",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@sainte-beuve/ai-review": "workspace:*",
+    "@sainte-beuve/integrations": "workspace:*",
+    "@sainte-beuve/kernel": "workspace:*",
+    "@sainte-beuve/persistence-memory": "workspace:*",
+    "@sainte-beuve/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "5.20260815.1",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11",
+    "wrangler": "4.124.0"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "@sainte-beuve/server",
+  "version": "0.1.0",
+  "description": "Runtime-neutral HTTP layer for sainte-beuve: the Hono controllers, middleware and the container seam shared by every deployment facade (Cloudflare Worker, Node service, local mode).",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/sainte-beuve.git",
+    "directory": "backend/packages/server"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@sainte-beuve/contracts": "workspace:*",
+    "@sainte-beuve/kernel": "workspace:*",
+    "@sainte-beuve/reminders": "workspace:*",
+    "@sainte-beuve/reviewers": "workspace:*",
+    "@toad-contracts/core": "0.4.0",
+    "@toad-contracts/hono": "0.3.2",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@sainte-beuve/persistence-memory": "workspace:*",
+    "@types/node": "^26.5.0",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

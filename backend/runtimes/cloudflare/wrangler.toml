@@ -1,0 +1,20 @@
+# The LIBRARY's own wrangler config: what `wrangler dev` and the workerd test pool
+# run against. A deployment carries its own (see deploy/backend) with real ids and
+# secrets; nothing here may reference an account.
+name = "sainte-beuve-worker"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# The reminder clock. Hourly is the right floor for a review nudge: the cadence
+# itself is measured in hours, so a finer trigger only adds invocations that find
+# nothing due.
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+CORS_ORIGINS = "*"

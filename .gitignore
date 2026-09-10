@@ -141,3 +141,18 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Turborepo task cache
+.turbo
+
+# TypeScript project-reference build state
+*.tsbuildinfo
+
+# Wrangler / workerd local state
+.wrangler
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# JetBrains
+.idea/

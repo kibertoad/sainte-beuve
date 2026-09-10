@@ -1,0 +1,20 @@
+# Keep the build context to SOURCE. The host's node_modules is a pnpm store full of
+# host-platform binaries (workerd, esbuild, @parcel/watcher), and installing on top
+# of it inside the image produces a tree built for the wrong platform; .git and the
+# build outputs only invalidate layers.
+node_modules
+**/node_modules
+.git
+.github
+.idea
+.turbo
+**/.turbo
+dist
+**/dist
+**/*.tsbuildinfo
+.nuxt
+**/.nuxt
+.output
+**/.output
+**/.env
+**/.dev.vars

@@ -1,0 +1,51 @@
+# One workspace for the whole repo: the publishable backend libraries
+# (backend/packages), the runtime facades (backend/runtimes), the Nuxt layer
+# (frontend/app) and the example deployments (deploy/*). One workspace = one
+# lockfile = one changesets setup spanning frontend and backend.
+packages:
+  - 'backend/packages/*'
+  - 'backend/runtimes/*'
+  - 'frontend/app'
+  - 'deploy/backend'
+  - 'deploy/frontend'
+  - 'deploy/node'
+  - 'deploy/local'
+
+# Pin the Vue runtime family to one version. Vue's render internals are
+# module-level singletons, so two copies in the bundle crash the SPA on boot with
+# a null-instance read. Keep these in lockstep with the `vue` range in
+# frontend/app/package.json and with whatever Nuxt resolves on the next bump.
+overrides:
+  vue: 3.5.42
+  vue-router: 5.3.1
+  # `@cloudflare/workers-types` IS a workerd date (5.20260815.1 <-> workerd
+  # 1.20260815.1), so a second copy means part of the tree typechecks against a
+  # runtime the rest of it does not run. Optional-peer slots float it even with
+  # every workspace declaration pinned exact: wrangler wherever a package
+  # declares wrangler without the types beside it, and `autoInstallPeers` then
+  # fills the slot from the newest published version. The date here is DERIVED
+  # from the workerd we actually run, which is the one
+  # `@cloudflare/vitest-pool-workers` pins (wrangler 4.124.0 + miniflare
+  # 5.20260815.0-alpha). Move it with wrangler, never on its own.
+  '@cloudflare/workers-types': 5.20260815.1
+
+# NO `wrangler` override, deliberately. The invariant is ONE wrangler (and
+# through it one workerd + one miniflare): the Worker suite runs inside the
+# pool's workerd and `wrangler deploy` ships wrangler's, so two copies mean the
+# runtime the tests prove is a different build from the runtime that ships. An
+# override is the wrong tool because it OVERRIDES
+# `@cloudflare/vitest-pool-workers`'s exact pin instead of TRACKING it. What
+# holds the invariant is an exact `wrangler` version in every package that
+# declares it, matching whatever the pool pins.
+
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  sharp: true
+  vue-demi: true
+  workerd: true
+
+# Supply-chain gate: refuse a package published inside this window, so a
+# compromised release has to survive a day of public scrutiny before it can
+# reach an install here. 1440 minutes = 24 hours.
+minimumReleaseAge: 1440

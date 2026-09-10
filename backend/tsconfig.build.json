@@ -1,0 +1,21 @@
+{
+  // Solution-style config: no files of its own, just the library build graph.
+  // `tsc -b backend/tsconfig.build.json` compiles every backend package as a single
+  // incremental project-reference graph (topological order comes from each build
+  // config's `references`), so unchanged packages are restored from their
+  // `.tsbuildinfo` instead of recompiled.
+  "files": [],
+  "references": [
+    { "path": "packages/contracts/tsconfig.build.json" },
+    { "path": "packages/kernel/tsconfig.build.json" },
+    { "path": "packages/reviewers/tsconfig.build.json" },
+    { "path": "packages/reminders/tsconfig.build.json" },
+    { "path": "packages/integrations/tsconfig.build.json" },
+    { "path": "packages/ai-review/tsconfig.build.json" },
+    { "path": "packages/persistence-memory/tsconfig.build.json" },
+    { "path": "packages/server/tsconfig.build.json" },
+    { "path": "runtimes/cloudflare/tsconfig.build.json" },
+    { "path": "runtimes/node/tsconfig.build.json" },
+    { "path": "runtimes/local/tsconfig.build.json" }
+  ]
+}
