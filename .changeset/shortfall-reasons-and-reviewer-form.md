@@ -48,3 +48,6 @@ and reverted concurrent changes on save.
 - A request the client itself refuses reports `invalid_request` rather than
   `contract_mismatch`, so a value somebody typed is not presented as the route
   breaking its contract.
+- A reviewer's weight has to be above 0, by the check and not only by the comment
+  beside it. A stored 0 was a person `isEligible` dropped from every draw while their
+  row still rendered as available.

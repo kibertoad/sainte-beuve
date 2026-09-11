@@ -44,6 +44,24 @@ const hosts = VCS_PROVIDERS.map((provider) => ({
   label: `${vcsDisplayName(provider)} handle`,
 }))
 
+/**
+ * Whether the draft can be sent.
+ *
+ * The weight box needs checking because it can hold something that is not a number.
+ * Nuxt UI applies Vue's `looseToNumber` for `type="number"`, which hands back the
+ * RAW STRING for anything not yet numeric, so a cleared box is `''` and a lone minus
+ * sign is `'-'`, both in a field typed `number`. An input's `min` and `max` are not
+ * enforced without a form submit either, so a typed 50 would reach the wire.
+ *
+ * Refused here rather than at the call, because a value somebody is still typing is
+ * not an error worth a toast.
+ */
+const submittable = computed(() => {
+  const weight = draft.value.weight
+  const usableWeight = typeof weight === 'number' && weight > 0 && weight <= 10
+  return draft.value.displayName.trim().length > 0 && usableWeight
+})
+
 function submit() {
   emit('submit', toCreateReviewer(draft.value))
 }
@@ -88,12 +106,12 @@ function submit() {
       </UFormField>
       <UFormField
         label="Weight"
-        description="Share of the load. A 0.5 is picked about half as often as a 1."
+        description="Share of the load, above 0. A 0.5 is picked about half as often as a 1."
       >
         <UInput
           v-model.number="draft.weight"
           type="number"
-          min="0"
+          min="0.1"
           max="10"
           step="0.1"
           class="w-24"
@@ -103,7 +121,7 @@ function submit() {
 
     <div class="flex justify-end gap-2">
       <UButton variant="ghost" color="neutral" @click="emit('cancel')">Cancel</UButton>
-      <UButton :disabled="draft.displayName.trim().length === 0" :loading="busy" @click="submit()">
+      <UButton :disabled="!submittable" :loading="busy" @click="submit()">
         {{ submitLabel }}
       </UButton>
     </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
-import { createReviewerSchema, reviewerSchema } from './reviewers.js'
+import { createReviewerSchema, reviewerSchema, updateReviewerSchema } from './reviewers.js'
 
 describe('createReviewerSchema', () => {
   it('fills the defaults a caller may omit', () => {
@@ -52,5 +52,17 @@ describe('reviewerSchema', () => {
       createdAt: 0,
     }
     expect(() => v.parse(reviewerSchema, row)).toThrow()
+  })
+
+  // A 0 parsed cleanly while the comment beside it said "0 excluded". `isEligible`
+  // drops a reviewer at or below 0, so the row was a person who never came up again
+  // and still rendered as available.
+  it('refuses a weight of 0, which would silently remove the person from every draw', () => {
+    expect(() => v.parse(createReviewerSchema, { displayName: 'Ada', weight: 0 })).toThrow()
+    expect(() => v.parse(updateReviewerSchema, { weight: 0 })).toThrow()
+  })
+
+  it('still takes a fractional weight, which is the point of the field', () => {
+    expect(v.parse(updateReviewerSchema, { weight: 0.25 })).toStrictEqual({ weight: 0.25 })
   })
 })
