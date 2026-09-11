@@ -1,4 +1,5 @@
 import type { IdentityProvider, LinkedIdentity, Project } from '@sainte-beuve/contracts'
+import { linkedIdentitySchema, projectSchema } from '@sainte-beuve/contracts'
 import type { IdentityRepository, ProjectRepository } from '@sainte-beuve/kernel'
 import { projectRefKey } from '@sainte-beuve/kernel'
 import type { SqlDriver } from './driver.js'
@@ -21,19 +22,19 @@ export class SqlProjectRepository implements ProjectRepository {
 
   async list(): Promise<Project[]> {
     const rows = await this.db.all('SELECT data FROM projects ORDER BY created_at, id')
-    return decodeRows<Project>(rows)
+    return decodeRows(projectSchema, 'projects', rows)
   }
 
   async getById(projectId: string): Promise<Project | null> {
     const row = await this.db.first('SELECT data FROM projects WHERE id = ?', [projectId])
-    return row === null ? null : decodeData<Project>(row.data)
+    return row === null ? null : decodeData(projectSchema, 'projects', row.data)
   }
 
   async getByRef(ref: { provider: string; owner: string; repo: string }): Promise<Project | null> {
     const row = await this.db.first('SELECT data FROM projects WHERE ref_key = ?', [
       projectRefKey(ref),
     ])
-    return row === null ? null : decodeData<Project>(row.data)
+    return row === null ? null : decodeData(projectSchema, 'projects', row.data)
   }
 
   async create(project: Project): Promise<Project> {
@@ -104,7 +105,7 @@ export class SqlIdentityRepository implements IdentityRepository {
       'SELECT data FROM identities WHERE reviewer_id = ? ORDER BY provider, subject',
       [reviewerId],
     )
-    return decodeRows<LinkedIdentity>(rows)
+    return decodeRows(linkedIdentitySchema, 'identities', rows)
   }
 
   async link(reviewerId: string, identity: LinkedIdentity): Promise<string> {

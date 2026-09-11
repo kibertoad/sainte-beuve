@@ -1,5 +1,8 @@
 import { applyD1Migrations, type D1Migration, env } from 'cloudflare:test'
-import { repositoryConformanceCases } from '@sainte-beuve/persistence-conformance'
+import {
+  repositoryConformanceCases,
+  storedRowConformanceCases,
+} from '@sainte-beuve/persistence-conformance'
 import { beforeAll, beforeEach, describe, it } from 'vitest'
 import { createD1Repositories } from '../src/index.js'
 
@@ -54,6 +57,24 @@ describe('D1 repositories', () => {
   for (const testCase of repositoryConformanceCases) {
     it(testCase.name, async () => {
       await testCase.run(createD1Repositories(env.DB))
+    })
+  }
+
+  // The payload cases, which need a write BEHIND the adapter: every write path it
+  // exposes typechecks against the current contract, so the only way to produce a
+  // row from an older one is a statement of our own.
+  for (const testCase of storedRowConformanceCases) {
+    it(testCase.name, async () => {
+      await testCase.run({
+        repositories: createD1Repositories(env.DB),
+        writeRawReviewer: async (id, payload) => {
+          await env.DB.prepare(
+            'INSERT INTO reviewers (id, outstanding_reviews, created_at, data) VALUES (?, ?, ?, ?)',
+          )
+            .bind(id, 0, 1_000, JSON.stringify(payload))
+            .run()
+        },
+      })
     })
   }
 })

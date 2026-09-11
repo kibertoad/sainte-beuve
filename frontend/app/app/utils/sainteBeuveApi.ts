@@ -99,7 +99,6 @@ const UNREACHABLE = 'The sainte-beuve API could not be reached'
  * `apiErrorMessage` folds the refused field names into the message rather than
  * leaving them for a component to read off `details`.
  */
-
 export class ApiError extends Error {
   readonly statusCode: number
   readonly code: string
@@ -218,7 +217,6 @@ async function checkRequest(contract: ApiContract, params: unknown): Promise<voi
 
 /**
  * Build the client for one backend.
-
  *
  * A function of a base URL rather than a Nuxt composable, so it can be exercised
  * by a suite with nothing else around it. `useSainteBeuveApi` is the composable

@@ -1,5 +1,9 @@
 ---
 '@sainte-beuve/contracts': minor
+'@sainte-beuve/kernel': minor
+'@sainte-beuve/persistence-conformance': minor
+'@sainte-beuve/persistence-d1': minor
+'@sainte-beuve/persistence-postgres': minor
 '@sainte-beuve/reviewers': minor
 '@sainte-beuve/server': patch
 '@sainte-beuve/app': patch
@@ -57,3 +61,10 @@ and reverted concurrent changes on save.
 - One API client per base URL. Seven call sites asked for one, one of them per
   expanded board row, and each built a fresh wretch instance and a closure per
   method. Safe to cache only because the app is `ssr: false`, which the comment says.
+- Both durable stores parse a `data` column through its contract schema on read, at
+  one place each: `decodeData` in the D1 adapter and the `payload` column type in the
+  Postgres schema. A row from an older contract is healed where the contract carries
+  a default and raises a `StoredRowError` naming the table and row id where it does
+  not, rather than reaching the browser and reading as a broken screen. The declared
+  column type is unchanged, so no migration follows. `storedRowConformanceCases`
+  covers it on both, and says why the in-memory store is not among them.

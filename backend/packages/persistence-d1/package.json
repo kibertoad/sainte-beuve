@@ -34,7 +34,8 @@
   },
   "dependencies": {
     "@sainte-beuve/contracts": "workspace:*",
-    "@sainte-beuve/kernel": "workspace:*"
+    "@sainte-beuve/kernel": "workspace:*",
+    "valibot": "^1.4.2"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",

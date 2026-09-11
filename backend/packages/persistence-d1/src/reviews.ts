@@ -5,6 +5,7 @@ import type {
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
+import { aiReviewRunSchema, reminderSchema, reviewRequestSchema } from '@sainte-beuve/contracts'
 import type {
   AiReviewRunRepository,
   EpochMs,
@@ -49,12 +50,12 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
       `SELECT data FROM review_requests${where} ORDER BY created_at DESC, id DESC`,
       wanted,
     )
-    return decodeRows<ReviewRequest>(rows)
+    return decodeRows(reviewRequestSchema, 'review_requests', rows)
   }
 
   async getById(reviewId: string): Promise<ReviewRequest | null> {
     const row = await this.db.first('SELECT data FROM review_requests WHERE id = ?', [reviewId])
-    return row === null ? null : decodeData<ReviewRequest>(row.data)
+    return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
   }
 
   async getByPullRequest(ref: {
@@ -66,7 +67,7 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
       'SELECT data FROM review_requests WHERE pr_owner = ? AND pr_repo = ? AND pr_number = ?',
       [ref.owner, ref.repo, ref.number],
     )
-    return row === null ? null : decodeData<ReviewRequest>(row.data)
+    return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
   }
 
   async create(review: ReviewRequest): Promise<ReviewRequest> {
@@ -116,7 +117,7 @@ export class SqlReminderRepository implements ReminderRepository {
       'SELECT data FROM reminders WHERE review_id = ? ORDER BY due_at, id',
       [reviewId],
     )
-    return decodeRows<Reminder>(rows)
+    return decodeRows(reminderSchema, 'reminders', rows)
   }
 
   async listDue(now: EpochMs, limit: number): Promise<Reminder[]> {
@@ -124,7 +125,7 @@ export class SqlReminderRepository implements ReminderRepository {
       "SELECT data FROM reminders WHERE status = 'scheduled' AND due_at <= ? ORDER BY due_at, id LIMIT ?",
       [now, limit],
     )
-    return decodeRows<Reminder>(rows)
+    return decodeRows(reminderSchema, 'reminders', rows)
   }
 
   async create(reminder: Reminder): Promise<Reminder> {
@@ -139,7 +140,7 @@ export class SqlReminderRepository implements ReminderRepository {
   ): Promise<void> {
     const row = await this.db.first('SELECT data FROM reminders WHERE id = ?', [reminderId])
     if (row === null) return
-    const current = decodeData<Reminder>(row.data)
+    const current = decodeData(reminderSchema, 'reminders', row.data)
     await this.write({
       ...current,
       status,
@@ -165,7 +166,7 @@ export class SqlReminderRepository implements ReminderRepository {
       [reviewId],
     )
     await this.db.batch(
-      decodeRows<Reminder>(rows).map((reminder) => ({
+      decodeRows(reminderSchema, 'reminders', rows).map((reminder) => ({
         sql: REMINDER_UPSERT,
         params: reminderParams({ ...reminder, status: 'cancelled' }),
       })),
@@ -192,12 +193,12 @@ export class SqlAiReviewRunRepository implements AiReviewRunRepository {
       'SELECT data FROM ai_review_runs WHERE review_id = ? ORDER BY requested_at DESC, id DESC',
       [reviewId],
     )
-    return decodeRows<AiReviewRun>(rows)
+    return decodeRows(aiReviewRunSchema, 'ai_review_runs', rows)
   }
 
   async getById(runId: string): Promise<AiReviewRun | null> {
     const row = await this.db.first('SELECT data FROM ai_review_runs WHERE id = ?', [runId])
-    return row === null ? null : decodeData<AiReviewRun>(row.data)
+    return row === null ? null : decodeData(aiReviewRunSchema, 'ai_review_runs', row.data)
   }
 
   async create(run: AiReviewRun): Promise<AiReviewRun> {

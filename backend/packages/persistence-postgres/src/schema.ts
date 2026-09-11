@@ -8,7 +8,19 @@ import type {
   ReviewCommitment,
   ReviewRequest,
 } from '@sainte-beuve/contracts'
-import { bigint, index, integer, jsonb, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import {
+  aiReviewRunSchema,
+  attentionRequestSchema,
+  linkedIdentitySchema,
+  projectSchema,
+  reminderSchema,
+  reviewCommitmentSchema,
+  reviewerSchema,
+  reviewRequestSchema,
+} from '@sainte-beuve/contracts'
+import { bigint, customType, index, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import type * as v from 'valibot'
+import { decodePayload } from './rows.js'
 
 /**
  * The board and the workspace, in Postgres types.
@@ -28,9 +40,11 @@ import { bigint, index, integer, jsonb, pgTable, primaryKey, text } from 'drizzl
  * with contracts that still move every slice, plus a JSON column anyway for the
  * arrays and the nested objects.
  *
- * `$type` is where Drizzle earns its place here: the payload is not an opaque
- * blob to the compiler, so a row written from a stale contract shape does not
- * typecheck.
+ * The payload is not an opaque blob at either end. The compiler knows its shape
+ * through the `payload` column type below, so a write from a stale contract does
+ * not typecheck, and that same column type parses what comes BACK through the
+ * contract's schema, so a row already on disk in an older shape is healed or named
+ * rather than believed.
  *
  * Timestamps are epoch milliseconds, in `mode: 'number'` so they arrive as
  * numbers. A bare `bigint` comes back from node-postgres as a STRING (its range
@@ -43,6 +57,31 @@ function epochMs(name: string) {
   return bigint(name, { mode: 'number' })
 }
 
+/**
+ * A payload column, read back THROUGH the contract it was written from.
+ *
+ * Here rather than at the twenty-odd read sites, because a decode that has to be
+ * remembered is one that will be forgotten: `fromDriver` runs for every select on
+ * the column, including the ones added next slice.
+ *
+ * `$type` alone says what the compiler should believe about the payload, which is a
+ * claim about code rather than about the rows already on disk. Nothing downstream
+ * checks them either, since `buildHonoRoute` validates requests and never
+ * responses, so a row written by an older contract reaches the browser and is
+ * refused there, as a broken screen naming a route rather than a row somebody can
+ * fix. Parsing also HEALS the ordinary case, because the contracts carry defaults
+ * for a field added after the row was written.
+ *
+ * The declared type stays `jsonb`, so this is a read-time change with no migration
+ * behind it.
+ */
+function payload<T>(name: string, table: string, schema: v.GenericSchema) {
+  return customType<{ data: T; driverData: unknown }>({
+    dataType: () => 'jsonb',
+    fromDriver: (value) => decodePayload(table, schema, value) as T,
+  })(name)
+}
+
 export const reviewers = pgTable('reviewers', {
   id: text('id').primaryKey(),
   /**
@@ -52,7 +91,7 @@ export const reviewers = pgTable('reviewers', {
    */
   outstandingReviews: integer('outstanding_reviews').notNull().default(0),
   createdAt: epochMs('created_at').notNull(),
-  data: jsonb('data').$type<Reviewer>().notNull(),
+  data: payload<Reviewer>('data', 'reviewers', reviewerSchema).notNull(),
 })
 
 export const reviewRequests = pgTable(
@@ -64,7 +103,7 @@ export const reviewRequests = pgTable(
     prRepo: text('pr_repo').notNull(),
     prNumber: integer('pr_number').notNull(),
     createdAt: epochMs('created_at').notNull(),
-    data: jsonb('data').$type<ReviewRequest>().notNull(),
+    data: payload<ReviewRequest>('data', 'review_requests', reviewRequestSchema).notNull(),
   },
   (table) => [
     index('review_requests_status_idx').on(table.status, table.createdAt),
@@ -81,7 +120,7 @@ export const reminders = pgTable(
     reviewId: text('review_id').notNull(),
     status: text('status').notNull(),
     dueAt: epochMs('due_at').notNull(),
-    data: jsonb('data').$type<Reminder>().notNull(),
+    data: payload<Reminder>('data', 'reminders', reminderSchema).notNull(),
   },
   (table) => [
     index('reminders_review_idx').on(table.reviewId),
@@ -96,7 +135,7 @@ export const aiReviewRuns = pgTable(
     id: text('id').primaryKey(),
     reviewId: text('review_id').notNull(),
     requestedAt: epochMs('requested_at').notNull(),
-    data: jsonb('data').$type<AiReviewRun>().notNull(),
+    data: payload<AiReviewRun>('data', 'ai_review_runs', aiReviewRunSchema).notNull(),
   },
   (table) => [index('ai_review_runs_review_idx').on(table.reviewId, table.requestedAt)],
 )
@@ -126,7 +165,7 @@ export const projects = pgTable('projects', {
    */
   refKey: text('ref_key').notNull().unique('projects_ref_idx'),
   createdAt: epochMs('created_at').notNull(),
-  data: jsonb('data').$type<Project>().notNull(),
+  data: payload<Project>('data', 'projects', projectSchema).notNull(),
 })
 
 /**
@@ -140,7 +179,7 @@ export const identities = pgTable(
     provider: text('provider').notNull(),
     subject: text('subject').notNull(),
     reviewerId: text('reviewer_id').notNull(),
-    data: jsonb('data').$type<LinkedIdentity>().notNull(),
+    data: payload<LinkedIdentity>('data', 'identities', linkedIdentitySchema).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.provider, table.subject] }),
@@ -154,7 +193,7 @@ export const attentionRequests = pgTable(
     id: text('id').primaryKey(),
     status: text('status').notNull(),
     createdAt: epochMs('created_at').notNull(),
-    data: jsonb('data').$type<AttentionRequest>().notNull(),
+    data: payload<AttentionRequest>('data', 'attention_requests', attentionRequestSchema).notNull(),
   },
   (table) => [index('attention_requests_status_idx').on(table.status, table.createdAt)],
 )
@@ -170,7 +209,7 @@ export const reviewCommitments = pgTable(
      */
     pullRequestKey: text('pull_request_key').notNull(),
     createdAt: epochMs('created_at').notNull(),
-    data: jsonb('data').$type<ReviewCommitment>().notNull(),
+    data: payload<ReviewCommitment>('data', 'review_commitments', reviewCommitmentSchema).notNull(),
   },
   (table) => [index('review_commitments_reviewer_idx').on(table.reviewerId, table.createdAt)],
 )
