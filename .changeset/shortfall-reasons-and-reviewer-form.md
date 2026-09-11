@@ -5,23 +5,33 @@
 '@sainte-beuve/app': patch
 ---
 
-Say why an assign found nobody, in wording both channels read from one place.
+Say why an assign found nobody, and stop the reviewer form losing work.
 
 An assign that put nobody on the row had two reasons to give and five situations to
 give them for, so four of the five were told that nobody holds the required skills.
-`shortfallReason` now names the cause it found, and the sentence for each cause lives
-in `@sainte-beuve/contracts` beside the schema.
+The reviewer form, meanwhile, dropped an operator's edits on any background refetch
+and reverted concurrent changes on save.
 
-- Five reasons where there were two: an empty directory, an all-paused pool, a skill
-  nobody available holds, a candidate list emptied by the author and already-assigned
-  exclusions, and a pool smaller than the number asked for. `diagnoseShortfall` in
-  `@sainte-beuve/reviewers` decides which, pure and over the same candidate list the
-  scorer filtered, checked coarsest cause first so a paused pool is never reported as
-  a skills problem.
-- `shortfallCause` and `shortfallRemedy` are the only copies of the wording.
-  `botReply` and the board each add the tail their channel owns, so the comment on
-  the pull request and the toast on the screen cannot drift apart, which the two
-  hand-written tables they replace had already done.
-- `pool_exhausted` means what its name says. It was unreachable at `count: 1`, which
-  is the only count the board and the webhooks send, so the message behind it had
-  never been seen.
+- Five shortfall reasons where there were two: an empty directory, an all-paused
+  pool, a skill nobody available holds, a candidate list emptied by the author and
+  already-assigned exclusions, and a pool smaller than the number asked for.
+  `diagnoseShortfall` in `@sainte-beuve/reviewers` decides which, pure and over the
+  same candidate list the scorer filtered, checked coarsest cause first so a paused
+  pool is never reported as a skills problem.
+- `shortfallCause` and `shortfallRemedy` in `@sainte-beuve/contracts` are the only
+  copies of the wording. `botReply` and the board each add the tail their channel
+  owns, so the comment on the pull request and the toast on the screen cannot drift,
+  which the two hand-written tables they replace had already done.
+- `pool_exhausted` means what its name says. It was unreachable at `count: 1`, the
+  only count the board and the webhooks send, so nobody had seen its message.
+- The reviewer form is seeded once and never refilled from its prop. A refetch used
+  to replace the draft mid-edit, which is every click of Pause on another row and
+  every press of Refresh.
+- A save sends only the fields that form moved, diffed against the row as it was when
+  Edit was pressed. Both a whole-row patch and a diff against the current row revert
+  what somebody else changed while the form was open.
+- The edit target is released when the list no longer holds it, so a failed refresh
+  cannot leave every Edit button disabled with nothing on screen explaining why.
+- `app/utils/reviewerDraft.ts` and `app/utils/text.ts` hold the draft conversions and
+  the two parsing rules the forms share, which is what gives them a suite: the cases
+  run in Node with no Nuxt around them.

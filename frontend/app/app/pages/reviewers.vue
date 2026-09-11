@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CreateReviewer, Reviewer } from '@sainte-beuve/contracts'
 import { knownHandles } from '@sainte-beuve/contracts'
+import { reviewerPatch } from '../utils/reviewerDraft'
 
 // The reviewer directory: who is in the pool, what they can take, and which
 // team an attention request can keep an ask inside.
@@ -23,7 +24,21 @@ const { busy, run } = useApiAction({ refresh })
 
 /** Whether the add form is open, and which row is being edited. Never both. */
 const adding = ref(false)
-const editing = ref<string | null>(null)
+// Holds the row AS IT WAS when Edit was pressed, rather than just its id. That
+// snapshot is what a save is diffed against, so a field this form never touched is
+// never sent, whatever has happened to the row in the meantime.
+const editing = ref<Reviewer | null>(null)
+
+// Let go of an edit target the list no longer holds. A refresh that fails leaves
+// `reviewers` empty, which unmounts the open form along with the Cancel button that
+// is the only control clearing this, and every Edit button is disabled while it is
+// set. Without this the screen comes back from a blip with all of them dead.
+watch(reviewers, (rows) => {
+  const open = editing.value
+  if (open !== null && !rows.some((row) => row.id === open.id)) {
+    editing.value = null
+  }
+})
 
 function startAdding() {
   editing.value = null
@@ -32,7 +47,7 @@ function startAdding() {
 
 function startEditing(reviewer: Reviewer) {
   adding.value = false
-  editing.value = reviewer.id
+  editing.value = reviewer
 }
 
 /**
@@ -52,10 +67,15 @@ async function add(draft: CreateReviewer) {
   }
 }
 
-async function save(reviewer: Reviewer, draft: CreateReviewer) {
-  // A `CreateReviewer` is a complete patch: every field on it is one
-  // `updateReviewer` accepts, so the form does not have to work out what moved.
-  if (await run(() => api.updateReviewer(reviewer.id, draft), 'Could not save', reviewer.id)) {
+async function save(draft: CreateReviewer) {
+  const opened = editing.value
+  if (opened === null) return
+  // Only what THIS form moved, diffed against the row as it was when Edit was
+  // pressed. Posting every field the form holds, or diffing against the row as it
+  // stands now, both revert whatever changed while the form was open: pause
+  // somebody in a second tab, save a form opened before that, and they come back.
+  const patch = reviewerPatch(opened, draft)
+  if (await run(() => api.updateReviewer(opened.id, patch), 'Could not save', opened.id)) {
     editing.value = null
   }
 }
@@ -115,13 +135,14 @@ function togglePause(reviewer: Reviewer) {
 
     <div v-else class="flex flex-col gap-3">
       <UCard v-for="reviewer in reviewers" :key="reviewer.id">
-        <div v-if="editing === reviewer.id">
+        <div v-if="editing?.id === reviewer.id">
           <p class="font-medium mb-4">Editing {{ reviewer.displayName }}</p>
+          <!-- Seeded from the snapshot, which is also what the save is diffed against. -->
           <ReviewerForm
-            :reviewer="reviewer"
+            :reviewer="editing"
             :busy="busy === reviewer.id"
             submit-label="Save"
-            @submit="(draft) => save(reviewer, draft)"
+            @submit="save"
             @cancel="editing = null"
           />
         </div>

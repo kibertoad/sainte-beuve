@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { CreateReviewer, Reviewer, VcsProvider } from '@sainte-beuve/contracts'
-import { NO_VCS_HANDLES, VCS_PROVIDERS, vcsDisplayName, withHandle } from '@sainte-beuve/contracts'
+import type { CreateReviewer, Reviewer } from '@sainte-beuve/contracts'
+import { VCS_PROVIDERS, vcsDisplayName } from '@sainte-beuve/contracts'
+import { draftFrom, toCreateReviewer } from '../utils/reviewerDraft'
 
 // One form for adding somebody to the pool and for editing a row, because the
 // fields are the same set and a second copy would drift the day a field is
-// added. What it emits is a `CreateReviewer`, which is also a valid patch: every
-// field on it is a field `updateReviewer` accepts.
+// added. What it emits is a `CreateReviewer`; the page turns that into the patch
+// the route takes, which is only the fields that moved.
 //
 // A handle PER HOST, never one login. The same engineer is `kibertoad` on one
 // host and `igor.savin` on another, and a reviewer with no handle on the host a
@@ -24,48 +25,14 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-/**
- * The inputs, as text. Every nullable field is a string here and becomes a null
- * on the way out, because an empty box means "nothing recorded" rather than a
- * person whose team is the empty string.
- */
-interface ReviewerDraft {
-  displayName: string
-  handles: Record<VcsProvider, string>
-  slackUserId: string
-  team: string
-  skills: string
-  availability: Reviewer['availability']
-  weight: number
-}
-
-/** A FACTORY, not a shared constant: `v-model` writes straight into what it returns. */
-function emptyDraft(): ReviewerDraft {
-  return {
-    displayName: '',
-    handles: { github: '', gitlab: '' },
-    slackUserId: '',
-    team: '',
-    skills: '',
-    availability: 'available',
-    weight: 1,
-  }
-}
-
-function draftFrom(reviewer: Reviewer | null): ReviewerDraft {
-  if (reviewer === null) return emptyDraft()
-  return {
-    displayName: reviewer.displayName,
-    handles: { github: reviewer.handles.github ?? '', gitlab: reviewer.handles.gitlab ?? '' },
-    slackUserId: reviewer.slackUserId ?? '',
-    team: reviewer.team ?? '',
-    skills: reviewer.skills.join(', '),
-    availability: reviewer.availability,
-    weight: reviewer.weight,
-  }
-}
-
-const draft = ref<ReviewerDraft>(draftFrom(props.reviewer))
+// Seeded once, and never refilled from the prop.
+//
+// Each row renders its own instance, under a card keyed by reviewer id and behind
+// a `v-if` on the row being edited, so this form is never handed a second person.
+// A watch on `props.reviewer` would therefore only ever fire on a background
+// refetch, where the reviewer is the same person as a new object, and it would
+// throw away whatever was being typed at the time.
+const draft = ref(draftFrom(props.reviewer))
 
 const availabilities = [
   { value: 'available' as const, label: 'Available' },
@@ -77,37 +44,8 @@ const hosts = VCS_PROVIDERS.map((provider) => ({
   label: `${vcsDisplayName(provider)} handle`,
 }))
 
-// Refill when the form is reused for somebody else, so an edit never opens on
-// the row that was open before it.
-watch(
-  () => props.reviewer,
-  (reviewer) => {
-    draft.value = draftFrom(reviewer)
-  },
-)
-
-/** An empty box means "nothing recorded here", which is a null rather than a blank. */
-function optional(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed.length === 0 ? null : trimmed
-}
-
 function submit() {
-  emit('submit', {
-    displayName: draft.value.displayName.trim(),
-    handles: VCS_PROVIDERS.reduce(
-      (built, provider) => withHandle(built, provider, optional(draft.value.handles[provider])),
-      NO_VCS_HANDLES,
-    ),
-    slackUserId: optional(draft.value.slackUserId),
-    team: optional(draft.value.team),
-    skills: draft.value.skills
-      .split(',')
-      .map((skill) => skill.trim())
-      .filter((skill) => skill.length > 0),
-    availability: draft.value.availability,
-    weight: draft.value.weight,
-  })
+  emit('submit', toCreateReviewer(draft.value))
 }
 </script>
 
