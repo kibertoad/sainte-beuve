@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ReviewRequest } from '@sainte-beuve/contracts'
+import type { ReviewRequest, ShortfallReason } from '@sainte-beuve/contracts'
+import { shortfallCause, shortfallRemedy } from '@sainte-beuve/contracts'
 
 // The review board: every pull request sainte-beuve is TRACKING, and the two
 // actions a viewer can take on each row.
@@ -37,15 +38,16 @@ const toast = useToast()
  * Why a successful assign put nobody on the row.
  *
  * The route answers 200 with an empty `assigned` list and the reason, because
- * "the pool has nobody with these skills" is a configuration answer rather than
- * a fault. Same wording as the bot's reply on the pull request, so a person
- * reading one and a person reading the other are told the same thing.
+ * "everybody who could take this is already on it" is a configuration answer
+ * rather than a fault.
+ *
+ * The sentence comes from `@sainte-beuve/contracts`, which is where the bot's
+ * reply on the pull request reads it too, so the two cannot drift.
  */
-const SHORTFALL: Record<'no_candidates' | 'pool_exhausted', string> = {
-  no_candidates:
-    'Nobody in the reviewer pool holds every skill this review needs. Add the skill to a ' +
-    'reviewer, or drop it from the request.',
-  pool_exhausted: 'Everybody who could review this is already on it, or is the author.',
+function shortfallMessage(reason: ShortfallReason): string {
+  const remedy = shortfallRemedy(reason)
+  const cause = `${shortfallCause(reason)}.`
+  return remedy === null ? cause : `${cause} ${remedy}`
 }
 
 async function assign(review: ReviewRequest) {
@@ -55,7 +57,7 @@ async function assign(review: ReviewRequest) {
       toast.add({
         color: 'warning',
         title: 'Nobody was assigned',
-        description: SHORTFALL[result.shortfallReason],
+        description: shortfallMessage(result.shortfallReason),
       })
     }
   }, 'Could not find a reviewer')

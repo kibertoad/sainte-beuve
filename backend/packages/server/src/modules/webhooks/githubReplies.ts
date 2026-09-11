@@ -3,44 +3,54 @@ import type {
   AssignReviewersResult,
   Reviewer,
   ReviewRequest,
+  ShortfallReason,
 } from '@sainte-beuve/contracts'
+import { shortfallCause, shortfallRemedy } from '@sainte-beuve/contracts'
+
+// ---------------------------------------------------------------------------
+// What the bot says on a pull request. Pure text, so the wording is testable and
+// so the service stays about ordering and writes.
+//
+// The rule behind every line: name who is on the hook, or name what is missing.
+// A bot comment that says "done" is a comment somebody has to leave the pull
+// request to act on.
+// ---------------------------------------------------------------------------
 
 /**
- * What the bot says on a pull request. Pure text, so the wording is testable and
- * so the service stays about ordering and writes.
+ * A shortfall line: the cause, the tail this channel owns, then the advice where
+ * there is any to give.
  *
- * The rule behind every line: name who is on the hook, or name what is missing.
- * A bot comment that says "done" is a comment somebody has to leave the pull
- * request to act on.
+ * The cause and the advice come from `@sainte-beuve/contracts`, which is also where
+ * the board reads them, so a person reading this comment and a person reading the
+ * screen are told the same thing by construction rather than by a promise.
  */
+function shortfallLine(reason: ShortfallReason | null, tail: string): string {
+  if (reason === null) return `Nobody was assigned, ${tail}`
+  const sentence = `${shortfallCause(reason)}, ${tail}`
+  const remedy = shortfallRemedy(reason)
+  return remedy === null ? sentence : `${sentence} ${remedy}`
+}
+
 export const botReply = {
   assigned(result: AssignReviewersResult): string {
     if (result.assigned.length > 0) {
       const names = result.assigned.map((reviewer) => reviewer.displayName).join(', ')
       return `Review requested from ${names}.`
     }
-    return result.shortfallReason === 'no_candidates'
-      ? 'Nobody in the reviewer pool holds every skill this review needs, so it is on the board ' +
-          'unassigned. Add the skill to a reviewer, or drop it from the request.'
-      : 'Everybody who could review this is already on it or is the author, so it is on the ' +
-          'board unassigned.'
+    return shortfallLine(result.shortfallReason, 'so it is on the board unassigned.')
   },
 
   /**
    * A reroll, which has a second outcome an assign does not: nobody else could
-   * take it. The review then STAYS with whoever has it, so the line has to say
-   * that rather than reporting an unassigned board, which is what a reroll that
-   * found nobody used to leave behind.
+   * take it. The review then STAYS with whoever has it, so the tail says that
+   * rather than reporting an unassigned board.
    */
   rerolled(result: AssignReviewersResult): string {
     if (result.assigned.length > 0) {
       const names = result.assigned.map((reviewer) => reviewer.displayName).join(', ')
       return `Handed over to ${names}, and taken off whoever had it.`
     }
-    return result.shortfallReason === 'no_candidates'
-      ? 'Nobody in the reviewer pool holds every skill this review needs, so it stays where it ' +
-          'is. Add the skill to a reviewer, or drop it from the request.'
-      : 'There is nobody else to hand this to, so it stays with whoever has it.'
+    return shortfallLine(result.shortfallReason, 'so it stays with whoever has it.')
   },
 
   aiRequested(run: AiReviewRun): string {

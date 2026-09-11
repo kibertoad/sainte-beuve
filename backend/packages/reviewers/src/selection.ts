@@ -1,4 +1,4 @@
-import type { Reviewer, Skill } from '@sainte-beuve/contracts'
+import type { Reviewer, ShortfallReason, Skill } from '@sainte-beuve/contracts'
 
 /**
  * Reviewer selection: skill matching, then a load-aware weighted random pick.
@@ -33,7 +33,7 @@ export interface SelectionInput {
 export interface SelectionResult {
   selected: Reviewer[]
   /** Set when fewer than `count` came back, so the caller can say why rather than shrug. */
-  shortfallReason: 'no_candidates' | 'pool_exhausted' | null
+  shortfallReason: ShortfallReason | null
 }
 
 /** Case-insensitive skill comparison: 'TypeScript' and 'typescript' are one skill. */
@@ -104,6 +104,32 @@ export function scoreCandidates(
     }))
 }
 
+/**
+ * Why the candidate pool came back empty.
+ *
+ * Checked from the coarsest cause to the finest, because the first one that holds is
+ * the one worth telling somebody about: an all-paused pool is not a skills problem,
+ * and a pool emptied by the author exclusion is neither of those.
+ *
+ * `all_excluded` is the fallback rather than a check of its own. Reaching it means
+ * somebody is available and holds every skill, and the only gate left in
+ * `isEligible` is the exclusion list, so the exclusion is what emptied the pool.
+ */
+export function diagnoseShortfall(
+  candidates: readonly Reviewer[],
+  requiredSkills: readonly string[],
+): ShortfallReason {
+  if (candidates.length === 0) return 'no_reviewers'
+
+  const selectable = candidates.filter(
+    (reviewer) => reviewer.availability === 'available' && reviewer.weight > 0,
+  )
+  if (selectable.length === 0) return 'none_available'
+
+  const skilled = selectable.some((reviewer) => hasAllSkills(reviewer, requiredSkills))
+  return skilled ? 'all_excluded' : 'no_skill_match'
+}
+
 /** One weighted draw. Returns the index, or -1 for an empty pool. */
 function drawIndex(weights: readonly number[], random: () => number): number {
   const total = weights.reduce((sum, w) => sum + w, 0)
@@ -130,7 +156,12 @@ export function selectReviewers(
   random: () => number = Math.random,
 ): SelectionResult {
   const pool = scoreCandidates(input.candidates, input.requiredSkills, input.excludeReviewerIds)
-  if (pool.length === 0) return { selected: [], shortfallReason: 'no_candidates' }
+  if (pool.length === 0) {
+    return {
+      selected: [],
+      shortfallReason: diagnoseShortfall(input.candidates, input.requiredSkills),
+    }
+  }
 
   const remaining = [...pool]
   const selected: Reviewer[] = []

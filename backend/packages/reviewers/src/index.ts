@@ -16,6 +16,7 @@ export {
   selectAttentionAudience,
 } from './attention.js'
 export {
+  diagnoseShortfall,
   drawWeight,
   hasAllSkills,
   isEligible,
