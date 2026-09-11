@@ -90,7 +90,7 @@ describe('reviewer directory API', () => {
     expect(await res.json()).toMatchObject({ outstandingReviews: 0, team: 'platform' })
   })
 
-  it('refuses a body the contract does not describe', async () => {
+  it('refuses a display name that is only whitespace', async () => {
     const res = await harness.app.fetch(post('/api/v1/reviewers', { displayName: '   ' }))
 
     expect(res.status).toBe(400)

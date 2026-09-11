@@ -28,8 +28,7 @@ call rather than three components later.
 - The first drift it caught: `assignReviewers` was hand-typed as `{ assigned }`
   while the route answers `{ review, assigned, shortfallReason }`, so an assign
   that found nobody with the required skills read as a success and said nothing.
-  The board now reports which of the two reasons it was, in the wording the bot
-  uses on the pull request.
+  The board now reports the shortfall the route hands back.
 - The Reviewers screen manages the pool: add somebody, edit their skills, team,
   per-host handles, Slack id and weight, and pause or resume them in one click. No
   delete, deliberately: `paused` keeps the row, and the row is what a review's

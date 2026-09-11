@@ -163,19 +163,24 @@ lists it. What that slice decided, in short:
   underlying `SchemaValidationError` carries a JSON blob of every issue and says
   nothing about where it came from; what reaches the screen is the route and the
   first few field paths (`GET /reviewers did not match its contract:
-reviewers.0.handles: ...`). The same gate runs on the way out, so a request the
-  contract forbids never leaves the browser.
+reviewers.0.handles: ...`). The request side is checked first and separately,
+  under `invalid_request`, so a value somebody typed is never reported as the route
+  breaking its contract, and anything left under `contract_mismatch` is
+  response-side by construction.
 - **The live half stays an `EventSource`, and the contract still owns its path.**
   `sendByApiContract` can iterate an SSE contract over `fetch`, and that would give
   up the one thing the attention stream needs, which is a reader that reconnects by
   itself after a laptop closes. The URL is built from the stream contract rather
-  than typed out, so the rule that no path is hand-written holds anyway.
-- **What it caught on the first pass**, which is the argument for the slice:
-  `assignReviewers` was hand-typed as `{ assigned }` while the route answers
-  `{ review, assigned, shortfallReason }`. An assign that put nobody on the row
-  because nobody in the pool holds the skills was read as a success and reported
-  as nothing at all. The board now says which of the two reasons it was, in the
-  same words the bot uses on the pull request.
+  than typed out, so the rule that no path is hand-written holds anyway, and each
+  event is parsed through `attentionEventSchema` so the stream is behind the same
+  gate as every fetch.
+- **An assign that finds nobody says which of five reasons it was.** The route
+  answers 200 with an empty `assigned` list and a `shortfallReason`, because an
+  empty pool is a configuration answer rather than a fault. `diagnoseShortfall`
+  names the cause it found, coarsest first, so an all-paused pool is never reported
+  as a skills problem; `shortfallCause` and `shortfallRemedy` in the contracts
+  package are the only copies of the wording, read by both the board and the bot's
+  comment on the pull request.
 - **A reviewer cannot be deleted, and that is the answer rather than a gap.**
   `paused` is the way out of the pool: it keeps the skills, the team and the host
   accounts, so somebody back from leave reappears as themselves instead of being
