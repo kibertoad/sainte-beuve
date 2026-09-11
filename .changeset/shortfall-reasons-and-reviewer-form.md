@@ -51,3 +51,9 @@ and reverted concurrent changes on save.
 - A reviewer's weight has to be above 0, by the check and not only by the comment
   beside it. A stored 0 was a person `isEligible` dropped from every draw while their
   row still rendered as available.
+- `parseSkills` and `blankToNull` have one home. They had four copies between them
+  across three screens, so a change to how a blank box or a trailing comma is treated
+  had to be found in each.
+- One API client per base URL. Seven call sites asked for one, one of them per
+  expanded board row, and each built a fresh wretch instance and a closure per
+  method. Safe to cache only because the app is `ssr: false`, which the comment says.

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Project, VcsProvider } from '@sainte-beuve/contracts'
 import { DEFAULT_PROJECT_SKILLS, VCS_PROVIDERS, vcsDisplayName } from '@sainte-beuve/contracts'
+import { blankToNull, parseSkills } from '../utils/text'
 
 // The repositories this workspace watches, and the skill vocabulary each one
 // offers when somebody asks for attention on it.
@@ -30,13 +31,6 @@ function draftFor(project: Project): string {
   return drafts.value[project.id] ?? project.skills.join(', ')
 }
 
-function parseSkills(value: string): string[] {
-  return value
-    .split(',')
-    .map((skill) => skill.trim())
-    .filter((skill) => skill.length > 0)
-}
-
 async function add() {
   const added = await run(
     () =>
@@ -44,7 +38,7 @@ async function add() {
         provider: provider.value,
         owner: owner.value.trim(),
         repo: repo.value.trim(),
-        webUrl: webUrl.value.trim().length === 0 ? null : webUrl.value.trim(),
+        webUrl: blankToNull(webUrl.value),
       }),
     'Could not register the project',
     'add',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OpenPullRequest, Project } from '@sainte-beuve/contracts'
 import { MAX_NEEDED_COMMITMENTS } from '@sainte-beuve/contracts'
+import { blankToNull } from '../utils/text'
 
 // "Somebody please look at this."
 //
@@ -72,7 +73,7 @@ function submit() {
     requiredSkills: selectedSkills.value,
     sameTeamOnly: sameTeamOnly.value,
     neededCommitments: neededCommitments.value,
-    note: note.value.trim().length === 0 ? null : note.value.trim(),
+    note: blankToNull(note.value),
   })
 }
 </script>
