@@ -35,3 +35,10 @@ and reverted concurrent changes on save.
 - `app/utils/reviewerDraft.ts` and `app/utils/text.ts` hold the draft conversions and
   the two parsing rules the forms share, which is what gives them a suite: the cases
   run in Node with no Nuxt around them.
+- One `ApiErrorAlert` for every failed fetch. Two screens rendered nothing and told
+  the operator their list was empty, and two hardcoded "Is the backend running?",
+  which is the wrong question when the API answered and broke its contract.
+- A 400 names the field it refused. `issuePath` in `@sainte-beuve/contracts` is now
+  the one reader of a Standard Schema issue path, so the envelope's `details` carries
+  a field name a person can act on rather than `[object Object]`, and
+  `apiErrorMessage` folds it into the message.

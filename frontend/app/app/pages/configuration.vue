@@ -155,13 +155,7 @@ onMounted(() => {
       </UButton>
     </div>
 
-    <UAlert
-      v-if="error"
-      color="error"
-      variant="subtle"
-      title="Could not reach the sainte-beuve API"
-      :description="`Tried ${api.apiBase}. Is the backend running?`"
-    />
+    <ApiErrorAlert v-if="error" :error="error" title="Could not read the configuration" />
 
     <div v-else-if="data" class="flex flex-col gap-4">
       <VcsConnectionCard

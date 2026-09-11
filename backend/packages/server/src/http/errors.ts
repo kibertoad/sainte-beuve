@@ -1,4 +1,5 @@
 import type { ErrorResponse } from '@sainte-beuve/contracts'
+import { issuePath } from '@sainte-beuve/contracts'
 import {
   type DomainErrorCode,
   type Logger,
@@ -50,10 +51,7 @@ export function handleError(err: unknown, c: Context<AppEnv>): Response {
       errorBody(
         'validation',
         err.message,
-        err.issues.map((issue) => ({
-          path: issue.path?.map(String).join('.'),
-          message: issue.message,
-        })),
+        err.issues.map((issue) => ({ path: issuePath(issue), message: issue.message })),
       ),
       400,
     )

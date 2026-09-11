@@ -97,13 +97,7 @@ async function requestAiReview(review: ReviewRequest) {
       </UButton>
     </div>
 
-    <UAlert
-      v-if="error"
-      color="error"
-      variant="subtle"
-      title="Could not reach the sainte-beuve API"
-      :description="`Tried ${api.apiBase}. Is the backend running?`"
-    />
+    <ApiErrorAlert v-if="error" :error="error" title="Could not read the review board" />
 
     <UCard v-else-if="reviews.length === 0">
       <p class="text-sm text-muted">

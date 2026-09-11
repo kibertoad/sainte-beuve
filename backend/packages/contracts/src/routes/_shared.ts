@@ -22,6 +22,25 @@ export const errorResponseSchema = v.object({
 export type ErrorResponse = v.InferOutput<typeof errorResponseSchema>
 
 /**
+ * The dotted field path a validation issue names, as a person would write the field.
+ *
+ * Both sides of a route need it and neither can guess it. A Standard Schema issue
+ * addresses a field either by the key itself or by a SEGMENT wrapping that key, and
+ * valibot emits the second form, so the obvious `String(segment)` yields
+ * `[object Object]` and names nothing. The server puts this in the envelope's
+ * `details` and the client reads it back to say which field was refused.
+ */
+export function issuePath(issue: { readonly path?: readonly unknown[] }): string {
+  return (issue.path ?? [])
+    .map((segment) =>
+      typeof segment === 'object' && segment !== null && 'key' in segment
+        ? String((segment as { key: unknown }).key)
+        : String(segment),
+    )
+    .join('.')
+}
+
+/**
  * Spread into a contract's `responsesByStatusCode` so every non-2xx return is typed
  * for the handler and validated by the client. Exact success codes stay tight;
  * these range keys catch the error halves.

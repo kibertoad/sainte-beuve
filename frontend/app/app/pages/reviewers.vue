@@ -17,7 +17,7 @@ import { reviewerPatch } from '../utils/reviewerDraft'
 // reviews and the linked host accounts point AT, so removing one would leave a
 // board row assigned to nobody and a signed-in account attached to nothing.
 const api = useSainteBeuveApi()
-const { data, pending, refresh } = await useAsyncData('reviewers', () => api.listReviewers())
+const { data, pending, error, refresh } = await useAsyncData('reviewers', () => api.listReviewers())
 
 const reviewers = computed<Reviewer[]>(() => data.value?.reviewers ?? [])
 const { busy, run } = useApiAction({ refresh })
@@ -126,7 +126,9 @@ function togglePause(reviewer: Reviewer) {
       />
     </UCard>
 
-    <UCard v-if="reviewers.length === 0 && !adding">
+    <ApiErrorAlert v-if="error" :error="error" title="Could not read the reviewer pool" />
+
+    <UCard v-else-if="reviewers.length === 0 && !adding">
       <p class="text-sm text-muted">
         Nobody is in the pool yet. Until somebody is, a review has nobody to be routed to and an ask
         for attention reaches nobody.

@@ -23,6 +23,7 @@ import {
   getIntegrationSettingsContract,
   getViewerContract,
   getWorkspaceContract,
+  issuePath,
   listAiReviewRunsContract,
   listAttentionContract,
   listProjectsContract,
@@ -87,7 +88,16 @@ const UNREACHABLE = 'The sainte-beuve API could not be reached'
  * what a screen shows. A transport failure never becomes one of these: it stays
  * the `TypeError` fetch threw, because "the backend is not running" and "the
  * backend refused" are different things for whoever is reading the toast.
+ *
+ * `code`, `statusCode` and `details` are readable wherever the call is awaited
+ * directly, which is every action going through `useApiAction`. They do NOT survive
+ * a trip through `useAsyncData`: Nuxt puts each rejection through h3's
+ * `createError`, which builds a fresh `H3Error` for anything that is not one
+ * already, so a fetch-error screen has the message and nothing else. That is why
+ * `apiErrorMessage` folds the refused field names into the message rather than
+ * leaving them for a component to read off `details`.
  */
+
 export class ApiError extends Error {
   readonly statusCode: number
   readonly code: string
@@ -114,20 +124,12 @@ type SuccessBody<TContract extends ApiContract> = Extract<
  */
 type RequestParams<TContract extends ApiContract> = ClientRequestParams<TContract, false>
 
-/**
- * The first few field paths a schema refused, as `reviewers.0.handles: ...`.
- *
- * A Standard Schema issue addresses a field either by the key itself or by a
- * SEGMENT wrapping it, and valibot emits the second form. Stringifying the
- * segment gives `[object Object]`, which is a message naming nothing.
- */
+/** The first few field paths a schema refused, as `reviewers.0.handles: ...`. */
 function issueSummary(error: SchemaValidationError): string {
   return error.issues
     .slice(0, REPORTED_ISSUES)
     .map((issue) => {
-      const path = issue.path
-        ?.map((segment) => String(typeof segment === 'object' ? segment.key : segment))
-        .join('.')
+      const path = issuePath(issue)
       return path ? `${path}: ${issue.message}` : issue.message
     })
     .join('; ')
@@ -295,12 +297,34 @@ export function createSainteBeuveApi(apiBase: string) {
 export type SainteBeuveApi = ReturnType<typeof createSainteBeuveApi>
 
 /**
+ * The field paths an error envelope named, where it named any.
+ *
+ * A 400 from the request validator puts one entry per refused field in `details`,
+ * and it is the only place a screen can learn WHICH field the server would not take.
+ * `details` is `unknown` on the wire, so this reads it defensively and gives up
+ * quietly rather than turning a bad envelope into a second error.
+ */
+function refusedFields(details: unknown): string[] {
+  if (!Array.isArray(details)) return []
+  return details
+    .map((entry) =>
+      typeof entry === 'object' && entry !== null && 'path' in entry
+        ? String((entry as { path: unknown }).path)
+        : '',
+    )
+    .filter((path) => path.length > 0)
+}
+
+/**
  * The operator-facing text for a failed call. A refusal the API described carries
  * its own message and names what is missing, so that is the thing to show; a
  * transport failure has only whatever `fetch` said, and a rejection that is not an
  * `Error` at all gets the one sentence that is always true.
  */
 export function apiErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message
+  if (err instanceof ApiError) {
+    const fields = refusedFields(err.details)
+    return fields.length === 0 ? err.message : `${err.message} (${fields.join(', ')})`
+  }
   return err instanceof Error ? err.message : UNREACHABLE
 }

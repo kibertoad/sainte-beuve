@@ -127,6 +127,27 @@ describe('createSainteBeuveApi', () => {
     expect(apiErrorMessage(failure)).toBe('GITHUB_TOKEN is not set')
   })
 
+  it('names the field a 400 refused, which is the only place that says which one', async () => {
+    stubFetch(
+      jsonResponse(
+        {
+          error: {
+            code: 'validation',
+            message: 'Invalid request',
+            details: [{ path: 'weight', message: 'Invalid type' }],
+          },
+        },
+        400,
+      ),
+    )
+
+    const failure = await createSainteBeuveApi(API_BASE)
+      .updateReviewer('r-1', { availability: 'paused' })
+      .catch((err: unknown) => err)
+
+    expect(apiErrorMessage(failure)).toBe('Invalid request (weight)')
+  })
+
   it('reports a status its contract does not describe as one', async () => {
     stubFetch(new Response(null, { status: 204 }))
 

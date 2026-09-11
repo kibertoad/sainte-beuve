@@ -110,13 +110,7 @@ async function resume(runId: string): Promise<void> {
       </UButton>
     </div>
 
-    <UAlert
-      v-if="error"
-      color="error"
-      variant="subtle"
-      title="Could not read the AI reviews"
-      :description="apiErrorMessage(error)"
-    />
+    <ApiErrorAlert v-if="error" :error="error" title="Could not read the AI reviews" />
 
     <p v-else-if="runs.length === 0" class="text-sm text-muted">
       Nothing delegated yet. Press <span class="font-medium">AI review</span> to hand this pull

@@ -11,7 +11,7 @@ import { DEFAULT_PROJECT_SKILLS, VCS_PROVIDERS, vcsDisplayName } from '@sainte-b
 // and see exactly which connection is missing, rather than being sent to the
 // Configuration screen with nothing to explain why.
 const api = useSainteBeuveApi()
-const { data, pending, refresh } = await useAsyncData('projects', () => api.listProjects())
+const { data, pending, error, refresh } = await useAsyncData('projects', () => api.listProjects())
 
 const projects = computed<Project[]>(() => data.value?.projects ?? [])
 const { busy, run } = useApiAction({ refresh })
@@ -119,7 +119,9 @@ function remove(project: Project) {
       </p>
     </UCard>
 
-    <UCard v-if="projects.length === 0">
+    <ApiErrorAlert v-if="error" :error="error" title="Could not read the projects" />
+
+    <UCard v-else-if="projects.length === 0">
       <p class="text-sm text-muted">
         No projects yet. Your workspace has nothing to sweep until one is registered.
       </p>
