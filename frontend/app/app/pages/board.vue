@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ReviewRequest } from '@sainte-beuve/contracts'
+import type { ReviewRequest, ShortfallReason } from '@sainte-beuve/contracts'
+import { shortfallCause, shortfallRemedy } from '@sainte-beuve/contracts'
 
 // The review board: every pull request sainte-beuve is TRACKING, and the two
 // actions a viewer can take on each row.
@@ -31,9 +32,35 @@ const statusColor: Record<ReviewRequest['status'], BadgeColor> = {
 // API's own message and refreshes the board. One copy, shared with the
 // Configuration screen, so a change to how a refusal is shown lands in one file.
 const { run } = useApiAction({ refresh })
+const toast = useToast()
+
+/**
+ * Why a successful assign put nobody on the row.
+ *
+ * The route answers 200 with an empty `assigned` list and the reason, because
+ * "everybody who could take this is already on it" is a configuration answer
+ * rather than a fault.
+ *
+ * The sentence comes from `@sainte-beuve/contracts`, which is where the bot's
+ * reply on the pull request reads it too, so the two cannot drift.
+ */
+function shortfallMessage(reason: ShortfallReason): string {
+  const remedy = shortfallRemedy(reason)
+  const cause = `${shortfallCause(reason)}.`
+  return remedy === null ? cause : `${cause} ${remedy}`
+}
 
 async function assign(review: ReviewRequest) {
-  await run(() => api.assignReviewers(review.id), 'Could not find a reviewer')
+  await run(async () => {
+    const result = await api.assignReviewers(review.id)
+    if (result.shortfallReason !== null) {
+      toast.add({
+        color: 'warning',
+        title: 'Nobody was assigned',
+        description: shortfallMessage(result.shortfallReason),
+      })
+    }
+  }, 'Could not find a reviewer')
 }
 
 /**
@@ -70,13 +97,7 @@ async function requestAiReview(review: ReviewRequest) {
       </UButton>
     </div>
 
-    <UAlert
-      v-if="error"
-      color="error"
-      variant="subtle"
-      title="Could not reach the sainte-beuve API"
-      :description="`Tried ${api.apiBase}. Is the backend running?`"
-    />
+    <ApiErrorAlert v-if="error" :error="error" title="Could not read the review board" />
 
     <UCard v-else-if="reviews.length === 0">
       <p class="text-sm text-muted">

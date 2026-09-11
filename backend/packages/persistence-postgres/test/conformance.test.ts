@@ -1,5 +1,8 @@
 import { PGlite } from '@electric-sql/pglite'
-import { repositoryConformanceCases } from '@sainte-beuve/persistence-conformance'
+import {
+  repositoryConformanceCases,
+  storedRowConformanceCases,
+} from '@sainte-beuve/persistence-conformance'
 import { getTableName, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
@@ -54,6 +57,25 @@ describe('Postgres repositories', () => {
   for (const testCase of repositoryConformanceCases) {
     it(testCase.name, async () => {
       await testCase.run(createPostgresRepositories(db))
+    })
+  }
+
+  // The payload cases, which need a write BEHIND the store: every write path it
+  // exposes typechecks against the current contract, so the only way to produce a
+  // row from an older one is a statement of our own. Raw SQL rather than Drizzle,
+  // because the column type is the thing under test and an insert through it would
+  // parse the payload on the way in.
+  for (const testCase of storedRowConformanceCases) {
+    it(testCase.name, async () => {
+      await testCase.run({
+        repositories: createPostgresRepositories(db),
+        writeRawReviewer: async (id, payload) => {
+          await db.execute(
+            sql`INSERT INTO reviewers (id, outstanding_reviews, created_at, data)
+                VALUES (${id}, 0, 1000, ${JSON.stringify(payload)}::jsonb)`,
+          )
+        },
+      })
     })
   }
 })

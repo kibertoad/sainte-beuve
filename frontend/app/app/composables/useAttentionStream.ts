@@ -1,4 +1,6 @@
 import type { AttentionEvent, AttentionRequest } from '@sainte-beuve/contracts'
+import { attentionEventSchema } from '@sainte-beuve/contracts'
+import * as v from 'valibot'
 
 /**
  * The attention inbox, kept live.
@@ -64,10 +66,26 @@ export function useAttentionStream() {
       attached = true
     })
     source.addEventListener('attention', (event) => {
-      const received = JSON.parse((event as MessageEvent<string>).data) as AttentionEvent
-      raced?.push(received)
-      apply(received)
+      // Through the contract's schema, like every other body this client reads.
+      //
+      // Nothing else checks this one. `buildHonoRoute` validates requests and never
+      // responses, and a stream does not go through `sendByApiContract`, so an event
+      // missing its `request` would reach `apply` and throw a TypeError from inside
+      // a listener, where `useApiAction` cannot catch it and the page has no way to
+      // report it. A payload the contract does not describe is a backend fault, so
+      // it is dropped and reported rather than applied.
+      const parsed = v.safeParse(
+        attentionEventSchema,
+        JSON.parse((event as MessageEvent<string>).data),
+      )
+      if (!parsed.success) {
+        error.value = 'The attention stream sent an event this deployment cannot read'
+        return
+      }
+      raced?.push(parsed.output)
+      apply(parsed.output)
     })
+
     source.addEventListener('error', () => {
       // `EventSource` reconnects by itself, so this is a state to REPORT rather
       // than to repair: the list is still correct, it is just no longer live.

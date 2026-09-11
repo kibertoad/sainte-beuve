@@ -1,4 +1,5 @@
 import type { AttentionRequest, AttentionStatus, ReviewCommitment } from '@sainte-beuve/contracts'
+import { attentionRequestSchema, reviewCommitmentSchema } from '@sainte-beuve/contracts'
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
 import { pullRequestKey } from '@sainte-beuve/kernel'
 import type { SqlDriver } from './driver.js'
@@ -24,14 +25,14 @@ export class SqlAttentionRepository implements AttentionRepository {
       `SELECT data FROM attention_requests${where} ORDER BY created_at DESC, id DESC`,
       wanted,
     )
-    return decodeRows<AttentionRequest>(rows)
+    return decodeRows(attentionRequestSchema, 'attention_requests', rows)
   }
 
   async getById(attentionId: string): Promise<AttentionRequest | null> {
     const row = await this.db.first('SELECT data FROM attention_requests WHERE id = ?', [
       attentionId,
     ])
-    return row === null ? null : decodeData<AttentionRequest>(row.data)
+    return row === null ? null : decodeData(attentionRequestSchema, 'attention_requests', row.data)
   }
 
   async create(request: AttentionRequest): Promise<AttentionRequest> {
@@ -76,14 +77,14 @@ export class SqlReviewCommitmentRepository implements ReviewCommitmentRepository
       'SELECT data FROM review_commitments WHERE reviewer_id = ? ORDER BY created_at DESC, id DESC',
       [reviewerId],
     )
-    return decodeRows<ReviewCommitment>(rows)
+    return decodeRows(reviewCommitmentSchema, 'review_commitments', rows)
   }
 
   async getById(commitmentId: string): Promise<ReviewCommitment | null> {
     const row = await this.db.first('SELECT data FROM review_commitments WHERE id = ?', [
       commitmentId,
     ])
-    return row === null ? null : decodeData<ReviewCommitment>(row.data)
+    return row === null ? null : decodeData(reviewCommitmentSchema, 'review_commitments', row.data)
   }
 
   async find(
@@ -98,7 +99,7 @@ export class SqlReviewCommitmentRepository implements ReviewCommitmentRepository
       'SELECT data FROM review_commitments WHERE reviewer_id = ? AND pull_request_key = ? ORDER BY created_at, id',
       [reviewerId, pullRequestKey(pullRequest)],
     )
-    return row === null ? null : decodeData<ReviewCommitment>(row.data)
+    return row === null ? null : decodeData(reviewCommitmentSchema, 'review_commitments', row.data)
   }
 
   async create(commitment: ReviewCommitment): Promise<ReviewCommitment> {

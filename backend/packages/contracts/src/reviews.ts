@@ -76,15 +76,69 @@ export const assignReviewersSchema = v.object({
 })
 export type AssignReviewers = v.InferOutput<typeof assignReviewersSchema>
 
+/**
+ * Why fewer reviewers than requested came back.
+ *
+ * Five values rather than one because each names a different thing to go and do.
+ * A single reason covering an empty directory, an all-paused pool, a skill nobody
+ * holds and a candidate list emptied by the author exclusion can only be worded for
+ * one of them, and it sends everybody else to fix something that was never wrong.
+ */
+export const shortfallReasonSchema = v.picklist([
+  // The directory is empty.
+  'no_reviewers',
+  // Reviewers exist, but none of them is available.
+  'none_available',
+  // Somebody is available, but nobody available holds every required skill.
+  'no_skill_match',
+  // Somebody available holds the skills, and every one of them is the author or
+  // is already on the review.
+  'all_excluded',
+  // The pool was smaller than the number asked for, so it ran out part way.
+  'pool_exhausted',
+])
+export type ShortfallReason = v.InferOutput<typeof shortfallReasonSchema>
+
+// What each reason is, and what to do about it, in one place: the bot's comment on
+// the pull request and the board's toast are the same sentence with different tails,
+// and two hand-written copies of it drifted the day they were written.
+//
+// The cause carries no terminal punctuation because the caller owns the middle: the
+// bot says the review is on the board unassigned, a reroll says it stays where it is,
+// and the board says neither. Private table and exported reader, the shape
+// `vcsDisplayName` already uses.
+const SHORTFALL_CAUSES: Record<ShortfallReason, string> = {
+  no_reviewers: 'There is nobody in the reviewer pool yet',
+  none_available: 'Everybody in the reviewer pool is paused',
+  no_skill_match: 'Nobody available holds every skill this review needs',
+  all_excluded: 'Everybody who could review this is already on it, or is the author',
+  pool_exhausted: 'The pool ran out of people before it reached the number asked for',
+}
+
+const SHORTFALL_REMEDIES: Record<ShortfallReason, string | null> = {
+  no_reviewers: 'Add somebody on the Reviewers screen.',
+  none_available: 'Resume somebody, or add another reviewer.',
+  no_skill_match: 'Add the skill to a reviewer, or drop it from the request.',
+  all_excluded: null,
+  pool_exhausted: null,
+}
+
+/** The cause as a clause, so a caller can follow it with the tail its channel needs. */
+export function shortfallCause(reason: ShortfallReason): string {
+  return SHORTFALL_CAUSES[reason]
+}
+
+/** What to do about it, as a full sentence, or null where there is nothing to suggest. */
+export function shortfallRemedy(reason: ShortfallReason): string | null {
+  return SHORTFALL_REMEDIES[reason]
+}
+
 export const assignReviewersResultSchema = v.object({
   review: reviewRequestSchema,
   /** The reviewers this call added, in the order the router picked them. */
   assigned: v.array(v.object({ reviewerId: v.string(), displayName: v.string() })),
-  /**
-   * Why fewer reviewers than requested came back, when that happened: the pool ran
-   * out of candidates with the required skills. Null on a full match.
-   */
-  shortfallReason: v.nullable(v.picklist(['no_candidates', 'pool_exhausted'])),
+  /** Why fewer reviewers than requested came back. Null on a full match. */
+  shortfallReason: v.nullable(shortfallReasonSchema),
 })
 export type AssignReviewersResult = v.InferOutput<typeof assignReviewersResultSchema>
 

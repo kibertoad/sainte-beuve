@@ -133,7 +133,7 @@ describe('review board API', () => {
     const res = await assignReviewer(harness, review.id)
     const body = (await res.json()) as { assigned: unknown[]; shortfallReason: string }
     expect(body.assigned).toStrictEqual([])
-    expect(body.shortfallReason).toBe('no_candidates')
+    expect(body.shortfallReason).toBe('no_skill_match')
   })
 
   it('answers 404 for a review that does not exist', async () => {
@@ -160,7 +160,7 @@ describe('review board API', () => {
       shortfallReason: string | null
     }
     expect(body.assigned).toStrictEqual([])
-    expect(body.shortfallReason).toBe('no_candidates')
+    expect(body.shortfallReason).toBe('all_excluded')
     expect(body.assigned.map((a) => a.reviewerId)).not.toContain(author.id)
   })
 

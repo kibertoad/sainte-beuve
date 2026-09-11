@@ -37,6 +37,11 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
 
 export type { ConformanceCase } from './case.js'
 export { conformanceCase } from './case.js'
+export {
+  type StoredRowCase,
+  storedRowConformanceCases,
+  type StoreHarness,
+} from './stored-row-cases.js'
 export { aiReviewCases, integrationTokenCases, reminderCases, reviewCases } from './board-cases.js'
 export { reviewerCases } from './reviewer-cases.js'
 export { attentionCases, commitmentCases, identityCases, projectCases } from './workspace-cases.js'

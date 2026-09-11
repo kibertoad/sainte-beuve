@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Project, VcsProvider } from '@sainte-beuve/contracts'
 import { DEFAULT_PROJECT_SKILLS, VCS_PROVIDERS, vcsDisplayName } from '@sainte-beuve/contracts'
+import { blankToNull, parseSkills } from '../utils/text'
 
 // The repositories this workspace watches, and the skill vocabulary each one
 // offers when somebody asks for attention on it.
@@ -11,7 +12,7 @@ import { DEFAULT_PROJECT_SKILLS, VCS_PROVIDERS, vcsDisplayName } from '@sainte-b
 // and see exactly which connection is missing, rather than being sent to the
 // Configuration screen with nothing to explain why.
 const api = useSainteBeuveApi()
-const { data, pending, refresh } = await useAsyncData('projects', () => api.listProjects())
+const { data, pending, error, refresh } = await useAsyncData('projects', () => api.listProjects())
 
 const projects = computed<Project[]>(() => data.value?.projects ?? [])
 const { busy, run } = useApiAction({ refresh })
@@ -30,13 +31,6 @@ function draftFor(project: Project): string {
   return drafts.value[project.id] ?? project.skills.join(', ')
 }
 
-function parseSkills(value: string): string[] {
-  return value
-    .split(',')
-    .map((skill) => skill.trim())
-    .filter((skill) => skill.length > 0)
-}
-
 async function add() {
   const added = await run(
     () =>
@@ -44,7 +38,7 @@ async function add() {
         provider: provider.value,
         owner: owner.value.trim(),
         repo: repo.value.trim(),
-        webUrl: webUrl.value.trim().length === 0 ? null : webUrl.value.trim(),
+        webUrl: blankToNull(webUrl.value),
       }),
     'Could not register the project',
     'add',
@@ -119,7 +113,9 @@ function remove(project: Project) {
       </p>
     </UCard>
 
-    <UCard v-if="projects.length === 0">
+    <ApiErrorAlert v-if="error" :error="error" title="Could not read the projects" />
+
+    <UCard v-else-if="projects.length === 0">
       <p class="text-sm text-muted">
         No projects yet. Your workspace has nothing to sweep until one is registered.
       </p>

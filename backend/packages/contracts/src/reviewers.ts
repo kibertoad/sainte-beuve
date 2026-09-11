@@ -42,11 +42,19 @@ export const reviewerSchema = v.object({
   skills: v.array(skillSchema),
   availability: reviewerAvailabilitySchema,
   /**
-   * Relative share of the review load, 0 excluded. A 0.5 reviewer is picked about
-   * half as often as a 1.0 one at equal outstanding load: the lever for part-time
-   * members and for people ramping up on a codebase.
+   * Relative share of the review load. A 0.5 reviewer is picked about half as often
+   * as a 1.0 one at equal outstanding load: the lever for part-time members and for
+   * people ramping up on a codebase.
+   *
+   * 0 is EXCLUDED, and by the check rather than only by the comment. `isEligible`
+   * drops a reviewer at or below 0, so a stored 0 is a person who never comes up
+   * again while their row still reads as available.
    */
-  weight: v.pipe(v.number(), v.minValue(0), v.maxValue(10)),
+  weight: v.pipe(
+    v.number(),
+    v.check((weight) => weight > 0, "A reviewer's weight has to be above 0"),
+    v.maxValue(10),
+  ),
   /** Reviews currently assigned and not yet resolved. Selection reads it; nothing else does. */
   outstandingReviews: v.pipe(v.number(), v.integer(), v.minValue(0)),
   createdAt: v.number(),

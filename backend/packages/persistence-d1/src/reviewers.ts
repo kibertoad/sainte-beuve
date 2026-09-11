@@ -1,4 +1,5 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
+import { reviewerSchema } from '@sainte-beuve/contracts'
 import type { ReviewerRepository } from '@sainte-beuve/kernel'
 import type { SqlDriver, SqlRow } from './driver.js'
 import { decodeCount, decodeData, encodeData, patched } from './rows.js'
@@ -34,7 +35,7 @@ const ADJUST =
 
 function toReviewer(row: SqlRow): Reviewer {
   return {
-    ...decodeData<Reviewer>(row.data),
+    ...decodeData(reviewerSchema, 'reviewers', row.data),
     outstandingReviews: decodeCount(row.outstanding_reviews),
   }
 }

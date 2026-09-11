@@ -94,12 +94,10 @@ async function release(commitmentId: string) {
       </UButton>
     </div>
 
-    <UAlert
+    <ApiErrorAlert
       v-if="error"
-      color="error"
-      variant="subtle"
-      :title="'This deployment could not build your workspace'"
-      :description="apiErrorMessage(error)"
+      :error="error"
+      title="This deployment could not build your workspace"
     />
 
     <div v-else-if="workspace" class="flex flex-col gap-4">

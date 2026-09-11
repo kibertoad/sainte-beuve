@@ -65,6 +65,7 @@ describe('selectReviewers', () => {
     reviewer({ id: 'b', skills: ['typescript'] }),
     reviewer({ id: 'c', skills: ['go'] }),
   ]
+  const paused = pool.map((candidate) => ({ ...candidate, availability: 'paused' as const }))
 
   it('picks only reviewers holding the required skill', () => {
     const result = selectReviewers(
@@ -75,13 +76,48 @@ describe('selectReviewers', () => {
     expect(result.shortfallReason).toBeNull()
   })
 
-  it('reports no_candidates when nobody has the skill', () => {
+  it('reports no_skill_match when nobody available holds the skill', () => {
     const result = selectReviewers(
       { candidates: pool, requiredSkills: ['rust'], excludeReviewerIds: [], count: 1 },
       scripted([0]),
     )
     expect(result.selected).toStrictEqual([])
-    expect(result.shortfallReason).toBe('no_candidates')
+    expect(result.shortfallReason).toBe('no_skill_match')
+  })
+
+  it('reports no_reviewers when the directory is empty', () => {
+    const result = selectReviewers(
+      { candidates: [], requiredSkills: [], excludeReviewerIds: [], count: 1 },
+      scripted([0]),
+    )
+    expect(result.shortfallReason).toBe('no_reviewers')
+  })
+
+  it('reports none_available when everybody is paused', () => {
+    const result = selectReviewers(
+      { candidates: paused, requiredSkills: [], excludeReviewerIds: [], count: 1 },
+      scripted([0]),
+    )
+    expect(result.shortfallReason).toBe('none_available')
+  })
+
+  it('reports all_excluded when the only match is the author or already on it', () => {
+    const result = selectReviewers(
+      { candidates: pool, requiredSkills: ['go'], excludeReviewerIds: ['c'], count: 1 },
+      scripted([0]),
+    )
+    expect(result.selected).toStrictEqual([])
+    expect(result.shortfallReason).toBe('all_excluded')
+  })
+
+  // The order the causes are checked in IS the behaviour: a paused pool reported as
+  // a skills problem sends somebody to edit skills that were never the reason.
+  it('names the paused pool rather than the skill nobody holds', () => {
+    const result = selectReviewers(
+      { candidates: paused, requiredSkills: ['rust'], excludeReviewerIds: [], count: 1 },
+      scripted([0]),
+    )
+    expect(result.shortfallReason).toBe('none_available')
   })
 
   it('never picks the same reviewer twice', () => {

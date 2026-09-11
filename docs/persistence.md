@@ -68,6 +68,21 @@ Adding a field to a contract therefore needs no migration. Adding one that has
 to be FILTERED or SORTED on needs a column, an index and a migration in both
 dialects, which is the price of the port having grown a new question.
 
+**A read parses the payload through its contract schema.** Both durable stores do
+it at one place each: `decodeData` in the D1 adapter, and the `payload` column type
+in the Postgres schema, which Drizzle calls for every select on a `data` column.
+That matters because nothing downstream checks it. `buildHonoRoute` validates
+requests and never responses, so the browser's own response gate is the next thing
+that would look, and a row from an older contract would surface there as a broken
+screen naming a route instead of a row.
+
+Parsing on read is also what makes adding a field cheap in practice rather than
+only in theory. A contract field with a default arrives as that default for rows
+written before it existed, and a payload with nothing to fall back on raises a
+`StoredRowError` naming the table and the row id, which is a statement an operator
+can act on. The compiler covers the other direction: the column type carries the
+contract type, so a write from a stale shape does not typecheck.
+
 **One field is not in the payload's gift.** `reviewers.outstanding_reviews` is
 incremented rather than written (`adjustOutstanding`), so two assignments
 landing together must both count: the column is authoritative, the statement is
@@ -173,3 +188,11 @@ A new port method lands in all three stores in the same change, with a case
 here. That is the rule the symmetry rests on: a store that is behind is a
 deployment that behaves differently, and the suite is the only thing that
 notices.
+
+`storedRowConformanceCases` is a second, smaller list, and it runs against the two
+DURABLE stores only. Its cases need a write behind the store's own write path,
+since every path a store exposes typechecks against the current contract, and what
+they are about is a payload left by an older one. The in-memory store is excluded
+on purpose rather than by omission: it holds the objects it was handed for the life
+of one process, so no such payload can arise in it, and a case run there would
+exercise its own setup hook and nothing else.

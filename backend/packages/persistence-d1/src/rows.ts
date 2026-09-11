@@ -1,3 +1,6 @@
+import { issuePath } from '@sainte-beuve/contracts'
+import { StoredRowError } from '@sainte-beuve/kernel'
+import { type GenericSchema, type InferOutput, safeParse } from 'valibot'
 import type { SqlParam, SqlRow } from './driver.js'
 
 /**
@@ -33,14 +36,54 @@ export function encodeData(row: unknown): SqlParam {
   return JSON.stringify(row)
 }
 
-/** Read a `data` column back. SQLite stores it as `TEXT` and hands back the text. */
-export function decodeData<Row>(value: unknown): Row {
-  return JSON.parse(String(value)) as Row
+/**
+ * The row's own id, read off the payload.
+ *
+ * Every read here is `SELECT data`, and the payload IS the row, so its `id` is both
+ * present and authoritative. Worth the defensive read: this runs on the path where
+ * the payload has ALREADY failed its schema, so nothing about its shape is certain.
+ */
+function payloadId(payload: unknown): string {
+  return typeof payload === 'object' && payload !== null && 'id' in payload
+    ? String((payload as { id: unknown }).id)
+    : 'unknown'
+}
+
+/**
+ * Read a `data` column back, THROUGH the schema it was written from.
+ *
+ * SQLite stores the payload as `TEXT` and hands back the text, so a read is the one
+ * moment anything can check that what is on disk is still what the contract says.
+ * Nothing downstream does: `buildHonoRoute` validates requests and never responses,
+ * so a row written by an older contract travels to the browser and is refused there,
+ * as a broken screen naming a route rather than a row somebody can go and fix.
+ *
+ * Parsing here also HEALS the ordinary case, because the contracts carry defaults
+ * for exactly it: a field added since the row was written arrives as its default
+ * rather than as an `undefined` behind a type promising otherwise.
+ */
+export function decodeData<TSchema extends GenericSchema>(
+  schema: TSchema,
+  table: string,
+  value: unknown,
+): InferOutput<TSchema> {
+  const payload: unknown = JSON.parse(String(value))
+  const parsed = safeParse(schema, payload)
+  if (parsed.success) return parsed.output
+  throw new StoredRowError(
+    table,
+    payloadId(payload),
+    parsed.issues.map((issue) => `${issuePath(issue)}: ${issue.message}`),
+  )
 }
 
 /** Every row's payload, in the order the query returned them. */
-export function decodeRows<Row>(rows: readonly SqlRow[]): Row[] {
-  return rows.map((row) => decodeData<Row>(row.data))
+export function decodeRows<TSchema extends GenericSchema>(
+  schema: TSchema,
+  table: string,
+  rows: readonly SqlRow[],
+): InferOutput<TSchema>[] {
+  return rows.map((row) => decodeData(schema, table, row.data))
 }
 
 /** A count column as a number. */
