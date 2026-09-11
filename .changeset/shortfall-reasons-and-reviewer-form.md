@@ -42,3 +42,9 @@ and reverted concurrent changes on save.
   the one reader of a Standard Schema issue path, so the envelope's `details` carries
   a field name a person can act on rather than `[object Object]`, and
   `apiErrorMessage` folds it into the message.
+- Stream events go through `attentionEventSchema`, which is the one body that reached
+  a component unchecked. Nothing else validates it: `buildHonoRoute` validates
+  requests only, and a stream does not go through `sendByApiContract`.
+- A request the client itself refuses reports `invalid_request` rather than
+  `contract_mismatch`, so a value somebody typed is not presented as the route
+  breaking its contract.

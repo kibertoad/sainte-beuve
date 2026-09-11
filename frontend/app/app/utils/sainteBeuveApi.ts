@@ -49,9 +49,11 @@ import type {
   SuccessfulHttpStatusCode,
 } from '@toad-contracts/core'
 import {
+  ContractNoBody,
   describeApiContract,
   mapApiContractToPath,
   SchemaValidationError,
+  validate,
 } from '@toad-contracts/core'
 import { sendByApiContract, UnexpectedResponseError } from '@toad-contracts/frontend-http-client'
 import wretch from 'wretch'
@@ -181,7 +183,42 @@ function toClientError(contract: ApiContract, failure: unknown): unknown {
 }
 
 /**
+ * Refuse a body the contract forbids HERE, before the request is dispatched.
+ *
+ * `sendByApiContract` already validates the request before it touches the network,
+ * but it raises the same `SchemaValidationError` class it raises for a response that
+ * broke its contract, carrying nothing that says which side failed. Mapped through
+ * one code, somebody clearing a number box is told the route did not match its
+ * contract, which blames the deployment for their own empty field.
+ *
+ * Checking the body first splits the two: anything that reaches the
+ * `contract_mismatch` branch afterwards is response-side by construction, because
+ * the request side has already passed the very same schema.
+ */
+async function checkRequest(contract: ApiContract, params: unknown): Promise<void> {
+  // Both reads are off union members the generic signature hides: a contract that
+  // declares no body types the field as `never`, and a params object for such a
+  // contract has no `body` at all.
+  const schema = (contract as { requestBodySchema?: unknown }).requestBodySchema
+  const body = (params as { body?: unknown }).body
+  if (body === undefined || schema === undefined || schema === ContractNoBody) return
+  try {
+    await validate(schema as Parameters<typeof validate>[0], body)
+  } catch (err) {
+    if (err instanceof SchemaValidationError) {
+      throw new ApiError(
+        0,
+        'invalid_request',
+        `This request was refused before it was sent: ${issueSummary(err)}`,
+      )
+    }
+    throw err
+  }
+}
+
+/**
  * Build the client for one backend.
+
  *
  * A function of a base URL rather than a Nuxt composable, so it can be exercised
  * by a suite with nothing else around it. `useSainteBeuveApi` is the composable
@@ -194,6 +231,8 @@ export function createSainteBeuveApi(apiBase: string) {
     contract: TContract,
     params: RequestParams<TContract>,
   ): Promise<SuccessBody<TContract>> {
+    await checkRequest(contract, params)
+
     let outcome: Awaited<ReturnType<typeof sendByApiContract<TContract, false, true>>>
     try {
       outcome = await sendByApiContract<TContract, false, true>(client, contract, params)

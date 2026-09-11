@@ -100,7 +100,9 @@ describe('createSainteBeuveApi', () => {
     expect(apiErrorMessage(failure)).toContain('reviewers.0.handles')
   })
 
-  // The same gate on the way out: nothing the contract forbids leaves the browser.
+  // The same gate on the way out, under its OWN code: nothing the contract forbids
+  // leaves the browser, and the operator is told it was their value rather than the
+  // route breaking its contract.
   it('refuses a request body the contract forbids, before anything is sent', async () => {
     const calls = stubFetch(jsonResponse(reviewer, 201))
 
@@ -108,7 +110,9 @@ describe('createSainteBeuveApi', () => {
       .createReviewer({ displayName: '' })
       .catch((err: unknown) => err)
 
-    expect((failure as ApiError).code).toBe('contract_mismatch')
+    expect((failure as ApiError).code).toBe('invalid_request')
+    expect(apiErrorMessage(failure)).toContain('displayName')
+    expect(apiErrorMessage(failure)).not.toContain('did not match its contract')
     expect(calls).toEqual([])
   })
 
