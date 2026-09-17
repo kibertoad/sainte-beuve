@@ -1,4 +1,10 @@
-import type { CreateReviewer, Reviewer, UpdateReviewer, VcsProvider } from '@sainte-beuve/contracts'
+import type {
+  CreateReviewer,
+  Reviewer,
+  Role,
+  UpdateReviewer,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
 import { NO_VCS_HANDLES, VCS_PROVIDERS, withHandle } from '@sainte-beuve/contracts'
 import { blankToNull, parseSkills } from './text'
 
@@ -21,6 +27,8 @@ export interface ReviewerDraft {
   team: string
   skills: string
   availability: Reviewer['availability']
+  /** What this person may do in the org: administer it, or use it. See `roleSchema`. */
+  role: Role
   weight: number
 }
 
@@ -45,6 +53,10 @@ export function emptyDraft(): ReviewerDraft {
     team: '',
     skills: '',
     availability: 'available',
+    // `member` for somebody being added, because an admin is the exception: the
+    // safe default for a row that decides who else can change the deployment is
+    // the narrower one.
+    role: 'member',
     weight: 1,
   }
 }
@@ -58,6 +70,7 @@ export function draftFrom(reviewer: Reviewer | null): ReviewerDraft {
     team: reviewer.team ?? '',
     skills: reviewer.skills.join(', '),
     availability: reviewer.availability,
+    role: reviewer.role,
     weight: reviewer.weight,
   }
 }
@@ -74,6 +87,7 @@ export function toCreateReviewer(draft: ReviewerDraft): CreateReviewer {
     team: blankToNull(draft.team),
     skills: parseSkills(draft.skills),
     availability: draft.availability,
+    role: draft.role,
     weight: draft.weight,
   }
 }
@@ -99,6 +113,7 @@ export function reviewerPatch(opened: Reviewer, next: CreateReviewer): UpdateRev
   if (next.team !== opened.team) patch.team = next.team
   if (!sameSkills(opened.skills, next.skills)) patch.skills = next.skills
   if (next.availability !== opened.availability) patch.availability = next.availability
+  if (next.role !== opened.role) patch.role = next.role
   if (next.weight !== opened.weight) patch.weight = next.weight
   return patch
 }

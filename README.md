@@ -127,8 +127,9 @@ a reduced build.
 Read [docs/implementation-plan.md](./docs/implementation-plan.md) for what is built,
 what is a placeholder, and what lands next,
 [docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design,
-[docs/persistence.md](./docs/persistence.md) for where the board lives, and
-[docs/auth.md](./docs/auth.md) for who is allowed to call it.
+[docs/persistence.md](./docs/persistence.md) for where the board lives,
+[docs/auth.md](./docs/auth.md) for who is allowed to call it, and
+[docs/orgs.md](./docs/orgs.md) for what they may reach once they are in.
 
 ## Connecting GitHub, GitLab and Slack
 
@@ -173,8 +174,22 @@ not a person: it can drive the board and it has no workspace of its own.
 `GET /health` reports the mode beside the hosts a sign-in could actually use, so
 a deployment nobody can enter is visible from outside the process. One thing to
 know before turning it on: a browser sends its session only to an origin the API
-NAMES, so a hosted SPA has to be listed in `CORS_ORIGINS`. Full design, including
-what is still missing: [docs/auth.md](./docs/auth.md).
+NAMES, so a hosted SPA has to be listed in `CORS_ORIGINS`. Full design:
+[docs/auth.md](./docs/auth.md).
+
+### And what they may reach
+
+Every row belongs to an **org**, and the repositories a request reaches are bound
+to the one its credential names before any handler runs — so a board, a directory
+and a registry belong to a tenancy rather than to the deployment. A deployment
+that never makes a second org is entirely inside the default one and behaves
+exactly as it did; `POST /api/v1/settings/orgs` makes another, and people sign in
+to it with `/api/v1/auth/sign-in/<host>?org=<slug>`.
+
+Two roles over that: an **admin** configures the org — credentials, API keys, the
+project registry, the reviewer directory — and a **member** uses it. The first
+person to sign in to an org is its admin. Full design, including what the
+boundary does not reach yet: [docs/orgs.md](./docs/orgs.md).
 
 ## Hosting it
 

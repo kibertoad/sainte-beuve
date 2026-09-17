@@ -14,9 +14,10 @@ import { digestOf, mintToken, SESSION_TOKEN_PREFIX } from '../../crypto/tokens.j
  * request is the price, and it is one indexed read against a store the request
  * was going to touch anyway.
  *
- * What the session does NOT carry is authority beyond identity. It says which
- * person is calling; what they may do is the org boundary, which is the half of
- * slice 6 still outstanding (docs/implementation-plan.md).
+ * What the session carries beyond identity is a TENANCY. It names the org it was
+ * established in, that org is what the request's repositories are bound to, and
+ * nothing a caller sends can move it: the only moment an org is chosen is the
+ * sign-in, and the choice rides in the signed state. See docs/orgs.md.
  */
 
 /**
@@ -46,11 +47,15 @@ export class SessionService {
    * moment the value exists anywhere but the browser.
    */
   async issue(who: SessionSubject): Promise<{ token: string; session: StoredSession }> {
-    const { clock, ids, repositories, auth } = this.container
+    const { clock, ids, repositories, auth, orgId } = this.container
     const token = mintToken(SESSION_TOKEN_PREFIX)
     const now = clock.now()
     const session = await repositories.sessions.create({
       id: ids.next(),
+      // The org THIS container is bound to, which the sign-in flow rebound from
+      // the signed state before reaching here. Fixed for the life of the
+      // session: a cookie is a credential for one tenancy.
+      orgId,
       tokenDigest: await digestOf(token),
       reviewerId: who.reviewerId,
       provider: who.provider,
@@ -73,9 +78,14 @@ export class SessionService {
    */
   async resolve(token: string | null): Promise<StoredSession | null> {
     if (token === null || !token.startsWith(SESSION_TOKEN_PREFIX)) return null
-    const { sessions } = this.container.repositories
-    const held = await sessions.findByDigest(await digestOf(token))
+    // Through the TENANCY DIRECTORY rather than this container's repositories.
+    // The digest is what decides which org the request is in, so it is read
+    // before there is an org to scope it by; the writes below then go through
+    // the store bound to whatever it said, which is not necessarily the org this
+    // service was constructed in.
+    const held = await this.container.stores.tenancy.findSessionByDigest(await digestOf(token))
     if (held === null) return null
+    const sessions = this.container.stores.forOrg(held.orgId).sessions
     const now = this.container.clock.now()
     if (held.expiresAt <= now) {
       await sessions.delete(held.id)
@@ -95,7 +105,12 @@ export class SessionService {
     await this.container.repositories.sessions.deleteForReviewer(reviewerId)
   }
 
-  /** Drop what has already expired. Driven by the reminder tick; see `reminders/tick.ts`. */
+  /**
+   * Drop what has already expired, IN THIS CONTAINER'S ORG. The tick walks every
+   * org and calls this once per tenancy, which is what keeps the sweep inside
+   * the same boundary as everything else rather than making it the one write
+   * that reaches across.
+   */
   async sweepExpired(): Promise<number> {
     return this.container.repositories.sessions.deleteExpired(this.container.clock.now())
   }

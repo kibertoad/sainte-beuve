@@ -12,13 +12,18 @@ import { decodeCount } from './rows.js'
  * What is stored is an ENVELOPE. The plaintext never reaches a repository, so a
  * dump of this table carries no usable credential, and the durable store is no
  * more sensitive than the in-memory one it replaces.
+ *
+ * Scoped per ORG, like everything else: each tenancy connects its own GitHub and
+ * its own Slack, and a credential shared across the boundary would let one org's
+ * board write comments as another org's bot.
  */
 
-const SELECT = 'SELECT integration_id, sealed, hint, subject, updated_at FROM integration_tokens'
+const SELECT =
+  'SELECT integration_id, sealed, hint, subject, updated_at FROM integration_tokens WHERE org_id = ?'
 
-const UPSERT = `INSERT INTO integration_tokens (integration_id, sealed, hint, subject, updated_at)
-VALUES (?, ?, ?, ?, ?)
-ON CONFLICT (integration_id) DO UPDATE SET
+const UPSERT = `INSERT INTO integration_tokens (org_id, integration_id, sealed, hint, subject, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (org_id, integration_id) DO UPDATE SET
   sealed = excluded.sealed,
   hint = excluded.hint,
   subject = excluded.subject,
@@ -38,20 +43,24 @@ function toToken(row: SqlRow): StoredIntegrationToken {
 }
 
 export class SqlIntegrationTokenRepository implements IntegrationTokenRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(
+    private readonly db: SqlDriver,
+    private readonly orgId: string,
+  ) {}
 
   async list(): Promise<StoredIntegrationToken[]> {
-    const rows = await this.db.all(`${SELECT} ORDER BY integration_id`)
+    const rows = await this.db.all(`${SELECT} ORDER BY integration_id`, [this.orgId])
     return rows.map(toToken)
   }
 
   async get(integrationId: string): Promise<StoredIntegrationToken | null> {
-    const row = await this.db.first(`${SELECT} WHERE integration_id = ?`, [integrationId])
+    const row = await this.db.first(`${SELECT} AND integration_id = ?`, [this.orgId, integrationId])
     return row === null ? null : toToken(row)
   }
 
   async put(token: StoredIntegrationToken): Promise<StoredIntegrationToken> {
     await this.db.run(UPSERT, [
+      this.orgId,
       token.integrationId,
       token.sealed,
       token.hint,
@@ -62,6 +71,9 @@ export class SqlIntegrationTokenRepository implements IntegrationTokenRepository
   }
 
   async delete(integrationId: string): Promise<void> {
-    await this.db.run('DELETE FROM integration_tokens WHERE integration_id = ?', [integrationId])
+    await this.db.run('DELETE FROM integration_tokens WHERE org_id = ? AND integration_id = ?', [
+      this.orgId,
+      integrationId,
+    ])
   }
 }

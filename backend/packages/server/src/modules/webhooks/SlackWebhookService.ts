@@ -32,6 +32,24 @@ import { ReviewService } from '../reviews/ReviewService.js'
  * button is on.
  */
 
+/**
+ * WHICH ORG a Slack command lands in is the DEFAULT one, and that is the known
+ * limit of the boundary rather than an oversight.
+ *
+ * A GitHub delivery names a repository, and the project registry says which
+ * tenancy claimed it; a slash command names a Slack user and a channel, and
+ * nothing on this deployment maps either to an org — the signing secret is
+ * deployment wiring rather than an org's credential, so one Slack app serves
+ * every tenancy. Placing a command by searching every org's directory for the
+ * Slack id would be a read across the boundary on an unauthenticated path, and
+ * would answer ambiguously for anybody who is in two.
+ *
+ * So a deployment with a second org reaches it through the SPA and through
+ * GitHub, and its Slack commands act on the default org. Closing this needs an
+ * org's own Slack connection, which is a credential change rather than a
+ * routing one. See docs/orgs.md.
+ */
+
 const NO_SECRET =
   'This deployment cannot verify Slack requests: set SLACK_SIGNING_SECRET to the signing secret ' +
   'from the Slack app configuration'

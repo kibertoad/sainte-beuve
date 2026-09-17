@@ -1,7 +1,9 @@
+import type { Role } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type { StoredSession } from '@sainte-beuve/kernel'
 import { ForbiddenError, UnauthenticatedError } from '@sainte-beuve/kernel'
 import type { Context, Input, MiddlewareHandler } from 'hono'
-import type { AppContainer } from '../../container.js'
+import { type AppContainer, withOrg } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import { ApiKeyService, type ApiKeyPrincipal } from './ApiKeyService.js'
 import { readSessionCookie } from './cookies.js'
@@ -90,8 +92,30 @@ async function resolve<E extends AppEnv, P extends string, I extends Input>(
 }
 
 /**
- * Put the caller on the context, and refuse an anonymous one where the
- * deployment said to.
+ * Which tenancy a resolved caller is in.
+ *
+ * The credential decides, and nothing else can: a session and a minted key each
+ * carry the org they were established in, and a caller this deployment cannot
+ * place — anonymous on an `open` deployment, or holding `AUTH_API_KEY`, which is
+ * an environment variable rather than a row — is in the DEFAULT org. That
+ * fallback is what makes a single-tenant deployment behave exactly as it did:
+ * everything it has is in the default org and every caller it has lands there.
+ */
+function orgOf(principal: RequestPrincipal): string {
+  if (principal.kind === 'session') return principal.session.orgId
+  if (principal.kind === 'api_key') return principal.orgId
+  return DEFAULT_ORG_ID
+}
+
+/**
+ * Put the caller on the context, BIND THE CONTAINER TO THEIR ORG, and refuse an
+ * anonymous one where the deployment said to.
+ *
+ * The rebinding is the whole of the org boundary as the request handlers meet
+ * it. Everything below this line reads `container.repositories` exactly as it
+ * did before orgs existed, and what it gets can only see one tenancy — so a
+ * controller cannot leak across the boundary by forgetting something, because
+ * there is nothing for it to remember.
  *
  * It runs on every `/api/v1` request rather than being applied per route,
  * because the failure mode of the other arrangement is a route somebody forgot
@@ -103,6 +127,7 @@ export function authentication(): MiddlewareHandler<AppEnv> {
     const container = c.get('container')
     const principal = await resolve(container, c)
     c.set('principal', principal)
+    c.set('container', withOrg(container, orgOf(principal)))
     if (
       container.auth.mode === 'required' &&
       principal.kind === 'anonymous' &&
@@ -158,4 +183,49 @@ export function refuseIfMachine(principal: RequestPrincipal): void {
  */
 export function refuseIfAnonymous(principal: RequestPrincipal, reason: string): void {
   if (principal.kind === 'anonymous') throw new UnauthenticatedError(reason)
+}
+
+/**
+ * What the caller may do in their org.
+ *
+ * A READ for a session, which is why it is not on `RequestPrincipal`: the role
+ * lives on the reviewer row, so putting it on the principal would mean a store
+ * read on every authenticated request for a fact four routes consult — and
+ * caching it on the session row instead would leave a demotion taking effect
+ * whenever somebody next signs in, which is not what a demotion means.
+ *
+ * ANONYMOUS IS AN ADMIN, and that is a decision rather than an oversight. `open`
+ * means this deployment refuses nobody, so whoever can reach it can already
+ * reach every route; answering `member` here would take the Configuration screen
+ * away from the laptop the open default exists for, while changing nothing about
+ * who can get at it. Closing the door is `AUTH_MODE=required`, and it closes
+ * this too.
+ */
+export async function roleOf(container: AppContainer, principal: RequestPrincipal): Promise<Role> {
+  if (principal.kind === 'anonymous') return 'admin'
+  if (principal.kind === 'api_key') return principal.role
+  const reviewer = await container.repositories.reviewers.getById(principal.session.reviewerId)
+  // A session whose reviewer row is gone is nobody, and nobody is not an admin.
+  // The directory has no delete, so this is a state no route here produces; it
+  // fails closed rather than asserting, because a permission check is the last
+  // place to answer a surprise with a 404.
+  return reviewer?.role ?? 'member'
+}
+
+/**
+ * Refuse a caller who is not an admin of their org.
+ *
+ * The line it draws: an ADMIN configures the deployment — credentials, keys,
+ * orgs, the project registry, the reviewer directory — and a MEMBER uses it: the
+ * board, the workspace, attention requests, AI reviews. That is the one
+ * distinction slice 6a left collapsed ("can revoke an API key" and "can read the
+ * board" were the same permission), and anything finer is a permission matrix
+ * nobody has asked for yet.
+ */
+export async function requireAdmin<E extends AppEnv, P extends string, I extends Input>(
+  c: Ctx<E, P, I>,
+  reason: string,
+): Promise<void> {
+  const container: AppContainer = c.get('container')
+  if ((await roleOf(container, principalOf(c))) !== 'admin') throw new ForbiddenError(reason)
 }

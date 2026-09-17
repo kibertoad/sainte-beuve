@@ -39,6 +39,14 @@ const availabilities = [
   { value: 'paused' as const, label: 'Paused' },
 ]
 
+// What somebody may do in this org, which is a different question from whether
+// they are in the pool. An ADMIN configures the deployment — credentials, keys,
+// the registry, this directory — and a MEMBER uses it.
+const roles = [
+  { value: 'member' as const, label: 'Member' },
+  { value: 'admin' as const, label: 'Admin' },
+]
+
 const hosts = VCS_PROVIDERS.map((provider) => ({
   provider,
   label: `${vcsDisplayName(provider)} handle`,
@@ -96,13 +104,22 @@ function submit() {
       >
         <UInput v-model="draft.skills" class="w-96" placeholder="typescript, payments" />
       </UFormField>
-      <UFormField label="Availability" description="Paused keeps the row and its skills.">
+      <UFormField
+        label="Availability"
+        description="Paused keeps the row and its skills, and signs them out."
+      >
         <USelect
           v-model="draft.availability"
           :items="availabilities"
           value-key="value"
           class="w-36"
         />
+      </UFormField>
+      <UFormField
+        label="Role"
+        description="An admin can change this org's credentials, keys, registry and directory."
+      >
+        <USelect v-model="draft.role" :items="roles" value-key="value" class="w-36" />
       </UFormField>
       <UFormField
         label="Weight"

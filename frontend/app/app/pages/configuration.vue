@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { IntegrationId, IntegrationTokenStatus, VcsProvider } from '@sainte-beuve/contracts'
+import type {
+  IntegrationId,
+  IntegrationTokenStatus,
+  Role,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
 import { isVcsProvider, vcsDisplayName, vcsPatCredentialKey } from '@sainte-beuve/contracts'
 
 // Configuration: how this deployment reaches the systems it depends on.
@@ -27,6 +32,12 @@ const { data, pending, error, refresh } = await useAsyncData('configuration', as
   // in unreachable in the one mode it exists for. `auth.refresh()` never
   // rejects, so this settles either way.
   await auth.refresh()
+  // NOT ASKED FOR AT ALL unless the caller may have them. Everything below is
+  // admin-only since the org boundary landed, and a member reaching this page —
+  // which they do, because it holds the only sign-out button — would otherwise
+  // get three 403s and an error alert where the honest answer is "this part is
+  // not yours". The API is still the guard; this only decides what to ask.
+  if (!auth.isAdmin.value) return null
   // The rest is one call for the reason the two credential reads are one call:
   // minting a key and connecting a host both change what this page says about
   // who may call, and a card that refreshed only its own half would report a
@@ -44,11 +55,11 @@ const { busy, run } = useApiAction({ refresh })
 /** The one time a minted key is readable. See AccessCard. */
 const issuedKey = ref<string | null>(null)
 
-async function mintKey(label: string) {
+async function mintKey(key: { label: string; role: Role }) {
   let token: string | null = null
   const minted = await run(
     async () => {
-      token = (await api.createApiKey(label)).token
+      token = (await api.createApiKey(key.label, key.role)).token
     },
     'Could not mint an API key',
     'create-key',
@@ -231,6 +242,14 @@ onMounted(() => {
     />
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the configuration" />
+
+    <UAlert
+      v-else-if="!auth.isAdmin.value"
+      color="neutral"
+      variant="subtle"
+      title="The rest of this screen belongs to an admin"
+      description="How this org reaches GitHub, GitLab, Slack and cat-factory, and the keys machines call it with, are an admin's to change. Ask one of them, or sign in to an org you administer."
+    />
 
     <div v-else-if="data" class="flex flex-col gap-4">
       <VcsConnectionCard

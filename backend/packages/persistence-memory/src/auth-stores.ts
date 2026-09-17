@@ -22,6 +22,12 @@ import { newestFirst } from './order.js'
 export class InMemorySessionRepository implements SessionRepository {
   private readonly rows = new Map<string, StoredSession>()
 
+  /**
+   * Wider than the port, on purpose. Resolving a digest is what DECIDES which
+   * org a request is in, so it is not a method a store bound to one can carry;
+   * `createInMemoryPersistence` reaches this across every org's dataset and
+   * answers `TenancyDirectory` with it.
+   */
   async findByDigest(tokenDigest: string): Promise<StoredSession | null> {
     for (const row of this.rows.values()) {
       if (row.tokenDigest === tokenDigest) return clone(row)
@@ -76,6 +82,7 @@ export class InMemoryApiKeyRepository implements ApiKeyRepository {
     return [...this.rows.values()].sort(newestFirst((row) => row.createdAt)).map(clone)
   }
 
+  /** Off the port, beside the session store's and for the same reason. */
   async findByDigest(tokenDigest: string): Promise<StoredApiKey | null> {
     for (const row of this.rows.values()) {
       if (row.tokenDigest === tokenDigest) return clone(row)

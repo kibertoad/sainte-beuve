@@ -28,7 +28,10 @@ import { aiReviewRuns, reminders, reviewRequests } from './schema.js'
  */
 
 export class PostgresReviewRequestRepository implements ReviewRequestRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]> {
     const wanted = filter?.status
@@ -39,13 +42,21 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
     const rows = await this.db
       .select()
       .from(reviewRequests)
-      .where(wanted === undefined ? undefined : inArray(reviewRequests.status, wanted))
+      .where(
+        and(
+          eq(reviewRequests.orgId, this.orgId),
+          wanted === undefined ? undefined : inArray(reviewRequests.status, wanted),
+        ),
+      )
       .orderBy(desc(reviewRequests.createdAt), desc(reviewRequests.id))
     return rows.map((row) => row.data)
   }
 
   async getById(reviewId: string): Promise<ReviewRequest | null> {
-    const rows = await this.db.select().from(reviewRequests).where(eq(reviewRequests.id, reviewId))
+    const rows = await this.db
+      .select()
+      .from(reviewRequests)
+      .where(and(eq(reviewRequests.orgId, this.orgId), eq(reviewRequests.id, reviewId)))
     return firstOr(rows)?.data ?? null
   }
 
@@ -59,6 +70,7 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
       .from(reviewRequests)
       .where(
         and(
+          eq(reviewRequests.orgId, this.orgId),
           eq(reviewRequests.prOwner, ref.owner),
           eq(reviewRequests.prRepo, ref.repo),
           eq(reviewRequests.prNumber, ref.number),
@@ -82,6 +94,7 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
 
   private async write(review: ReviewRequest): Promise<void> {
     const row = {
+      orgId: this.orgId,
       id: review.id,
       status: review.status,
       prOwner: review.pullRequest.owner,
@@ -93,12 +106,13 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
     await this.db
       .insert(reviewRequests)
       .values(row)
-      .onConflictDoUpdate({ target: reviewRequests.id, set: row })
+      .onConflictDoUpdate({ target: [reviewRequests.orgId, reviewRequests.id], set: row })
   }
 }
 
-function reminderRow(reminder: Reminder) {
+function reminderRow(orgId: string, reminder: Reminder) {
   return {
+    orgId,
     id: reminder.id,
     reviewId: reminder.reviewId,
     status: reminder.status,
@@ -113,7 +127,7 @@ function reminderRow(reminder: Reminder) {
  * worth in one statement.
  */
 const REMINDER_CONFLICT = {
-  target: reminders.id,
+  target: [reminders.orgId, reminders.id],
   set: {
     reviewId: sql`excluded.review_id`,
     status: sql`excluded.status`,
@@ -123,13 +137,16 @@ const REMINDER_CONFLICT = {
 }
 
 export class PostgresReminderRepository implements ReminderRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async listByReview(reviewId: string): Promise<Reminder[]> {
     const rows = await this.db
       .select()
       .from(reminders)
-      .where(eq(reminders.reviewId, reviewId))
+      .where(and(eq(reminders.orgId, this.orgId), eq(reminders.reviewId, reviewId)))
       .orderBy(asc(reminders.dueAt), asc(reminders.id))
     return rows.map((row) => row.data)
   }
@@ -138,7 +155,13 @@ export class PostgresReminderRepository implements ReminderRepository {
     const rows = await this.db
       .select()
       .from(reminders)
-      .where(and(eq(reminders.status, 'scheduled'), lte(reminders.dueAt, now)))
+      .where(
+        and(
+          eq(reminders.orgId, this.orgId),
+          eq(reminders.status, 'scheduled'),
+          lte(reminders.dueAt, now),
+        ),
+      )
       .orderBy(asc(reminders.dueAt), asc(reminders.id))
       .limit(limit)
     return rows.map((row) => row.data)
@@ -154,7 +177,10 @@ export class PostgresReminderRepository implements ReminderRepository {
     status: ReminderStatus,
     fields?: { sentAt?: EpochMs; failureReason?: string },
   ): Promise<void> {
-    const rows = await this.db.select().from(reminders).where(eq(reminders.id, reminderId))
+    const rows = await this.db
+      .select()
+      .from(reminders)
+      .where(and(eq(reminders.orgId, this.orgId), eq(reminders.id, reminderId)))
     const current = firstOr(rows)?.data
     if (current === undefined) return
     await this.write({
@@ -179,36 +205,48 @@ export class PostgresReminderRepository implements ReminderRepository {
     const rows = await this.db
       .select()
       .from(reminders)
-      .where(and(eq(reminders.reviewId, reviewId), eq(reminders.status, 'scheduled')))
+      .where(
+        and(
+          eq(reminders.orgId, this.orgId),
+          eq(reminders.reviewId, reviewId),
+          eq(reminders.status, 'scheduled'),
+        ),
+      )
     if (rows.length === 0) return
     await this.db
       .insert(reminders)
-      .values(rows.map((row) => reminderRow({ ...row.data, status: 'cancelled' })))
+      .values(rows.map((row) => reminderRow(this.orgId, { ...row.data, status: 'cancelled' })))
       .onConflictDoUpdate(REMINDER_CONFLICT)
   }
 
   private async write(reminder: Reminder): Promise<void> {
     await this.db
       .insert(reminders)
-      .values(reminderRow(reminder))
+      .values(reminderRow(this.orgId, reminder))
       .onConflictDoUpdate(REMINDER_CONFLICT)
   }
 }
 
 export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async listByReview(reviewId: string): Promise<AiReviewRun[]> {
     const rows = await this.db
       .select()
       .from(aiReviewRuns)
-      .where(eq(aiReviewRuns.reviewId, reviewId))
+      .where(and(eq(aiReviewRuns.orgId, this.orgId), eq(aiReviewRuns.reviewId, reviewId)))
       .orderBy(desc(aiReviewRuns.requestedAt), desc(aiReviewRuns.id))
     return rows.map((row) => row.data)
   }
 
   async getById(runId: string): Promise<AiReviewRun | null> {
-    const rows = await this.db.select().from(aiReviewRuns).where(eq(aiReviewRuns.id, runId))
+    const rows = await this.db
+      .select()
+      .from(aiReviewRuns)
+      .where(and(eq(aiReviewRuns.orgId, this.orgId), eq(aiReviewRuns.id, runId)))
     return firstOr(rows)?.data ?? null
   }
 
@@ -226,10 +264,16 @@ export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
   }
 
   private async write(run: AiReviewRun): Promise<void> {
-    const row = { id: run.id, reviewId: run.reviewId, requestedAt: run.requestedAt, data: run }
+    const row = {
+      orgId: this.orgId,
+      id: run.id,
+      reviewId: run.reviewId,
+      requestedAt: run.requestedAt,
+      data: run,
+    }
     await this.db
       .insert(aiReviewRuns)
       .values(row)
-      .onConflictDoUpdate({ target: aiReviewRuns.id, set: row })
+      .onConflictDoUpdate({ target: [aiReviewRuns.orgId, aiReviewRuns.id], set: row })
   }
 }

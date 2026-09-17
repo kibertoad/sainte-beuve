@@ -8,18 +8,25 @@ import { identities, projects } from './schema.js'
 
 /** The projects a deployment watches, and who its people are on each host. */
 export class PostgresProjectRepository implements ProjectRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async list(): Promise<Project[]> {
     const rows = await this.db
       .select()
       .from(projects)
+      .where(eq(projects.orgId, this.orgId))
       .orderBy(asc(projects.createdAt), asc(projects.id))
     return rows.map((row) => row.data)
   }
 
   async getById(projectId: string): Promise<Project | null> {
-    const rows = await this.db.select().from(projects).where(eq(projects.id, projectId))
+    const rows = await this.db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.orgId, this.orgId), eq(projects.id, projectId)))
     return firstOr(rows)?.data ?? null
   }
 
@@ -27,7 +34,7 @@ export class PostgresProjectRepository implements ProjectRepository {
     const rows = await this.db
       .select()
       .from(projects)
-      .where(eq(projects.refKey, projectRefKey(ref)))
+      .where(and(eq(projects.orgId, this.orgId), eq(projects.refKey, projectRefKey(ref))))
     return firstOr(rows)?.data ?? null
   }
 
@@ -45,22 +52,30 @@ export class PostgresProjectRepository implements ProjectRepository {
   }
 
   async delete(projectId: string): Promise<void> {
-    await this.db.delete(projects).where(eq(projects.id, projectId))
+    await this.db
+      .delete(projects)
+      .where(and(eq(projects.orgId, this.orgId), eq(projects.id, projectId)))
   }
 
   private async write(project: Project): Promise<void> {
-    // `ref_key` is UNIQUE, which is the uniqueness the port declares and the
-    // in-memory store can only promise. Registering a repository twice is
+    // `(org_id, ref_key)` is UNIQUE, which is the uniqueness the port declares
+    // and the in-memory store can only promise. It is scoped to the org because
+    // two tenancies watching one repository is the ordinary multi-tenant case
+    // rather than a duplicate. Registering a repository twice within one org is
     // refused by the service, so reaching the constraint means two of those
     // calls raced, and the loser being told beats a workspace listing one
     // repository twice.
     const row = {
+      orgId: this.orgId,
       id: project.id,
       refKey: projectRefKey(project),
       createdAt: project.createdAt,
       data: project,
     }
-    await this.db.insert(projects).values(row).onConflictDoUpdate({ target: projects.id, set: row })
+    await this.db
+      .insert(projects)
+      .values(row)
+      .onConflictDoUpdate({ target: [projects.orgId, projects.id], set: row })
   }
 }
 
@@ -76,13 +91,22 @@ export class PostgresProjectRepository implements ProjectRepository {
  * rename visible.
  */
 export class PostgresIdentityRepository implements IdentityRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async findReviewerId(provider: IdentityProvider, subject: string): Promise<string | null> {
     const rows = await this.db
       .select({ reviewerId: identities.reviewerId })
       .from(identities)
-      .where(and(eq(identities.provider, provider), eq(identities.subject, subject)))
+      .where(
+        and(
+          eq(identities.orgId, this.orgId),
+          eq(identities.provider, provider),
+          eq(identities.subject, subject),
+        ),
+      )
     return firstOr(rows)?.reviewerId ?? null
   }
 
@@ -90,7 +114,7 @@ export class PostgresIdentityRepository implements IdentityRepository {
     const rows = await this.db
       .select()
       .from(identities)
-      .where(eq(identities.reviewerId, reviewerId))
+      .where(and(eq(identities.orgId, this.orgId), eq(identities.reviewerId, reviewerId)))
       .orderBy(asc(identities.provider), asc(identities.subject))
     return rows.map((row) => row.data)
   }
@@ -99,13 +123,14 @@ export class PostgresIdentityRepository implements IdentityRepository {
     const rows = await this.db
       .insert(identities)
       .values({
+        orgId: this.orgId,
         provider: identity.provider,
         subject: identity.subject,
         reviewerId,
         data: identity,
       })
       .onConflictDoUpdate({
-        target: [identities.provider, identities.subject],
+        target: [identities.orgId, identities.provider, identities.subject],
         set: {
           data: sql`CASE WHEN ${identities.reviewerId} = excluded.reviewer_id THEN excluded.data ELSE ${identities.data} END`,
         },

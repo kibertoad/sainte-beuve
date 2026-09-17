@@ -33,7 +33,7 @@ import type { NodeStore } from './persistence.js'
  */
 export function buildContainer(config: NodeConfig, store: NodeStore, logger: Logger): AppContainer {
   return createContainer({
-    repositories: store.repositories,
+    stores: store.stores,
     persistence: store.kind,
     logger,
     chat:

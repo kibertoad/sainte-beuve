@@ -1,7 +1,8 @@
 // `@sainte-beuve/persistence-d1`: the durable store the Cloudflare Worker boots
 // with.
 //
-// Eleven stores over one `D1Database`, plus the migrations directory a deployment
+// Eleven stores over one `D1Database` and one org, plus the tenancy surface above
+// them (`createD1Store`) and the migrations directory a deployment
 // points wrangler at (`migrations_dir`). The Postgres adapter
 // (@sainte-beuve/persistence-postgres) implements the same ports over Drizzle,
 // against the same tables and the same payload column, and the two land together
@@ -12,55 +13,40 @@
 // same assertions run against this store, that one, and the in-memory one.
 //
 // The tables this adapter reads and writes, and the columns each one carries
-// beside its payload. `migrations/0001_initial.sql` is the definition; this is
-// the map, and the Postgres schema (`persistence-postgres/src/schema.ts`) is the
-// same one in the other dialect's types.
+// beside its payload. `migrations/0001_initial.sql` is the definition and
+// `0003_orgs.sql` is the tenancy; this is the map, and the Postgres schema
+// (`persistence-postgres/src/schema.ts`) is the same one in the other dialect's
+// types.
 //
-//  | table                | key                    | columns beside `data`                                      |
-//  | -------------------- | ---------------------- | ---------------------------------------------------------- |
-//  | `reviewers`          | `id`                   | `outstanding_reviews`, `created_at`                        |
-//  | `review_requests`    | `id`                   | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at` |
-//  | `reminders`          | `id`                   | `review_id`, `status`, `due_at`                            |
-//  | `ai_review_runs`     | `id`                   | `review_id`, `requested_at`                                |
-//  | `integration_tokens` | `integration_id`       | `sealed`, `hint`, `subject`, `updated_at` (no payload)     |
-//  | `projects`           | `id`                   | `ref_key` (UNIQUE), `created_at`                           |
-//  | `identities`         | `(provider, subject)`  | `reviewer_id`                                              |
-//  | `attention_requests` | `id`                   | `status`, `created_at`                                     |
-//  | `review_commitments` | `id`                   | `reviewer_id`, `pull_request_key`, `created_at`            |
-//  | `sessions`           | `id`                   | `token_digest` (UNIQUE), `reviewer_id`, `expires_at`       |
-//  | `api_keys`           | `id`                   | `token_digest` (UNIQUE), `created_at` (no payload)         |
+// EVERY TABLE BUT `orgs` IS KEYED ON `(org_id, ...)`. The tenancy is in the
+// primary key rather than beside it, because a tenancy a query can omit is a
+// tenancy a query will omit: with it in the key, a statement that forgot the
+// org does not read somebody else's rows, it fails to parse.
+//
+//  | table                | key                            | columns beside `data`                                      |
+//  | -------------------- | ------------------------------ | ---------------------------------------------------------- |
+//  | `orgs`               | `id`                           | `slug` (UNIQUE), `created_at`                              |
+//  | `reviewers`          | `(org_id, id)`                 | `outstanding_reviews`, `created_at`                        |
+//  | `review_requests`    | `(org_id, id)`                 | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at` |
+//  | `reminders`          | `(org_id, id)`                 | `review_id`, `status`, `due_at`                            |
+//  | `ai_review_runs`     | `(org_id, id)`                 | `review_id`, `requested_at`                                |
+//  | `integration_tokens` | `(org_id, integration_id)`     | `sealed`, `hint`, `subject`, `updated_at` (no payload)     |
+//  | `projects`           | `(org_id, id)`                 | `ref_key` (UNIQUE per org), `created_at`                   |
+//  | `identities`         | `(org_id, provider, subject)`  | `reviewer_id`                                              |
+//  | `attention_requests` | `(org_id, id)`                 | `status`, `created_at`                                     |
+//  | `review_commitments` | `(org_id, id)`                 | `reviewer_id`, `pull_request_key`, `created_at`            |
+//  | `sessions`           | `(org_id, id)`                 | `token_digest` (UNIQUE globally), `reviewer_id`, `expires_at` |
+//  | `api_keys`           | `(org_id, id)`                 | `token_digest` (UNIQUE globally), `role`, `created_at` (no payload) |
 
-import type { Repositories } from '@sainte-beuve/kernel'
-import { SqlAttentionRepository, SqlReviewCommitmentRepository } from './attention.js'
-import { SqlApiKeyRepository, SqlSessionRepository } from './auth.js'
+import type { PersistenceProvider } from '@sainte-beuve/kernel'
 import { D1SqlDriver } from './D1SqlDriver.js'
-import type { SqlDriver } from './driver.js'
-import { SqlReviewerRepository } from './reviewers.js'
-import {
-  SqlAiReviewRunRepository,
-  SqlReminderRepository,
-  SqlReviewRequestRepository,
-} from './reviews.js'
-import { SqlIntegrationTokenRepository } from './settings.js'
-import { SqlIdentityRepository, SqlProjectRepository } from './workspace.js'
+import { createD1Persistence } from './provider.js'
 
 /** Every store, over one D1 binding. */
-export function createD1Repositories(binding: D1Database): Repositories {
-  const db: SqlDriver = new D1SqlDriver(binding)
-  return {
-    reviewers: new SqlReviewerRepository(db),
-    reviews: new SqlReviewRequestRepository(db),
-    reminders: new SqlReminderRepository(db),
-    aiReviewRuns: new SqlAiReviewRunRepository(db),
-    integrationTokens: new SqlIntegrationTokenRepository(db),
-    projects: new SqlProjectRepository(db),
-    identities: new SqlIdentityRepository(db),
-    attention: new SqlAttentionRepository(db),
-    commitments: new SqlReviewCommitmentRepository(db),
-    sessions: new SqlSessionRepository(db),
-    apiKeys: new SqlApiKeyRepository(db),
-  }
+export function createD1Store(binding: D1Database): PersistenceProvider {
+  return createD1Persistence(new D1SqlDriver(binding))
 }
 
 export { D1SqlDriver } from './D1SqlDriver.js'
+export { createD1Persistence } from './provider.js'
 export type { SqlDriver, SqlParam, SqlRow, SqlStatement } from './driver.js'

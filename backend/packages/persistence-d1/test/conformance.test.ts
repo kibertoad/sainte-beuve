@@ -1,10 +1,12 @@
 import { applyD1Migrations, type D1Migration, env } from 'cloudflare:test'
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import {
   repositoryConformanceCases,
   storedRowConformanceCases,
+  tenancyConformanceCases,
 } from '@sainte-beuve/persistence-conformance'
 import { beforeAll, beforeEach, describe, it } from 'vitest'
-import { createD1Repositories } from '../src/index.js'
+import { createD1Store } from '../src/index.js'
 
 // The shared suite (@sainte-beuve/persistence-conformance), run against D1
 // inside workerd. Every case here also runs against the in-memory store and
@@ -56,7 +58,16 @@ describe('D1 repositories', () => {
 
   for (const testCase of repositoryConformanceCases) {
     it(testCase.name, async () => {
-      await testCase.run(createD1Repositories(env.DB))
+      await testCase.run(createD1Store(env.DB).forOrg(DEFAULT_ORG_ID))
+    })
+  }
+
+  // The boundary itself, which the cases above cannot see: they are written
+  // against one org's repositories, and this adapter's isolation is an `org_id`
+  // in every predicate and every primary key.
+  for (const testCase of tenancyConformanceCases) {
+    it(testCase.name, async () => {
+      await testCase.run(createD1Store(env.DB))
     })
   }
 
@@ -66,12 +77,12 @@ describe('D1 repositories', () => {
   for (const testCase of storedRowConformanceCases) {
     it(testCase.name, async () => {
       await testCase.run({
-        repositories: createD1Repositories(env.DB),
+        repositories: createD1Store(env.DB).forOrg(DEFAULT_ORG_ID),
         writeRawReviewer: async (id, payload) => {
           await env.DB.prepare(
-            'INSERT INTO reviewers (id, outstanding_reviews, created_at, data) VALUES (?, ?, ?, ?)',
+            'INSERT INTO reviewers (org_id, id, outstanding_reviews, created_at, data) VALUES (?, ?, ?, ?, ?)',
           )
-            .bind(id, 0, 1_000, JSON.stringify(payload))
+            .bind(DEFAULT_ORG_ID, id, 0, 1_000, JSON.stringify(payload))
             .run()
         },
       })

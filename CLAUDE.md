@@ -18,6 +18,13 @@ Working rules for this repo. Read [README.md](./README.md) for what exists and
 - **Every integration stays optional.** A new gateway is nullable on the container,
   and the route that needs it calls `requireCapability` with a message naming the
   configuration that is missing.
+- **The tenancy is bound, never passed.** No repository port method takes an org
+  and no route accepts one: the authentication middleware reads it off the
+  caller's credential and rebinds the container (`withOrg`), and every service
+  below asks `container.repositories` as it always did. A new port method gets no
+  `orgId` parameter, and anything that has to read across the boundary goes on
+  `TenancyDirectory` — which is three methods and should stay that size. See
+  [docs/orgs.md](./docs/orgs.md).
 - **Three stores, one behaviour.** A change to a repository port lands in all
   three implementations (`persistence-memory`, `persistence-d1`,
   `persistence-postgres`) in the same commit, with a case in
@@ -48,7 +55,7 @@ disable.
 5. Adapter in `@sainte-beuve/integrations` (or a new package if it is a new system).
 6. If it stores anything: the port method in all three stores, a case in
    `@sainte-beuve/persistence-conformance`, and a migration per dialect if it
-   needs a column.
+   needs a column. A new table is keyed on `(org_id, …)`.
 7. Wire it in ALL THREE runtime facades, nullable, reported on `/health`.
 8. Changeset.
 

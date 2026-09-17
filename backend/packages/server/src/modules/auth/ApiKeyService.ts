@@ -1,4 +1,5 @@
-import type { ApiKey } from '@sainte-beuve/contracts'
+import type { ApiKey, Role } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import { type StoredApiKey, timingSafeEqual, ValidationError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { API_KEY_PREFIX, digestOf, hintOfToken, mintToken } from '../../crypto/tokens.js'
@@ -31,6 +32,10 @@ export const ENVIRONMENT_KEY_ID = 'environment'
 export interface ApiKeyPrincipal {
   keyId: string
   label: string
+  /** The tenancy the key was minted in, which the request is then bound to. */
+  orgId: string
+  /** What it may do there. Off the ROW, so a demotion takes effect at once. */
+  role: Role
 }
 
 export class ApiKeyService {
@@ -44,16 +49,18 @@ export class ApiKeyService {
    * Mint one. The token is returned once and never stored, so a caller that
    * loses it mints another rather than recovering this one.
    */
-  async mint(input: { label: string; createdBy: string | null }): Promise<{
+  async mint(input: { label: string; role: Role; createdBy: string | null }): Promise<{
     key: ApiKey
     token: string
   }> {
-    const { clock, ids, repositories } = this.container
+    const { clock, ids, repositories, orgId } = this.container
     const token = mintToken(API_KEY_PREFIX)
     const stored = await repositories.apiKeys.create({
       id: ids.next(),
+      orgId,
       tokenDigest: await digestOf(token),
       label: input.label,
+      role: input.role,
       hint: hintOfToken(token),
       createdBy: input.createdBy,
       createdAt: clock.now(),
@@ -97,14 +104,26 @@ export class ApiKeyService {
   async verify(token: string | null): Promise<ApiKeyPrincipal | null> {
     if (token === null || token.length === 0) return null
     if (this.isEnvironmentKey(token)) {
-      return { keyId: ENVIRONMENT_KEY_ID, label: ENVIRONMENT_KEY_ID }
+      // The bootstrap credential, and therefore an ADMIN of the DEFAULT org. It
+      // is an environment variable rather than a row, so there is nothing to
+      // read a tenancy or a role off; it exists to answer the case where a
+      // deployment has neither, and a bootstrap that could not configure the
+      // deployment it bootstraps would answer nothing.
+      return {
+        keyId: ENVIRONMENT_KEY_ID,
+        label: ENVIRONMENT_KEY_ID,
+        orgId: DEFAULT_ORG_ID,
+        role: 'admin',
+      }
     }
     if (!token.startsWith(API_KEY_PREFIX)) return null
-    const { apiKeys } = this.container.repositories
-    const held = await apiKeys.findByDigest(await digestOf(token))
+    // Through the TENANCY DIRECTORY, beside the session digest and for the same
+    // reason: the key is what decides which org the request is in, so it is
+    // matched before there is an org to scope the read by.
+    const held = await this.container.stores.tenancy.findApiKeyByDigest(await digestOf(token))
     if (held === null) return null
     await this.touch(held)
-    return { keyId: held.id, label: held.label }
+    return { keyId: held.id, label: held.label, orgId: held.orgId, role: held.role }
   }
 
   /**
@@ -130,7 +149,10 @@ export class ApiKeyService {
   private async touch(key: StoredApiKey): Promise<void> {
     const now = this.container.clock.now()
     if (key.lastUsedAt !== null && now - key.lastUsedAt < TOUCH_INTERVAL_MS) return
-    await this.container.repositories.apiKeys.touch(key.id, now)
+    // The key's OWN org, not this container's: `verify` runs before the request
+    // has been bound to one, and writing through the default org's store would
+    // touch nothing on a deployment with a second tenancy.
+    await this.container.stores.forOrg(key.orgId).apiKeys.touch(key.id, now)
   }
 }
 
@@ -145,6 +167,7 @@ function apiKeyOnTheWire(key: StoredApiKey): ApiKey {
   return {
     id: key.id,
     label: key.label,
+    role: key.role,
     hint: key.hint,
     createdBy: key.createdBy,
     createdAt: key.createdAt,

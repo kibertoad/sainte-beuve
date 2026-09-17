@@ -31,6 +31,15 @@ export interface RoundTripState {
    * browser that asked for it is what makes the return leg the same person's.
    */
   nonce: string
+  /**
+   * The tenancy the round trip is for.
+   *
+   * SIGNED, because it is the one moment an org is chosen by something a caller
+   * sent: a sign-in names a slug, and the session that comes back is bound to
+   * whatever this says. In the query string unsigned, it would let anybody who
+   * can hand somebody a URL decide which org they land in.
+   */
+  orgId: string
   /** Where to send the browser once the callback has done its work. Null for the default. */
   returnTo: string | null
   /** Absolute expiry, epoch ms. */

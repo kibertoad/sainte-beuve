@@ -10,6 +10,8 @@ import type {
   ReviewCommitment,
   ReviewRequest,
 } from '@sainte-beuve/contracts'
+import type { Org } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type { StoredApiKey, StoredIntegrationToken, StoredSession } from '@sainte-beuve/kernel'
 
 /**
@@ -20,6 +22,16 @@ import type { StoredApiKey, StoredIntegrationToken, StoredSession } from '@saint
  * pass: the payload column carries the whole row, and the whole row is what has
  * to come back.
  */
+
+export function org(id: string, overrides: Partial<Org> = {}): Org {
+  return {
+    id,
+    slug: id.replace(/[^a-z0-9-]/g, '-'),
+    name: `Org ${id}`,
+    createdAt: 1_000,
+    ...overrides,
+  }
+}
 
 export function pullRequest(overrides: Partial<PullRequestRef> = {}): PullRequestRef {
   return {
@@ -41,6 +53,7 @@ export function reviewer(id: string, overrides: Partial<Reviewer> = {}): Reviewe
     team: 'platform',
     skills: ['typescript'],
     availability: 'available',
+    role: 'member',
     weight: 1,
     outstandingReviews: 0,
     createdAt: 1_000,
@@ -202,6 +215,7 @@ export function commitment(
 export function session(id: string, overrides: Partial<StoredSession> = {}): StoredSession {
   return {
     id,
+    orgId: DEFAULT_ORG_ID,
     tokenDigest: `digest-${id}`,
     reviewerId: 'r1',
     provider: 'github',
@@ -216,8 +230,10 @@ export function session(id: string, overrides: Partial<StoredSession> = {}): Sto
 export function apiKey(id: string, overrides: Partial<StoredApiKey> = {}): StoredApiKey {
   return {
     id,
+    orgId: DEFAULT_ORG_ID,
     tokenDigest: `digest-${id}`,
     label: `key ${id}`,
+    role: 'member',
     hint: 'abcd',
     createdBy: 'r1',
     createdAt: 1_000,

@@ -79,14 +79,26 @@ describe('sainte-beuve worker', () => {
   it('lets the SPA in on the origins its bindings list', async () => {
     // wrangler.toml sets CORS_ORIGINS = "*", and the app is built once per isolate,
     // so this is also the proof that the per-request `env` still reaches the
-    // origin decision. Loopback is answered BY NAME even under the wildcard,
-    // because the credentials header is invalid beside `*` and a local SPA
-    // answered with it could never send its session cookie.
-    const res = await SELF.fetch('https://example.com/api/v1/reviews', {
+    // origin decision.
+    //
+    // A page on `http://localhost:<port>` gets the wildcard every other unnamed
+    // origin gets, and no credentials header with it: this deployment is not
+    // the local one, so that page is some other program on the operator's
+    // machine rather than its SPA.
+    const hosted = await SELF.fetch('https://example.com/api/v1/reviews', {
       headers: { origin: 'http://localhost:3000' },
     })
-    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000')
-    expect(res.headers.get('access-control-allow-credentials')).toBe('true')
+    expect(hosted.headers.get('access-control-allow-origin')).toBe('*')
+    expect(hosted.headers.get('access-control-allow-credentials')).toBeNull()
+
+    // `wrangler dev`, where BOTH sides are loopback: echoed by name, because the
+    // credentials header is invalid beside `*` and a local SPA answered with the
+    // wildcard could never send its session cookie.
+    const local = await SELF.fetch('http://localhost:8787/api/v1/reviews', {
+      headers: { origin: 'http://localhost:3000' },
+    })
+    expect(local.headers.get('access-control-allow-origin')).toBe('http://localhost:3000')
+    expect(local.headers.get('access-control-allow-credentials')).toBe('true')
   })
 
   it('seals and reads back a credential with the runtime Web Crypto', async () => {

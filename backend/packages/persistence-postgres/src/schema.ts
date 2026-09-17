@@ -3,30 +3,47 @@ import type {
   AttentionRequest,
   IdentityProvider,
   LinkedIdentity,
+  Org,
   Project,
   Reminder,
   Reviewer,
   ReviewCommitment,
   ReviewRequest,
+  Role,
 } from '@sainte-beuve/contracts'
 import {
   aiReviewRunSchema,
   attentionRequestSchema,
   linkedIdentitySchema,
+  orgSchema,
   projectSchema,
   reminderSchema,
   reviewCommitmentSchema,
   reviewerSchema,
   reviewRequestSchema,
 } from '@sainte-beuve/contracts'
-import { bigint, customType, index, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import {
+  bigint,
+  customType,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 import type * as v from 'valibot'
 import { decodePayload } from './rows.js'
 
 /**
  * The board and the workspace, in Postgres types.
  *
- * The same eleven tables and the same columns the D1 adapter carries
+ * EVERY TABLE BUT `orgs` IS KEYED ON `(org_id, ...)`. The tenancy is in the
+ * primary key rather than beside it, because a tenancy a query can omit is a
+ * tenancy a query will omit; with it in the key, a statement that forgot the org
+ * cannot quietly read another one's rows.
+ *
+ * The same twelve tables and the same columns the D1 adapter carries
  * (`@sainte-beuve/persistence-d1/migrations`), so the two durable stores read
  * the same in a database console and a deployment can be described once. What
  * differs is only what the engines spell differently: `jsonb` where SQLite has
@@ -52,6 +69,15 @@ import { decodePayload } from './rows.js'
  * does not fit a JS number), and a `createdAt` that is sometimes a string is a
  * sort that is sometimes lexicographic.
  */
+
+/**
+ * The tenancy column every table below carries. Spelled once, because twelve
+ * copies of `text('org_id').notNull()` is twelve chances to spell one of them
+ * nullable.
+ */
+function orgId() {
+  return text('org_id').notNull()
+}
 
 /** Epoch milliseconds, as every contract carries them. */
 function epochMs(name: string) {
@@ -83,22 +109,41 @@ function payload<T>(name: string, table: string, schema: v.GenericSchema) {
   })(name)
 }
 
-export const reviewers = pgTable('reviewers', {
+/**
+ * The tenancies. The one table with no `org_id`, because it is the table that
+ * says which orgs there are. The slug is UNIQUE: it is what a sign-in names, and
+ * two orgs answering to one name would make which board somebody lands on depend
+ * on which row the planner reached first.
+ */
+export const orgs = pgTable('orgs', {
   id: text('id').primaryKey(),
-  /**
-   * NOT derived from `data`. `adjustOutstanding` increments rather than writes,
-   * so two assignments landing together must both count; the column is
-   * authoritative and every read overlays it onto the decoded payload.
-   */
-  outstandingReviews: integer('outstanding_reviews').notNull().default(0),
+  slug: text('slug').notNull().unique('orgs_slug_idx'),
   createdAt: epochMs('created_at').notNull(),
-  data: payload<Reviewer>('data', 'reviewers', reviewerSchema).notNull(),
+  data: payload<Org>('data', 'orgs', orgSchema).notNull(),
 })
+
+export const reviewers = pgTable(
+  'reviewers',
+  {
+    orgId: orgId(),
+    id: text('id').notNull(),
+    /**
+     * NOT derived from `data`. `adjustOutstanding` increments rather than writes,
+     * so two assignments landing together must both count; the column is
+     * authoritative and every read overlays it onto the decoded payload.
+     */
+    outstandingReviews: integer('outstanding_reviews').notNull().default(0),
+    createdAt: epochMs('created_at').notNull(),
+    data: payload<Reviewer>('data', 'reviewers', reviewerSchema).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.orgId, table.id] })],
+)
 
 export const reviewRequests = pgTable(
   'review_requests',
   {
-    id: text('id').primaryKey(),
+    orgId: orgId(),
+    id: text('id').notNull(),
     status: text('status').notNull(),
     prOwner: text('pr_owner').notNull(),
     prRepo: text('pr_repo').notNull(),
@@ -107,38 +152,46 @@ export const reviewRequests = pgTable(
     data: payload<ReviewRequest>('data', 'review_requests', reviewRequestSchema).notNull(),
   },
   (table) => [
-    index('review_requests_status_idx').on(table.status, table.createdAt),
+    primaryKey({ columns: [table.orgId, table.id] }),
+    index('review_requests_status_idx').on(table.orgId, table.status, table.createdAt),
     // A webhook replay looks a review up by the pull request it is about, so
     // this is the index that keeps an intake from scanning the board.
-    index('review_requests_pr_idx').on(table.prOwner, table.prRepo, table.prNumber),
+    index('review_requests_pr_idx').on(table.orgId, table.prOwner, table.prRepo, table.prNumber),
   ],
 )
 
 export const reminders = pgTable(
   'reminders',
   {
-    id: text('id').primaryKey(),
+    orgId: orgId(),
+    id: text('id').notNull(),
     reviewId: text('review_id').notNull(),
     status: text('status').notNull(),
     dueAt: epochMs('due_at').notNull(),
     data: payload<Reminder>('data', 'reminders', reminderSchema).notNull(),
   },
   (table) => [
-    index('reminders_review_idx').on(table.reviewId),
-    // The reminder tick's only read: what is scheduled and already due.
-    index('reminders_due_idx').on(table.status, table.dueAt),
+    primaryKey({ columns: [table.orgId, table.id] }),
+    index('reminders_review_idx').on(table.orgId, table.reviewId),
+    // The reminder tick's only read: what is scheduled and already due, in the
+    // org it is ticking. The tick walks the orgs, so this index is per tenancy.
+    index('reminders_due_idx').on(table.orgId, table.status, table.dueAt),
   ],
 )
 
 export const aiReviewRuns = pgTable(
   'ai_review_runs',
   {
-    id: text('id').primaryKey(),
+    orgId: orgId(),
+    id: text('id').notNull(),
     reviewId: text('review_id').notNull(),
     requestedAt: epochMs('requested_at').notNull(),
     data: payload<AiReviewRun>('data', 'ai_review_runs', aiReviewRunSchema).notNull(),
   },
-  (table) => [index('ai_review_runs_review_idx').on(table.reviewId, table.requestedAt)],
+  (table) => [
+    primaryKey({ columns: [table.orgId, table.id] }),
+    index('ai_review_runs_review_idx').on(table.orgId, table.reviewId, table.requestedAt),
+  ],
 )
 
 /**
@@ -148,61 +201,89 @@ export const aiReviewRuns = pgTable(
  * What is stored is an ENVELOPE. The plaintext never reaches a repository, so a
  * dump of this table carries no usable credential.
  */
-export const integrationTokens = pgTable('integration_tokens', {
-  integrationId: text('integration_id').primaryKey(),
-  sealed: text('sealed').notNull(),
-  hint: text('hint').notNull(),
-  /** Null for a credential somebody pasted, because a pasted token names nobody. */
-  subject: text('subject'),
-  updatedAt: epochMs('updated_at').notNull(),
-})
+export const integrationTokens = pgTable(
+  'integration_tokens',
+  {
+    orgId: orgId(),
+    integrationId: text('integration_id').notNull(),
+    sealed: text('sealed').notNull(),
+    hint: text('hint').notNull(),
+    /** Null for a credential somebody pasted, because a pasted token names nobody. */
+    subject: text('subject'),
+    updatedAt: epochMs('updated_at').notNull(),
+  },
+  // Per ORG: each tenancy connects its own GitHub and its own Slack, and a
+  // credential shared across the boundary would let one org's board write
+  // comments as another org's bot.
+  (table) => [primaryKey({ columns: [table.orgId, table.integrationId] })],
+)
 
-export const projects = pgTable('projects', {
-  id: text('id').primaryKey(),
-  /**
-   * `provider:owner/repo`, lowercased. UNIQUE, because the port declares a
-   * repository is registered once and two rows for it would list one project
-   * on the workspace twice.
-   */
-  refKey: text('ref_key').notNull().unique('projects_ref_idx'),
-  createdAt: epochMs('created_at').notNull(),
-  data: payload<Project>('data', 'projects', projectSchema).notNull(),
-})
+export const projects = pgTable(
+  'projects',
+  {
+    orgId: orgId(),
+    id: text('id').notNull(),
+    /** `provider:owner/repo`, lowercased. */
+    refKey: text('ref_key').notNull(),
+    createdAt: epochMs('created_at').notNull(),
+    data: payload<Project>('data', 'projects', projectSchema).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.orgId, table.id] }),
+    // UNIQUE PER ORG rather than globally: the port declares a repository is
+    // registered once inside a tenancy, and two tenancies watching one
+    // repository is the ordinary multi-tenant case rather than a duplicate.
+    uniqueIndex('projects_ref_idx').on(table.orgId, table.refKey),
+    // The one read an inbound webhook makes before it knows where it is: which
+    // org registered this repository. See `TenancyDirectory`.
+    index('projects_tenancy_idx').on(table.refKey, table.createdAt),
+  ],
+)
 
 /**
  * An identity is `(provider, subject)` and never a handle: a login is
  * renameable and reusable by whoever claims it next. The primary key is what
  * makes the first claim win.
+ *
+ * The ORG is part of it, so the same GitHub account is a person in each tenancy
+ * that knows them. One row across all of them would make signing in to a second
+ * org hand back the first org's reviewer.
  */
 export const identities = pgTable(
   'identities',
   {
+    orgId: orgId(),
     provider: text('provider').notNull(),
     subject: text('subject').notNull(),
     reviewerId: text('reviewer_id').notNull(),
     data: payload<LinkedIdentity>('data', 'identities', linkedIdentitySchema).notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.provider, table.subject] }),
-    index('identities_reviewer_idx').on(table.reviewerId),
+    primaryKey({ columns: [table.orgId, table.provider, table.subject] }),
+    index('identities_reviewer_idx').on(table.orgId, table.reviewerId),
   ],
 )
 
 export const attentionRequests = pgTable(
   'attention_requests',
   {
-    id: text('id').primaryKey(),
+    orgId: orgId(),
+    id: text('id').notNull(),
     status: text('status').notNull(),
     createdAt: epochMs('created_at').notNull(),
     data: payload<AttentionRequest>('data', 'attention_requests', attentionRequestSchema).notNull(),
   },
-  (table) => [index('attention_requests_status_idx').on(table.status, table.createdAt)],
+  (table) => [
+    primaryKey({ columns: [table.orgId, table.id] }),
+    index('attention_requests_status_idx').on(table.orgId, table.status, table.createdAt),
+  ],
 )
 
 export const reviewCommitments = pgTable(
   'review_commitments',
   {
-    id: text('id').primaryKey(),
+    orgId: orgId(),
+    id: text('id').notNull(),
     reviewerId: text('reviewer_id').notNull(),
     /**
      * `provider:owner/repo#number`. The host is part of the key: the same path
@@ -212,7 +293,10 @@ export const reviewCommitments = pgTable(
     createdAt: epochMs('created_at').notNull(),
     data: payload<ReviewCommitment>('data', 'review_commitments', reviewCommitmentSchema).notNull(),
   },
-  (table) => [index('review_commitments_reviewer_idx').on(table.reviewerId, table.createdAt)],
+  (table) => [
+    primaryKey({ columns: [table.orgId, table.id] }),
+    index('review_commitments_reviewer_idx').on(table.orgId, table.reviewerId, table.createdAt),
+  ],
 )
 
 /**
@@ -225,11 +309,14 @@ export const reviewCommitments = pgTable(
 export const sessions = pgTable(
   'sessions',
   {
-    id: text('id').primaryKey(),
+    orgId: orgId(),
+    id: text('id').notNull(),
     /**
-     * SHA-256 of the cookie's value, base64url. UNIQUE because a digest
-     * addresses exactly one session: two rows for one value would make which
-     * person is calling depend on which row the planner reached first.
+     * SHA-256 of the cookie's value, base64url. UNIQUE ACROSS EVERY ORG, unlike
+     * every other index here: the digest is what DECIDES which org a request is
+     * in, so it is read before there is an org to scope it by, and two rows for
+     * one value would make which board a cookie opens depend on which row the
+     * planner reached first.
      */
     tokenDigest: text('token_digest').notNull().unique('sessions_digest_idx'),
     reviewerId: text('reviewer_id').notNull(),
@@ -240,9 +327,10 @@ export const sessions = pgTable(
     expiresAt: epochMs('expires_at').notNull(),
   },
   (table) => [
-    index('sessions_reviewer_idx').on(table.reviewerId),
-    // The tick's sweep: everything already expired.
-    index('sessions_expiry_idx').on(table.expiresAt),
+    primaryKey({ columns: [table.orgId, table.id] }),
+    index('sessions_reviewer_idx').on(table.orgId, table.reviewerId),
+    // The tick's sweep: everything already expired, in the org it is ticking.
+    index('sessions_expiry_idx').on(table.orgId, table.expiresAt),
   ],
 )
 
@@ -250,9 +338,18 @@ export const sessions = pgTable(
 export const apiKeys = pgTable(
   'api_keys',
   {
-    id: text('id').primaryKey(),
+    orgId: orgId(),
+    id: text('id').notNull(),
+    /** Global, beside the sessions' digest and for the same reason. */
     tokenDigest: text('token_digest').notNull().unique('api_keys_digest_idx'),
     label: text('label').notNull(),
+    /**
+     * What the key may do in its org. On the ROW rather than derived from
+     * whoever minted it: a key outlives the person who made it, and a CI job
+     * that silently inherited an operator's admin is how a build script comes to
+     * be able to revoke the credentials it runs on.
+     */
+    role: text('role').$type<Role>().notNull().default('member'),
     /** The last four characters, so a row can be matched to a secret store's entry. */
     hint: text('hint').notNull(),
     /** The reviewer who minted it, when a person did. Null for one nobody is behind. */
@@ -260,5 +357,8 @@ export const apiKeys = pgTable(
     createdAt: epochMs('created_at').notNull(),
     lastUsedAt: epochMs('last_used_at'),
   },
-  (table) => [index('api_keys_created_idx').on(table.createdAt)],
+  (table) => [
+    primaryKey({ columns: [table.orgId, table.id] }),
+    index('api_keys_created_idx').on(table.orgId, table.createdAt),
+  ],
 )

@@ -1,6 +1,6 @@
-import type { Logger, PersistenceKind, Repositories } from '@sainte-beuve/kernel'
-import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
-import { connectPostgres, createPostgresRepositories } from '@sainte-beuve/persistence-postgres'
+import type { Logger, PersistenceKind, PersistenceProvider } from '@sainte-beuve/kernel'
+import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
+import { connectPostgres, createPostgresPersistence } from '@sainte-beuve/persistence-postgres'
 import type { NodeConfig } from './config.js'
 
 /**
@@ -20,7 +20,7 @@ import type { NodeConfig } from './config.js'
  * `POSTGRES_MIGRATIONS_DIR` and starts with `DATABASE_MIGRATE=false`.
  */
 export interface NodeStore {
-  repositories: Repositories
+  stores: PersistenceProvider
   kind: PersistenceKind
   close: () => Promise<void>
 }
@@ -31,7 +31,7 @@ export async function openStore(config: NodeConfig, logger: Logger): Promise<Nod
       { persistence: 'memory' },
       'no DATABASE_URL: the board lives in memory and is lost on restart',
     )
-    return { repositories: createInMemoryRepositories(), kind: 'memory', close: async () => {} }
+    return { stores: createInMemoryPersistence(), kind: 'memory', close: async () => {} }
   }
 
   const connection = connectPostgres({
@@ -50,7 +50,7 @@ export async function openStore(config: NodeConfig, logger: Logger): Promise<Nod
     }
   }
   return {
-    repositories: createPostgresRepositories(connection.db),
+    stores: createPostgresPersistence(connection.db),
     kind: 'postgres',
     close: connection.close,
   }

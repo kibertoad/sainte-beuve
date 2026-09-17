@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
 import { errorBody, handleError } from './http/errors.js'
+import { requestOrigin } from './http/forwarded.js'
 import { allowedOrigin, intendedMethod, WILDCARD, writeOriginGuard } from './http/origins.js'
 import { attentionController } from './modules/attention/AttentionController.js'
 import { authController } from './modules/auth/AuthController.js'
@@ -11,6 +12,7 @@ import { authentication } from './modules/auth/principal.js'
 import { connectController } from './modules/connections/ConnectController.js'
 import { connectionsController } from './modules/connections/ConnectionsController.js'
 import { healthController } from './modules/health/HealthController.js'
+import { orgController } from './modules/orgs/OrgController.js'
 import { projectController } from './modules/projects/ProjectController.js'
 import { reviewerController } from './modules/reviewers/ReviewerController.js'
 import { aiReviewController } from './modules/reviews/AiReviewController.js'
@@ -72,8 +74,15 @@ const allowCredentials: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 }
 
-export function createApp(options: AppOptions): Hono<AppEnv> {
-  const app = new Hono<AppEnv>()
+/**
+ * Everything that runs before a route does, in the order it has to run in.
+ *
+ * Its own function because the order is the load-bearing part and reads better
+ * uninterrupted by the route table: CORS decides what a browser may READ, the
+ * origin guard decides what may RUN, and only then is the caller resolved and
+ * the container bound to their org.
+ */
+function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
   const { corsOrigins } = options
   const originsFor =
     typeof corsOrigins === 'function' ? corsOrigins : () => corsOrigins ?? [WILDCARD]
@@ -86,6 +95,10 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
       origin: (origin, c) =>
         allowedOrigin(originsFor(scopeOf(c)), {
           origin,
+          // Which deployment this IS, so the loopback echo local development
+          // needs is not also a credentialed grant to every page on the
+          // operator's machine. See `allowedOrigin`.
+          addressed: requestOrigin(c),
           path: c.req.path,
           method: intendedMethod(c),
         }),
@@ -93,24 +106,38 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   )
 
   app.use('*', async (c, next) => {
+    // Beside the container and for the same reason: everything below this line
+    // reads what this request resolved to rather than reading configuration a
+    // second time. The session cookie's SameSite is decided from it.
+    c.set('corsOrigins', originsFor(scopeOf(c)))
     c.set('container', await options.resolveContainer(scopeOf(c)))
     await next()
   })
 
   // Before the caller is resolved, because refusing this costs nothing and
   // resolving a session for a request that is about to be refused costs a store
-  // read: a cross-site write carries the session cookie whether or not CORS
-  // will show the answer, so it has to be refused rather than merely hidden.
+  // read: a cross-site request carries the session cookie whether or not CORS
+  // will show the answer, so the ones the wildcard does not cover have to be
+  // refused rather than merely hidden.
   app.use(
     '/api/v1/*',
     writeOriginGuard((c) => originsFor(scopeOf(c))),
   )
 
   // After the container and before every route under it: the caller is resolved
-  // once per request, and a deployment that insists on knowing who is calling
-  // refuses here rather than in each controller. The webhook and connect paths
-  // sit outside `/api/v1` and are authenticated by their own signatures.
+  // once per request, a deployment that insists on knowing who is calling
+  // refuses here rather than in each controller, and the container is REBOUND to
+  // the org the caller's credential named, so every handler below reaches one
+  // tenancy and cannot address another. The webhook and connect paths sit
+  // outside `/api/v1`, are authenticated by their own signatures, and place
+  // themselves in an org from what the delivery is about (see
+  // `WebhookController`).
   app.use('/api/v1/*', authentication())
+}
+
+export function createApp(options: AppOptions): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+  mountMiddleware(app, options)
 
   app.route('/', healthController())
   app.route('/', webhookController())
@@ -122,6 +149,7 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
   app.route('/api/v1', aiReviewController())
+  app.route('/api/v1', orgController())
   app.route('/api/v1', settingsController())
   app.route('/api/v1', connectionsController())
 

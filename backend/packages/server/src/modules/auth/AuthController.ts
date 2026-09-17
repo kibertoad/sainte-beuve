@@ -15,7 +15,7 @@ import { ConnectionsService } from '../connections/ConnectionsService.js'
 import { ApiKeyService } from './ApiKeyService.js'
 import { AuthService } from './AuthService.js'
 import { clearSessionCookie, writeFlowCookie } from './cookies.js'
-import { principalOf, refuseIfAnonymous, type RequestPrincipal } from './principal.js'
+import { principalOf, refuseIfAnonymous, requireAdmin, type RequestPrincipal } from './principal.js'
 import { SessionService } from './SessionService.js'
 
 /**
@@ -43,6 +43,11 @@ export function authController(): Hono<AppEnv> {
       c.req.valid('param').provider,
       new URL(c.req.url).origin,
       'session',
+      // The one place an org is chosen by something a caller sent, and the
+      // choice goes into the SIGNED state rather than riding the query string
+      // back: a slug in the callback URL would let anybody who can hand somebody
+      // a link decide which tenancy they land in.
+      c.req.valid('query').org,
     )
     // On the SAME answer that carries the URL, so the browser that is about to
     // leave is the only one that can come back. See `RoundTripState`.
@@ -76,6 +81,12 @@ export function authController(): Hono<AppEnv> {
  */
 function apiKeyRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, listApiKeysContract, async (c) => {
+    // Admin-only, unlike before the org boundary existed. A key's LABEL and the
+    // last four characters of its value are how an operator decides which row in
+    // front of them is the credential in their CI secret store, and that is an
+    // administrator's question about the deployment rather than something a
+    // member of the directory has any use for.
+    await requireAdmin(c, NOT_AN_ADMIN)
     return c.json({ apiKeys: await new ApiKeyService(c.get('container')).list() }, 200)
   })
 
@@ -83,14 +94,21 @@ function apiKeyRoutes(app: Hono<AppEnv>): void {
     // The only route in the tree that an `open` deployment still refuses an
     // anonymous caller, because it is the only one whose result survives the
     // mode: everything else an unnamed caller can do here is undone by setting
-    // AUTH_MODE=required, and a key minted a minute earlier is not. Listing and
-    // revoking are deliberately NOT guarded — neither creates anything that
-    // outlives the mode, and guarding the read would take the Configuration
-    // screen away from the laptop the open default exists for.
+    // AUTH_MODE=required, and a key minted a minute earlier is not.
+    //
+    // The admin check BELOW is a different question and both are asked: an
+    // anonymous caller on an `open` deployment is an admin (see `roleOf`), so
+    // the role guard alone would let one mint a key that outlives the mode.
     refuseIfAnonymous(principalOf(c), CANNOT_MINT)
+    await requireAdmin(c, NOT_AN_ADMIN)
     const service = new ApiKeyService(c.get('container'))
     const issued = await service.mint({
       label: c.req.valid('json').label,
+      // What the key may do, which is a decision at MINT time and never
+      // afterwards: a key outlives whoever made it, so inheriting the minter's
+      // role would leave a CI job able to revoke the credentials it runs on the
+      // day an operator mints one.
+      role: c.req.valid('json').role,
       // Whose key it is, when a person minted it. A key minted by another key
       // records nobody rather than the key it was minted through, because the
       // field names a REVIEWER and a key is not one.
@@ -100,11 +118,16 @@ function apiKeyRoutes(app: Hono<AppEnv>): void {
   })
 
   buildHonoRoute(app, revokeApiKeyContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
     const service = new ApiKeyService(c.get('container'))
     await service.revoke(c.req.valid('param').keyId)
     return c.json({ apiKeys: await service.list() }, 200)
   })
 }
+
+const NOT_AN_ADMIN =
+  'Only an admin of this org can see or change the keys machines call it with. Ask an admin, or ' +
+  "call with this deployment's own key as `Authorization: Bearer <AUTH_API_KEY>`."
 
 const CANNOT_MINT =
   'An API key outlives the mode it was minted in, so this deployment will not hand one to a ' +

@@ -1,14 +1,16 @@
 import { PGlite } from '@electric-sql/pglite'
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import {
   repositoryConformanceCases,
   storedRowConformanceCases,
+  tenancyConformanceCases,
 } from '@sainte-beuve/persistence-conformance'
 import { getTableName, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 import {
-  createPostgresRepositories,
+  createPostgresPersistence,
   POSTGRES_MIGRATIONS_DIR,
   type PostgresDatabase,
   schema,
@@ -56,7 +58,16 @@ describe('Postgres repositories', () => {
 
   for (const testCase of repositoryConformanceCases) {
     it(testCase.name, async () => {
-      await testCase.run(createPostgresRepositories(db))
+      await testCase.run(createPostgresPersistence(db).forOrg(DEFAULT_ORG_ID))
+    })
+  }
+
+  // The boundary itself, which the cases above cannot see: they are written
+  // against one org's repositories, and this store's isolation is an `org_id` in
+  // every predicate and every primary key.
+  for (const testCase of tenancyConformanceCases) {
+    it(testCase.name, async () => {
+      await testCase.run(createPostgresPersistence(db))
     })
   }
 
@@ -68,11 +79,11 @@ describe('Postgres repositories', () => {
   for (const testCase of storedRowConformanceCases) {
     it(testCase.name, async () => {
       await testCase.run({
-        repositories: createPostgresRepositories(db),
+        repositories: createPostgresPersistence(db).forOrg(DEFAULT_ORG_ID),
         writeRawReviewer: async (id, payload) => {
           await db.execute(
-            sql`INSERT INTO reviewers (id, outstanding_reviews, created_at, data)
-                VALUES (${id}, 0, 1000, ${JSON.stringify(payload)}::jsonb)`,
+            sql`INSERT INTO reviewers (org_id, id, outstanding_reviews, created_at, data)
+                VALUES (${DEFAULT_ORG_ID}, ${id}, 0, 1000, ${JSON.stringify(payload)}::jsonb)`,
           )
         },
       })

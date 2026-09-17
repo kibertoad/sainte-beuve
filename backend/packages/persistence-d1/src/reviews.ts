@@ -27,9 +27,9 @@ import { decodeData, decodeRows, encodeData, patched, placeholders } from './row
  * can follow.
  */
 
-const REVIEW_UPSERT = `INSERT INTO review_requests (id, status, pr_owner, pr_repo, pr_number, created_at, data)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (id) DO UPDATE SET
+const REVIEW_UPSERT = `INSERT INTO review_requests (org_id, id, status, pr_owner, pr_repo, pr_number, created_at, data)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (org_id, id) DO UPDATE SET
   status = excluded.status,
   pr_owner = excluded.pr_owner,
   pr_repo = excluded.pr_repo,
@@ -38,23 +38,29 @@ ON CONFLICT (id) DO UPDATE SET
   data = excluded.data`
 
 export class SqlReviewRequestRepository implements ReviewRequestRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(
+    private readonly db: SqlDriver,
+    private readonly orgId: string,
+  ) {}
 
   async list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]> {
     const wanted = filter?.status
     // A filter naming no status matches nothing, and `IN ()` parses on neither
     // engine, so that answer is given without a statement.
     if (wanted !== undefined && wanted.length === 0) return []
-    const where = wanted === undefined ? '' : ` WHERE status IN (${placeholders(wanted.length)})`
+    const where = wanted === undefined ? '' : ` AND status IN (${placeholders(wanted.length)})`
     const rows = await this.db.all(
-      `SELECT data FROM review_requests${where} ORDER BY created_at DESC, id DESC`,
-      wanted,
+      `SELECT data FROM review_requests WHERE org_id = ?${where} ORDER BY created_at DESC, id DESC`,
+      [this.orgId, ...(wanted ?? [])],
     )
     return decodeRows(reviewRequestSchema, 'review_requests', rows)
   }
 
   async getById(reviewId: string): Promise<ReviewRequest | null> {
-    const row = await this.db.first('SELECT data FROM review_requests WHERE id = ?', [reviewId])
+    const row = await this.db.first(
+      'SELECT data FROM review_requests WHERE org_id = ? AND id = ?',
+      [this.orgId, reviewId],
+    )
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
   }
 
@@ -64,8 +70,8 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
     number: number
   }): Promise<ReviewRequest | null> {
     const row = await this.db.first(
-      'SELECT data FROM review_requests WHERE pr_owner = ? AND pr_repo = ? AND pr_number = ?',
-      [ref.owner, ref.repo, ref.number],
+      'SELECT data FROM review_requests WHERE org_id = ? AND pr_owner = ? AND pr_repo = ? AND pr_number = ?',
+      [this.orgId, ref.owner, ref.repo, ref.number],
     )
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
   }
@@ -86,6 +92,7 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
   private async write(review: ReviewRequest): Promise<void> {
     const pr = review.pullRequest
     await this.db.run(REVIEW_UPSERT, [
+      this.orgId,
       review.id,
       review.status,
       pr.owner,
@@ -97,33 +104,43 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
   }
 }
 
-const REMINDER_UPSERT = `INSERT INTO reminders (id, review_id, status, due_at, data)
-VALUES (?, ?, ?, ?, ?)
-ON CONFLICT (id) DO UPDATE SET
+const REMINDER_UPSERT = `INSERT INTO reminders (org_id, id, review_id, status, due_at, data)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (org_id, id) DO UPDATE SET
   review_id = excluded.review_id,
   status = excluded.status,
   due_at = excluded.due_at,
   data = excluded.data`
 
-function reminderParams(reminder: Reminder): readonly SqlParam[] {
-  return [reminder.id, reminder.reviewId, reminder.status, reminder.dueAt, encodeData(reminder)]
+function reminderParams(orgId: string, reminder: Reminder): readonly SqlParam[] {
+  return [
+    orgId,
+    reminder.id,
+    reminder.reviewId,
+    reminder.status,
+    reminder.dueAt,
+    encodeData(reminder),
+  ]
 }
 
 export class SqlReminderRepository implements ReminderRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(
+    private readonly db: SqlDriver,
+    private readonly orgId: string,
+  ) {}
 
   async listByReview(reviewId: string): Promise<Reminder[]> {
     const rows = await this.db.all(
-      'SELECT data FROM reminders WHERE review_id = ? ORDER BY due_at, id',
-      [reviewId],
+      'SELECT data FROM reminders WHERE org_id = ? AND review_id = ? ORDER BY due_at, id',
+      [this.orgId, reviewId],
     )
     return decodeRows(reminderSchema, 'reminders', rows)
   }
 
   async listDue(now: EpochMs, limit: number): Promise<Reminder[]> {
     const rows = await this.db.all(
-      "SELECT data FROM reminders WHERE status = 'scheduled' AND due_at <= ? ORDER BY due_at, id LIMIT ?",
-      [now, limit],
+      "SELECT data FROM reminders WHERE org_id = ? AND status = 'scheduled' AND due_at <= ? ORDER BY due_at, id LIMIT ?",
+      [this.orgId, now, limit],
     )
     return decodeRows(reminderSchema, 'reminders', rows)
   }
@@ -138,7 +155,10 @@ export class SqlReminderRepository implements ReminderRepository {
     status: ReminderStatus,
     fields?: { sentAt?: EpochMs; failureReason?: string },
   ): Promise<void> {
-    const row = await this.db.first('SELECT data FROM reminders WHERE id = ?', [reminderId])
+    const row = await this.db.first('SELECT data FROM reminders WHERE org_id = ? AND id = ?', [
+      this.orgId,
+      reminderId,
+    ])
     if (row === null) return
     const current = decodeData(reminderSchema, 'reminders', row.data)
     await this.write({
@@ -162,42 +182,48 @@ export class SqlReminderRepository implements ReminderRepository {
     // Worker's time budget, and a batch is a transaction, so an interrupted
     // tick cannot leave a review with half its schedule cancelled.
     const rows = await this.db.all(
-      "SELECT data FROM reminders WHERE review_id = ? AND status = 'scheduled'",
-      [reviewId],
+      "SELECT data FROM reminders WHERE org_id = ? AND review_id = ? AND status = 'scheduled'",
+      [this.orgId, reviewId],
     )
     await this.db.batch(
       decodeRows(reminderSchema, 'reminders', rows).map((reminder) => ({
         sql: REMINDER_UPSERT,
-        params: reminderParams({ ...reminder, status: 'cancelled' }),
+        params: reminderParams(this.orgId, { ...reminder, status: 'cancelled' }),
       })),
     )
   }
 
   private async write(reminder: Reminder): Promise<void> {
-    await this.db.run(REMINDER_UPSERT, reminderParams(reminder))
+    await this.db.run(REMINDER_UPSERT, reminderParams(this.orgId, reminder))
   }
 }
 
-const RUN_UPSERT = `INSERT INTO ai_review_runs (id, review_id, requested_at, data)
-VALUES (?, ?, ?, ?)
-ON CONFLICT (id) DO UPDATE SET
+const RUN_UPSERT = `INSERT INTO ai_review_runs (org_id, id, review_id, requested_at, data)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (org_id, id) DO UPDATE SET
   review_id = excluded.review_id,
   requested_at = excluded.requested_at,
   data = excluded.data`
 
 export class SqlAiReviewRunRepository implements AiReviewRunRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(
+    private readonly db: SqlDriver,
+    private readonly orgId: string,
+  ) {}
 
   async listByReview(reviewId: string): Promise<AiReviewRun[]> {
     const rows = await this.db.all(
-      'SELECT data FROM ai_review_runs WHERE review_id = ? ORDER BY requested_at DESC, id DESC',
-      [reviewId],
+      'SELECT data FROM ai_review_runs WHERE org_id = ? AND review_id = ? ORDER BY requested_at DESC, id DESC',
+      [this.orgId, reviewId],
     )
     return decodeRows(aiReviewRunSchema, 'ai_review_runs', rows)
   }
 
   async getById(runId: string): Promise<AiReviewRun | null> {
-    const row = await this.db.first('SELECT data FROM ai_review_runs WHERE id = ?', [runId])
+    const row = await this.db.first('SELECT data FROM ai_review_runs WHERE org_id = ? AND id = ?', [
+      this.orgId,
+      runId,
+    ])
     return row === null ? null : decodeData(aiReviewRunSchema, 'ai_review_runs', row.data)
   }
 
@@ -215,6 +241,12 @@ export class SqlAiReviewRunRepository implements AiReviewRunRepository {
   }
 
   private async write(run: AiReviewRun): Promise<void> {
-    await this.db.run(RUN_UPSERT, [run.id, run.reviewId, run.requestedAt, encodeData(run)])
+    await this.db.run(RUN_UPSERT, [
+      this.orgId,
+      run.id,
+      run.reviewId,
+      run.requestedAt,
+      encodeData(run),
+    ])
   }
 }

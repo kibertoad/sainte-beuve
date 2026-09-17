@@ -63,8 +63,8 @@ See `docs/auth.md`.
   which the SPA's client does on every call. A hosted deployment's SPA origin
   therefore has to be one it named, through `CORS_ORIGINS` or through
   `APP_BASE_URL`, whose origin every runtime facade folds into the list. Loopback
-  is echoed by name even under the wildcard, which is what keeps local development
-  working.
+  is echoed by name even under the wildcard when the deployment is itself loopback,
+  which is what keeps local development working.
 - CORS is not the whole of it, so every unsafe method under `/api/v1` now goes
   through an `Origin` check: a cross-site `text/plain` POST is a simple request,
   carries the session cookie on a `SameSite=None` deployment, and is only denied

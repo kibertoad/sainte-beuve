@@ -5,22 +5,23 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import {
+  DEFAULT_ORG_ID,
+  DEFAULT_ORG_SLUG,
   signInCallbackPath,
   VCS_PROVIDERS,
   vcsDisplayName,
   vcsOauthCredentialKey,
   vcsPatCredentialKey,
 } from '@sainte-beuve/contracts'
-import type { RoundTripState, VcsAccount } from '@sainte-beuve/kernel'
-import type { AppContainer } from '../../container.js'
+import type { RoundTripState } from '@sainte-beuve/kernel'
+import { NotFoundError } from '@sainte-beuve/kernel'
+import { type AppContainer, withOrg } from '../../container.js'
 import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
 import { mintNonce } from '../../crypto/tokens.js'
 import { requireCapability } from '../../http/errors.js'
-import { hintOf } from '../../integrations/credentials.js'
 import { resolveChat, resolveVcs } from '../../integrations/resolve.js'
-import { SessionService } from '../auth/SessionService.js'
-import { PeopleService } from '../identity/PeopleService.js'
 import { notOurState, startedByThisBrowser } from './roundTrip.js'
+import { establishSession, type IssuedSession, storeCredential } from './signIn.js'
 
 /**
  * How this deployment reaches its source-control hosts and Slack, and how an
@@ -95,12 +96,6 @@ export interface StartedFlow {
   nonce: string
 }
 
-/** A session the callback has to hand to the browser. See `writeSessionCookie`. */
-export interface IssuedSession {
-  token: string
-  expiresAt: number
-}
-
 /** What the callback learned, and what it now has to do with it. */
 export interface CompletedSignIn {
   login: string
@@ -150,6 +145,12 @@ export class ConnectionsService {
     provider: VcsProvider,
     origin: string,
     purpose: SignInPurpose = 'connect',
+    /**
+     * Which tenancy to sign in to, by slug. Omitted means the org this request
+     * is already in, which for an anonymous caller is the default one — and is
+     * every request on a deployment that never made a second org.
+     */
+    orgSlug?: string,
   ): Promise<StartedFlow> {
     const identity = requireCapability(
       this.container.gateways?.signIn(provider) ?? null,
@@ -162,6 +163,7 @@ export class ConnectionsService {
     const { state, nonce } = await this.mintState(
       signInFlow(provider, purpose),
       purpose === 'connect' ? '/configuration' : '/',
+      await this.orgIdFor(orgSlug),
     )
     return {
       url: identity.authorizeUrl({ redirectUri: callbackUrl(provider, origin), state }),
@@ -205,7 +207,12 @@ export class ConnectionsService {
       code: input.code,
       redirectUri: callbackUrl(provider, input.origin),
     })
-    if (purpose === 'connect') await this.storeCredential(provider, token, account)
+    // EVERY WRITE BELOW GOES INTO THE ORG THE STATE NAMED, not the one this
+    // callback arrived in: the callback carries no session, so the request is in
+    // the default org, and the signed state is the only thing that knows which
+    // tenancy the browser set out to join.
+    const inOrg = withOrg(this.container, claims.orgId)
+    if (purpose === 'connect') await storeCredential(inOrg, provider, token, account)
     return {
       login: account.username,
       returnTo: claims.returnTo,
@@ -213,9 +220,29 @@ export class ConnectionsService {
       // thing. An operator who just connected this deployment's credential has
       // demonstrated exactly what a sign-in demonstrates, and making them click
       // a second button to be recognised would be a round trip for nothing.
-      session: await this.establishSession(provider, account),
+      session: await establishSession(inOrg, provider, account),
       purpose,
     }
+  }
+
+  /**
+   * The org a slug names, or the one this request is already in.
+   *
+   * A slug nobody has made is a 404 rather than a quiet fall back to the default
+   * org: somebody who typed an org name and was signed in to a different board
+   * would have no way to tell, and the two states look identical afterwards.
+   */
+  private async orgIdFor(slug: string | undefined): Promise<string> {
+    if (slug === undefined) return this.container.orgId
+    // The DEFAULT org answers to its slug whether or not its row exists, which
+    // is the ordinary state of a deployment that never made a second one (see
+    // `OrgService.current`). Without this, the one slug every caller can read
+    // off their own auth state — and the only one nobody is allowed to create —
+    // is the one slug a sign-in refuses.
+    if (slug === DEFAULT_ORG_SLUG) return DEFAULT_ORG_ID
+    const held = await this.container.stores.orgs.getBySlug(slug)
+    if (held === null) throw new NotFoundError(`No org "${slug}" on this deployment.`)
+    return held.id
   }
 
   /**
@@ -226,22 +253,6 @@ export class ConnectionsService {
    * encryption key is not refused for a capability it does not use — though in
    * practice it has one, because the state it carried had to be signed.
    */
-  private async storeCredential(
-    provider: VcsProvider,
-    token: string,
-    account: VcsAccount,
-  ): Promise<void> {
-    const cipher = requireCapability(this.container.secrets, NO_STATE)
-    const key = vcsOauthCredentialKey(provider)
-    await this.container.repositories.integrationTokens.put({
-      integrationId: key,
-      sealed: await cipher.encrypt(token, key),
-      hint: hintOf(token),
-      subject: account.username,
-      updatedAt: this.container.clock.now(),
-    })
-  }
-
   /**
    * The person behind the account, and a session for them.
    *
@@ -249,18 +260,6 @@ export class ConnectionsService {
    * directory forking into two people for one human being has to be the same one
    * the viewer read uses, and a second copy of it is how they come to disagree.
    */
-  private async establishSession(
-    provider: VcsProvider,
-    account: VcsAccount,
-  ): Promise<IssuedSession> {
-    const reviewer = await new PeopleService(this.container).reviewerFor(provider, account)
-    const { token, session } = await new SessionService(this.container).issue({
-      reviewerId: reviewer.id,
-      provider,
-      subject: account.subject,
-    })
-    return { token, expiresAt: session.expiresAt }
-  }
 
   /**
    * Finish an App install. There is nothing to store: an installation is resolved
@@ -343,6 +342,7 @@ export class ConnectionsService {
   private async mintState(
     flow: string,
     returnPath = '/configuration',
+    orgId: string = this.container.orgId,
   ): Promise<{ state: string; nonce: string }> {
     const signer = requireCapability(this.container.states, NO_STATE)
     const { appBaseUrl, clock } = this.container
@@ -351,6 +351,7 @@ export class ConnectionsService {
       state: await signer.sign({
         flow,
         nonce,
+        orgId,
         // Back to the page the flow was started from, when the deployment said
         // where the SPA is.
         returnTo: appBaseUrl === null ? null : `${appBaseUrl}${returnPath}`,

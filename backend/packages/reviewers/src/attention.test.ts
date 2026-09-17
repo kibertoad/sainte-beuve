@@ -17,6 +17,7 @@ function reviewer(overrides: Partial<Reviewer> = {}): Reviewer {
     team: null,
     skills: [],
     availability: 'available',
+    role: 'member',
     weight: 1,
     outstandingReviews: 0,
     createdAt: 0,

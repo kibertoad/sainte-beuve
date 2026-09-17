@@ -3,7 +3,8 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { Input } from 'hono'
 import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
-import { forwardedProto } from '../../http/forwarded.js'
+import { forwardedProto, requestHostname } from '../../http/forwarded.js'
+import { namesAnotherHost, withAppOrigin } from '../../http/origins.js'
 import type { AnyAppContext } from './principal.js'
 
 /** The three parameters every helper below is generic over. See `AnyAppContext`. */
@@ -44,15 +45,25 @@ export const FLOW_COOKIE = 'sb_flow'
  *
  * Deriving it rather than configuring it keeps one fact in one place: the
  * deployment already says where its SPA is, and a second variable saying the
- * same thing differently is a second variable to get wrong.
+ * same thing differently is a second variable to get wrong. It is asked of EVERY
+ * origin the deployment named, not of `APP_BASE_URL` alone — a split-host
+ * deployment that listed its SPA in `CORS_ORIGINS` and nothing else has said
+ * exactly the same thing, and answering `Lax` there is a sign-in that fails on
+ * the callback and blames the operator's browser for it. `withAppOrigin` folds
+ * the two spellings into one list, which is the list CORS itself answered from.
+ *
+ * The hostname compared against is the one the BROWSER addressed rather than the
+ * URL this process was handed, for the reason `reachedOverTls` reads the same
+ * headers: behind a proxy that rewrites `Host`, a single-host deployment would
+ * otherwise call itself cross-site and drop the browser's own protection on the
+ * deployments this module exists for.
  */
-function isCrossSite(container: AppContainer, requestUrl: string): boolean {
-  if (container.appBaseUrl === null) return false
-  try {
-    return new URL(container.appBaseUrl).hostname !== new URL(requestUrl).hostname
-  } catch {
-    return false
-  }
+function isCrossSite<E extends AppEnv, P extends string, I extends Input>(
+  c: Ctx<E, P, I>,
+  container: AppContainer,
+): boolean {
+  const named = withAppOrigin(c.get('corsOrigins') ?? [], container.appBaseUrl)
+  return namesAnotherHost(named, requestHostname(c))
 }
 
 /**
@@ -88,7 +99,7 @@ function optionsFor<E extends AppEnv, P extends string, I extends Input>(
   c: Ctx<E, P, I>,
   container: AppContainer,
 ): CookieOptions {
-  const crossSite = isCrossSite(container, c.req.url)
+  const crossSite = isCrossSite(c, container)
   return {
     httpOnly: true,
     path: '/',

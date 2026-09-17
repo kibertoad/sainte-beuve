@@ -3,8 +3,8 @@ import type {
   CreateAttentionRequestInput,
   CreateProjectInput,
   CreateReviewerInput,
-  IntegrationId,
   PullRequestRef,
+  Role,
   UpdateProject,
   UpdateReviewer,
   VcsProvider,
@@ -13,16 +13,12 @@ import {
   addProjectContract,
   assignReviewersContract,
   cancelAttentionContract,
-  clearIntegrationTokenContract,
   commitToAttentionContract,
   commitToPullRequestContract,
   createApiKeyContract,
   createReviewerContract,
-  disconnectVcsSignInContract,
   dismissAiReviewFindingContract,
   getAuthStateContract,
-  getConnectionsContract,
-  getIntegrationSettingsContract,
   getViewerContract,
   getWorkspaceContract,
   issuePath,
@@ -39,21 +35,13 @@ import {
   resolveAiReviewContract,
   resumeAiReviewContract,
   revokeApiKeyContract,
-  setIntegrationTokenContract,
   signOutContract,
-  startGitHubAppInstallContract,
   startSessionSignInContract,
-  startVcsSignInContract,
   streamAttentionContract,
   updateProjectContract,
   updateReviewerContract,
 } from '@sainte-beuve/contracts'
-import type {
-  ApiContract,
-  ClientRequestParams,
-  InferNonSseClientResponse,
-  SuccessfulHttpStatusCode,
-} from '@toad-contracts/core'
+import type { ApiContract } from '@toad-contracts/core'
 import {
   ContractNoBody,
   describeApiContract,
@@ -63,6 +51,8 @@ import {
 } from '@toad-contracts/core'
 import { sendByApiContract, UnexpectedResponseError } from '@toad-contracts/frontend-http-client'
 import wretch from 'wretch'
+import type { RequestParams, SuccessBody } from './contractCall'
+import { configurationCalls } from './sainteBeuveSettingsApi'
 
 // ---------------------------------------------------------------------------
 // The SPA's single door to the backend, driven by the same contract objects the
@@ -118,18 +108,6 @@ export class ApiError extends Error {
     this.details = details
   }
 }
-
-/** What a call resolves to: the body of the contract's success response. */
-type SuccessBody<TContract extends ApiContract> = Extract<
-  InferNonSseClientResponse<TContract>,
-  { statusCode: SuccessfulHttpStatusCode }
->['body']
-
-/**
- * What a contract has to be called with, inferred from it: path params where it
- * declares them, a body where it declares one, and nothing where it does not.
- */
-type RequestParams<TContract extends ApiContract> = ClientRequestParams<TContract, false>
 
 /** The first few field paths a schema refused, as `reviewers.0.handles: ...`. */
 function issueSummary(error: SchemaValidationError): string {
@@ -281,13 +259,20 @@ export function createSainteBeuveApi(apiBase: string) {
     // signed in has nowhere to start.
     getAuthState: () => call(getAuthStateContract, {}),
     signOut: () => call(signOutContract, { body: {} }),
-    /** Where to send the browser to sign IN, as opposed to connecting a credential. */
-    startSessionSignIn: (provider: VcsProvider) =>
-      call(startSessionSignInContract, { pathParams: { provider } }),
+    /**
+     * Where to send the browser to sign IN, as opposed to connecting a credential.
+     *
+     * `org` is the only place the client names a tenancy, and only at the START
+     * of the round trip: the session that comes back is bound to whatever the
+     * signed state said, and every request after it reads its org from there.
+     */
+    startSessionSignIn: (provider: VcsProvider, org?: string) =>
+      call(startSessionSignInContract, { pathParams: { provider }, queryParams: { org } }),
 
     listApiKeys: () => call(listApiKeysContract, {}),
     /** The answer carries the key itself, which is the only time it is readable. */
-    createApiKey: (label: string) => call(createApiKeyContract, { body: { label } }),
+    createApiKey: (label: string, role: Role = 'member') =>
+      call(createApiKeyContract, { body: { label, role } }),
     revokeApiKey: (keyId: string) => call(revokeApiKeyContract, { pathParams: { keyId } }),
 
     getViewer: () => call(getViewerContract, {}),
@@ -341,26 +326,7 @@ export function createSainteBeuveApi(apiBase: string) {
     resumeAiReview: (runId: string) =>
       call(resumeAiReviewContract, { pathParams: { runId }, body: {} }),
 
-    getIntegrationSettings: () => call(getIntegrationSettingsContract, {}),
-    // A token goes out and never comes back: what returns is the integration's
-    // state, which is all the screen renders.
-    setIntegrationToken: (integrationId: IntegrationId, token: string) =>
-      call(setIntegrationTokenContract, { pathParams: { integrationId }, body: { token } }),
-    clearIntegrationToken: (integrationId: IntegrationId) =>
-      call(clearIntegrationTokenContract, { pathParams: { integrationId } }),
-
-    getConnections: () => call(getConnectionsContract, {}),
-    /**
-     * Where to send the browser to start a connect round trip. Fetched rather
-     * than navigated to, because each call MINTS a signed state with a few
-     * minutes of life: the URL has to be the one the operator clicks, not the one
-     * a poll happened to produce.
-     */
-    startGitHubAppInstall: () => call(startGitHubAppInstallContract, {}),
-    startSignIn: (provider: VcsProvider) =>
-      call(startVcsSignInContract, { pathParams: { provider } }),
-    disconnectSignIn: (provider: VcsProvider) =>
-      call(disconnectVcsSignInContract, { pathParams: { provider } }),
+    ...configurationCalls(call),
   }
 }
 

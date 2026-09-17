@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ApiKey, AuthState } from '@sainte-beuve/contracts'
+import type { ApiKey, AuthState, Role } from '@sainte-beuve/contracts'
 import { vcsDisplayName } from '@sainte-beuve/contracts'
 
 // Who may call this deployment, and the keys the machines call with.
@@ -13,12 +13,13 @@ import { vcsDisplayName } from '@sainte-beuve/contracts'
 const props = defineProps<{
   state: AuthState
   /**
-   * The keys this deployment has minted, or NULL for a caller who could not read
-   * them. The list lives under `/api/v1/settings`, which a `required` deployment
-   * refuses to anybody anonymous — and this card is where they sign in, so it has
-   * to render for exactly that caller. Empty and unreadable are different
-   * answers, and saying "no keys have been minted here" to somebody who was
-   * refused the question would be the wrong one.
+   * The keys this org has minted, or NULL for a caller who could not read them.
+   * The list lives under `/api/v1/settings`, which a `required` deployment
+   * refuses to anybody anonymous and which is admin-only besides — and this card
+   * is where both of them sign in and out, so it has to render for exactly those
+   * callers. Empty and unreadable are different answers, and saying "no keys have
+   * been minted here" to somebody who was refused the question would be the wrong
+   * one.
    */
   apiKeys: ApiKey[] | null
   busy: string | null
@@ -27,11 +28,24 @@ const props = defineProps<{
 const emit = defineEmits<{
   signIn: [provider: string]
   signOut: []
-  createKey: [label: string]
+  createKey: [key: { label: string; role: Role }]
   revokeKey: [keyId: string]
 }>()
 
 const label = ref('')
+
+/**
+ * What the key may do, chosen HERE because it is chosen at mint time and never
+ * afterwards: a key outlives whoever made it, so inheriting the minter's role is
+ * how a build script comes to be able to revoke the credentials it runs on.
+ * `member` by default, which is the job most keys have.
+ */
+const role = ref<Role>('member')
+
+const roles = [
+  { value: 'member' as const, label: 'Member' },
+  { value: 'admin' as const, label: 'Admin' },
+]
 
 /**
  * The key a mint just answered with, held until the operator navigates away.
@@ -54,7 +68,7 @@ const principal = computed(() => props.state.principal)
 function mint() {
   const typed = label.value.trim()
   if (typed.length === 0) return
-  emit('createKey', typed)
+  emit('createKey', { label: typed, role: role.value })
   label.value = ''
 }
 </script>
@@ -127,9 +141,11 @@ function mint() {
     <div class="text-sm">
       <p class="font-medium mb-1">API keys</p>
       <p v-if="apiKeys === null" class="text-muted">
-        Sign in to mint a key or see the ones this deployment already has. A key is for CI and
-        scripts, and minting one needs a caller this deployment can name — including here, where it
-        would otherwise refuse nobody.
+        {{
+          state.role === 'admin'
+            ? 'Sign in to mint a key or see the ones this org already has. A key is for CI and scripts, and minting one needs a caller this deployment can name — including here, where it would otherwise refuse nobody.'
+            : 'The keys machines call this org with are an admin\u2019s to see and to mint.'
+        }}
       </p>
       <template v-else>
         <p class="text-muted mb-3">
@@ -170,6 +186,7 @@ function mint() {
             placeholder="What is it for? e.g. release pipeline"
             @keyup.enter="mint()"
           />
+          <USelect v-model="role" :items="roles" value-key="value" class="w-32" />
           <UButton
             icon="i-lucide-plus"
             :disabled="label.trim().length === 0"
@@ -184,6 +201,7 @@ function mint() {
         <ul v-else class="flex flex-col divide-y divide-default">
           <li v-for="key in apiKeys" :key="key.id" class="flex items-center gap-3 py-2">
             <span class="font-medium truncate">{{ key.label }}</span>
+            <UBadge v-if="key.role === 'admin'" color="warning" variant="subtle">admin</UBadge>
             <code class="text-muted">…{{ key.hint }}</code>
             <span class="text-muted ml-auto">
               {{ key.lastUsedAt === null ? 'never used' : 'in use' }}

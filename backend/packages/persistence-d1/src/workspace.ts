@@ -10,28 +10,38 @@ import { decodeData, decodeRows, encodeData, patched } from './rows.js'
  * each host.
  */
 
-const PROJECT_UPSERT = `INSERT INTO projects (id, ref_key, created_at, data)
-VALUES (?, ?, ?, ?)
-ON CONFLICT (id) DO UPDATE SET
+const PROJECT_UPSERT = `INSERT INTO projects (org_id, id, ref_key, created_at, data)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (org_id, id) DO UPDATE SET
   ref_key = excluded.ref_key,
   created_at = excluded.created_at,
   data = excluded.data`
 
 export class SqlProjectRepository implements ProjectRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(
+    private readonly db: SqlDriver,
+    private readonly orgId: string,
+  ) {}
 
   async list(): Promise<Project[]> {
-    const rows = await this.db.all('SELECT data FROM projects ORDER BY created_at, id')
+    const rows = await this.db.all(
+      'SELECT data FROM projects WHERE org_id = ? ORDER BY created_at, id',
+      [this.orgId],
+    )
     return decodeRows(projectSchema, 'projects', rows)
   }
 
   async getById(projectId: string): Promise<Project | null> {
-    const row = await this.db.first('SELECT data FROM projects WHERE id = ?', [projectId])
+    const row = await this.db.first('SELECT data FROM projects WHERE org_id = ? AND id = ?', [
+      this.orgId,
+      projectId,
+    ])
     return row === null ? null : decodeData(projectSchema, 'projects', row.data)
   }
 
   async getByRef(ref: { provider: string; owner: string; repo: string }): Promise<Project | null> {
-    const row = await this.db.first('SELECT data FROM projects WHERE ref_key = ?', [
+    const row = await this.db.first('SELECT data FROM projects WHERE org_id = ? AND ref_key = ?', [
+      this.orgId,
       projectRefKey(ref),
     ])
     return row === null ? null : decodeData(projectSchema, 'projects', row.data)
@@ -51,16 +61,19 @@ export class SqlProjectRepository implements ProjectRepository {
   }
 
   async delete(projectId: string): Promise<void> {
-    await this.db.run('DELETE FROM projects WHERE id = ?', [projectId])
+    await this.db.run('DELETE FROM projects WHERE org_id = ? AND id = ?', [this.orgId, projectId])
   }
 
   private async write(project: Project): Promise<void> {
-    // `ref_key` carries a UNIQUE index, which is the uniqueness the port
-    // declares and the in-memory store can only promise. Registering a
-    // repository that is already registered is refused by the service, so
-    // reaching the constraint means two of those calls raced, and the loser
-    // being told so beats a workspace listing one repository twice.
+    // `(org_id, ref_key)` carries a UNIQUE index, which is the uniqueness the
+    // port declares and the in-memory store can only promise. It is scoped to
+    // the org because two tenancies watching one repository is the ordinary
+    // multi-tenant case rather than a duplicate. Registering a repository that
+    // is already registered is refused by the service, so reaching the
+    // constraint means two of those calls raced, and the loser being told so
+    // beats a workspace listing one repository twice.
     await this.db.run(PROJECT_UPSERT, [
+      this.orgId,
       project.id,
       projectRefKey(project),
       project.createdAt,
@@ -76,13 +89,14 @@ export class SqlProjectRepository implements ProjectRepository {
  * the reviewer that was passed in: two first sign-ins that both found no row are
  * how a directory forks into two people with one account between them. The
  * in-memory store reads and then writes and can only promise this; here the
- * primary key decides it, the conflict branch leaves the holder's `reviewer_id`
+ * primary key — `(org_id, provider, subject)`, so the same GitHub account is a
+ * person in each tenancy that knows them — decides it, the conflict branch leaves the holder's `reviewer_id`
  * alone, and `RETURNING` reports who won. A caller that already holds the key
  * refreshes the handle on the same trip, which is what keeps a rename visible.
  */
-const IDENTITY_CLAIM = `INSERT INTO identities (provider, subject, reviewer_id, data)
-VALUES (?, ?, ?, ?)
-ON CONFLICT (provider, subject) DO UPDATE SET
+const IDENTITY_CLAIM = `INSERT INTO identities (org_id, provider, subject, reviewer_id, data)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (org_id, provider, subject) DO UPDATE SET
   data = CASE
     WHEN identities.reviewer_id = excluded.reviewer_id THEN excluded.data
     ELSE identities.data
@@ -90,26 +104,30 @@ ON CONFLICT (provider, subject) DO UPDATE SET
 RETURNING reviewer_id`
 
 export class SqlIdentityRepository implements IdentityRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(
+    private readonly db: SqlDriver,
+    private readonly orgId: string,
+  ) {}
 
   async findReviewerId(provider: IdentityProvider, subject: string): Promise<string | null> {
     const row = await this.db.first(
-      'SELECT reviewer_id FROM identities WHERE provider = ? AND subject = ?',
-      [provider, subject],
+      'SELECT reviewer_id FROM identities WHERE org_id = ? AND provider = ? AND subject = ?',
+      [this.orgId, provider, subject],
     )
     return row === null ? null : String(row.reviewer_id)
   }
 
   async listForReviewer(reviewerId: string): Promise<LinkedIdentity[]> {
     const rows = await this.db.all(
-      'SELECT data FROM identities WHERE reviewer_id = ? ORDER BY provider, subject',
-      [reviewerId],
+      'SELECT data FROM identities WHERE org_id = ? AND reviewer_id = ? ORDER BY provider, subject',
+      [this.orgId, reviewerId],
     )
     return decodeRows(linkedIdentitySchema, 'identities', rows)
   }
 
   async link(reviewerId: string, identity: LinkedIdentity): Promise<string> {
     const row = await this.db.first(IDENTITY_CLAIM, [
+      this.orgId,
       identity.provider,
       identity.subject,
       reviewerId,

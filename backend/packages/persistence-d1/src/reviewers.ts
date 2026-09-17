@@ -20,18 +20,18 @@ import { decodeCount, decodeData, encodeData, patched } from './rows.js'
  * walk backwards every time a rename raced a review.
  */
 
-const SELECT = 'SELECT outstanding_reviews, data FROM reviewers'
+const SELECT = 'SELECT outstanding_reviews, data FROM reviewers WHERE org_id = ?'
 
-const UPSERT = `INSERT INTO reviewers (id, outstanding_reviews, created_at, data)
-VALUES (?, ?, ?, ?)
-ON CONFLICT (id) DO UPDATE SET
+const UPSERT = `INSERT INTO reviewers (org_id, id, outstanding_reviews, created_at, data)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (org_id, id) DO UPDATE SET
   created_at = excluded.created_at,
   data = excluded.data`
 
 // `MAX(a, b)` is SQLite's two-argument maximum, which is a scalar here and an
 // aggregate in Postgres; the Drizzle adapter spells the same floor `GREATEST`.
 const ADJUST =
-  'UPDATE reviewers SET outstanding_reviews = MAX(outstanding_reviews + ?, 0) WHERE id = ?'
+  'UPDATE reviewers SET outstanding_reviews = MAX(outstanding_reviews + ?, 0) WHERE org_id = ? AND id = ?'
 
 function toReviewer(row: SqlRow): Reviewer {
   return {
@@ -41,15 +41,18 @@ function toReviewer(row: SqlRow): Reviewer {
 }
 
 export class SqlReviewerRepository implements ReviewerRepository {
-  constructor(private readonly db: SqlDriver) {}
+  constructor(
+    private readonly db: SqlDriver,
+    private readonly orgId: string,
+  ) {}
 
   async list(): Promise<Reviewer[]> {
-    const rows = await this.db.all(`${SELECT} ORDER BY created_at, id`)
+    const rows = await this.db.all(`${SELECT} ORDER BY created_at, id`, [this.orgId])
     return rows.map(toReviewer)
   }
 
   async getById(reviewerId: string): Promise<Reviewer | null> {
-    const row = await this.db.first(`${SELECT} WHERE id = ?`, [reviewerId])
+    const row = await this.db.first(`${SELECT} AND id = ?`, [this.orgId, reviewerId])
     return row === null ? null : toReviewer(row)
   }
 
@@ -70,11 +73,12 @@ export class SqlReviewerRepository implements ReviewerRepository {
   }
 
   async adjustOutstanding(reviewerId: string, delta: number): Promise<void> {
-    await this.db.run(ADJUST, [delta, reviewerId])
+    await this.db.run(ADJUST, [delta, this.orgId, reviewerId])
   }
 
   private async write(reviewer: Reviewer): Promise<void> {
     await this.db.run(UPSERT, [
+      this.orgId,
       reviewer.id,
       reviewer.outstandingReviews,
       reviewer.createdAt,
