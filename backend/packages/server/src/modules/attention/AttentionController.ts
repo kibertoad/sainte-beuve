@@ -8,11 +8,13 @@ import {
   streamAttentionContract,
 } from '@sainte-beuve/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
+import type { Input } from 'hono'
 import { Hono } from 'hono'
 import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
+import type { AnyAppContext } from '../auth/principal.js'
 import { sseStream } from '../../realtime/sse.js'
-import { ViewerService } from '../identity/ViewerService.js'
+import { viewerOf } from '../identity/ViewerService.js'
 import { AttentionService, reaches } from './AttentionService.js'
 
 /**
@@ -21,16 +23,16 @@ import { AttentionService, reaches } from './AttentionService.js'
  * Every route resolves the viewer first, because who is asking decides what
  * the answer contains: the inbox is filtered by the audience gate, a
  * commitment is recorded against a person, and only the requester may
- * withdraw. Until sessions land (docs/implementation-plan.md, slice 6) the
- * viewer is whoever this deployment's source-control credential acts as, which
- * is what `ViewerService` resolves.
+ * withdraw. The viewer is the session's person where there is a session, and
+ * otherwise whoever this deployment's source-control credential acts as; see
+ * `ViewerService`.
  */
 export function attentionController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, listAttentionContract, async (c) => {
     const container = c.get('container')
-    const viewer = await new ViewerService(container).current()
+    const viewer = await viewerOf(c)
     const requests = await new AttentionService(container).inbox(viewer.reviewer)
     return c.json({ requests }, 200)
   })
@@ -38,12 +40,12 @@ export function attentionController(): Hono<AppEnv> {
   // The live half. The REST inbox above is the one that is correct on every
   // runtime; this is the optimisation that makes a page already open react.
   buildHonoRoute(app, streamAttentionContract, async (c) => {
-    return openStream(c.get('container'))
+    return openStream(c)
   })
 
   buildHonoRoute(app, requestAttentionContract, async (c) => {
     const container = c.get('container')
-    const viewer = await new ViewerService(container).current()
+    const viewer = await viewerOf(c)
     const request = await new AttentionService(container).raise(
       viewer.reviewer,
       c.req.valid('json'),
@@ -53,28 +55,28 @@ export function attentionController(): Hono<AppEnv> {
 
   buildHonoRoute(app, commitToAttentionContract, async (c) => {
     const container = c.get('container')
-    const viewer = await new ViewerService(container).current()
+    const viewer = await viewerOf(c)
     const { attentionId } = c.req.valid('param')
     return c.json(await new AttentionService(container).commit(viewer.reviewer, attentionId), 200)
   })
 
   buildHonoRoute(app, cancelAttentionContract, async (c) => {
     const container = c.get('container')
-    const viewer = await new ViewerService(container).current()
+    const viewer = await viewerOf(c)
     const { attentionId } = c.req.valid('param')
     return c.json(await new AttentionService(container).cancel(viewer.reviewer, attentionId), 200)
   })
 
   buildHonoRoute(app, commitToPullRequestContract, async (c) => {
     const container = c.get('container')
-    const viewer = await new ViewerService(container).current()
+    const viewer = await viewerOf(c)
     const service = new AttentionService(container)
     return c.json(await service.commitToPullRequest(viewer.reviewer, c.req.valid('json')), 201)
   })
 
   buildHonoRoute(app, releaseCommitmentContract, async (c) => {
     const container = c.get('container')
-    const viewer = await new ViewerService(container).current()
+    const viewer = await viewerOf(c)
     const { commitmentId } = c.req.valid('param')
     const service = new AttentionService(container)
     return c.json({ commitments: await service.release(viewer.reviewer, commitmentId) }, 200)
@@ -88,8 +90,13 @@ export function attentionController(): Hono<AppEnv> {
  * say who is looking answers 503 with the reason instead of holding a
  * connection open that will never carry anything.
  */
-async function openStream(container: AppContainer): Promise<Response> {
-  const viewer = await new ViewerService(container).current()
+async function openStream<E extends AppEnv, P extends string, I extends Input>(
+  c: AnyAppContext<E, P, I>,
+): Promise<Response> {
+  // Annotated rather than inferred: `c.get` off a context generic in its env
+  // widens, and the subscription's callback would then be typed `any`.
+  const container: AppContainer = c.get('container')
+  const viewer = await viewerOf(c)
   return sseStream({
     eventName: 'attention',
     subscribe: (emit) =>

@@ -42,6 +42,33 @@ SLACK_SIGNING_SECRET=
 SLACK_CHANNEL_ID=
 APP_BASE_URL=http://localhost:3000
 
+# ---------------------------------------------------------------------------
+# Who is allowed to call this deployment.
+#
+# `open` (the default, and what every deployment ran before sessions existed)
+# refuses nobody: the workspace renders for whoever this deployment's
+# source-control credential acts as. `required` refuses an anonymous call to
+# everything under /api/v1 but the sign-in routes, and the workspace then
+# renders for whoever is SIGNED IN.
+#
+# A `required` deployment needs a way in before it has any sessions: an OAuth
+# client (GITHUB_OAUTH_CLIENT_ID / GITLAB_OAUTH_CLIENT_ID above, plus
+# SETTINGS_ENCRYPTION_KEY, which signs the round trip) for a person, and
+# AUTH_API_KEY for a machine. /health reports the mode and the hosts a sign-in
+# could use, so a deployment nobody can enter is visible from outside.
+#
+# Note CORS: a browser only sends the session cookie to an origin the response
+# NAMES, so a hosted SPA has to be listed in CORS_ORIGINS. A wildcard serves
+# reads and can never carry a session.
+# ---------------------------------------------------------------------------
+AUTH_MODE=open
+# Presented as `Authorization: Bearer <key>`. Matched before the store, so it
+# still works while the database is being restored. Keys minted on the
+# Configuration screen live in the store as digests and are shown once.
+AUTH_API_KEY=
+# How long a session lasts, in ms. Defaults to 30 days.
+AUTH_SESSION_LIFETIME_MS=
+
 # Seals the credentials entered on the SPA's Configuration screen, and signs the
 # state carried through a connect round trip. Generate one with
 # `openssl rand -base64 32`. Without it the screen refuses to store a token

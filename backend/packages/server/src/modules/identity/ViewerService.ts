@@ -1,31 +1,42 @@
-import type { LinkedIdentity, Reviewer, VcsProvider, Viewer } from '@sainte-beuve/contracts'
-import { NO_VCS_HANDLES, VCS_PROVIDERS, withHandle } from '@sainte-beuve/contracts'
+import type { Reviewer, VcsProvider, Viewer } from '@sainte-beuve/contracts'
+import { VCS_PROVIDERS } from '@sainte-beuve/contracts'
 import { assertFound, UnavailableError, type VcsAccount } from '@sainte-beuve/kernel'
-import { isSameHandle } from '@sainte-beuve/reviewers'
+import type { Input } from 'hono'
 import type { AppContainer } from '../../container.js'
+import type { AppEnv } from '../../http/env.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
+import {
+  type AnyAppContext,
+  principalOf,
+  type RequestPrincipal,
+  refuseIfMachine,
+} from '../auth/principal.js'
+import { PeopleService } from './PeopleService.js'
 
 /**
  * Who the workspace is being rendered for.
  *
- * There is no session yet (docs/implementation-plan.md, slice 6), so the viewer
- * is derived from the credential this deployment holds: whoever the
- * source-control token acts as is who is looking. That is honest for a
- * single-tenant deployment and it is exactly what slice 6 replaces, one layer
- * lower down, by handing this service a session subject instead of asking a
- * gateway.
+ * A SESSION is the answer whenever there is one: the session names a reviewer
+ * row and a host account, both already in the store, so the viewer read touches
+ * no gateway at all. That is the substitution slice 6 was written around, and it
+ * is what makes a shared deployment correct — before it, everybody's workspace
+ * rendered for whoever the deployment's own source-control token acted as.
  *
- * What it deliberately does NOT do is treat the handle as the identity. The
- * account's stable subject is the key, the handle is refreshed from it, and the
- * person behind it is a reviewer row. So a rename keeps somebody's workspace,
- * the next holder of the name does not inherit it, and one person can hold a
- * GitHub and a GitLab account at once.
+ * The CREDENTIAL remains the answer for a deployment running `open` with nobody
+ * signed in, which is local mode and every deployment that has not turned
+ * sessions on. Keeping it is not a hedge: it is what lets a laptop run the whole
+ * product with a pasted token and no OAuth client, and it is reached only where
+ * the deployment has said anonymous callers are welcome.
+ *
+ * An API key is refused rather than resolved. A key is nobody, so it has no
+ * three lists, and inventing a person for it would put somebody else's work on a
+ * CI job's screen.
  */
 
 const NO_IDENTITY =
-  'This deployment cannot tell who you are: connect a source-control account on the Configuration ' +
-  'screen (Sign in with GitHub, or paste a personal access token). A GitHub App installation is ' +
-  'not a person, so it cannot be the viewer.'
+  'This deployment cannot tell who you are: sign in, or connect a source-control account on the ' +
+  'Configuration screen (Sign in with GitHub, or paste a personal access token). A GitHub App ' +
+  'installation is not a person, so it cannot be the viewer.'
 
 export class ViewerService {
   /**
@@ -36,17 +47,42 @@ export class ViewerService {
    */
   constructor(
     private readonly container: AppContainer,
+    private readonly principal: RequestPrincipal,
     private readonly resolutions: VcsResolutions = new VcsResolutions(container),
   ) {}
 
   /** The person in front of the workspace, creating their row on first sight. */
   async current(): Promise<Viewer> {
-    const { provider, account } = await this.signedInAccount()
-    const reviewer = await this.reviewerFor(provider, account)
+    refuseIfMachine(this.principal)
+    const reviewer =
+      this.principal.kind === 'session'
+        ? await this.reviewerOfSession(this.principal.session.reviewerId)
+        : await this.reviewerOfCredential()
     return {
       reviewer,
       identities: await this.container.repositories.identities.listForReviewer(reviewer.id),
     }
+  }
+
+  /**
+   * The row a live session points at.
+   *
+   * A session whose reviewer has been deleted cannot happen through any route
+   * here (the directory has no delete; `paused` is the way out), so this is
+   * `assertFound` rather than a fallback: a 404 naming the row is a bug report,
+   * and silently re-claiming a person would paper over it by inventing a second.
+   */
+  private async reviewerOfSession(reviewerId: string): Promise<Reviewer> {
+    return assertFound(
+      await this.container.repositories.reviewers.getById(reviewerId),
+      `No reviewer ${reviewerId}`,
+    )
+  }
+
+  /** Whoever the deployment's own credential acts as. The `open`, signed-out path. */
+  private async reviewerOfCredential(): Promise<Reviewer> {
+    const { provider, account } = await this.signedInAccount()
+    return new PeopleService(this.container).reviewerFor(provider, account)
   }
 
   /**
@@ -90,111 +126,18 @@ export class ViewerService {
       return null
     }
   }
+}
 
-  /** The reviewer row behind one host account: the linked one, else claimed. */
-  private async reviewerFor(provider: VcsProvider, account: VcsAccount): Promise<Reviewer> {
-    const linkedId = await this.container.repositories.identities.findReviewerId(
-      provider,
-      account.subject,
-    )
-    if (linkedId !== null) return this.refresh(linkedId, provider, account)
-    return this.claim(provider, account)
-  }
-
-  /**
-   * The person behind an account nothing has claimed yet: an existing directory
-   * row with the same handle, else a new one.
-   *
-   * Adopting the existing row is what stops the directory forking on the way
-   * IN. A team registers people by hand long before anybody signs in, and
-   * creating a second row for the same human the first time they open the
-   * workspace would give them an empty skill list and leave the router drawing
-   * the other row.
-   *
-   * The account is claimed BEFORE the row is written, and the claim is what
-   * decides. `current()` runs on a GET, and one page load fires three of them
-   * at once (the workspace, the inbox and the stream): three requests that each
-   * looked for a row, found none and created one would fork the directory into
-   * three people with a single identity between them, two of them orphans the
-   * reviewer screen still draws. The store keys the claim on
-   * `(provider, subject)`, so the first to land owns the person and the others
-   * are told whose it is.
-   */
-  private async claim(provider: VcsProvider, account: VcsAccount): Promise<Reviewer> {
-    const { repositories, ids } = this.container
-    const adopted = (await repositories.reviewers.list()).find((reviewer) =>
-      isSameHandle(reviewer.handles[provider], account.username),
-    )
-    const claimedId = adopted?.id ?? ids.next()
-    const ownerId = await repositories.identities.link(
-      claimedId,
-      this.identityOf(provider, account),
-    )
-    if (ownerId !== claimedId) return this.claimedElsewhere(ownerId, provider, account)
-    return adopted ?? this.create(claimedId, provider, account)
-  }
-
-  /** The row of whoever won the claim. */
-  private async claimedElsewhere(
-    ownerId: string,
-    provider: VcsProvider,
-    account: VcsAccount,
-  ): Promise<Reviewer> {
-    const existing = await this.container.repositories.reviewers.getById(ownerId)
-    if (existing !== null) return existing
-    // The winner claimed the account and has not written its row yet. It is the
-    // same account either way, so writing the row under the id the claim points
-    // at converges on the ONE person rather than answering this request with a
-    // reviewer that does not exist.
-    return this.create(ownerId, provider, account)
-  }
-
-  private async create(id: string, provider: VcsProvider, account: VcsAccount): Promise<Reviewer> {
-    return this.container.repositories.reviewers.create({
-      id,
-      displayName: account.displayName ?? account.username,
-      handles: withHandle(NO_VCS_HANDLES, provider, account.username),
-      slackUserId: null,
-      team: null,
-      skills: [],
-      availability: 'available',
-      weight: 1,
-      outstandingReviews: 0,
-      createdAt: this.container.clock.now(),
-    })
-  }
-
-  /**
-   * Re-record the handle every time, because it is the one field that changes
-   * under us: somebody who renames on the host would otherwise keep being
-   * mirrored onto pull requests under a name the host no longer routes.
-   */
-  private async refresh(
-    reviewerId: string,
-    provider: VcsProvider,
-    account: VcsAccount,
-  ): Promise<Reviewer> {
-    const { repositories } = this.container
-    const reviewer = assertFound(
-      await repositories.reviewers.getById(reviewerId),
-      `No reviewer ${reviewerId}`,
-    )
-    if (isSameHandle(reviewer.handles[provider], account.username)) return reviewer
-    await repositories.identities.link(reviewerId, this.identityOf(provider, account))
-    return assertFound(
-      await repositories.reviewers.update(reviewerId, {
-        handles: withHandle(reviewer.handles, provider, account.username),
-      }),
-      `No reviewer ${reviewerId}`,
-    )
-  }
-
-  private identityOf(provider: VcsProvider, account: VcsAccount): LinkedIdentity {
-    return {
-      provider,
-      subject: account.subject,
-      username: account.username,
-      linkedAt: this.container.clock.now(),
-    }
-  }
+/**
+ * The viewer for one request, from the two things the context already holds.
+ *
+ * Every route that renders for a person goes through this rather than
+ * constructing the service, so none of them can forget to pass the caller and
+ * silently fall back to the deployment's credential.
+ */
+export async function viewerOf<E extends AppEnv, P extends string, I extends Input>(
+  c: AnyAppContext<E, P, I>,
+): Promise<Viewer> {
+  const container: AppContainer = c.get('container')
+  return new ViewerService(container, principalOf(c)).current()
 }

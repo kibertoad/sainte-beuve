@@ -1,7 +1,7 @@
 // `@sainte-beuve/persistence-postgres`: the durable store the Node service
 // boots with.
 //
-// Nine stores over Drizzle, against the same nine tables the D1 adapter
+// Eleven stores over Drizzle, against the same eleven tables the D1 adapter
 // (@sainte-beuve/persistence-d1) carries, and the two land together because a
 // capability durable on one runtime and not the other is the failure mode this
 // layout exists to prevent.
@@ -11,6 +11,7 @@
 
 import type { Repositories } from '@sainte-beuve/kernel'
 import { PostgresAttentionRepository, PostgresReviewCommitmentRepository } from './attention.js'
+import { PostgresApiKeyRepository, PostgresSessionRepository } from './auth.js'
 import type { PostgresDatabase } from './database.js'
 import { PostgresReviewerRepository } from './reviewers.js'
 import {
@@ -33,6 +34,8 @@ export function createPostgresRepositories(db: PostgresDatabase): Repositories {
     identities: new PostgresIdentityRepository(db),
     attention: new PostgresAttentionRepository(db),
     commitments: new PostgresReviewCommitmentRepository(db),
+    sessions: new PostgresSessionRepository(db),
+    apiKeys: new PostgresApiKeyRepository(db),
   }
 }
 

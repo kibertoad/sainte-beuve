@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_SESSION_LIFETIME_MS } from '@sainte-beuve/server'
 import { loadConfig } from './config.js'
 
 describe('loadConfig', () => {
@@ -164,5 +165,36 @@ describe('loadConfig', () => {
       CORS_ORIGINS: 'https://a.example, https://b.example ',
     }).corsOrigins
     expect(origins).toStrictEqual(['https://a.example', 'https://b.example'])
+  })
+
+  it('names the SPA it was told about, so the wildcard default is not a trap', () => {
+    // The client sends `credentials: 'include'` on every call and a browser
+    // refuses any answer to one carrying `*`, so a hosted deployment left on the
+    // default would lose every request rather than only its sign-in. The Worker
+    // reads it the same way; see `corsOriginsFor`.
+    expect(loadConfig({ APP_BASE_URL: 'https://board.example.com' }).corsOrigins).toStrictEqual([
+      '*',
+      'https://board.example.com',
+    ])
+    // Already listed, so nothing is added twice.
+    expect(
+      loadConfig({
+        CORS_ORIGINS: 'https://board.example.com',
+        APP_BASE_URL: 'https://board.example.com/configuration',
+      }).corsOrigins,
+    ).toStrictEqual(['https://board.example.com'])
+  })
+
+  it('falls back on a session lifetime that would expire on issue', () => {
+    // The Worker rejects zero and below; this has to agree, or `0` on Node is a
+    // sign-in that completes and silently never sticks.
+    expect(loadConfig({}).auth.sessionLifetimeMs).toBe(DEFAULT_SESSION_LIFETIME_MS)
+    expect(loadConfig({ AUTH_SESSION_LIFETIME_MS: '0' }).auth.sessionLifetimeMs).toBe(
+      DEFAULT_SESSION_LIFETIME_MS,
+    )
+    expect(loadConfig({ AUTH_SESSION_LIFETIME_MS: '-1' }).auth.sessionLifetimeMs).toBe(
+      DEFAULT_SESSION_LIFETIME_MS,
+    )
+    expect(loadConfig({ AUTH_SESSION_LIFETIME_MS: '60000' }).auth.sessionLifetimeMs).toBe(60_000)
   })
 })

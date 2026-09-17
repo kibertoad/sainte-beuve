@@ -84,7 +84,33 @@ export interface WorkerEnv {
   SLACK_SIGNING_SECRET?: string
   SLACK_CHANNEL_ID?: string
 
-  /** Base URL of the sainte-beuve SPA, so a chat message can link back to a review. */
+  /**
+   * Whether this deployment insists on knowing who is calling: `open` (the
+   * default, and what every deployment ran before sessions existed) or
+   * `required`. `/health` reports which is in force.
+   *
+   * A `required` Worker needs a way IN: an OAuth client for the sign-in, or
+   * `AUTH_API_KEY` for a machine. Setting it with neither leaves a deployment
+   * nobody can enter, which is why `/health` reports the sign-in hosts beside
+   * the mode.
+   */
+  AUTH_MODE?: string
+  /**
+   * The deployment's OWN API key, for CI and for the first call into a
+   * `required` deployment that has no sessions yet. Presented as
+   * `Authorization: Bearer <key>`, and matched before the store, so it keeps
+   * working while the database is being restored. Beside it, keys minted on the
+   * Configuration screen live in D1 as digests.
+   */
+  AUTH_API_KEY?: string
+  /** How long a session lasts, in ms. Defaults to 30 days. */
+  AUTH_SESSION_LIFETIME_MS?: string
+
+  /**
+   * Base URL of the sainte-beuve SPA, so a chat message can link back to a
+   * review, a connect callback can send the browser home, and the session
+   * cookie knows whether the SPA is on another site (see `cookies.ts`).
+   */
   APP_BASE_URL?: string
 
   /**

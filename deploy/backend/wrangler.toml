@@ -63,6 +63,13 @@ GITHUB_APP_SLUG = "REPLACE_WITH_GITHUB_APP_SLUG"
 # form of an App's login works: GitHub writes its comments as
 # `sainte-beuve-bot[bot]` while people type `@sainte-beuve-bot`.
 GITHUB_BOT_LOGIN = "REPLACE_WITH_APP_BOT_LOGIN"
+# Whether this deployment insists on knowing who is calling. `open` is the
+# default and refuses nobody; `required` refuses an anonymous call to everything
+# under /api/v1 but the sign-in routes, and the workspace then renders for
+# whoever is signed in rather than for whoever the deployment's credential acts
+# as. A `required` Worker needs a way in: the App's OAuth client below for a
+# person, AUTH_API_KEY for a machine. /health reports both.
+AUTH_MODE = "open"
 # The labels that drive the board. These are the defaults; name your own.
 GITHUB_LABEL_REVIEW = "needs-review"
 GITHUB_LABEL_AI_REVIEW = "ai-review"
@@ -85,6 +92,9 @@ GITHUB_LABEL_SKILL_PREFIX = "skill:"
 #   GITLAB_OAUTH_CLIENT_SECRET
 #   SLACK_BOT_TOKEN            xoxb-… for the Slack bot
 #   SLACK_SIGNING_SECRET       the secret Slack signs its requests with
+#   AUTH_API_KEY               this deployment's own API key, for CI and for the
+#                              first call into a `required` deployment that has
+#                              no sessions yet (`Authorization: Bearer <key>`)
 #   SETTINGS_ENCRYPTION_KEY    seals the credentials entered on the Configuration
 #                              screen and signs the connect round trips
 #                              (`openssl rand -base64 32`)

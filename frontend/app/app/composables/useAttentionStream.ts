@@ -54,7 +54,16 @@ export function useAttentionStream() {
 
   function connect(): void {
     if (typeof EventSource === 'undefined') return
-    source = new EventSource(api.attentionStreamUrl)
+    // `withCredentials`, so the stream carries the session cookie the fetches
+    // carry. Without it a signed-in page would read its inbox as itself and
+    // stream somebody else's, which is worse than not streaming at all.
+    //
+    // Like the fetches, this needs an origin the deployment NAMED: a credentialed
+    // `EventSource` refuses a `*` answer, so on a deployment that named nothing
+    // this error-loops rather than degrading. Nothing here can repair that, and
+    // nothing should pretend to — the fetches on the same page have already
+    // failed, and the Access card says what to configure.
+    source = new EventSource(api.attentionStreamUrl, { withCredentials: true })
     source.addEventListener('open', () => {
       live.value = true
       // Every event published while the connection was down went to a

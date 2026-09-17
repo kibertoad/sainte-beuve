@@ -17,6 +17,7 @@
 // and read whole lists back, so a case that inherited the previous one's rows
 // would fail on the store that is fastest to set up and pass on the others.
 
+import { apiKeyCases, sessionCases } from './auth-cases.js'
 import { aiReviewCases, integrationTokenCases, reminderCases, reviewCases } from './board-cases.js'
 import type { ConformanceCase } from './case.js'
 import { reviewerCases } from './reviewer-cases.js'
@@ -33,6 +34,8 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
   ...identityCases,
   ...attentionCases,
   ...commitmentCases,
+  ...sessionCases,
+  ...apiKeyCases,
 ]
 
 export type { ConformanceCase } from './case.js'
@@ -42,6 +45,7 @@ export {
   storedRowConformanceCases,
   type StoreHarness,
 } from './stored-row-cases.js'
+export { apiKeyCases, sessionCases } from './auth-cases.js'
 export { aiReviewCases, integrationTokenCases, reminderCases, reviewCases } from './board-cases.js'
 export { reviewerCases } from './reviewer-cases.js'
 export { attentionCases, commitmentCases, identityCases, projectCases } from './workspace-cases.js'

@@ -11,12 +11,16 @@ import {
   vcsOauthCredentialKey,
   vcsPatCredentialKey,
 } from '@sainte-beuve/contracts'
-import { type RoundTripState, ValidationError } from '@sainte-beuve/kernel'
+import type { RoundTripState, VcsAccount } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
+import { mintNonce } from '../../crypto/tokens.js'
 import { requireCapability } from '../../http/errors.js'
 import { hintOf } from '../../integrations/credentials.js'
 import { resolveChat, resolveVcs } from '../../integrations/resolve.js'
+import { SessionService } from '../auth/SessionService.js'
+import { PeopleService } from '../identity/PeopleService.js'
+import { notOurState, startedByThisBrowser } from './roundTrip.js'
 
 /**
  * How this deployment reaches its source-control hosts and Slack, and how an
@@ -34,10 +38,26 @@ import { resolveChat, resolveVcs } from '../../integrations/resolve.js'
  * adds no code here.
  */
 
+/**
+ * The two things a sign-in through one host's callback can be FOR.
+ *
+ * `connect` is an operator's act on shared state: it stores the credential the
+ * whole deployment then works through. `session` proves who the caller is and
+ * stores nothing. They share an OAuth client and a callback path because a host
+ * matches the redirect URI it registered, and they are separate FLOWS because
+ * the state is what says which of the two came back: one button that did both
+ * would mean everybody who signed in overwrote the repository credential the
+ * board runs on.
+ */
+export type SignInPurpose = 'connect' | 'session'
+
 /** Names the flow a signed state belongs to, so one callback cannot accept another's. */
-function signInFlow(provider: VcsProvider): string {
-  return `${provider}-sign-in`
+function signInFlow(provider: VcsProvider, purpose: SignInPurpose): string {
+  return purpose === 'connect' ? `${provider}-sign-in` : `${provider}-session`
 }
+
+/** The two purposes, in the order the callback tries them. */
+const SIGN_IN_PURPOSES: readonly SignInPurpose[] = ['connect', 'session']
 
 const APP_INSTALL_FLOW = 'github-app-install'
 
@@ -59,6 +79,34 @@ function noOAuth(provider: VcsProvider): string {
     `Signing in to ${vcsDisplayName(provider)} needs an OAuth client: ` +
     `set ${OAUTH_VARIABLES[provider]} on the deployment`
   )
+}
+
+/**
+ * A round trip that has been started: where to send the browser, and the value
+ * that says the browser coming back is this one.
+ *
+ * The nonce leaves this service rather than being written from inside it,
+ * because a cookie is a RESPONSE and a service does not have one. The controller
+ * that hands the URL to the browser is the one that hands it the cookie, in the
+ * same answer. See `writeFlowCookie`.
+ */
+export interface StartedFlow {
+  url: string
+  nonce: string
+}
+
+/** A session the callback has to hand to the browser. See `writeSessionCookie`. */
+export interface IssuedSession {
+  token: string
+  expiresAt: number
+}
+
+/** What the callback learned, and what it now has to do with it. */
+export interface CompletedSignIn {
+  login: string
+  returnTo: string | null
+  session: IssuedSession
+  purpose: SignInPurpose
 }
 
 export class ConnectionsService {
@@ -83,12 +131,12 @@ export class ConnectionsService {
    * Where to install the App. The signed state rides along so the setup callback
    * can refuse a return leg this deployment did not start.
    */
-  async appInstallUrl(): Promise<string> {
+  async appInstallUrl(): Promise<StartedFlow> {
     const slug = requireCapability(this.container.github.appSlug, NO_APP)
-    const state = await this.mintState(APP_INSTALL_FLOW)
+    const { state, nonce } = await this.mintState(APP_INSTALL_FLOW)
     const url = new URL(`/apps/${slug}/installations/new`, 'https://github.com')
     url.searchParams.set('state', state)
-    return url.toString()
+    return { url: url.toString(), nonce }
   }
 
   /**
@@ -98,15 +146,33 @@ export class ConnectionsService {
    * what lets one build serve `http://localhost:8788` and a hosted origin without
    * a second variable to keep in step.
    */
-  async signInUrl(provider: VcsProvider, origin: string): Promise<string> {
+  async signInUrl(
+    provider: VcsProvider,
+    origin: string,
+    purpose: SignInPurpose = 'connect',
+  ): Promise<StartedFlow> {
     const identity = requireCapability(
       this.container.gateways?.signIn(provider) ?? null,
       noOAuth(provider),
     )
-    return identity.authorizeUrl({
-      redirectUri: callbackUrl(provider, origin),
-      state: await this.mintState(signInFlow(provider)),
-    })
+    // A session sign-in lands back on the workspace and a connect lands on the
+    // Configuration screen, because those are the pages the two were started
+    // from and a round trip that dumps somebody somewhere else reads as a
+    // failure even when it worked.
+    const { state, nonce } = await this.mintState(
+      signInFlow(provider, purpose),
+      purpose === 'connect' ? '/configuration' : '/',
+    )
+    return {
+      url: identity.authorizeUrl({ redirectUri: callbackUrl(provider, origin), state }),
+      nonce,
+    }
+  }
+
+  /** The hosts a sign-in can actually be started on. See `authStateSchema`. */
+  signInProviders(): VcsProvider[] {
+    if (this.container.states === null) return []
+    return VCS_PROVIDERS.filter((provider) => this.container.gateways?.signIn(provider) != null)
   }
 
   /**
@@ -126,19 +192,47 @@ export class ConnectionsService {
     code: string
     state: string | null
     origin: string
-  }): Promise<{ login: string; returnTo: string | null }> {
+    /** What the browser carried back in its flow cookie. See `RoundTripState`. */
+    nonce: string | null
+  }): Promise<CompletedSignIn> {
     const { provider } = input
-    const claims = await this.verifyState(input.state, signInFlow(provider))
+    const { claims, purpose } = await this.verifySignInState(input.state, provider, input.nonce)
     const identity = requireCapability(
       this.container.gateways?.signIn(provider) ?? null,
       noOAuth(provider),
     )
-    const cipher = requireCapability(this.container.secrets, NO_STATE)
-    const key = vcsOauthCredentialKey(provider)
     const { token, account } = await identity.exchangeCode({
       code: input.code,
       redirectUri: callbackUrl(provider, input.origin),
     })
+    if (purpose === 'connect') await this.storeCredential(provider, token, account)
+    return {
+      login: account.username,
+      returnTo: claims.returnTo,
+      // BOTH purposes establish a session, because both of them proved the same
+      // thing. An operator who just connected this deployment's credential has
+      // demonstrated exactly what a sign-in demonstrates, and making them click
+      // a second button to be recognised would be a round trip for nothing.
+      session: await this.establishSession(provider, account),
+      purpose,
+    }
+  }
+
+  /**
+   * Seal the exchanged token as this deployment's credential for the host.
+   *
+   * Only the `connect` purpose reaches this. The cipher is required HERE rather
+   * than at the top of the flow, so a session sign-in on a deployment with no
+   * encryption key is not refused for a capability it does not use — though in
+   * practice it has one, because the state it carried had to be signed.
+   */
+  private async storeCredential(
+    provider: VcsProvider,
+    token: string,
+    account: VcsAccount,
+  ): Promise<void> {
+    const cipher = requireCapability(this.container.secrets, NO_STATE)
+    const key = vcsOauthCredentialKey(provider)
     await this.container.repositories.integrationTokens.put({
       integrationId: key,
       sealed: await cipher.encrypt(token, key),
@@ -146,7 +240,26 @@ export class ConnectionsService {
       subject: account.username,
       updatedAt: this.container.clock.now(),
     })
-    return { login: account.username, returnTo: claims.returnTo }
+  }
+
+  /**
+   * The person behind the account, and a session for them.
+   *
+   * `PeopleService` rather than a row written here: the claim rule that stops a
+   * directory forking into two people for one human being has to be the same one
+   * the viewer read uses, and a second copy of it is how they come to disagree.
+   */
+  private async establishSession(
+    provider: VcsProvider,
+    account: VcsAccount,
+  ): Promise<IssuedSession> {
+    const reviewer = await new PeopleService(this.container).reviewerFor(provider, account)
+    const { token, session } = await new SessionService(this.container).issue({
+      reviewerId: reviewer.id,
+      provider,
+      subject: account.subject,
+    })
+    return { token, expiresAt: session.expiresAt }
   }
 
   /**
@@ -156,8 +269,11 @@ export class ConnectionsService {
    * here started, so an install cannot be attributed to this deployment by
    * anybody who can construct a URL.
    */
-  async completeAppInstall(state: string | null): Promise<{ returnTo: string | null }> {
-    return { returnTo: (await this.verifyState(state, APP_INSTALL_FLOW)).returnTo }
+  async completeAppInstall(
+    state: string | null,
+    nonce: string | null,
+  ): Promise<{ returnTo: string | null }> {
+    return { returnTo: (await this.verifyState(state, APP_INSTALL_FLOW, nonce)).returnTo }
   }
 
   /** Drop one host's sign-in credential. The App and the environment are untouched. */
@@ -224,30 +340,57 @@ export class ConnectionsService {
     return (await this.container.repositories.integrationTokens.get(key))?.subject ?? null
   }
 
-  private async mintState(flow: string): Promise<string> {
+  private async mintState(
+    flow: string,
+    returnPath = '/configuration',
+  ): Promise<{ state: string; nonce: string }> {
     const signer = requireCapability(this.container.states, NO_STATE)
     const { appBaseUrl, clock } = this.container
-    return signer.sign({
-      flow,
-      // Back to the Configuration screen, when the deployment said where that is.
-      returnTo: appBaseUrl === null ? null : `${appBaseUrl}/configuration`,
-      exp: clock.now() + STATE_LIFETIME_MS,
-    })
+    const nonce = mintNonce()
+    return {
+      state: await signer.sign({
+        flow,
+        nonce,
+        // Back to the page the flow was started from, when the deployment said
+        // where the SPA is.
+        returnTo: appBaseUrl === null ? null : `${appBaseUrl}${returnPath}`,
+        exp: clock.now() + STATE_LIFETIME_MS,
+      }),
+      nonce,
+    }
   }
 
-  private async verifyState(value: string | null, flow: string): Promise<RoundTripState> {
+  /**
+   * Which of this callback's own two flows came back, and its claims.
+   *
+   * Trying both is not the hole the flow check exists to close: that one is
+   * about a state minted for the App install being presented to a sign-in, and
+   * these two are the same callback's. What the check still buys is that a state
+   * minted for a session sign-in cannot store the deployment's credential, which
+   * is the difference that matters between them.
+   */
+  private async verifySignInState(
+    value: string | null,
+    provider: VcsProvider,
+    nonce: string | null,
+  ): Promise<{ claims: RoundTripState; purpose: SignInPurpose }> {
+    const signer = requireCapability(this.container.states, NO_STATE)
+    for (const purpose of SIGN_IN_PURPOSES) {
+      const claims = await signer.verify(value, signInFlow(provider, purpose))
+      if (claims !== null) return { claims: startedByThisBrowser(claims, nonce), purpose }
+    }
+    throw notOurState()
+  }
+
+  private async verifyState(
+    value: string | null,
+    flow: string,
+    nonce: string | null,
+  ): Promise<RoundTripState> {
     const signer = requireCapability(this.container.states, NO_STATE)
     const claims = await signer.verify(value, flow)
-    if (claims === null) {
-      // A validation error, not a forbidden one: the overwhelmingly common cause
-      // is an operator finishing an install they started an hour ago, and the
-      // message has to say "start again" rather than accuse them of anything.
-      throw new ValidationError(
-        'This callback did not carry a state this deployment recently issued. Start the ' +
-          'connection again from the Configuration screen.',
-      )
-    }
-    return claims
+    if (claims === null) throw notOurState()
+    return startedByThisBrowser(claims, nonce)
   }
 }
 

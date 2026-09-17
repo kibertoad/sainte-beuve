@@ -5,7 +5,7 @@ import type { SqlDriver, SqlParam, SqlRow, SqlStatement } from './driver.js'
  *
  * Everything above it is plain SQL with `?` placeholders, which is D1's own
  * binding syntax, so there is nothing to translate. What the class is actually
- * for is keeping `prepare/bind/all` out of nine stores, and keeping the one
+ * for is keeping `prepare/bind/all` out of eleven stores, and keeping the one
  * D1-specific rule in one place: `bind()` with no arguments is not the same as
  * not binding, so a statement with no parameters is prepared and run as it is.
  */

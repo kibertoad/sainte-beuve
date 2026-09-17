@@ -10,7 +10,7 @@ import type {
   ReviewCommitment,
   ReviewRequest,
 } from '@sainte-beuve/contracts'
-import type { StoredIntegrationToken } from '@sainte-beuve/kernel'
+import type { StoredApiKey, StoredIntegrationToken, StoredSession } from '@sainte-beuve/kernel'
 
 /**
  * The rows the suite writes.
@@ -195,6 +195,33 @@ export function commitment(
     title: 'Ship the thing',
     attentionRequestId: null,
     createdAt: 1_000,
+    ...overrides,
+  }
+}
+
+export function session(id: string, overrides: Partial<StoredSession> = {}): StoredSession {
+  return {
+    id,
+    tokenDigest: `digest-${id}`,
+    reviewerId: 'r1',
+    provider: 'github',
+    subject: '4242',
+    createdAt: 1_000,
+    lastSeenAt: 1_000,
+    expiresAt: 100_000,
+    ...overrides,
+  }
+}
+
+export function apiKey(id: string, overrides: Partial<StoredApiKey> = {}): StoredApiKey {
+  return {
+    id,
+    tokenDigest: `digest-${id}`,
+    label: `key ${id}`,
+    hint: 'abcd',
+    createdBy: 'r1',
+    createdAt: 1_000,
+    lastUsedAt: null,
     ...overrides,
   }
 }

@@ -1,7 +1,7 @@
 // `@sainte-beuve/persistence-d1`: the durable store the Cloudflare Worker boots
 // with.
 //
-// Nine stores over one `D1Database`, plus the migrations directory a deployment
+// Eleven stores over one `D1Database`, plus the migrations directory a deployment
 // points wrangler at (`migrations_dir`). The Postgres adapter
 // (@sainte-beuve/persistence-postgres) implements the same ports over Drizzle,
 // against the same tables and the same payload column, and the two land together
@@ -27,9 +27,12 @@
 //  | `identities`         | `(provider, subject)`  | `reviewer_id`                                              |
 //  | `attention_requests` | `id`                   | `status`, `created_at`                                     |
 //  | `review_commitments` | `id`                   | `reviewer_id`, `pull_request_key`, `created_at`            |
+//  | `sessions`           | `id`                   | `token_digest` (UNIQUE), `reviewer_id`, `expires_at`       |
+//  | `api_keys`           | `id`                   | `token_digest` (UNIQUE), `created_at` (no payload)         |
 
 import type { Repositories } from '@sainte-beuve/kernel'
 import { SqlAttentionRepository, SqlReviewCommitmentRepository } from './attention.js'
+import { SqlApiKeyRepository, SqlSessionRepository } from './auth.js'
 import { D1SqlDriver } from './D1SqlDriver.js'
 import type { SqlDriver } from './driver.js'
 import { SqlReviewerRepository } from './reviewers.js'
@@ -54,6 +57,8 @@ export function createD1Repositories(binding: D1Database): Repositories {
     identities: new SqlIdentityRepository(db),
     attention: new SqlAttentionRepository(db),
     commitments: new SqlReviewCommitmentRepository(db),
+    sessions: new SqlSessionRepository(db),
+    apiKeys: new SqlApiKeyRepository(db),
   }
 }
 

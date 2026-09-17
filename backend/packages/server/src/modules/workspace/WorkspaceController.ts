@@ -2,7 +2,8 @@ import { getViewerContract, getWorkspaceContract } from '@sainte-beuve/contracts
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { ViewerService } from '../identity/ViewerService.js'
+import { principalOf } from '../auth/principal.js'
+import { viewerOf } from '../identity/ViewerService.js'
 import { WorkspaceService } from './WorkspaceService.js'
 
 /**
@@ -18,11 +19,11 @@ export function workspaceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, getViewerContract, async (c) => {
-    return c.json(await new ViewerService(c.get('container')).current(), 200)
+    return c.json(await viewerOf(c), 200)
   })
 
   buildHonoRoute(app, getWorkspaceContract, async (c) => {
-    return c.json(await new WorkspaceService(c.get('container')).read(), 200)
+    return c.json(await new WorkspaceService(c.get('container'), principalOf(c)).read(), 200)
   })
 
   return app

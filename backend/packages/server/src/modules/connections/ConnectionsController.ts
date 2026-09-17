@@ -6,7 +6,9 @@ import {
 } from '@sainte-beuve/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
 import type { AppEnv } from '../../http/env.js'
+import { writeFlowCookie } from '../auth/cookies.js'
 import { ConnectionsService } from './ConnectionsService.js'
 
 /**
@@ -27,18 +29,24 @@ export function connectionsController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, startGitHubAppInstallContract, async (c) => {
-    const url = await new ConnectionsService(c.get('container')).appInstallUrl()
+    const container = c.get('container')
+    const { url, nonce } = await new ConnectionsService(container).appInstallUrl()
+    // On the same answer that carries the URL: the setup callback accepts only
+    // the browser that asked for it. See `RoundTripState`.
+    writeFlowCookie(c, container, nonce, STATE_LIFETIME_MS)
     return c.json({ url }, 200)
   })
 
   buildHonoRoute(app, startVcsSignInContract, async (c) => {
+    const container = c.get('container')
     // The API's own origin, from the request rather than from configuration: the
     // redirect URI the host matches has to name the origin that will receive
     // the callback, and that is the one this request arrived on.
-    const url = await new ConnectionsService(c.get('container')).signInUrl(
+    const { url, nonce } = await new ConnectionsService(container).signInUrl(
       c.req.valid('param').provider,
       new URL(c.req.url).origin,
     )
+    writeFlowCookie(c, container, nonce, STATE_LIFETIME_MS)
     return c.json({ url }, 200)
   })
 

@@ -4,6 +4,7 @@ import type { VcsIdentityGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildHarness,
+  cookieJar,
   del,
   environmentVcs,
   everyHost,
@@ -63,18 +64,30 @@ async function github(harness: TestHarness): Promise<VcsConnection> {
   return found as VcsConnection
 }
 
-async function urlFrom(harness: TestHarness, path: string): Promise<string> {
+async function urlFrom(harness: TestHarness, path: string, jar = cookieJar()): Promise<string> {
   const res = await harness.app.fetch(get(path))
   expect(res.status).toBe(200)
+  // The answer carries the flow cookie the callback will check, so a case that
+  // dropped it would be walking a round trip no browser walks.
+  jar.keep(res)
   return ((await res.json()) as { url: string }).url
+}
+
+/** Where a started flow sends the browser, with the cookie it was handed. */
+async function startFlow(
+  harness: TestHarness,
+  path: string,
+): Promise<{ state: string; jar: ReturnType<typeof cookieJar> }> {
+  const jar = cookieJar()
+  const url = new URL(await urlFrom(harness, path, jar))
+  return { state: url.searchParams.get('state') ?? '', jar }
 }
 
 /** Walk the sign-in round trip and hand back what the callback answered. */
 async function signIn(harness: TestHarness): Promise<Response> {
-  const authorize = new URL(await urlFrom(harness, `${CONNECTIONS}/github/sign-in`))
-  const state = authorize.searchParams.get('state') ?? ''
+  const { state, jar } = await startFlow(harness, `${CONNECTIONS}/github/sign-in`)
   return harness.app.fetch(
-    get(`/connect/github/callback?code=abc&state=${encodeURIComponent(state)}`),
+    get(`/connect/github/callback?code=abc&state=${encodeURIComponent(state)}`, jar.headers()),
   )
 }
 
@@ -219,10 +232,10 @@ describe('GitHub and Slack connections', () => {
         labels: harness.container.github.labels,
       },
     })
-    const install = new URL(await urlFrom(signing, `${CONNECTIONS}/github/app-install`))
-    const state = install.searchParams.get('state') ?? ''
+    const { state, jar } = await startFlow(signing, `${CONNECTIONS}/github/app-install`)
+    // The browser's own cookie rides along, so the FLOW check refuses this.
     const res = await signing.app.fetch(
-      get(`/connect/github/callback?code=abc&state=${encodeURIComponent(state)}`),
+      get(`/connect/github/callback?code=abc&state=${encodeURIComponent(state)}`, jar.headers()),
     )
     expect(res.status).toBe(400)
   })
@@ -280,12 +293,16 @@ describe('GitHub and Slack connections', () => {
         labels: harness.container.github.labels,
       },
     })
-    const install = new URL(await urlFrom(withApp, `${CONNECTIONS}/github/app-install`))
+    const jar = cookieJar()
+    const install = new URL(await urlFrom(withApp, `${CONNECTIONS}/github/app-install`, jar))
     expect(install.pathname).toBe('/apps/sainte-beuve/installations/new')
 
     const state = install.searchParams.get('state') ?? ''
     const res = await withApp.app.fetch(
-      get(`/connect/github/setup?installation_id=42&state=${encodeURIComponent(state)}`),
+      get(
+        `/connect/github/setup?installation_id=42&state=${encodeURIComponent(state)}`,
+        jar.headers(),
+      ),
     )
     expect(res.status).toBe(302)
     // Nothing is persisted: an installation is resolved from the repository it is

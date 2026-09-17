@@ -1,4 +1,9 @@
-import type { GitHubLabelRules, ReminderPolicy, VcsProvider } from '@sainte-beuve/contracts'
+import type {
+  AuthMode,
+  GitHubLabelRules,
+  ReminderPolicy,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
 import type {
   AiReviewGateway,
   AttentionBus,
@@ -64,6 +69,37 @@ export interface GitHubWiring {
   /** The login the bot answers to when it is @-mentioned in a comment. */
   botLogin: string | null
   labels: GitHubLabelRules
+}
+
+/**
+ * How much this deployment insists on knowing who is calling.
+ *
+ * `mode` is a decision somebody typed rather than something derived from what
+ * else is configured, for the reason `authModeSchema` gives: both derivations
+ * fail in the direction that hurts. It defaults to `open`, which is what every
+ * deployment ran before sessions existed and what local mode still runs, and
+ * `/health` reports it so the answer is legible from outside the process.
+ */
+export interface AuthWiring {
+  mode: AuthMode
+  /**
+   * The deployment's OWN API key, from its environment. The same idea as
+   * `GITHUB_TOKEN` beside a stored GitHub credential: a machine credential the
+   * process holds rather than one somebody minted in the SPA.
+   *
+   * It exists to answer the bootstrap. A deployment that comes up in `required`
+   * mode has no sessions and no minted keys, so the route that mints the first
+   * key would be the route that cannot be reached; this is the way in. It is
+   * matched BEFORE the store, so it keeps working while the database is being
+   * restored.
+   */
+  environmentApiKey: string | null
+  /**
+   * How long a session lasts, absolutely. Configurable because the right answer
+   * is a deployment's policy rather than ours, and injected because the suites
+   * have to be able to walk past an expiry without waiting a month.
+   */
+  sessionLifetimeMs: number
 }
 
 /** Slack deployment configuration, beside the bot token that is a credential. */
@@ -137,6 +173,7 @@ export interface AppContainer {
   bus: AttentionBus
   github: GitHubWiring
   slack: SlackWiring
+  auth: AuthWiring
   /**
    * Where the SPA is served from, so a connect callback can send the browser back
    * to it and a chat message can link to a review. Null when the deployment did
@@ -163,6 +200,7 @@ export interface ContainerOptions {
   secrets?: SecretsWiring | null
   github?: Partial<GitHubWiring>
   slack?: Partial<SlackWiring>
+  auth?: Partial<AuthWiring>
   appBaseUrl?: string | null
 }
 
@@ -200,6 +238,23 @@ function githubWiring(options: Partial<GitHubWiring> | undefined): GitHubWiring 
   }
 }
 
+/**
+ * A month. Long enough that somebody is not signed out mid-week, short enough
+ * that a cookie lifted off a laptop is not a permanent credential.
+ */
+export const DEFAULT_SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000
+
+function authWiring(options: Partial<AuthWiring> | undefined): AuthWiring {
+  return {
+    // `open` by default, so an existing deployment and local mode keep working
+    // and closing the door is a decision somebody made rather than an upgrade
+    // that locked them out of their own board.
+    mode: options?.mode ?? 'open',
+    environmentApiKey: configured(options?.environmentApiKey),
+    sessionLifetimeMs: options?.sessionLifetimeMs ?? DEFAULT_SESSION_LIFETIME_MS,
+  }
+}
+
 /** Beside `githubWiring`, and here for the same reason: blank counts as absent. */
 function slackWiring(options: Partial<SlackWiring> | undefined): SlackWiring {
   return {
@@ -233,6 +288,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     secretsRejectedReason: secrets.rejectedReason,
     github: githubWiring(options.github),
     slack: slackWiring(options.slack),
+    auth: authWiring(options.auth),
     appBaseUrl: configured(options.appBaseUrl),
   }
 }

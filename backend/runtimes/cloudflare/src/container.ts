@@ -18,12 +18,15 @@ import { createD1Repositories } from '@sainte-beuve/persistence-d1'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
 import {
   type AppContainer,
+  type AuthWiring,
   createContainer,
   DEFAULT_GITHUB_LABELS,
+  DEFAULT_SESSION_LIFETIME_MS,
   type EnvironmentVcsGateways,
   InMemoryAttentionBus,
   type SecretsWiring,
   secretsFrom,
+  withAppOrigin,
 } from '@sainte-beuve/server'
 import type { WorkerEnv } from './env.js'
 
@@ -258,13 +261,42 @@ export function containerFor(env: WorkerEnv): AppContainer {
       signingSecret: env.SLACK_SIGNING_SECRET || null,
       announcementChannelId: env.SLACK_CHANNEL_ID || null,
     },
+    auth: authFor(env),
     appBaseUrl: env.APP_BASE_URL || null,
   })
 }
 
+/**
+ * How much this Worker insists on knowing who is calling.
+ *
+ * Anything but the literal `required` is `open`, including a typo: a variable
+ * nobody can spell must not be the difference between a closed deployment and
+ * an open one that thinks it is closed, and `/health` reports what took effect.
+ */
+function authFor(env: WorkerEnv): AuthWiring {
+  const lifetime = Number.parseInt(env.AUTH_SESSION_LIFETIME_MS ?? '', 10)
+  return {
+    mode: env.AUTH_MODE?.trim().toLowerCase() === 'required' ? 'required' : 'open',
+    environmentApiKey: env.AUTH_API_KEY || null,
+    sessionLifetimeMs:
+      Number.isNaN(lifetime) || lifetime <= 0 ? DEFAULT_SESSION_LIFETIME_MS : lifetime,
+  }
+}
+
+/**
+ * The origins this Worker answers.
+ *
+ * The SPA's own origin is folded in, because a deployment that said where its
+ * SPA lives has NAMED an origin: the client sends `credentials: 'include'` on
+ * every call and a browser refuses any answer to one carrying
+ * `Access-Control-Allow-Origin: *`, so a hosted deployment left on the wildcard
+ * `wrangler.toml` ships would otherwise lose every request rather than only its
+ * sign-in. Node reads it the same way. See `withAppOrigin`.
+ */
 export function corsOriginsFor(env: WorkerEnv): string[] {
   const configured = env.CORS_ORIGINS?.split(',')
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0)
-  return configured === undefined || configured.length === 0 ? ['*'] : configured
+  const origins = configured === undefined || configured.length === 0 ? ['*'] : configured
+  return withAppOrigin(origins, env.APP_BASE_URL)
 }

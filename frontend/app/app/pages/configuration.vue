@@ -16,15 +16,56 @@ const api = useSainteBeuveApi()
 const route = useRoute()
 const toast = useToast()
 
+const auth = useAuthState()
+
 const { data, pending, error, refresh } = await useAsyncData('configuration', async () => {
-  const [connections, settings] = await Promise.all([
+  // Who is calling is read FIRST and ON ITS OWN, which is the whole shape of
+  // this. Everything below it is under `/api/v1/settings` and is refused
+  // outright on a `required` deployment nobody has signed in to yet, while the
+  // Access card this feeds holds the only sign-in button there is: a page that
+  // let that refusal take the card down with it would make the documented way
+  // in unreachable in the one mode it exists for. `auth.refresh()` never
+  // rejects, so this settles either way.
+  await auth.refresh()
+  // The rest is one call for the reason the two credential reads are one call:
+  // minting a key and connecting a host both change what this page says about
+  // who may call, and a card that refreshed only its own half would report a
+  // state that never existed.
+  const [connections, settings, keys] = await Promise.all([
     api.getConnections(),
     api.getIntegrationSettings(),
+    api.listApiKeys(),
   ])
-  return { connections, integrations: settings.integrations }
+  return { connections, integrations: settings.integrations, apiKeys: keys.apiKeys }
 })
 
 const { busy, run } = useApiAction({ refresh })
+
+/** The one time a minted key is readable. See AccessCard. */
+const issuedKey = ref<string | null>(null)
+
+async function mintKey(label: string) {
+  let token: string | null = null
+  const minted = await run(
+    async () => {
+      token = (await api.createApiKey(label)).token
+    },
+    'Could not mint an API key',
+    'create-key',
+  )
+  if (minted) issuedKey.value = token
+}
+
+function revokeKey(keyId: string) {
+  // Cleared first: leaving a secret on screen beside a list it is no longer in
+  // invites somebody to store a key that stopped working a moment ago.
+  issuedKey.value = null
+  return run(() => api.revokeApiKey(keyId), 'Could not revoke the API key', keyId)
+}
+
+async function endSession() {
+  await run(() => api.signOut(), 'Could not sign out', 'sign-out')
+}
 
 // The credential inputs, so a successful save can clear the one it landed on.
 // Held on the page rather than inside each field because only the page knows
@@ -115,6 +156,20 @@ async function connect(start: () => Promise<{ url: string }>, failure: string, k
   if (started && url !== null) window.location.assign(url)
 }
 
+/**
+ * Start a sign-in that establishes a SESSION, as opposed to the button on a host
+ * card, which connects the deployment's own credential. Two flows over one OAuth
+ * client, because one of them is an operator acting on shared state.
+ */
+function signIn(provider: string) {
+  if (!isVcsProvider(provider)) return
+  return connect(
+    () => api.startSessionSignIn(provider),
+    'Could not start the sign-in',
+    `sign-in-${provider}`,
+  )
+}
+
 async function signOut(provider: VcsProvider) {
   await run(
     () => api.disconnectSignIn(provider),
@@ -154,6 +209,26 @@ onMounted(() => {
         Refresh
       </UButton>
     </div>
+
+    <!--
+      Outside the block below, and above the failure it reports. The rest of this
+      screen reads the credential routes, which a `required` deployment refuses
+      to anybody who has not signed in — and signing in is what this card is for.
+      Its key half takes `null` for "this caller could not read them", which is
+      the same refusal seen from the other side.
+    -->
+    <AccessCard
+      v-if="auth.state.value"
+      v-model:issued="issuedKey"
+      class="mb-4"
+      :state="auth.state.value"
+      :api-keys="data?.apiKeys ?? null"
+      :busy="busy"
+      @sign-in="signIn($event)"
+      @sign-out="endSession()"
+      @create-key="mintKey($event)"
+      @revoke-key="revokeKey($event)"
+    />
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the configuration" />
 

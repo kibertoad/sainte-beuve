@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.js'
+import { withAppOrigin } from '../src/http/origins.js'
 import {
   PR,
   type TestHarness,
@@ -36,6 +37,9 @@ describe('review board API', () => {
       // Answered by READING the store, not by naming it: see the degraded case
       // below for what the name alone cannot tell an operator.
       persistenceReady: true,
+      // Beside the store for the same reason: every deployment has an answer
+      // and the one an operator has to be able to read from outside is WHICH.
+      auth: { mode: 'open', signInProviders: [], environmentApiKey: false },
       capabilities: {
         chat: false,
         vcs: { github: false, gitlab: false },
@@ -193,16 +197,115 @@ describe('review board API', () => {
     await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'in_review' }))
     expect(await outstanding(harness, reviewer.id)).toBe(1)
   })
+})
 
-  it('allows the SPA on the wildcard every runtime defaults to', async () => {
+/**
+ * Which origins this deployment answers, and which of them may change anything.
+ *
+ * Its own block rather than a tail on the board cases: the rule is about the
+ * browser in front of the API rather than about reviews, and both halves of it —
+ * what CORS echoes, and what the write guard refuses — have to be read together.
+ */
+describe('which origins it answers', () => {
+  let harness: TestHarness
+
+  beforeEach(() => {
+    harness = buildHarness()
+  })
+
+  it('answers the local SPA by name, so it can send its session', async () => {
+    // Loopback is echoed rather than covered by the wildcard, and the
+    // difference is the whole of local development: the credentials header is
+    // invalid beside `*`, so a page answered with the wildcard may read the
+    // board and may never send its cookie.
     const res = await harness.app.fetch(
       new Request('http://localhost/api/v1/reviews', {
         headers: { origin: 'http://localhost:3000' },
       }),
     )
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000')
+    expect(res.headers.get('access-control-allow-credentials')).toBe('true')
+  })
+
+  it('allows any other origin to read on the wildcard every runtime defaults to', async () => {
+    const res = await harness.app.fetch(
+      new Request('http://localhost/api/v1/reviews', {
+        headers: { origin: 'https://somebody-elses-page.example' },
+      }),
+    )
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
-    // A wildcard and credentials are invalid together, so the pair is never sent.
+    // A wildcard and credentials are invalid together, so the pair is never
+    // sent: an origin this deployment did not name reads, and is nobody.
+    //
+    // A browser refuses `*` OUTRIGHT on a request that asked to send a
+    // credential, and the SPA's client asks on every call — so this is a read
+    // for a client that did not, and is why a deployment's own SPA origin is
+    // folded in rather than left to the wildcard. See `withAppOrigin`.
     expect(res.headers.get('access-control-allow-credentials')).toBeNull()
+  })
+
+  it('names the SPA a deployment said it has, so the wildcard default is not a trap', async () => {
+    const listed = buildHarness()
+    const app = createApp({
+      resolveContainer: () => listed.container,
+      // What a runtime facade computes: the wildcard it ships, plus the origin
+      // of the APP_BASE_URL the deployment already had to set.
+      corsOrigins: withAppOrigin(['*'], 'https://board.example.com/'),
+    })
+
+    const res = await app.fetch(
+      new Request('http://localhost/api/v1/reviews', {
+        headers: { origin: 'https://board.example.com' },
+      }),
+    )
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://board.example.com')
+    expect(res.headers.get('access-control-allow-credentials')).toBe('true')
+  })
+
+  it('refuses a cross-site write even where no preflight would have run', async () => {
+    // A `text/plain` POST from another page is a SIMPLE request: there is no
+    // preflight to refuse, the browser sends the session cookie, and CORS
+    // withholds only the answer — by which time the write has happened.
+    const simplePost = (origin: string | null) =>
+      harness.app.fetch(
+        new Request('http://localhost/api/v1/projects', {
+          method: 'POST',
+          headers: {
+            'content-type': 'text/plain;charset=UTF-8',
+            ...(origin === null ? {} : { origin }),
+          },
+          body: JSON.stringify({ provider: 'github', owner: 'o', repo: 'r' }),
+        }),
+      )
+
+    const refused = await simplePost('https://evil.example.com')
+    expect(refused.status).toBe(403)
+    expect(await refused.text()).toContain('does not accept a write from a page on another origin')
+
+    // A caller that sets no `Origin` is not a browser: a CI job on an API key,
+    // or an inbound webhook, which is authenticated by its own signature.
+    expect((await simplePost(null)).status).not.toBe(403)
+    // Same origin is the deployment's own SPA, whatever the CORS list says.
+    expect((await simplePost('http://localhost')).status).not.toBe(403)
+  })
+
+  it('reads the origin a browser addressed rather than the one a proxy handed on', async () => {
+    // Behind a TLS terminator the request arrives as `http://` against an
+    // internal host, so comparing against the raw URL would have a deployment
+    // refusing its own SPA over a scheme it never sees.
+    const res = await harness.app.fetch(
+      new Request('http://internal-8788/api/v1/projects', {
+        method: 'POST',
+        headers: {
+          'content-type': 'text/plain;charset=UTF-8',
+          origin: 'https://board.example.com',
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'board.example.com',
+        },
+        body: '{}',
+      }),
+    )
+    expect(res.status).not.toBe(403)
   })
 
   it('does not let the wildcard cover a write', async () => {

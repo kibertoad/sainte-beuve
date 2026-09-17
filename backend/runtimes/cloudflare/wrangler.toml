@@ -16,6 +16,10 @@ head_sampling_rate = 1
 [triggers]
 crons = ["0 * * * *"]
 
+# A deployment serving its SPA from another origin lists it here, or sets
+# APP_BASE_URL, whose origin is folded in: the SPA's client sends
+# `credentials: 'include'` on every call and a browser refuses a `*` answer to
+# one outright, so the wildcard alone reaches no browser-served SPA.
 [vars]
 CORS_ORIGINS = "*"
 

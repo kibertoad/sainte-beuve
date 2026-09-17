@@ -88,6 +88,11 @@ export class HmacStateSigner implements StateSigner {
     // so a state minted to install an App would otherwise be presentable to the
     // sign-in callback, and each callback has to accept only its own.
     if (state.flow !== flow) return null
+    // The nonce has to BE there, for the reason the rest of this fails closed: a
+    // state signed by an older build of this deployment carries none, and a
+    // missing one compared against a missing cookie would match. See
+    // `RoundTripState`.
+    if (typeof state.nonce !== 'string' || state.nonce.length === 0) return null
     if (typeof state.exp !== 'number' || state.exp < this.clock.now()) return null
     return state
   }

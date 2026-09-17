@@ -4,9 +4,11 @@
 export { type AppOptions, type RequestScope, createApp } from './app.js'
 export {
   type AppContainer,
+  type AuthWiring,
   type ContainerOptions,
   createContainer,
   DEFAULT_GITHUB_LABELS,
+  DEFAULT_SESSION_LIFETIME_MS,
   type EnvironmentVcsGateways,
   type GitHubWiring,
   NO_VCS_GATEWAYS,
@@ -21,6 +23,7 @@ export {
   type WebCryptoSecretCipherOptions,
 } from './crypto/WebCryptoSecretCipher.js'
 export { errorBody, handleError, requireCapability } from './http/errors.js'
+export { withAppOrigin } from './http/origins.js'
 export { HINT_LENGTH, hintOf } from './integrations/credentials.js'
 export {
   type CredentialSource,
@@ -31,7 +34,13 @@ export {
   resolveVcs,
 } from './integrations/resolve.js'
 export { AttentionService, concerns, reaches } from './modules/attention/AttentionService.js'
+export { ApiKeyService, ENVIRONMENT_KEY_ID } from './modules/auth/ApiKeyService.js'
+export { AuthService } from './modules/auth/AuthService.js'
+export { SESSION_COOKIE } from './modules/auth/cookies.js'
+export { type RequestPrincipal } from './modules/auth/principal.js'
+export { SessionService } from './modules/auth/SessionService.js'
 export { ConnectionsService } from './modules/connections/ConnectionsService.js'
+export { PeopleService } from './modules/identity/PeopleService.js'
 export { ViewerService } from './modules/identity/ViewerService.js'
 export { ProjectService } from './modules/projects/ProjectService.js'
 export { WorkspaceService } from './modules/workspace/WorkspaceService.js'
