@@ -7,6 +7,7 @@ import {
   addReviewer,
   assignReviewer,
   buildHarness,
+  get,
   openReview,
   patch,
   post,
@@ -218,6 +219,9 @@ describe('which origins it answers', () => {
     // difference is the whole of local development: the credentials header is
     // invalid beside `*`, so a page answered with the wildcard may read the
     // board and may never send its cookie.
+    //
+    // This harness is addressed on `http://localhost`, which is the other half
+    // of the rule: BOTH sides loopback. See the hosted case below.
     const res = await harness.app.fetch(
       new Request('http://localhost/api/v1/reviews', {
         headers: { origin: 'http://localhost:3000' },
@@ -280,7 +284,7 @@ describe('which origins it answers', () => {
 
     const refused = await simplePost('https://evil.example.com')
     expect(refused.status).toBe(403)
-    expect(await refused.text()).toContain('does not accept a write from a page on another origin')
+    expect(await refused.text()).toContain('does not accept this request from a page on another')
 
     // A caller that sets no `Origin` is not a browser: a CI job on an API key,
     // or an inbound webhook, which is authenticated by its own signature.
@@ -325,6 +329,42 @@ describe('which origins it answers', () => {
     expect((await preflight('http://localhost:3000')).headers.get(ALLOW_ORIGIN)).toBe(
       'http://localhost:3000',
     )
+  })
+
+  it("does not hand a hosted deployment to a page on the operator's machine", async () => {
+    // The same wildcard, and the deployment is NOT the local one. A page on
+    // `http://localhost:<port>` is then some other program on that machine — a
+    // dev server, an installed app, a package's postinstall — and echoing it by
+    // name would give it the credentials header, and with it the operator's
+    // session on every route the Configuration screen uses.
+    const hosted = (path: string, headers: Record<string, string>) =>
+      harness.app.fetch(new Request(`https://api.example.com${path}`, { headers }))
+
+    const board = await hosted('/api/v1/reviews', { origin: 'http://localhost:3000' })
+    // The wildcard it would have given any other unnamed origin, which a
+    // browser refuses outright on a request that asked to send a credential.
+    expect(board.headers.get(ALLOW_ORIGIN)).toBe('*')
+    expect(board.headers.get('access-control-allow-credentials')).toBeNull()
+
+    // And the routes the wildcard never covered are refused outright rather
+    // than answered without a CORS header: the read has already happened by
+    // then, and this one reads the deployment's credentials.
+    const keys = await hosted('/api/v1/settings/api-keys', { origin: 'http://localhost:3000' })
+    expect(keys.status).toBe(403)
+    expect(keys.headers.get(ALLOW_ORIGIN)).toBeNull()
+  })
+
+  it('refuses a cross-site AI-review read, whose GET is not a read', async () => {
+    // Answering one polls cat-factory with this deployment's key and writes
+    // what it learns onto the run. CORS withholds the answer from a page on
+    // another origin; it does not withhold the spend, so the guard has to
+    // refuse the request rather than hide it.
+    const res = await harness.app.fetch(
+      get('/api/v1/ai-review/runs/run-1', { origin: 'https://evil.example.com' }),
+    )
+    expect(res.status).toBe(403)
+    // The deployment's own SPA is not touched by it: same origin, no `Origin`.
+    expect((await harness.app.fetch(get('/api/v1/ai-review/runs/run-1'))).status).not.toBe(403)
   })
 
   it('answers only the origins a deployment listed', async () => {

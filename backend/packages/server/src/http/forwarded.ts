@@ -43,3 +43,20 @@ export function requestOrigin(c: ForwardedRequest): string {
   const proto = forwardedProto(c) ?? url.protocol.replace(':', '')
   return `${proto}://${firstValue(c.req.header('x-forwarded-host')) ?? url.host}`
 }
+
+/**
+ * The HOSTNAME the browser addressed, which is the half of the origin that
+ * decides whether a cookie is cross-site: `SameSite` is a rule about sites, so
+ * the scheme and the port are not part of the question.
+ *
+ * Falls back to this process's own URL when what was forwarded does not parse,
+ * because a header somebody in front set badly is not a reason to fail a
+ * sign-in — it is a reason to answer what we can see ourselves.
+ */
+export function requestHostname(c: ForwardedRequest): string {
+  try {
+    return new URL(requestOrigin(c)).hostname
+  } catch {
+    return new URL(c.req.url).hostname
+  }
+}

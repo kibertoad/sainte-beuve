@@ -21,8 +21,8 @@ Harden the integration credential store behind the Configuration screen.
   while the gateway is still built from the environment.
 - `/api/v1/settings` is excluded from the wildcard CORS default. A hosted deployment
   names its SPA origin in `CORS_ORIGINS` for the Configuration screen to work, and
-  loopback passes for local mode; without that, any page an operator visited could
-  preflight a write into the token store.
+  loopback passes for a loopback deployment, which is local mode; without that, any
+  page an operator visited could preflight a write into the token store.
 - 503 from the store distinguishes "no encryption key is configured" from "the key
   this deployment has was refused, because ...".
 - Local mode generates its per-boot key even when a copied `.env` carries
