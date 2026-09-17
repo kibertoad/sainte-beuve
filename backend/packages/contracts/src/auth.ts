@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { identityProviderSchema, viewerSchema } from './identity.js'
+import { orgSchema, roleSchema } from './orgs.js'
 
 // ---------------------------------------------------------------------------
 // Who is calling, and on what authority.
@@ -96,6 +97,18 @@ export const authStateSchema = v.object({
   mode: authModeSchema,
   principal: principalSchema,
   /**
+   * The tenancy this request is in, and what the caller may do inside it.
+   *
+   * Beside the principal rather than inside it, because all three kinds of
+   * caller have one: an anonymous caller on an `open` deployment is in the
+   * default org, a key is in the org it was minted in, and a session is in the
+   * org it was established in. A screen reads `role` to decide whether to draw
+   * the Configuration screen at all, so it has to be answered for every caller
+   * the guard let through rather than only for the ones with a reviewer row.
+   */
+  org: orgSchema,
+  role: roleSchema,
+  /**
    * The hosts a sign-in can actually be started on: an OAuth client is
    * configured for them AND this deployment can sign the round trip. Empty means
    * nobody can sign in here, which is the state a `required` deployment must not
@@ -114,6 +127,13 @@ export const apiKeySchema = v.object({
   id: v.string(),
   /** What it is for, typed by whoever minted it. The only way to tell two apart. */
   label: v.string(),
+  /**
+   * What the key may do in its org. Carried on the ROW rather than derived from
+   * whoever minted it: a key outlives the person who made it, and a CI job that
+   * silently inherited an operator's admin is how a build script comes to be
+   * able to revoke the credentials it runs on.
+   */
+  role: roleSchema,
   /** The last four characters of the key, so a row can be matched to a secret store. */
   hint: v.string(),
   /** The reviewer who minted it, when a person did. Null for one the deployment carries. */
@@ -126,6 +146,12 @@ export type ApiKey = v.InferOutput<typeof apiKeySchema>
 
 export const createApiKeyInputSchema = v.object({
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
+  /**
+   * `member` unless the caller says otherwise, because most keys are a job that
+   * reads the board and the safe default for a durable bearer credential is the
+   * narrower one. Only an admin can mint either.
+   */
+  role: v.optional(roleSchema, 'member'),
 })
 export type CreateApiKeyInput = v.InferOutput<typeof createApiKeyInputSchema>
 

@@ -5,9 +5,8 @@ import type {
   StoredApiKey,
   StoredSession,
 } from '@sainte-beuve/kernel'
-import { desc, eq, lte } from 'drizzle-orm'
+import { and, desc, eq, lte } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
-import { firstOr } from './rows.js'
 import { apiKeys, sessions } from './schema.js'
 
 /**
@@ -17,15 +16,20 @@ import { apiKeys, sessions } from './schema.js'
  * one that matters is a DIGEST rather than the credential. A dump of either
  * table lets nobody present anything, which is what makes the durable store no
  * more sensitive than the in-memory one it replaces.
+ *
+ * Both rows carry an `org_id`, and both tables are read TWICE with different
+ * scoping. Everything a request does once it knows where it is goes through the
+ * org-bound stores below; resolving a digest is what DECIDES where it is, so it
+ * happens across the whole table and is not a method these classes carry. That
+ * read lives on `PostgresTenancyDirectory` in `provider.ts`, the only place in
+ * this package that queries without an org.
  */
 
 export class PostgresSessionRepository implements SessionRepository {
-  constructor(private readonly db: PostgresDatabase) {}
-
-  async findByDigest(tokenDigest: string): Promise<StoredSession | null> {
-    const rows = await this.db.select().from(sessions).where(eq(sessions.tokenDigest, tokenDigest))
-    return firstOr(rows)
-  }
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async create(session: StoredSession): Promise<StoredSession> {
     await this.db.insert(sessions).values(session)
@@ -34,15 +38,22 @@ export class PostgresSessionRepository implements SessionRepository {
 
   /** One column, so a request that is only recording it does not rewrite the row. */
   async touch(sessionId: string, lastSeenAt: EpochMs): Promise<void> {
-    await this.db.update(sessions).set({ lastSeenAt }).where(eq(sessions.id, sessionId))
+    await this.db
+      .update(sessions)
+      .set({ lastSeenAt })
+      .where(and(eq(sessions.orgId, this.orgId), eq(sessions.id, sessionId)))
   }
 
   async delete(sessionId: string): Promise<void> {
-    await this.db.delete(sessions).where(eq(sessions.id, sessionId))
+    await this.db
+      .delete(sessions)
+      .where(and(eq(sessions.orgId, this.orgId), eq(sessions.id, sessionId)))
   }
 
   async deleteForReviewer(reviewerId: string): Promise<void> {
-    await this.db.delete(sessions).where(eq(sessions.reviewerId, reviewerId))
+    await this.db
+      .delete(sessions)
+      .where(and(eq(sessions.orgId, this.orgId), eq(sessions.reviewerId, reviewerId)))
   }
 
   /**
@@ -54,22 +65,24 @@ export class PostgresSessionRepository implements SessionRepository {
   async deleteExpired(now: EpochMs): Promise<number> {
     const removed = await this.db
       .delete(sessions)
-      .where(lte(sessions.expiresAt, now))
+      .where(and(eq(sessions.orgId, this.orgId), lte(sessions.expiresAt, now)))
       .returning({ id: sessions.id })
     return removed.length
   }
 }
 
 export class PostgresApiKeyRepository implements ApiKeyRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async list(): Promise<StoredApiKey[]> {
-    return this.db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt), desc(apiKeys.id))
-  }
-
-  async findByDigest(tokenDigest: string): Promise<StoredApiKey | null> {
-    const rows = await this.db.select().from(apiKeys).where(eq(apiKeys.tokenDigest, tokenDigest))
-    return firstOr(rows)
+    return this.db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.orgId, this.orgId))
+      .orderBy(desc(apiKeys.createdAt), desc(apiKeys.id))
   }
 
   async create(key: StoredApiKey): Promise<StoredApiKey> {
@@ -78,10 +91,13 @@ export class PostgresApiKeyRepository implements ApiKeyRepository {
   }
 
   async touch(keyId: string, lastUsedAt: EpochMs): Promise<void> {
-    await this.db.update(apiKeys).set({ lastUsedAt }).where(eq(apiKeys.id, keyId))
+    await this.db
+      .update(apiKeys)
+      .set({ lastUsedAt })
+      .where(and(eq(apiKeys.orgId, this.orgId), eq(apiKeys.id, keyId)))
   }
 
   async delete(keyId: string): Promise<void> {
-    await this.db.delete(apiKeys).where(eq(apiKeys.id, keyId))
+    await this.db.delete(apiKeys).where(and(eq(apiKeys.orgId, this.orgId), eq(apiKeys.id, keyId)))
   }
 }

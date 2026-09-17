@@ -12,10 +12,10 @@ import type {
   GatewayFactory,
   Logger,
   PersistenceKind,
-  Repositories,
+  PersistenceProvider,
 } from '@sainte-beuve/kernel'
-import { createD1Repositories } from '@sainte-beuve/persistence-d1'
-import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
+import { createD1Store } from '@sainte-beuve/persistence-d1'
+import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
 import {
   type AppContainer,
   type AuthWiring,
@@ -40,7 +40,7 @@ import type { WorkerEnv } from './env.js'
  * buys is `wrangler dev` and a first deploy that work before anybody has
  * created a database.
  */
-const fallbackRepositories = createInMemoryRepositories()
+const fallbackStores = createInMemoryPersistence()
 
 /**
  * The store this request runs against.
@@ -50,10 +50,10 @@ const fallbackRepositories = createInMemoryRepositories()
  * three methods over `prepare`, so building it per request costs nothing worth
  * caching.
  */
-function storeFor(env: WorkerEnv): { repositories: Repositories; kind: PersistenceKind } {
+function storeFor(env: WorkerEnv): { stores: PersistenceProvider; kind: PersistenceKind } {
   return env.DB === undefined
-    ? { repositories: fallbackRepositories, kind: 'memory' }
-    : { repositories: createD1Repositories(env.DB), kind: 'd1' }
+    ? { stores: fallbackStores, kind: 'memory' }
+    : { stores: createD1Store(env.DB), kind: 'd1' }
 }
 
 /**
@@ -231,7 +231,7 @@ function buildVcs(env: WorkerEnv): EnvironmentVcsGateways {
 export function containerFor(env: WorkerEnv): AppContainer {
   const store = storeFor(env)
   return createContainer({
-    repositories: store.repositories,
+    stores: store.stores,
     persistence: store.kind,
     logger: workerLogger,
     chat: buildChat(env),

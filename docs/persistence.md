@@ -1,6 +1,6 @@
 # Where the board lives
 
-Three implementations of the same nine repository ports, and one suite that
+Three implementations of the same eleven repository ports, and one suite that
 holds them to one behaviour:
 
 | Store                      | Package                              | Used by                                             |
@@ -31,23 +31,35 @@ store is a behaviour proved for the code path every deployment runs.
 
 ## One schema, in two dialects
 
-Both durable stores carry the same eleven tables with the same columns. Only the
+Both durable stores carry the same twelve tables with the same columns. Only the
 types differ, because only the types have to: `jsonb` where SQLite has `TEXT`,
 `bigint` where it has `INTEGER`.
 
-| Table                | Key                   | Columns beside `data`                                                                                                  |
-| -------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `reviewers`          | `id`                  | `outstanding_reviews`, `created_at`                                                                                    |
-| `review_requests`    | `id`                  | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at`                                                             |
-| `reminders`          | `id`                  | `review_id`, `status`, `due_at`                                                                                        |
-| `ai_review_runs`     | `id`                  | `review_id`, `requested_at`                                                                                            |
-| `integration_tokens` | `integration_id`      | `sealed`, `hint`, `subject`, `updated_at` (no payload)                                                                 |
-| `projects`           | `id`                  | `ref_key` (UNIQUE), `created_at`                                                                                       |
-| `identities`         | `(provider, subject)` | `reviewer_id`                                                                                                          |
-| `attention_requests` | `id`                  | `status`, `created_at`                                                                                                 |
-| `review_commitments` | `id`                  | `reviewer_id`, `pull_request_key`, `created_at`                                                                        |
-| `sessions`           | `id`                  | `token_digest` (UNIQUE), `reviewer_id`, `provider`, `subject`, `created_at`, `last_seen_at`, `expires_at` (no payload) |
-| `api_keys`           | `id`                  | `token_digest` (UNIQUE), `label`, `hint`, `created_by`, `created_at`, `last_used_at` (no payload)                      |
+**Every table but `orgs` is keyed on `(org_id, …)`.** The tenancy is IN the
+primary key rather than beside it, because a tenancy a query can omit is one a
+query will omit: in the key, a statement that forgot the org does not quietly
+read another one's rows, it fails to parse. See [orgs.md](./orgs.md) for how the
+org gets there — no port method takes one, and no service passes one.
+
+| Table                | Key                           | Columns beside `data`                                                                                                           |
+| -------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `orgs`               | `id`                          | `slug` (UNIQUE), `created_at`                                                                                                   |
+| `reviewers`          | `(org_id, id)`                | `outstanding_reviews`, `created_at`                                                                                             |
+| `review_requests`    | `(org_id, id)`                | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at`                                                                      |
+| `reminders`          | `(org_id, id)`                | `review_id`, `status`, `due_at`                                                                                                 |
+| `ai_review_runs`     | `(org_id, id)`                | `review_id`, `requested_at`                                                                                                     |
+| `integration_tokens` | `(org_id, integration_id)`    | `sealed`, `hint`, `subject`, `updated_at` (no payload)                                                                          |
+| `projects`           | `(org_id, id)`                | `ref_key` (UNIQUE per org), `created_at`                                                                                        |
+| `identities`         | `(org_id, provider, subject)` | `reviewer_id`                                                                                                                   |
+| `attention_requests` | `(org_id, id)`                | `status`, `created_at`                                                                                                          |
+| `review_commitments` | `(org_id, id)`                | `reviewer_id`, `pull_request_key`, `created_at`                                                                                 |
+| `sessions`           | `(org_id, id)`                | `token_digest` (UNIQUE globally), `reviewer_id`, `provider`, `subject`, `created_at`, `last_seen_at`, `expires_at` (no payload) |
+| `api_keys`           | `(org_id, id)`                | `token_digest` (UNIQUE globally), `label`, `role`, `hint`, `created_by`, `created_at`, `last_used_at` (no payload)              |
+
+The two digests are the exception, and unique across EVERY org: a digest is what
+decides which org a request is in, so it is read before there is an org to scope
+it by, and two rows for one value would make which board a cookie opens depend on
+which row the planner reached first.
 
 `integration_tokens`, `sessions` and `api_keys` are the three tables with no
 payload column, and for one reason: every field in them is queried or shown, and

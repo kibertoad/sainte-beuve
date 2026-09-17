@@ -11,6 +11,7 @@ import type {
   ReviewCommitment,
   ReviewRequest,
   ReviewStatus,
+  Role,
 } from '@sainte-beuve/contracts'
 import type { EpochMs } from '../domain/types.js'
 
@@ -53,6 +54,13 @@ export function isStoredRowError(err: unknown): err is StoredRowError {
  *
  * The methods are deliberately coarse: `listDue` rather than a query builder, so a
  * store can answer it with one index and no caller can accidentally write an N+1.
+ *
+ * NONE OF THEM TAKES AN ORG. Every repository below is already bound to one
+ * before a service can reach it (`PersistenceProvider.forOrg`), so the tenancy
+ * is a property of the object rather than an argument every call site has to
+ * remember. That is the difference between a boundary and a convention: a
+ * `listDue(orgId, now, limit)` is one forgotten parameter away from answering
+ * with somebody else's reminders, and there is no parameter here to forget.
  */
 
 export interface ReviewerRepository {
@@ -217,6 +225,13 @@ export interface StoredSession {
    * gain over a value that cannot be searched for in the first place.
    */
   tokenDigest: string
+  /**
+   * The tenancy this session is in, decided when it was established and never
+   * afterwards. It is what `PersistenceProvider.forOrg` is handed on every
+   * request the cookie arrives on, so a session cannot be carried across the
+   * boundary by anything the caller sends.
+   */
+  orgId: string
   /** The person, as `@sainte-beuve/contracts` means it: a reviewer row. */
   reviewerId: string
   /** The host account they proved, keyed the way an identity always is. */
@@ -228,14 +243,14 @@ export interface StoredSession {
 }
 
 /**
- * The sessions a browser is carried by.
+ * The sessions a browser is carried by, within one org.
  *
- * Keyed by id, looked up by DIGEST, which is the one read on every authenticated
- * request and therefore the one a store has to index.
+ * The read on every authenticated request is NOT here: resolving a digest is
+ * what decides which org the request is in, so it cannot be asked of a store
+ * already bound to one. It lives on `TenancyDirectory` instead, and what is left
+ * here is everything a request does once it knows where it is.
  */
 export interface SessionRepository {
-  /** The session a presented token belongs to, expired or not: the caller decides. */
-  findByDigest(tokenDigest: string): Promise<StoredSession | null>
   create(session: StoredSession): Promise<StoredSession>
   /** Move `lastSeenAt` without rewriting the row. A no-op for a session that is gone. */
   touch(sessionId: string, lastSeenAt: EpochMs): Promise<void>
@@ -261,7 +276,11 @@ export interface SessionRepository {
 export interface StoredApiKey {
   id: string
   tokenDigest: string
+  /** The tenancy the key was minted in. Fixed at mint time, like a session's. */
+  orgId: string
   label: string
+  /** What the key may do in that org. See `roleSchema`. */
+  role: Role
   /** The last four characters, so a row can be matched to an entry in a secret store. */
   hint: string
   /** The reviewer who minted it, when a person did. Null for one nobody is behind. */
@@ -273,7 +292,6 @@ export interface StoredApiKey {
 export interface ApiKeyRepository {
   /** Newest first, which is the order a directory of credentials is read in. */
   list(): Promise<StoredApiKey[]>
-  findByDigest(tokenDigest: string): Promise<StoredApiKey | null>
   create(key: StoredApiKey): Promise<StoredApiKey>
   touch(keyId: string, lastUsedAt: EpochMs): Promise<void>
   delete(keyId: string): Promise<void>

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { roleSchema } from './orgs.js'
 import { NO_VCS_HANDLES, vcsHandlesSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,18 @@ export const reviewerSchema = v.object({
   skills: v.array(skillSchema),
   availability: reviewerAvailabilitySchema,
   /**
+   * What this person may do in their org. It is here rather than on a membership
+   * table of its own because the reviewer row IS the membership: a person exists
+   * in exactly one org's directory, and a second table would be a second row to
+   * keep in step for one fact.
+   *
+   * `member` for a row that predates the field, which is why the migration
+   * backfills the rows that already existed to `admin` instead of leaning on
+   * this default: a deployment upgrading into the boundary must not wake up with
+   * a Configuration screen nobody can reach.
+   */
+  role: v.optional(roleSchema, 'member'),
+  /**
    * Relative share of the review load. A 0.5 reviewer is picked about half as often
    * as a 1.0 one at equal outstanding load: the lever for part-time members and for
    * people ramping up on a codebase.
@@ -72,6 +85,7 @@ export const createReviewerSchema = v.object({
   team: v.optional(v.nullable(v.string()), null),
   skills: v.optional(v.array(skillSchema), () => []),
   availability: v.optional(reviewerAvailabilitySchema, 'available'),
+  role: v.optional(roleSchema, 'member'),
   weight: v.optional(reviewerSchema.entries.weight, 1),
 })
 export type CreateReviewer = v.InferOutput<typeof createReviewerSchema>
@@ -91,6 +105,7 @@ export const updateReviewerSchema = v.partial(
     team: v.nullable(v.string()),
     skills: v.array(skillSchema),
     availability: reviewerAvailabilitySchema,
+    role: roleSchema,
     weight: reviewerSchema.entries.weight,
   }),
 )

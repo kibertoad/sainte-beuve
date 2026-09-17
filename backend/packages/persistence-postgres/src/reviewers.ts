@@ -1,6 +1,6 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
 import type { ReviewerRepository } from '@sainte-beuve/kernel'
-import { asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
 import { reviewers } from './schema.js'
@@ -30,18 +30,25 @@ function toReviewer(row: ReviewerRow): Reviewer {
 }
 
 export class PostgresReviewerRepository implements ReviewerRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async list(): Promise<Reviewer[]> {
     const rows = await this.db
       .select()
       .from(reviewers)
+      .where(eq(reviewers.orgId, this.orgId))
       .orderBy(asc(reviewers.createdAt), asc(reviewers.id))
     return rows.map(toReviewer)
   }
 
   async getById(reviewerId: string): Promise<Reviewer | null> {
-    const rows = await this.db.select().from(reviewers).where(eq(reviewers.id, reviewerId))
+    const rows = await this.db
+      .select()
+      .from(reviewers)
+      .where(and(eq(reviewers.orgId, this.orgId), eq(reviewers.id, reviewerId)))
     const row = firstOr(rows)
     return row === null ? null : toReviewer(row)
   }
@@ -68,20 +75,21 @@ export class PostgresReviewerRepository implements ReviewerRepository {
       .set({
         outstandingReviews: sql`GREATEST(${reviewers.outstandingReviews} + ${delta}, 0)`,
       })
-      .where(eq(reviewers.id, reviewerId))
+      .where(and(eq(reviewers.orgId, this.orgId), eq(reviewers.id, reviewerId)))
   }
 
   private async write(reviewer: Reviewer): Promise<void> {
     await this.db
       .insert(reviewers)
       .values({
+        orgId: this.orgId,
         id: reviewer.id,
         outstandingReviews: reviewer.outstandingReviews,
         createdAt: reviewer.createdAt,
         data: reviewer,
       })
       .onConflictDoUpdate({
-        target: reviewers.id,
+        target: [reviewers.orgId, reviewers.id],
         set: { createdAt: reviewer.createdAt, data: reviewer },
       })
   }

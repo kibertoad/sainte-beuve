@@ -39,5 +39,22 @@ export function useAuthState() {
   /** Whether a sign-in could be started at all, which decides whether to offer one. */
   const canSignIn = computed(() => (state.value?.signInProviders ?? []).length > 0)
 
-  return { state, pending, viewer, canSignIn, refresh }
+  /**
+   * The org this browser is looking at. Null only while the read has not landed
+   * or could not be made, which is the same state `viewer` is null in.
+   */
+  const org = computed(() => state.value?.org ?? null)
+
+  /**
+   * Whether the caller may administer this org: credentials, keys, the registry,
+   * the directory.
+   *
+   * It defaults to FALSE while the state is unknown, which is the safe direction
+   * for a screen: an admin sees the Configuration link a moment late, where a
+   * member would otherwise see it and be refused by the API a click later. The
+   * API is the guard either way — this only decides what is worth offering.
+   */
+  const isAdmin = computed(() => state.value?.role === 'admin')
+
+  return { state, pending, viewer, org, isAdmin, canSignIn, refresh }
 }

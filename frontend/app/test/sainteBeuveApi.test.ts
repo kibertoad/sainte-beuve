@@ -50,6 +50,7 @@ const reviewer: Reviewer = {
   team: 'platform',
   skills: ['payments'],
   availability: 'available',
+  role: 'member',
   weight: 1,
   outstandingReviews: 0,
   createdAt: 1_000,

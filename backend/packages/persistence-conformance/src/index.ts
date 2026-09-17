@@ -16,11 +16,18 @@
 // `freshStore()` has to hand back EMPTY repositories: the cases write fixed ids
 // and read whole lists back, so a case that inherited the previous one's rows
 // would fail on the store that is fastest to set up and pass on the others.
+//
+// There are two lists. `repositoryConformanceCases` is written against one org's
+// `Repositories` and is what every behaviour is asserted through;
+// `tenancyConformanceCases` takes the whole `PersistenceProvider`, because what
+// it is about is the seam between two orgs and a store bound to one has no
+// method that reaches outside it. Both run three ways.
 
 import { apiKeyCases, sessionCases } from './auth-cases.js'
 import { aiReviewCases, integrationTokenCases, reminderCases, reviewCases } from './board-cases.js'
 import type { ConformanceCase } from './case.js'
 import { reviewerCases } from './reviewer-cases.js'
+import { type TenancyCase, tenancyConformanceCases as boundaryCases } from './tenancy-cases.js'
 import { attentionCases, commitmentCases, identityCases, projectCases } from './workspace-cases.js'
 
 /** Every case, in the order the ports are declared on `Repositories`. */
@@ -34,12 +41,22 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
   ...identityCases,
   ...attentionCases,
   ...commitmentCases,
+]
+
+/**
+ * The cases that need the whole provider: the boundary between two orgs, and the
+ * two credential tables, whose one interesting read is the digest lookup that
+ * DECIDES which org a request is in.
+ */
+export const tenancyConformanceCases: readonly TenancyCase[] = [
+  ...boundaryCases,
   ...sessionCases,
   ...apiKeyCases,
 ]
 
 export type { ConformanceCase } from './case.js'
 export { conformanceCase } from './case.js'
+export { type TenancyCase, tenancyCase } from './tenancy-cases.js'
 export {
   type StoredRowCase,
   storedRowConformanceCases,

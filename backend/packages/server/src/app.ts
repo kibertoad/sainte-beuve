@@ -11,6 +11,7 @@ import { authentication } from './modules/auth/principal.js'
 import { connectController } from './modules/connections/ConnectController.js'
 import { connectionsController } from './modules/connections/ConnectionsController.js'
 import { healthController } from './modules/health/HealthController.js'
+import { orgController } from './modules/orgs/OrgController.js'
 import { projectController } from './modules/projects/ProjectController.js'
 import { reviewerController } from './modules/reviewers/ReviewerController.js'
 import { aiReviewController } from './modules/reviews/AiReviewController.js'
@@ -72,8 +73,15 @@ const allowCredentials: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 }
 
-export function createApp(options: AppOptions): Hono<AppEnv> {
-  const app = new Hono<AppEnv>()
+/**
+ * Everything that runs before a route does, in the order it has to run in.
+ *
+ * Its own function because the order is the load-bearing part and reads better
+ * uninterrupted by the route table: CORS decides what a browser may READ, the
+ * origin guard decides what may RUN, and only then is the caller resolved and
+ * the container bound to their org.
+ */
+function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
   const { corsOrigins } = options
   const originsFor =
     typeof corsOrigins === 'function' ? corsOrigins : () => corsOrigins ?? [WILDCARD]
@@ -107,10 +115,19 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   )
 
   // After the container and before every route under it: the caller is resolved
-  // once per request, and a deployment that insists on knowing who is calling
-  // refuses here rather than in each controller. The webhook and connect paths
-  // sit outside `/api/v1` and are authenticated by their own signatures.
+  // once per request, a deployment that insists on knowing who is calling
+  // refuses here rather than in each controller, and the container is REBOUND to
+  // the org the caller's credential named, so every handler below reaches one
+  // tenancy and cannot address another. The webhook and connect paths sit
+  // outside `/api/v1`, are authenticated by their own signatures, and place
+  // themselves in an org from what the delivery is about (see
+  // `WebhookController`).
   app.use('/api/v1/*', authentication())
+}
+
+export function createApp(options: AppOptions): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+  mountMiddleware(app, options)
 
   app.route('/', healthController())
   app.route('/', webhookController())
@@ -122,6 +139,7 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
   app.route('/api/v1', aiReviewController())
+  app.route('/api/v1', orgController())
   app.route('/api/v1', settingsController())
   app.route('/api/v1', connectionsController())
 

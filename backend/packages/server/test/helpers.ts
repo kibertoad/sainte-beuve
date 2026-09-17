@@ -8,7 +8,7 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import type { ChatGateway, GatewayFactory, Logger, VcsGateway } from '@sainte-beuve/kernel'
-import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
+import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
 import type { Hono } from 'hono'
 import { expect } from 'vitest'
 import { createApp } from '../src/app.js'
@@ -68,7 +68,7 @@ export function buildHarness(
   const clock = fixedClock()
   const container: AppContainer = {
     ...createContainer({
-      repositories: createInMemoryRepositories(),
+      stores: createInMemoryPersistence(),
       logger: silentLogger(),
       clock,
       ids: sequentialIds(),

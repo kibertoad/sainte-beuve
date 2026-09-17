@@ -1,5 +1,5 @@
-import type { Logger, Repositories } from '@sainte-beuve/kernel'
-import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
+import type { Logger, PersistenceProvider } from '@sainte-beuve/kernel'
+import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createContainer, DEFAULT_GITHUB_LABELS } from '../src/container.js'
 
@@ -10,10 +10,10 @@ import { createContainer, DEFAULT_GITHUB_LABELS } from '../src/container.js'
 const logger: Logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
 
 describe('createContainer', () => {
-  let repositories: Repositories
+  let stores: PersistenceProvider
 
   beforeEach(() => {
-    repositories = createInMemoryRepositories()
+    stores = createInMemoryPersistence()
   })
 
   it('reads a blank configuration value as unconfigured', () => {
@@ -21,7 +21,7 @@ describe('createContainer', () => {
     // otherwise sail past the 503 that names the variable and reach Web Crypto,
     // which refuses a zero-length HMAC key.
     const blank = createContainer({
-      repositories,
+      stores,
       logger,
       github: { appSlug: '', webhookSecret: '', botLogin: '   ' },
       slack: { signingSecret: '', announcementChannelId: '' },
@@ -36,7 +36,7 @@ describe('createContainer', () => {
     // An empty review label matches no label at all, so labelling a pull request
     // would do nothing while the Configuration screen showed no fault.
     const blank = createContainer({
-      repositories,
+      stores,
       logger,
       github: { labels: { review: '', aiReview: 'ai', skillPrefix: '' } },
     })
@@ -49,7 +49,7 @@ describe('createContainer', () => {
 
   it('keeps what a deployment did configure', () => {
     const wired = createContainer({
-      repositories,
+      stores,
       logger,
       github: { webhookSecret: 'hook', botLogin: 'sainte-beuve-bot' },
       slack: { signingSecret: 'shh', announcementChannelId: 'C-reviews' },

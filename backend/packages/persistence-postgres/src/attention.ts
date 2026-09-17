@@ -8,7 +8,10 @@ import { attentionRequests, reviewCommitments } from './schema.js'
 
 /** The asks in flight, and the promises people made against pull requests. */
 export class PostgresAttentionRepository implements AttentionRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async list(filter?: { status?: AttentionStatus[] }): Promise<AttentionRequest[]> {
     const wanted = filter?.status
@@ -16,7 +19,12 @@ export class PostgresAttentionRepository implements AttentionRepository {
     const rows = await this.db
       .select()
       .from(attentionRequests)
-      .where(wanted === undefined ? undefined : inArray(attentionRequests.status, wanted))
+      .where(
+        and(
+          eq(attentionRequests.orgId, this.orgId),
+          wanted === undefined ? undefined : inArray(attentionRequests.status, wanted),
+        ),
+      )
       .orderBy(desc(attentionRequests.createdAt), desc(attentionRequests.id))
     return rows.map((row) => row.data)
   }
@@ -25,7 +33,7 @@ export class PostgresAttentionRepository implements AttentionRepository {
     const rows = await this.db
       .select()
       .from(attentionRequests)
-      .where(eq(attentionRequests.id, attentionId))
+      .where(and(eq(attentionRequests.orgId, this.orgId), eq(attentionRequests.id, attentionId)))
     return firstOr(rows)?.data ?? null
   }
 
@@ -47,6 +55,7 @@ export class PostgresAttentionRepository implements AttentionRepository {
 
   private async write(request: AttentionRequest): Promise<void> {
     const row = {
+      orgId: this.orgId,
       id: request.id,
       status: request.status,
       createdAt: request.createdAt,
@@ -55,18 +64,23 @@ export class PostgresAttentionRepository implements AttentionRepository {
     await this.db
       .insert(attentionRequests)
       .values(row)
-      .onConflictDoUpdate({ target: attentionRequests.id, set: row })
+      .onConflictDoUpdate({ target: [attentionRequests.orgId, attentionRequests.id], set: row })
   }
 }
 
 export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepository {
-  constructor(private readonly db: PostgresDatabase) {}
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
 
   async listByReviewer(reviewerId: string): Promise<ReviewCommitment[]> {
     const rows = await this.db
       .select()
       .from(reviewCommitments)
-      .where(eq(reviewCommitments.reviewerId, reviewerId))
+      .where(
+        and(eq(reviewCommitments.orgId, this.orgId), eq(reviewCommitments.reviewerId, reviewerId)),
+      )
       .orderBy(desc(reviewCommitments.createdAt), desc(reviewCommitments.id))
     return rows.map((row) => row.data)
   }
@@ -75,7 +89,7 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
     const rows = await this.db
       .select()
       .from(reviewCommitments)
-      .where(eq(reviewCommitments.id, commitmentId))
+      .where(and(eq(reviewCommitments.orgId, this.orgId), eq(reviewCommitments.id, commitmentId)))
     return firstOr(rows)?.data ?? null
   }
 
@@ -88,6 +102,7 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
       .from(reviewCommitments)
       .where(
         and(
+          eq(reviewCommitments.orgId, this.orgId),
           eq(reviewCommitments.reviewerId, reviewerId),
           eq(reviewCommitments.pullRequestKey, pullRequestKey(pullRequest)),
         ),
@@ -98,6 +113,7 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
 
   async create(commitment: ReviewCommitment): Promise<ReviewCommitment> {
     const row = {
+      orgId: this.orgId,
       id: commitment.id,
       reviewerId: commitment.reviewerId,
       pullRequestKey: pullRequestKey(commitment.pullRequest),
@@ -107,11 +123,13 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
     await this.db
       .insert(reviewCommitments)
       .values(row)
-      .onConflictDoUpdate({ target: reviewCommitments.id, set: row })
+      .onConflictDoUpdate({ target: [reviewCommitments.orgId, reviewCommitments.id], set: row })
     return commitment
   }
 
   async delete(commitmentId: string): Promise<void> {
-    await this.db.delete(reviewCommitments).where(eq(reviewCommitments.id, commitmentId))
+    await this.db
+      .delete(reviewCommitments)
+      .where(and(eq(reviewCommitments.orgId, this.orgId), eq(reviewCommitments.id, commitmentId)))
   }
 }

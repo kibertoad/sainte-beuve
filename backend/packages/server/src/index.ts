@@ -13,6 +13,7 @@ export {
   type GitHubWiring,
   NO_VCS_GATEWAYS,
   type SlackWiring,
+  withOrg,
 } from './container.js'
 export type { AppEnv } from './http/env.js'
 export { HmacStateSigner, STATE_LIFETIME_MS } from './crypto/HmacStateSigner.js'
@@ -48,6 +49,7 @@ export { InMemoryAttentionBus } from './realtime/InMemoryAttentionBus.js'
 export { sseStream, type SseStreamOptions } from './realtime/sse.js'
 export { AiReviewService } from './modules/reviews/AiReviewService.js'
 export { ReviewService } from './modules/reviews/ReviewService.js'
+export { OrgService } from './modules/orgs/OrgService.js'
 export { ReviewerService } from './modules/reviewers/ReviewerService.js'
 export { IntegrationSettingsService } from './modules/settings/IntegrationSettingsService.js'
 export { GitHubWebhookService } from './modules/webhooks/GitHubWebhookService.js'

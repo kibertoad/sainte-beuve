@@ -7,7 +7,7 @@ import {
 } from '@sainte-beuve/kernel'
 import type { GitHubDelivery, GitHubIntent } from '@sainte-beuve/integrations'
 import { interpretGitHubDelivery, verifyGitHubSignature } from '@sainte-beuve/integrations'
-import type { AppContainer } from '../../container.js'
+import { type AppContainer, withOrg } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 import { AiReviewService } from '../reviews/AiReviewService.js'
@@ -20,6 +20,14 @@ import { botReply } from './githubReplies.js'
  * The order is the security property: the signature is checked over the RAW
  * bytes before anything is parsed, because that is what GitHub signed, and
  * because a payload that has been through `JSON.parse` has already been trusted.
+ *
+ * WHICH ORG a delivery lands in comes from the PROJECT REGISTRY, because a
+ * delivery carries no credential of ours and therefore nothing that could place
+ * it: registering a repository is a tenancy claiming responsibility for it, and
+ * that claim is exactly what an intake needs. A repository nobody registered
+ * falls to the default org, which is where a single-tenant deployment's
+ * everything already is, so nothing changes for one — and for a deployment with
+ * a second tenancy, registering the repository is the answer.
  *
  * Deliveries are handled INLINE rather than queued. GitHub's own guidance is to
  * ack fast and work asynchronously, and it earns its keep when the work is a
@@ -76,7 +84,19 @@ export class GitHubWebhookService {
       labels: this.container.github.labels,
       botLogin: this.container.github.botLogin,
     })
-    return intent === null ? IGNORED : this.perform(intent)
+    if (intent === null) return IGNORED
+    // Re-entered against the org the registry placed this delivery in, rather
+    // than threading a container through the eight methods below: `perform` and
+    // everything under it reads `this.container`, so binding it once here is the
+    // whole of it and there is no call site that can use the wrong one.
+    return new GitHubWebhookService(await this.containerFor(intent)).perform(intent)
+  }
+
+  /** The org that registered the repository this delivery is about. See above. */
+  private async containerFor(intent: GitHubIntent): Promise<AppContainer> {
+    const ref = intent.kind === 'track' ? intent.review.pullRequest : intent.pullRequest
+    const orgId = await this.container.stores.tenancy.findOrgIdForProject(ref)
+    return orgId === null ? this.container : withOrg(this.container, orgId)
   }
 
   private parse(event: string, rawBody: string): GitHubDelivery | null {

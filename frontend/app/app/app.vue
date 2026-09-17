@@ -10,6 +10,10 @@ const links = [
   { label: 'Projects', to: '/projects', icon: 'i-lucide-folder-git-2' },
   { label: 'Board', to: '/board', icon: 'i-lucide-git-pull-request' },
   { label: 'Reviewers', to: '/reviewers', icon: 'i-lucide-users' },
+  // Kept for EVERYBODY, including a member who can change none of it. It holds
+  // the Access card, which holds the only sign-out button there is, and a rail
+  // that hid it from the people it refuses would leave them signed in with no
+  // way out. What the page itself shows them is its own decision.
   { label: 'Configuration', to: '/configuration', icon: 'i-lucide-settings' },
 ]
 
@@ -22,6 +26,16 @@ const links = [
 // whoever the deployment's credential acts as.
 const auth = useAuthState()
 await auth.refresh()
+
+/**
+ * The tenancy, above the person. Shown only for a deployment that made a second
+ * org: a single-tenant one is entirely in the default org, and a rail that said
+ * "default" on every screen would be reporting a fact nobody has to act on.
+ */
+const orgName = computed(() => {
+  const org = auth.org.value
+  return org === null || org.slug === 'default' ? null : org.name
+})
 
 /**
  * What the foot of the rail says. Three states, and they are three different
@@ -44,14 +58,20 @@ const whoami = computed(() => {
       <aside class="w-56 shrink-0 border-r border-default flex flex-col gap-4 p-4">
         <span class="font-semibold px-2.5">sainte-beuve</span>
         <UNavigationMenu orientation="vertical" :items="links" />
-        <NuxtLink
-          v-if="whoami"
-          to="/configuration"
-          class="mt-auto flex items-center gap-2 px-2.5 py-2 text-sm text-muted hover:text-default"
-        >
-          <UIcon name="i-lucide-user-round" />
-          <span class="truncate">{{ whoami }}</span>
-        </NuxtLink>
+        <div v-if="orgName || whoami" class="mt-auto flex flex-col gap-1">
+          <p v-if="orgName" class="flex items-center gap-2 px-2.5 text-sm text-muted">
+            <UIcon name="i-lucide-building-2" />
+            <span class="truncate">{{ orgName }}</span>
+          </p>
+          <NuxtLink
+            v-if="whoami"
+            to="/configuration"
+            class="flex items-center gap-2 px-2.5 py-2 text-sm text-muted hover:text-default"
+          >
+            <UIcon name="i-lucide-user-round" />
+            <span class="truncate">{{ whoami }}</span>
+          </NuxtLink>
+        </div>
       </aside>
       <main class="flex-1 min-w-0">
         <NuxtPage />

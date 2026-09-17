@@ -2,9 +2,10 @@
 
 Everything below `/api/v1` now knows who asked. This is the first half of slice 6
 in [the implementation plan](./implementation-plan.md): sessions for people, API
-keys for machines, and one guard over both. The org boundary — a tenancy around
-the reviewer pool and the board — is the half still outstanding, and is called
-out at the end.
+keys for machines, and one guard over both. The other half — a tenancy around the
+reviewer pool and the board, and roles over it — landed in slice 6b and is
+[docs/orgs.md](./orgs.md); the end of this document says which parts of it follow
+from here.
 
 ## Two kinds of caller
 
@@ -188,9 +189,13 @@ whose effect is bounded by the mode: whoever can empty the project registry toda
 is whoever can reach the deployment today, and `AUTH_MODE=required` takes it back
 tomorrow. A minted key does not come back — it is a durable bearer credential that
 keeps answering after the switch — so the route that produces one asks who is
-calling even where nothing else does. Listing and revoking are not guarded:
-neither creates anything that outlives the mode, and guarding the read would take
-the Configuration screen away from the laptop the open default exists for.
+calling even where nothing else does. Listing and revoking are not refused for being
+anonymous either: neither creates anything that outlives the mode, and refusing
+the read would take the Configuration screen away from the laptop the open
+default exists for. All three are ADMIN-only since the org boundary landed, which
+is a different question and is answered in [docs/orgs.md](./orgs.md) — on an
+`open` deployment an anonymous caller is an admin, so nothing about that laptop
+changes.
 
 Beside them there is `AUTH_API_KEY`, the deployment's OWN key, read from the
 environment. It answers the bootstrap — a `required` deployment has no sessions
@@ -202,18 +207,25 @@ whatever value an operator's secret manager produced rather than something they
 had to spell a particular way. It cannot be revoked through the API, and the
 refusal says to clear the variable rather than answering "no such key".
 
-## What this does not do yet
+## The org boundary
 
-**There is no org boundary.** A session says WHO is calling; nothing yet says what
-they may reach. Every authenticated caller sees the same board, the same reviewer
-directory and the same project registry, and every key is as powerful as every
-other. That is the second half of slice 6, and it touches every table: a tenancy
-column in three stores, a migration per dialect, and a scope on every port.
+A session says WHO is calling. What they may reach, and what they may change, is
+[docs/orgs.md](./orgs.md): a tenancy on every table, bound to the request from
+the credential it arrived on, and two roles over it. Three things there follow
+directly from this document:
 
-**Roles are the same gap, one level down.** "Can revoke an API key" and "can read
-the board" are the same permission today.
+- **A session and a key each carry an org.** It is fixed when the credential is
+  established — at sign-in, from the slug in the signed state — and nothing a
+  caller sends afterwards can move it.
+- **`AUTH_API_KEY` is an admin of the default org.** It is an environment
+  variable rather than a row, so there is nothing to read a tenancy or a role
+  off, and a bootstrap that could not configure the deployment it bootstraps
+  would answer nothing.
+- **Pausing somebody signs them out.** `deleteForReviewer` was on the port from
+  the day sessions were and nothing called it; that is what it is for.
 
-**A session does not follow a paused reviewer.** `deleteForReviewer` exists on the
-port and nothing calls it yet; pausing somebody in the directory leaves their
-cookie working. It is a line in `ReviewerService` once there is a policy about
-what pausing should mean for access, rather than only for selection.
+Both derivations this document already refuses show up once more there. On an
+`open` deployment, an anonymous caller is an ADMIN of the default org — the
+deployment refuses nobody, so whoever can reach it can already reach every
+route, and answering `member` would take the Configuration screen away from the
+laptop the open default exists for without changing who can get at it.

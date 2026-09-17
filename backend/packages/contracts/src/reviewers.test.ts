@@ -12,6 +12,10 @@ describe('createReviewerSchema', () => {
       team: null,
       skills: [],
       availability: 'available',
+      // `member`, not `admin`. The migration is what makes the rows that
+      // predate roles admins; a row somebody is creating now is the narrower
+      // one, because it decides who else can change the deployment.
+      role: 'member',
       weight: 1,
     })
   })
@@ -47,6 +51,10 @@ describe('reviewerSchema', () => {
       team: null,
       skills: [],
       availability: 'available',
+      // `member`, not `admin`. The migration is what makes the rows that
+      // predate roles admins; a row somebody is creating now is the narrower
+      // one, because it decides who else can change the deployment.
+      role: 'member',
       weight: 1,
       outstandingReviews: 1.5,
       createdAt: 0,

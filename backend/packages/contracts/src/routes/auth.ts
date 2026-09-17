@@ -7,6 +7,7 @@ import {
   issuedApiKeySchema,
 } from '../auth.js'
 import { connectStartSchema } from '../connections.js'
+import { orgSlugSchema } from '../orgs.js'
 import { vcsProviderSchema } from '../vcs.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -48,6 +49,16 @@ export const getAuthStateContract = defineApiContract({
 export const startSessionSignInContract = defineApiContract({
   method: 'get',
   requestPathParamsSchema: providerParams,
+  /**
+   * Which tenancy to sign in to. Omitted means the default org, which is every
+   * request on a deployment that never made a second one.
+   *
+   * It is on the SIGN-IN and nowhere else, and that is the whole of how an org
+   * is chosen: the session that comes back is bound to it, and every later
+   * request takes its org from the session rather than from anything the caller
+   * sends. A route that accepted an org would be a boundary a caller can cross.
+   */
+  requestQuerySchema: v.object({ org: v.optional(orgSlugSchema) }),
   pathResolver: ({ provider }) => `/auth/sign-in/${provider}`,
   responsesByStatusCode: { 200: connectStartSchema, ...errorResponses },
 })

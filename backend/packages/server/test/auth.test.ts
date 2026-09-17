@@ -103,6 +103,15 @@ describe('who is calling', () => {
       expect(await authState(harness)).toStrictEqual({
         mode: 'open',
         principal: { kind: 'anonymous' },
+        // The default org, SYNTHESISED: a deployment that never made a second
+        // one has an empty `orgs` table and a full board, and a read that wrote
+        // the row would make the route every page polls a write.
+        org: { id: 'org_default', slug: 'default', name: 'Default', createdAt: 0 },
+        // `open` refuses nobody, so whoever can reach this deployment can
+        // already reach every route; answering `member` would take the
+        // Configuration screen away from the laptop the default exists for
+        // without changing who can get at it. See `roleOf`.
+        role: 'admin',
         signInProviders: [],
       })
     })

@@ -65,7 +65,7 @@ provider)` from that host's own credential. Above the adapter there is no
 ## What works today
 
 - **A durable board, on both runtimes**: D1 behind the Worker, Postgres behind
-  the Node service, the same eleven tables in each, and one conformance suite that
+  the Node service, the same twelve tables in each, and one conformance suite that
   proves the three stores (those two and the in-memory one) answer alike. A
   facade with neither bound still boots, and `/health` reports which store it is
   on. See [persistence.md](./persistence.md).
@@ -128,8 +128,13 @@ provider)` from that host's own credential. Above the adapter there is no
   both, off by default and turned on with `AUTH_MODE=required`. See
   [auth.md](./auth.md).
 - **The reviewer directory is editable**: adding somebody, editing their skills,
-  team, per-host handles, Slack id and weight, and pausing or resuming them in one
-  click.
+  team, per-host handles, Slack id, role and weight, and pausing or resuming them
+  in one click.
+- **An org boundary, and roles over it**: every row belongs to a tenancy, the
+  repositories are bound to one from the caller's own credential before a service
+  sees them, and an admin configures the deployment where a member uses it. A
+  deployment that never makes a second org is entirely inside the default one and
+  behaves exactly as it did. See [orgs.md](./orgs.md).
 
 ## What is a placeholder, and why it is still here
 
@@ -138,7 +143,7 @@ provider)` from that host's own credential. Above the adapter there is no
 | Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
 | A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
 | An AI review is polled on the READ      | Nothing drives `refresh()` on a clock, so a review that parks while nobody is looking sits there until somebody opens the row. The reminder tick is where that belongs.                                                             |
-| No org boundary behind the session      | A session says WHO is calling and nothing says what they may reach: every authenticated caller sees the same board, the same directory and the same registry. It is the second half of slice 6 and it touches every table.          |
+| A Slack command acts on the default org | A GitHub delivery names a repository the registry can place; a slash command names a Slack user, and one Slack app serves every tenancy. An org's own Slack connection closes it.                                                   |
 | The attention stream is per process     | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
 | No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
 
@@ -402,25 +407,53 @@ is [auth.md](./auth.md); what that slice decided, in short:
   runtimes already have, and a sweep wired on the Node interval and not on the
   Worker's cron would be exactly the asymmetry this layout exists to prevent.
 
-### Slice 6b: the org boundary
+### Slice 6b: the org boundary (done)
 
-A session says who is calling; nothing yet says what they may reach. Every
-authenticated caller sees the same board, the same reviewer directory and the
-same project registry, and every API key is as powerful as every other.
+A tenancy on every table and two roles over it. The design is
+[orgs.md](./orgs.md); what that slice decided, in short:
 
-Closing it is not a new idea on top of 6a, it is a column: a tenancy on every
-table, a scope on every port, a migration per dialect, and a case per store in
-`@sainte-beuve/persistence-conformance`. It is deliberately separate because it
-touches all eleven tables and the half above it — knowing who is calling — is
-worth having before it lands rather than after.
+- **The tenancy is bound to the STORE, not passed to it.** No port method takes
+  an org and no route accepts one: the authentication middleware reads the org
+  off the caller's credential and rebinds the container, and every service below
+  asks for a repository exactly as it did before. The alternative —
+  `listDue(orgId, now, limit)` on seventy call sites — makes the boundary a rule
+  each of them has to obey, and a rule obeyed sixty-nine times is not a boundary.
+- **`org_id` is in the primary key, not beside it.** A tenancy a statement can
+  omit is one a statement will omit. In the key, a query that forgot the org does
+  not quietly read somebody else's rows; it fails to parse.
+- **Three reads decide an org and nothing else does.** `TenancyDirectory` is a
+  session digest, a key digest, and which org registered a repository — the last
+  being what an inbound GitHub delivery has instead of a credential. The list is
+  short enough to audit, and nothing on it reads a board, a directory or a
+  registry.
+- **The default org is a fixed id, so nothing has to be migrated by hand.** Every
+  row that predates the boundary is backfilled to `org_default`, and every caller
+  a deployment cannot place lands there. Its own ROW is synthesised rather than
+  written, because the route every page polls must not be a write.
+- **An org is chosen exactly once, in a signed state.**
+  `/api/v1/auth/sign-in/<host>?org=<slug>` puts the slug in the round trip's
+  signed claims, and the session that comes back is bound to it for good. A slug
+  in the callback URL instead would let anybody who can hand somebody a link
+  decide which tenancy they land in.
+- **The first person into an org is its admin.** An operator who creates an org
+  does not become a person in it, so any other rule leaves a tenancy nobody on
+  the deployment can configure and no route that could fix it.
+- **Anonymous is an admin, and rows that predate roles are admins.** `open`
+  refuses nobody, so whoever can reach the deployment can already reach every
+  route; answering `member` would take the Configuration screen away from the
+  laptop the default exists for while changing nothing about who gets at it. The
+  migration follows the same reasoning backwards for the rows already on disk.
+- **Pausing somebody signs them out, and demoting them does not.** `paused` is
+  the only way out of the directory, so it is the only thing that means "not
+  them, for now"; a role is read per request off the reviewer row, so a demotion
+  already takes effect at once.
 
-Two smaller things fall out of 6a and belong here:
+### Slice 7: what is next
 
-- **Pausing somebody does not sign them out.** `deleteForReviewer` exists on the
-  session port and nothing calls it, because what pausing should mean for ACCESS
-  (as opposed to for selection) is a policy question this slice did not answer.
-- **Roles are the same gap one level down.** "Can revoke an API key" and "can
-  read the board" are the same permission today.
+The placeholders above are the list, and two of them are now the loudest: an AI
+review is still polled on the READ rather than on the reminder tick, and the
+attention stream is still per process. Beside them, the Slack intake is the one
+surface the org boundary does not reach.
 
 ## Decisions worth recording
 

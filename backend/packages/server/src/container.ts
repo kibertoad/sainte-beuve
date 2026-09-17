@@ -4,6 +4,7 @@ import type {
   ReminderPolicy,
   VcsProvider,
 } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type {
   AiReviewGateway,
   AttentionBus,
@@ -13,6 +14,7 @@ import type {
   IdGenerator,
   Logger,
   PersistenceKind,
+  PersistenceProvider,
   Repositories,
   SecretCipher,
   StateSigner,
@@ -114,6 +116,29 @@ export interface SlackWiring {
 }
 
 export interface AppContainer {
+  /**
+   * The whole store: the orgs, the reads that place a caller in one, and
+   * `forOrg`. A facade wires this, and almost nothing else reads it — the
+   * authentication middleware, which has to resolve a credential before there is
+   * an org, and the reminder tick, which walks every org.
+   */
+  stores: PersistenceProvider
+  /**
+   * Which org THIS container is bound to, and therefore which tenancy every
+   * service reached through it writes into.
+   *
+   * The default org until `withOrg` rebinds it, which the authentication
+   * middleware does once per request from whatever the caller's credential said.
+   */
+  orgId: string
+  /**
+   * The eleven stores, ALREADY BOUND to `orgId`.
+   *
+   * This is the whole of how the boundary reaches the services: they ask the
+   * container for a repository exactly as they did before the org existed, and
+   * what they get can only see one tenancy. No service takes an org, no route
+   * accepts one, and there is therefore no call site that can forget to pass it.
+   */
   repositories: Repositories
   /**
    * Which store those repositories are, for `/health` to report. The facade
@@ -183,7 +208,7 @@ export interface AppContainer {
 }
 
 export interface ContainerOptions {
-  repositories: Repositories
+  stores: PersistenceProvider
   /** Defaults to `memory`, which is what a facade that wired no durable store has. */
   persistence?: PersistenceKind
   logger: Logger
@@ -268,7 +293,12 @@ export function createContainer(options: ContainerOptions): AppContainer {
   // reason there are none arrive together from `secretsFrom`.
   const secrets = options.secrets ?? { cipher: null, states: null, rejectedReason: null }
   return {
-    repositories: options.repositories,
+    stores: options.stores,
+    // The DEFAULT org, which is where a facade's container starts and where
+    // every caller this deployment cannot place ends up. The middleware rebinds
+    // it per request; a facade never has to know the boundary exists.
+    orgId: DEFAULT_ORG_ID,
+    repositories: options.stores.forOrg(DEFAULT_ORG_ID),
     persistence: options.persistence ?? 'memory',
     logger: options.logger,
     clock: options.clock ?? systemClock,
@@ -291,4 +321,22 @@ export function createContainer(options: ContainerOptions): AppContainer {
     auth: authWiring(options.auth),
     appBaseUrl: configured(options.appBaseUrl),
   }
+}
+
+/**
+ * The same container, bound to another org.
+ *
+ * ONE function, called once per request by the authentication middleware, and
+ * the only way the tenancy of a request is ever decided. Everything below it —
+ * every service, every controller — reads `container.repositories` exactly as it
+ * did before orgs existed and cannot reach outside the org it was handed.
+ *
+ * A spread rather than a mutation, because a Worker builds one container per
+ * request and the Node facade builds ONE at boot: rebinding in place there would
+ * leak whichever org served the last request into whatever the reminder tick
+ * does next.
+ */
+export function withOrg(container: AppContainer, orgId: string): AppContainer {
+  if (container.orgId === orgId) return container
+  return { ...container, orgId, repositories: container.stores.forOrg(orgId) }
 }
