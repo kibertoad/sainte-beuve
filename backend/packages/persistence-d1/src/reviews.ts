@@ -5,7 +5,12 @@ import type {
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
-import { aiReviewRunSchema, reminderSchema, reviewRequestSchema } from '@sainte-beuve/contracts'
+import {
+  AI_REVIEW_IN_FLIGHT_STATUSES,
+  aiReviewRunSchema,
+  reminderSchema,
+  reviewRequestSchema,
+} from '@sainte-beuve/contracts'
 import type {
   AiReviewRunRepository,
   EpochMs,
@@ -198,12 +203,19 @@ export class SqlReminderRepository implements ReminderRepository {
   }
 }
 
-const RUN_UPSERT = `INSERT INTO ai_review_runs (org_id, id, review_id, requested_at, data)
-VALUES (?, ?, ?, ?, ?)
+const RUN_UPSERT = `INSERT INTO ai_review_runs (org_id, id, review_id, status, requested_at, data)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT (org_id, id) DO UPDATE SET
   review_id = excluded.review_id,
+  status = excluded.status,
   requested_at = excluded.requested_at,
   data = excluded.data`
+
+/** `AI_REVIEW_IN_FLIGHT_STATUSES` as the `IN (...)` list the clock's read needs. */
+const IN_FLIGHT = `SELECT data FROM ai_review_runs
+WHERE org_id = ? AND status IN (${placeholders(AI_REVIEW_IN_FLIGHT_STATUSES.length)})
+ORDER BY requested_at, id
+LIMIT ?`
 
 export class SqlAiReviewRunRepository implements AiReviewRunRepository {
   constructor(
@@ -216,6 +228,11 @@ export class SqlAiReviewRunRepository implements AiReviewRunRepository {
       'SELECT data FROM ai_review_runs WHERE org_id = ? AND review_id = ? ORDER BY requested_at DESC, id DESC',
       [this.orgId, reviewId],
     )
+    return decodeRows(aiReviewRunSchema, 'ai_review_runs', rows)
+  }
+
+  async listInFlight(limit: number): Promise<AiReviewRun[]> {
+    const rows = await this.db.all(IN_FLIGHT, [this.orgId, ...AI_REVIEW_IN_FLIGHT_STATUSES, limit])
     return decodeRows(aiReviewRunSchema, 'ai_review_runs', rows)
   }
 
@@ -245,6 +262,7 @@ export class SqlAiReviewRunRepository implements AiReviewRunRepository {
       this.orgId,
       run.id,
       run.reviewId,
+      run.status,
       run.requestedAt,
       encodeData(run),
     ])

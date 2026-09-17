@@ -2,6 +2,7 @@ import type { AiReviewRun, ReviewRequest } from '@sainte-beuve/contracts'
 import type { AiReviewReport } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { aiFinding, curation, type StubAiReview, stubAiReview } from './ai-review-doubles.js'
+import { runReminderTick } from '../src/reminders/tick.js'
 import { buildHarness, get, openReview, post, type TestHarness } from './helpers.js'
 
 /**
@@ -405,5 +406,68 @@ describe('polling a delegated AI review', () => {
     // The board's own read is unaffected, because it is a read.
     const board = await read('/api/v1/reviews', 'https://evil.example.com')
     expect(board.headers.get(header)).toBe('*')
+  })
+})
+
+/**
+ * The clock's half of the loop, which the read cannot supply: a review that parks
+ * while every board in the team is closed has to become a fact the deployment
+ * holds, rather than one waiting for somebody to already suspect it and look.
+ */
+describe('polling a delegated AI review on the reminder tick', () => {
+  let loop: Loop
+
+  beforeEach(() => {
+    loop = buildLoop()
+  })
+
+  it('polls what is in flight, with no read of the row', async () => {
+    const review = await filedReview(loop)
+    loop.catFactory.report = {
+      status: 'awaiting_selection',
+      runId: 'cf-run-1',
+      summary: null,
+      failureReason: null,
+      curation: curation({ findings: [aiFinding()] }),
+    }
+
+    expect(await runReminderTick(loop.harness.container)).toMatchObject({ aiReviewsPolled: 1 })
+
+    // Straight out of the store, without the read that would have polled it.
+    const stored = await loop.harness.container.repositories.aiReviewRuns.listByReview(review.id)
+    expect(stored[0]?.status).toBe('awaiting_selection')
+    expect(stored[0]?.curation?.findings).toHaveLength(1)
+  })
+
+  it('stops polling a run once it has settled', async () => {
+    await filedReview(loop)
+    loop.catFactory.report = {
+      status: 'completed',
+      runId: 'cf-run-1',
+      summary: 'Posted 2 comments.',
+      failureReason: null,
+      curation: null,
+    }
+    expect(await runReminderTick(loop.harness.container)).toMatchObject({ aiReviewsPolled: 1 })
+
+    const polls = loop.catFactory.polls
+    expect(await runReminderTick(loop.harness.container)).toMatchObject({ aiReviewsPolled: 0 })
+    expect(loop.catFactory.polls).toBe(polls)
+  })
+
+  /**
+   * A cat-factory that cannot be reached is a bad minute, not a reason to stop
+   * ticking: the nudges in the same pass have already gone out, and the reason
+   * belongs on the row where the board shows it.
+   */
+  it('records an unreachable cat-factory on the row without failing the tick', async () => {
+    const review = await filedReview(loop)
+    loop.catFactory.pollFails = true
+
+    expect(await runReminderTick(loop.harness.container)).toMatchObject({ aiReviewsPolled: 1 })
+
+    const stored = await loop.harness.container.repositories.aiReviewRuns.listByReview(review.id)
+    expect(stored[0]?.status).toBe('running')
+    expect(stored[0]?.failureReason).toMatch(/could not be read from cat-factory/)
   })
 })

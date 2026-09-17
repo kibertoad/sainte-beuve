@@ -93,7 +93,10 @@ provider)` from that host's own credential. Above the adapter there is no
   comments (or handed to a fixer, or closed having posted nothing). The receipt
   for a posting pass comes back with it, so a pass that landed nothing is not
   read as a review nobody has curated; a reviewer that wedged with every slice
-  reported can be resumed within the budget cat-factory enforces.
+  reported can be resumed within the budget cat-factory enforces. A run in flight
+  is polled BY THE CLOCK as well as by the read, so a review that parks while
+  everybody's board is closed is a fact the deployment holds rather than one
+  waiting to be discovered.
 - Reviewer selection, with the author and anyone already assigned excluded by the
   service rather than by the caller.
 - The reminder policy and the tick that fires it, on both runtimes.
@@ -142,7 +145,6 @@ provider)` from that host's own credential. Above the adapter there is no
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
 | A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
-| An AI review is polled on the READ      | Nothing drives `refresh()` on a clock, so a review that parks while nobody is looking sits there until somebody opens the row. The reminder tick is where that belongs.                                                             |
 | A Slack command acts on the default org | A GitHub delivery names a repository the registry can place; a slash command names a Slack user, and one Slack app serves every tenancy. An org's own Slack connection closes it.                                                   |
 | The attention stream is per process     | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
 | No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
@@ -302,9 +304,9 @@ The loop runs: file, read the findings, curate, post. What it decided, in short:
 
 What is left:
 
-- Drive `refresh()` from the same tick that drives reminders, so a review that
-  parks while nobody is looking reaches the board (and a reminder) by itself
-  rather than on the next read.
+- Tell somebody a review parked. The clock now DISCOVERS it (slice 7), so the
+  board is true without anybody opening a row; what is still missing is the nudge
+  that says so, which is a reminder kind rather than a poll.
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
@@ -449,12 +451,47 @@ A tenancy on every table and two roles over it. The design is
   them, for now"; a role is read per request off the reviewer row, so a demotion
   already takes effect at once.
 
-### Slice 7: what is next
+### Slice 7: the AI review on the clock (done)
 
-The placeholders above are the list, and two of them are now the loudest: an AI
-review is still polled on the READ rather than on the reminder tick, and the
-attention stream is still per process. Beside them, the Slack intake is the one
-surface the org boundary does not reach.
+cat-factory calls nothing back, so until this slice the only thing that ever
+asked it where a review got to was somebody opening the row. A review that parked
+with its findings therefore waited on a person who had no way of knowing it was
+waiting on them. The reminder tick asks on everybody's behalf. What it decided:
+
+- **On the clock AND on the read, not one or the other.** A read polls the runs
+  it is about, which is what keeps an OPEN row live; the tick polls what a
+  tenancy has in flight, which is what makes a CLOSED one true. Dropping the read
+  would make the board lag by up to a tick at the moment somebody is watching it;
+  dropping the tick is the state this slice ends.
+- **It rides the reminder clock rather than getting one of its own.** That pass
+  is the one thing both runtimes already have — a cron trigger on the Worker, an
+  interval on Node — and a poll wired on one and not the other is exactly the
+  asymmetry the layout exists to prevent. The session sweep is already there for
+  the same reason.
+- **A status COLUMN on `ai_review_runs`, not a payload extraction.** The clock's
+  read is "what is unsettled in this org", which has no review id to narrow it,
+  so it is the one read of that table that would scan it. Neither engine indexes
+  a JSON extraction usefully, and `review_requests` and `reminders` already carry
+  their status the same way.
+- **`AI_REVIEW_IN_FLIGHT_STATUSES` is on the contract.** Three stores and the
+  poll now agree on what "in flight" means: a `WHERE ... IN` in two SQL dialects,
+  a filter in the third, and the service's own guard. Spelled out per store it
+  would drift, and silently — a store that forgot `awaiting_selection` would
+  simply stop handing parked reviews to the clock.
+- **The sweep cannot fail the tick, and is capped like the nudges.** The
+  reminders in a pass have already gone out when it runs, so a cat-factory that
+  is down for a minute is not a reason to re-send every nudge next minute. The
+  cap is the same one the nudges get, applied per tenancy, and the oldest run is
+  polled first so what a cap leaves over is picked up next tick rather than
+  starved. A poll that is merely refused is recorded on the row, where the board
+  shows it, exactly as a read's is.
+
+### Slice 8: what is next
+
+The placeholders above are the list, and the loudest is now the attention stream,
+which is still per process. Beside it, the Slack intake is the one surface the
+org boundary does not reach, and a parked AI review still tells nobody: the clock
+finds it, and no nudge says so.
 
 ## Decisions worth recording
 

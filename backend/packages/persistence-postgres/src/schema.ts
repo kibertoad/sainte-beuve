@@ -185,12 +185,17 @@ export const aiReviewRuns = pgTable(
     orgId: orgId(),
     id: text('id').notNull(),
     reviewId: text('review_id').notNull(),
+    status: text('status').notNull(),
     requestedAt: epochMs('requested_at').notNull(),
     data: payload<AiReviewRun>('data', 'ai_review_runs', aiReviewRunSchema).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
     index('ai_review_runs_review_idx').on(table.orgId, table.reviewId, table.requestedAt),
+    // The reminder tick's AI-review read: what is unsettled in the org it is
+    // ticking, oldest request first. cat-factory calls nothing back, so this is
+    // what the clock polls instead of waiting for somebody to open the row.
+    index('ai_review_runs_status_idx').on(table.orgId, table.status, table.requestedAt),
   ],
 )
 

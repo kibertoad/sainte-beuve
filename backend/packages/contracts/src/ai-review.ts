@@ -36,6 +36,23 @@ export const aiReviewStatusSchema = v.picklist([
 ])
 export type AiReviewStatus = v.InferOutput<typeof aiReviewStatusSchema>
 
+/**
+ * The statuses a run can still learn something from, and the one definition of
+ * them.
+ *
+ * It is on the contract rather than in the service because three stores and a
+ * poll now agree on it: `listInFlight` is a WHERE clause in two SQL dialects and
+ * a filter in the third, and a fourth status added here has to reach all of them
+ * at once. A set spelled out per store is a set that drifts, and the drift is
+ * silent — a store that forgot `awaiting_selection` would simply stop handing
+ * parked reviews to the clock.
+ */
+export const AI_REVIEW_IN_FLIGHT_STATUSES: readonly AiReviewStatus[] = [
+  'requested',
+  'running',
+  'awaiting_selection',
+]
+
 /** How bad the reviewer thinks one finding is. cat-factory's own ladder. */
 export const aiReviewSeveritySchema = v.picklist(['blocker', 'high', 'medium', 'low', 'nit'])
 export type AiReviewSeverity = v.InferOutput<typeof aiReviewSeveritySchema>

@@ -132,6 +132,20 @@ export interface IntegrationTokenRepository {
 
 export interface AiReviewRunRepository {
   listByReview(reviewId: string): Promise<AiReviewRun[]>
+  /**
+   * The runs still in flight, oldest request first. The clock's only read.
+   *
+   * cat-factory calls nothing back, so a review that parks with findings is a
+   * fact nobody holds until somebody asks for it. This is what lets the reminder
+   * tick ask on everybody's behalf instead of leaving a parked review invisible
+   * until its author happens to open the row.
+   *
+   * `AI_REVIEW_IN_FLIGHT_STATUSES` is what "in flight" means, and all three
+   * stores read it from the contract rather than spelling it out. Oldest first
+   * because the batch cap is a cap: the run that has been waiting longest is the
+   * one a person is most likely to be waiting on.
+   */
+  listInFlight(limit: number): Promise<AiReviewRun[]>
   getById(runId: string): Promise<AiReviewRun | null>
   create(run: AiReviewRun): Promise<AiReviewRun>
   update(runId: string, patch: Partial<AiReviewRun>): Promise<AiReviewRun | null>

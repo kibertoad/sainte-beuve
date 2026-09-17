@@ -4,6 +4,7 @@ import { type ChatGateway, getErrorMessage } from '@sainte-beuve/kernel'
 import { type AppContainer, withOrg } from '../container.js'
 import { type CredentialSource, type Resolved, resolveChat } from '../integrations/resolve.js'
 import { SessionService } from '../modules/auth/SessionService.js'
+import { AiReviewService } from '../modules/reviews/AiReviewService.js'
 import { scheduleNextReminder } from './schedule.js'
 
 /**
@@ -19,6 +20,11 @@ import { scheduleNextReminder } from './schedule.js'
  * nudges will hit a Worker's CPU budget or a Slack rate limit halfway through, and
  * the half that succeeded is indistinguishable from the half that did not. Capped,
  * every tick finishes and the next one picks up the rest.
+ *
+ * It is also the deployment's only clock, so two things that need one ride it:
+ * the expired sessions are swept, and the AI reviews still in flight are polled.
+ * Both are per org and both are capped the same way, and both are isolated from
+ * the nudges — neither can fail a pass that has already sent something.
  *
  * It WALKS THE ORGS, one pass each, with the batch cap applied per tenancy. This
  * is the one caller in the tree that is not inside an org to begin with — a cron
@@ -44,19 +50,30 @@ export interface TickResult {
    * sign-in for ever rather than about correctness.
    */
   sessionsSwept: number
+  /**
+   * In-flight AI reviews polled on the way past.
+   *
+   * On this clock for the reason the session sweep is, and for one more: unlike
+   * the sweep, this one IS about correctness. cat-factory calls nothing back, so
+   * a delegated review that parks with its findings is waiting on a person
+   * nothing has told. Polled on the read alone, it stays parked until somebody
+   * opens the row it is on — which is to say, until somebody already suspected.
+   */
+  aiReviewsPolled: number
 }
 
 export async function runReminderTick(
   container: AppContainer,
   batchSize: number = DEFAULT_BATCH,
 ): Promise<TickResult> {
-  const total: TickResult = { sent: 0, failed: 0, skipped: 0, sessionsSwept: 0 }
+  const total: TickResult = { sent: 0, failed: 0, skipped: 0, sessionsSwept: 0, aiReviewsPolled: 0 }
   for (const orgId of await tenancies(container)) {
     const pass = await tickOrg(withOrg(container, orgId), batchSize)
     total.sent += pass.sent
     total.failed += pass.failed
     total.skipped += pass.skipped
     total.sessionsSwept += pass.sessionsSwept
+    total.aiReviewsPolled += pass.aiReviewsPolled
   }
   return total
 }
@@ -78,7 +95,13 @@ async function tenancies(container: AppContainer): Promise<string[]> {
 /** One org's pass. `container` is already bound to it. */
 async function tickOrg(container: AppContainer, batchSize: number): Promise<TickResult> {
   const due = await container.repositories.reminders.listDue(container.clock.now(), batchSize)
-  const result: TickResult = { sent: 0, failed: 0, skipped: 0, sessionsSwept: 0 }
+  const result: TickResult = {
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    sessionsSwept: 0,
+    aiReviewsPolled: 0,
+  }
   // Resolved ONCE for the batch, and once PER ORG: every reminder in this pass
   // goes out over this tenancy's own credential, and resolving per reminder
   // means re-reading the stored bot token, re-deriving its HKDF key and opening
@@ -89,7 +112,8 @@ async function tickOrg(container: AppContainer, batchSize: number): Promise<Tick
     result[outcome] += 1
   }
   result.sessionsSwept = await sweepSessions(container)
-  if (due.length > 0 || result.sessionsSwept > 0) {
+  result.aiReviewsPolled = await pollAiReviews(container, batchSize)
+  if (due.length > 0 || result.sessionsSwept > 0 || result.aiReviewsPolled > 0) {
     container.logger.info(
       { ...result, due: due.length, org: container.orgId },
       'reminder tick complete',
@@ -108,6 +132,29 @@ async function sweepSessions(container: AppContainer): Promise<number> {
     return await new SessionService(container).sweepExpired()
   } catch (err) {
     container.logger.warn({ err }, 'could not sweep expired sessions')
+    return 0
+  }
+}
+
+/**
+ * Ask cat-factory where this org's delegated reviews got to.
+ *
+ * The same batch cap as the nudges, for the same reason: every poll is an
+ * outbound call, and a tenancy with two hundred runs in flight would otherwise
+ * spend one tick's whole budget here and send no reminder at all. The oldest are
+ * read first, so what is left over is picked up next tick rather than starved.
+ *
+ * A sweep that fails does NOT fail the tick, exactly as the session sweep does
+ * not: the reminders in this pass have already gone out, and a cat-factory that
+ * is unreachable for a minute is not a reason to re-send every nudge next
+ * minute. A poll that is merely refused never reaches here — the service records
+ * that on the run, where the board shows it.
+ */
+async function pollAiReviews(container: AppContainer, batchSize: number): Promise<number> {
+  try {
+    return await new AiReviewService(container).sweepInFlight(batchSize)
+  } catch (err) {
+    container.logger.warn({ err }, 'could not poll the AI reviews in flight')
     return 0
   }
 }

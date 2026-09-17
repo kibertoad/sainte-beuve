@@ -1,3 +1,4 @@
+import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type {
   AiReviewRun,
   Reminder,
@@ -184,6 +185,9 @@ export class InMemoryReminderRepository implements ReminderRepository {
   }
 }
 
+/** `AI_REVIEW_IN_FLIGHT_STATUSES` as a lookup, built once rather than per read. */
+const IN_FLIGHT = new Set<AiReviewRun['status']>(AI_REVIEW_IN_FLIGHT_STATUSES)
+
 export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
   private readonly rows = new Map<string, AiReviewRun>()
 
@@ -191,6 +195,14 @@ export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
     return [...this.rows.values()]
       .filter((row) => row.reviewId === reviewId)
       .sort(newestFirst((row) => row.requestedAt))
+      .map(clone)
+  }
+
+  async listInFlight(limit: number): Promise<AiReviewRun[]> {
+    return [...this.rows.values()]
+      .filter((row) => IN_FLIGHT.has(row.status))
+      .sort(oldestFirst((row) => row.requestedAt))
+      .slice(0, limit)
       .map(clone)
   }
 

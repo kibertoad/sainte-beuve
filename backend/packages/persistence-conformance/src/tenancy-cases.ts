@@ -87,6 +87,12 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
       (await stores.forOrg(ORG_B).aiReviewRuns.listByReview('review-1')).map((run) => run.summary),
       ['B'],
     )
+    // The clock's read is the one with no review id to narrow it, so it is the
+    // one that would reach across the boundary if the org were not in the key.
+    assert.deepStrictEqual(
+      (await stores.forOrg(ORG_A).aiReviewRuns.listInFlight(10)).map((run) => run.summary),
+      ['A'],
+    )
   }),
 
   // Each org connects its own GitHub: a credential shared across the boundary

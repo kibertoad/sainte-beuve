@@ -5,6 +5,7 @@ import type {
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
+import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type {
   AiReviewRunRepository,
   EpochMs,
@@ -242,6 +243,21 @@ export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
     return rows.map((row) => row.data)
   }
 
+  async listInFlight(limit: number): Promise<AiReviewRun[]> {
+    const rows = await this.db
+      .select()
+      .from(aiReviewRuns)
+      .where(
+        and(
+          eq(aiReviewRuns.orgId, this.orgId),
+          inArray(aiReviewRuns.status, [...AI_REVIEW_IN_FLIGHT_STATUSES]),
+        ),
+      )
+      .orderBy(asc(aiReviewRuns.requestedAt), asc(aiReviewRuns.id))
+      .limit(limit)
+    return rows.map((row) => row.data)
+  }
+
   async getById(runId: string): Promise<AiReviewRun | null> {
     const rows = await this.db
       .select()
@@ -268,6 +284,7 @@ export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
       orgId: this.orgId,
       id: run.id,
       reviewId: run.reviewId,
+      status: run.status,
       requestedAt: run.requestedAt,
       data: run,
     }

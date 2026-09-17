@@ -29,7 +29,7 @@
 //  | `reviewers`          | `(org_id, id)`                 | `outstanding_reviews`, `created_at`                        |
 //  | `review_requests`    | `(org_id, id)`                 | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at` |
 //  | `reminders`          | `(org_id, id)`                 | `review_id`, `status`, `due_at`                            |
-//  | `ai_review_runs`     | `(org_id, id)`                 | `review_id`, `requested_at`                                |
+//  | `ai_review_runs`     | `(org_id, id)`                 | `review_id`, `status`, `requested_at`                      |
 //  | `integration_tokens` | `(org_id, integration_id)`     | `sealed`, `hint`, `subject`, `updated_at` (no payload)     |
 //  | `projects`           | `(org_id, id)`                 | `ref_key` (UNIQUE per org), `created_at`                   |
 //  | `identities`         | `(org_id, provider, subject)`  | `reviewer_id`                                              |

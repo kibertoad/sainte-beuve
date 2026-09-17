@@ -187,6 +187,47 @@ export const aiReviewCases: readonly ConformanceCase[] = [
   conformanceCase('patching a run that is not there answers null', async (repos) => {
     assert.strictEqual(await repos.aiReviewRuns.update('nobody', { status: 'failed' }), null)
   }),
+
+  conformanceCase('in-flight runs come back oldest first, across reviews', async (repos) => {
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-parked', { status: 'awaiting_selection', requestedAt: 3_000 }),
+    )
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-running', { status: 'running', requestedAt: 2_000, reviewId: 'review-2' }),
+    )
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-filed', { status: 'requested', requestedAt: 1_000 }),
+    )
+    const ids = (await repos.aiReviewRuns.listInFlight(10)).map((row) => row.id)
+    // Oldest first: the batch cap is a cap, and the run that has been waiting
+    // longest is the one somebody is most likely to be waiting on.
+    assert.deepStrictEqual(ids, ['run-filed', 'run-running', 'run-parked'])
+  }),
+
+  conformanceCase('a settled run is not in flight', async (repos) => {
+    await repos.aiReviewRuns.create(aiReviewRun('run-done', { status: 'completed' }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-failed', { status: 'failed' }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-gone', { status: 'cancelled' }))
+    assert.deepStrictEqual(await repos.aiReviewRuns.listInFlight(10), [])
+  }),
+
+  conformanceCase('settling a run takes it out of the in-flight read', async (repos) => {
+    // The status is a column in the durable stores AND a field of the payload,
+    // so this is what proves an update moves both: a store that wrote only the
+    // payload would go on handing a finished run to the clock for ever.
+    await repos.aiReviewRuns.create(aiReviewRun('run-1', { status: 'running' }))
+    assert.strictEqual((await repos.aiReviewRuns.listInFlight(10)).length, 1)
+    await repos.aiReviewRuns.update('run-1', { status: 'completed' })
+    assert.deepStrictEqual(await repos.aiReviewRuns.listInFlight(10), [])
+  }),
+
+  conformanceCase('the in-flight read stops at its limit', async (repos) => {
+    await repos.aiReviewRuns.create(aiReviewRun('run-1', { requestedAt: 1_000 }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-2', { requestedAt: 2_000 }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-3', { requestedAt: 3_000 }))
+    const ids = (await repos.aiReviewRuns.listInFlight(2)).map((row) => row.id)
+    assert.deepStrictEqual(ids, ['run-1', 'run-2'])
+  }),
 ]
 
 export const integrationTokenCases: readonly ConformanceCase[] = [

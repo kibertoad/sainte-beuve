@@ -1,4 +1,5 @@
 import type { AiReviewCuration, AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
 import { ConflictError, ValidationError, assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
@@ -23,6 +24,14 @@ import type { CredentialSource } from '../../integrations/resolve.js'
  * being two different moments. A cat-factory-side callback is a later
  * OPTIMISATION over this, never a replacement: see docs/implementation-plan.md,
  * slice 4.
+ *
+ * Polls come from two places and neither replaces the other. A READ polls the
+ * runs it is about, so an open row is live. The reminder CLOCK polls what a
+ * tenancy has in flight (`sweepInFlight`), so a review that parked while
+ * everybody's board was closed is a fact the deployment holds rather than one
+ * waiting to be discovered. Without the first, an open row would go stale under
+ * somebody's eyes; without the second, a review would wait on a person who has
+ * no way of knowing it is waiting on them.
  */
 
 /** The message a route answers with when cat-factory is not configured at all. */
@@ -31,18 +40,19 @@ const NOT_CONFIGURED =
   'an API key with the `decide` scope (the key can be entered on the Configuration screen)'
 
 /** The states a poll can still learn something from. Anything else is settled. */
-const IN_FLIGHT = new Set<AiReviewRun['status']>(['requested', 'running', 'awaiting_selection'])
+const IN_FLIGHT = new Set<AiReviewRun['status']>(AI_REVIEW_IN_FLIGHT_STATUSES)
 
 export class AiReviewService {
   /**
    * The cat-factory resolution for THIS request, made at most once.
    *
-   * One service instance answers one route, which is the lifetime this may be
-   * cached for and no longer: a key entered on the Configuration screen has to
-   * take effect without a redeploy. Within the request it is worth caching,
-   * because every resolution is a credential read plus an HKDF derivation plus an
-   * AES-GCM open, and a review with four runs on it would otherwise pay for all
-   * four. `VcsResolutions` does the same job for source control.
+   * One service instance answers one route, or one org's pass of the clock,
+   * which is the lifetime this may be cached for and no longer: a key entered on
+   * the Configuration screen has to take effect without a redeploy. Within that
+   * pass it is worth caching, because every resolution is a credential read plus
+   * an HKDF derivation plus an AES-GCM open, and a review with four runs on it —
+   * or a tenancy with forty in flight — would otherwise pay for every one.
+   * `VcsResolutions` does the same job for source control.
    */
   private resolution: Promise<Resolved<AiReviewGateway, CredentialSource> | null> | null = null
 
@@ -123,6 +133,38 @@ export class AiReviewService {
   async refresh(runId: string): Promise<AiReviewRun | null> {
     const run = await this.container.repositories.aiReviewRuns.getById(runId)
     return run === null ? null : this.refreshed(run)
+  }
+
+  /**
+   * Poll every run this org has in flight, and say how many were asked about.
+   *
+   * What the reminder clock calls, and the half of the loop a read cannot
+   * supply: cat-factory calls nothing back, so until something asks on a
+   * schedule, a review that parks with its findings is waiting on a person who
+   * has no way of knowing it is. Opening the row still polls, because that is
+   * what makes an open row live; this is what makes a CLOSED one true.
+   *
+   * SEQUENTIAL rather than `Promise.all`, unlike the read path. A read polls the
+   * runs of one review, which is a handful; this polls a whole tenancy's, and a
+   * tick that opened thirty connections to one cat-factory at once would be
+   * rate-limited into exactly the silence it exists to end.
+   *
+   * A deployment with no cat-factory asks the store nothing: the resolution is
+   * the cheaper of the two reads, and it is the one that settles whether the
+   * other can lead anywhere.
+   */
+  async sweepInFlight(limit: number): Promise<number> {
+    if ((await this.resolved()) === null) return 0
+    const runs = await this.container.repositories.aiReviewRuns.listInFlight(limit)
+    let polled = 0
+    for (const run of runs) {
+      // `refreshed` answers null for a run there was nothing to ask about — one
+      // cat-factory never acknowledged — and swallows a poll that was refused,
+      // recording the reason on the row. Neither ends the sweep: the next run
+      // in the batch is a different review and often a different outcome.
+      if ((await this.refreshed(run)) !== null) polled += 1
+    }
+    return polled
   }
 
   /**
