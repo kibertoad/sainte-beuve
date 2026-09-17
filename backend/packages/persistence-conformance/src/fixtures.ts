@@ -138,6 +138,7 @@ export function aiReviewRun(id: string, overrides: Partial<AiReviewRun> = {}): A
     curation: curation(),
     requestedAt: 1_000,
     lastPolledAt: null,
+    parkedAt: null,
     completedAt: null,
     ...overrides,
   }

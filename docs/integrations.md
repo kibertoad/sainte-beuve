@@ -151,7 +151,11 @@ Outbound needs a bot token (on the Configuration screen, or `SLACK_BOT_TOKEN`):
 
 - a new review request is announced in `SLACK_CHANNEL_ID`, with buttons;
 - reminders are delivered by the clock, as a DM to the assigned reviewer or to
-  the channel.
+  the channel. Four kinds: the review nobody took, the reviewer who has gone
+  quiet, one escalation past the deadline, and the delegated AI review that has
+  parked on its findings and is waiting to be curated. All four are the same
+  row, so all four are snoozable with `/review snooze` and all four record why a
+  delivery failed.
 
 Inbound needs `SLACK_SIGNING_SECRET`, which is a **separate** capability: a
 deployment can post out without being able to trust anything coming back, and the

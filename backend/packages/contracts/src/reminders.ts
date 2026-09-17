@@ -17,8 +17,21 @@ import * as v from 'valibot'
  * reviewer who has not answered; `escalation` widens the audience once a review has
  * gone past its deadline, which is the point where a private nudge has demonstrably
  * not worked.
+ *
+ * `ai_review_parked` is the odd one out, and deliberately so: the other three
+ * chase a PERSON who has not acted, and this one reports that a MACHINE has
+ * stopped and is waiting to be told what to do with what it found. cat-factory
+ * calls nothing back, so the deployment's clock is the only thing that ever
+ * learns a delegated review parked on its findings, and without a nudge that
+ * knowledge stays inside the process: the row says `awaiting_selection` to
+ * whoever opens it, which is exactly the person who would have opened it anyway.
  */
-export const reminderKindSchema = v.picklist(['unassigned', 'pending', 'escalation'])
+export const reminderKindSchema = v.picklist([
+  'unassigned',
+  'pending',
+  'escalation',
+  'ai_review_parked',
+])
 export type ReminderKind = v.InferOutput<typeof reminderKindSchema>
 
 /** Where the nudge is delivered. */
@@ -65,5 +78,17 @@ export const reminderPolicySchema = v.object({
   escalateAfterDueMs: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /** Cap on `pending` nudges per review, so a stalled review cannot become a drumbeat. */
   maxPendingReminders: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * Wait before saying out loud that a delegated review has parked on its
+   * findings.
+   *
+   * Much shorter than the other rungs, and it measures something else. The
+   * others are waiting on a person who may reasonably be busy; this one is
+   * waiting on nobody at all — the work is done and sitting in a queue whose
+   * existence nothing has announced. The wait is not patience, it is a grace
+   * period for the person who pressed the button and is still looking at the
+   * row.
+   */
+  aiReviewParkedAfterMs: v.pipe(v.number(), v.integer(), v.minValue(0)),
 })
 export type ReminderPolicy = v.InferOutput<typeof reminderPolicySchema>

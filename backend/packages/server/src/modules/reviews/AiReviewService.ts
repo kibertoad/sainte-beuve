@@ -1,11 +1,12 @@
-import type { AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import type { AiReviewResolution, AiReviewRun, AiReviewStatus } from '@sainte-beuve/contracts'
 import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
-import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
+import type { AiReviewGateway, AiReviewReport, EpochMs } from '@sainte-beuve/kernel'
 import { ConflictError, ValidationError, assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { type Resolved, resolveAiReview } from '../../integrations/resolve.js'
 import type { CredentialSource } from '../../integrations/resolve.js'
+import { scheduleNextReminder } from '../../reminders/schedule.js'
 import { abandonIfOrphaned } from './orphans.js'
 import { curationFor } from './reconcile.js'
 
@@ -79,6 +80,7 @@ export class AiReviewService {
       curation: null,
       requestedAt: clock.now(),
       lastPolledAt: null,
+      parkedAt: null,
       completedAt: null,
     })
 
@@ -336,7 +338,7 @@ export class AiReviewService {
     if (current === null) return null
     const settled = reported.status !== 'running' && reported.status !== 'awaiting_selection'
     if (!settled && !IN_FLIGHT.has(current.status)) return current
-    return this.container.repositories.aiReviewRuns.update(run.id, {
+    const written = await this.container.repositories.aiReviewRuns.update(run.id, {
       status: reported.status,
       catFactoryRunId: reported.runId ?? current.catFactoryRunId,
       summary: reported.summary,
@@ -346,7 +348,46 @@ export class AiReviewService {
       // asked about goes to the back of the rotation whatever came back. See
       // `AiReviewRunRepository.listInFlight`.
       lastPolledAt: this.container.clock.now(),
+      parkedAt: this.parkedAt(current, reported.status),
       completedAt: settled ? (current.completedAt ?? this.container.clock.now()) : null,
     })
+    if (written !== null && written.parkedAt !== current.parkedAt) await this.replan(written)
+    return written
+  }
+
+  /**
+   * When this run parked on its findings, as the poll leaves it.
+   *
+   * Stamped on the EDGE rather than on every poll that finds the run parked: the
+   * ladder counts the wait from here and decides whether a nudge already went
+   * out about this park by comparing against it, so a timestamp that moved every
+   * time the clock looked would push the nudge out by a tick for ever and never
+   * send it. Cleared the moment the run is anything else, because a curated,
+   * posting or finished review is not waiting on anybody and `parkedSince` reads
+   * this field as the answer to "is it now".
+   */
+  private parkedAt(current: AiReviewRun, reported: AiReviewStatus): EpochMs | null {
+    if (reported !== 'awaiting_selection') return null
+    if (current.status === 'awaiting_selection' && current.parkedAt !== null)
+      return current.parkedAt
+    return this.container.clock.now()
+  }
+
+  /**
+   * Put the review's ladder back in step with a park that just started or ended.
+   *
+   * A poll is the only thing that ever learns either fact — cat-factory calls
+   * nothing back — and the reminder rows are written ahead of time, so without
+   * this the nudge would be planned whenever something else happened to re-plan
+   * the review, which for a review nobody is touching is never. The other half
+   * matters as much: a park that ENDS takes the nudge off the schedule, so a
+   * review curated ten minutes after it parked is not announced afterwards.
+   *
+   * Both halves run on the read path as well as on the clock's, which is what
+   * makes them agree: whichever poll gets there first is the one that schedules.
+   */
+  private async replan(run: AiReviewRun): Promise<void> {
+    const review = await this.container.repositories.reviews.getById(run.reviewId)
+    if (review !== null) await scheduleNextReminder(this.container, review)
   }
 }

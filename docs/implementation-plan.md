@@ -13,7 +13,8 @@ today:
    `CODEOWNERS` file: a weighted random pick from the people who actually hold the
    skills a change needs, damped by what they already owe.
 3. **Keep reminders honest.** A nudge for a review nobody picked up, a nudge for a
-   reviewer who has gone quiet, and one escalation past the deadline. Then it stops.
+   reviewer who has gone quiet, a word when a delegated review parks on its
+   findings, and one escalation past the deadline. Then it stops.
 4. **Trigger an AI review.** sainte-beuve runs no models. It files a `review` task
    against a [cat-factory](https://github.com/kibertoad/cat-factory) instance over
    the published `@cat-factory/sdk` and tracks the run.
@@ -96,10 +97,13 @@ provider)` from that host's own credential. Above the adapter there is no
   reported can be resumed within the budget cat-factory enforces. A run in flight
   is polled BY THE CLOCK as well as by the read, so a review that parks while
   everybody's board is closed is a fact the deployment holds rather than one
-  waiting to be discovered.
+  waiting to be discovered — and one that parks is a rung on the reminder ladder,
+  so the fact reaches a person rather than only the row.
 - Reviewer selection, with the author and anyone already assigned excluded by the
   service rather than by the caller.
-- The reminder policy and the tick that fires it, on both runtimes.
+- The reminder policy and the tick that fires it, on both runtimes: the review
+  nobody took, the reviewer who has gone quiet, the AI review parked on its
+  findings, and one escalation past the deadline.
 - Three facades that boot: Worker (smoke-tested inside workerd), Node, local mode.
 - A Nuxt SPA: the workspace on `/`, the project registry, the board, the
   reviewer directory and the Configuration screen behind a side navigation.
@@ -506,12 +510,67 @@ waiting on them. The reminder tick asks on everybody's behalf. What it decided:
   the same rows — so a refusal is not stamped on a run that settled underneath it,
   and a curation from before the last post no longer overwrites the receipt.
 
-### Slice 8: what is next
+### Slice 8: the parked review says so (done)
+
+Slice 7 gave the deployment the fact — the clock asks cat-factory where every
+delegated review got to, so a review that parks on its findings is something the
+process holds. It held it and told nobody. The row said `awaiting_selection` to
+whoever opened it, which is exactly the person who would have opened it anyway,
+so the loop still ended at somebody's habit of checking. This slice is the other
+half of slice 4: a rung on the reminder ladder for a review waiting on a
+CURATOR rather than on a reviewer. What it decided:
+
+- **A reminder kind, not a notification of its own.** Every other thing that
+  interrupts somebody about a review is a row in `reminders`: it is scheduled
+  ahead of time, it is snoozable from Slack, it records why it could not be
+  delivered, and it is capped per tick. A parked review announced through a
+  second path would be the one nudge that none of that was true of, and the
+  first one nobody could snooze.
+- **It is planned by the ladder, so it COMPETES.** `planNextReminder` still
+  answers with at most one reminder, decided by the clock rather than by a
+  precedence between kinds, and the outstanding schedule for a review is still a
+  single row. A parked review that is also past its deadline gets the escalation
+  first and the park behind it, because the wide nudge is the one that widens the
+  audience and the tick re-plans after every send.
+- **Once per park, and a re-park is a new park.** The other rungs chase a
+  SILENCE, so repeating them means chasing harder; this one reports an EVENT, and
+  a second nudge about the same park says nothing the first did not. What makes
+  that a timestamp comparison rather than a budget is the post that fails: it
+  re-parks the review with a receipt saying what did not land, and that is a
+  thing to say again. `parkedAt` on the run is what the two are told apart by.
+- **`parkedAt` is stamped on the EDGE, and it lives on the payload.** On the
+  edge because the ladder counts from it: moved on every poll that found the run
+  parked, it would push the nudge out by a tick for ever and never send it. On
+  the payload — unlike `status` and `lastPolledAt`, which slice 7 promoted to
+  columns — because nothing selects on it: the clock reads what is in flight by
+  status and the ladder asks for one review's runs by `review_id`, both already
+  indexed. A column would be a migration in two dialects bought for a field no
+  `WHERE` clause names.
+- **The poll re-plans, in both directions.** A poll is the only thing that ever
+  learns a review parked, and reminder rows are written ahead of time, so without
+  a re-plan the nudge would be scheduled whenever something ELSE happened to
+  re-plan the review — which, for a review nobody is touching, is never. The
+  other direction matters as much: a park that ends takes the nudge off the
+  schedule, so a review curated ten minutes after it parked is not announced
+  afterwards. Both run on the read path as well as the clock's, so whichever poll
+  gets there first is the one that schedules.
+- **It is not gated on the pending budget and does not spend it.** A review
+  whose reviewer has gone quiet is exactly the one somebody delegated to
+  cat-factory, and going silent about the findings because the human ladder is
+  spent would mute the half that still has something new to report.
+- **The same audience as the review's own nudge**, which is the assigned
+  reviewer's DM or the channel while nobody owns it. The escalation is the only
+  rung allowed to widen an audience, and a parked review that went to the channel
+  for an assigned review would widen it as a side effect of pressing a button.
+- **A resolved review is silent, parked findings and all.** The findings are
+  still there and the board still says so, but a pull request that has been
+  approved or closed is not something to interrupt anybody about.
+
+### Slice 9: what is next
 
 The placeholders above are the list, and the loudest is now the attention stream,
 which is still per process. Beside it, the Slack intake is the one surface the
-org boundary does not reach, and a parked AI review still tells nobody: the clock
-finds it, and no nudge says so.
+org boundary does not reach.
 
 ## Decisions worth recording
 

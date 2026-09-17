@@ -50,7 +50,10 @@ Opening the row reads cat-factory, and closing it stops. What does not stop is
 the deployment's own clock: the same tick that sends the reminders asks after
 every review still in flight, so one that parks while every board is closed is
 already on the row when somebody next looks, rather than waiting to be
-discovered.
+discovered. And it does not wait to be looked at: a review that parks is a nudge
+like any other — the assigned reviewer's DM, or the channel while nobody owns
+it — said once per park, and again if a post fails and re-parks it. A pull
+request that has already been approved or closed is left alone.
 
 ## Asking for attention
 

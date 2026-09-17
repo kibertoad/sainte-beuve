@@ -224,6 +224,24 @@ export const aiReviewRunSchema = v.object({
    * one still moves the run down the rotation instead of monopolising it.
    */
   lastPolledAt: v.nullable(v.number()),
+  /**
+   * When this run last PARKED on its findings, and null whenever it is not
+   * parked.
+   *
+   * The moment a poll first saw `awaiting_selection` after the run was
+   * something else, which is the moment the review stopped waiting on a model
+   * and started waiting on a person. It is what the reminder ladder counts from,
+   * and what tells a nudge that has already gone out about this park from one
+   * that has not: a post that fails re-parks the review, and that is a second
+   * thing to say rather than a repeat of the first.
+   *
+   * On the PAYLOAD rather than promoted to a column, unlike `status` and
+   * `lastPolledAt`. Nothing selects on it: the clock reads what is in flight by
+   * status, and the ladder asks for one review's runs by `review_id`, both of
+   * which are already indexed. A column would be a migration in two dialects
+   * bought for a field no `WHERE` clause names.
+   */
+  parkedAt: v.nullable(v.number()),
   completedAt: v.nullable(v.number()),
 })
 export type AiReviewRun = v.InferOutput<typeof aiReviewRunSchema>

@@ -9,6 +9,12 @@ export type EpochMs = number
  * assigned-but-silent one after a working day, then every working day, and widen
  * the audience 24 hours past the deadline. Deployment-tunable (see
  * `reminderPolicySchema`), but these are the numbers a workspace starts on.
+ *
+ * The parked AI review is the one rung measured in minutes rather than hours,
+ * because it is the only one that is not waiting on somebody's attention: the
+ * findings exist, and fifteen minutes is long enough for whoever pressed the
+ * button to still be on the row and short enough that nobody's afternoon is
+ * spent beside a queue nothing announced.
  */
 export const DEFAULT_REMINDER_POLICY: ReminderPolicy = {
   unassignedAfterMs: 4 * 60 * 60 * 1000,
@@ -16,6 +22,7 @@ export const DEFAULT_REMINDER_POLICY: ReminderPolicy = {
   pendingRepeatMs: 24 * 60 * 60 * 1000,
   escalateAfterDueMs: 24 * 60 * 60 * 1000,
   maxPendingReminders: 3,
+  aiReviewParkedAfterMs: 15 * 60 * 1000,
 }
 
 /**

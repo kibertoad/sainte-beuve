@@ -529,6 +529,7 @@ describe('polling a delegated AI review on the reminder tick', () => {
       curation: null,
       requestedAt: loop.harness.clock.now(),
       lastPolledAt: null,
+      parkedAt: null,
       completedAt: null,
     })
 

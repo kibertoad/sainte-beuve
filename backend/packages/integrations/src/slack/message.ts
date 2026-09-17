@@ -82,7 +82,14 @@ export function announcementMessage(review: ReviewRequest): SlackMessage {
   }
 }
 
-/** One scheduled nudge, worded by what the nudge is for. */
+/**
+ * One scheduled nudge, worded by what the nudge is for.
+ *
+ * The parked AI review is the one that names the BOARD rather than the pull
+ * request as the thing to open, because it is the one whose answer is not on the
+ * pull request: nothing has been posted there yet, and the point of the loop is
+ * that nothing is until somebody has said which findings deserve it.
+ */
 export function reminderMessage(
   reminder: Reminder,
   review: ReviewRequest,
@@ -95,6 +102,13 @@ export function reminderMessage(
   }
   if (reminder.kind === 'escalation') {
     return { text: `${link} is past its review deadline.${board}` }
+  }
+  if (reminder.kind === 'ai_review_parked') {
+    return {
+      text:
+        `The AI review of ${link} has finished and is waiting on somebody to say which ` +
+        `findings are worth posting.${board}`,
+    }
   }
   return { text: `Reminder: ${link} is waiting on your review.${board}` }
 }
