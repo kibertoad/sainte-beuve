@@ -5,6 +5,8 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import {
+  DEFAULT_ORG_ID,
+  DEFAULT_ORG_SLUG,
   signInCallbackPath,
   VCS_PROVIDERS,
   vcsDisplayName,
@@ -232,6 +234,12 @@ export class ConnectionsService {
    */
   private async orgIdFor(slug: string | undefined): Promise<string> {
     if (slug === undefined) return this.container.orgId
+    // The DEFAULT org answers to its slug whether or not its row exists, which
+    // is the ordinary state of a deployment that never made a second one (see
+    // `OrgService.current`). Without this, the one slug every caller can read
+    // off their own auth state — and the only one nobody is allowed to create —
+    // is the one slug a sign-in refuses.
+    if (slug === DEFAULT_ORG_SLUG) return DEFAULT_ORG_ID
     const held = await this.container.stores.orgs.getBySlug(slug)
     if (held === null) throw new NotFoundError(`No org "${slug}" on this deployment.`)
     return held.id

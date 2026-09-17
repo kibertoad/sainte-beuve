@@ -77,12 +77,34 @@ There is exactly one moment an org is chosen by something a caller sent:
 GET /api/v1/auth/sign-in/github?org=acme
 ```
 
-The slug goes into the SIGNED state, the callback reads it back, and the session
-it establishes is bound to it for good. A slug in the callback URL instead would
+`default` is accepted whether or not the default org's row exists, because it is
+the slug every caller can read off their own auth state and the one slug nobody
+is allowed to create. The slug goes into the SIGNED state, the callback reads it
+back, and the session it establishes is bound to it for good. A slug in the callback URL instead would
 let anybody who can hand somebody a link decide which tenancy they land in. A
 slug nobody has made is a 404 rather than a quiet fall back to the default org,
 because somebody who typed an org name and was signed in to a different board
 would have no way to tell afterwards.
+
+### The one thing `forOrg` could not scope
+
+The attention bus is a single object per PROCESS — it has to be, because a
+Worker rebuilds its container per request and a bus built with it would have one
+subscriber and no publisher. So it is the one thing on the container that cannot
+be handed out as a scoped copy, and the only place the boundary had to be closed
+by hand.
+
+The org is therefore a parameter of the BUS (`publish(orgId, event)`,
+`subscribe(orgId, listener)`) and never of its callers: `withOrg` binds a
+`ScopedAttentionBus` beside the repositories, and `AttentionService` and the SSE
+controller pass no org at all.
+
+Getting this wrong is quiet and complete. A live event is filtered by `reaches`
+→ `isInAttentionAudience`, which knows about skills and teams and nothing about
+orgs — and an ask with no required skills and no same-team gate concerns _any_
+available reviewer. One process serving two tenancies would push every ask in the
+first onto the open streams of the second. The REST inbox was never affected,
+because it reads through the org-bound repositories like everything else.
 
 ## A role is what you may change
 

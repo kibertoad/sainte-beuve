@@ -3,6 +3,7 @@ import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type { VcsIdentityGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { withOrg } from '../src/container.js'
+import { InMemoryAttentionBus } from '../src/realtime/InMemoryAttentionBus.js'
 import { runReminderTick } from '../src/reminders/tick.js'
 import {
   buildHarness,
@@ -142,6 +143,15 @@ describe('the org boundary', () => {
       const made = await makeOrg(harness, 'acme', 'Acme')
       const state = await authState(harness, await signIn(harness, 'acme'))
       expect(state.org).toStrictEqual(made)
+    })
+
+    // The one slug every caller can read off their own auth state, and the only
+    // one nobody is allowed to create. A sign-in that refused it would refuse
+    // the org it is describing.
+    it('signs somebody in to the default org by its slug, row or no row', async () => {
+      const state = await authState(harness, await signIn(harness, 'default'))
+      expect(state.org.id).toBe(DEFAULT_ORG_ID)
+      expect(await harness.container.stores.orgs.list()).toStrictEqual([])
     })
 
     it('refuses a sign-in to an org nobody made rather than falling back', async () => {
@@ -309,3 +319,66 @@ describe('the org boundary', () => {
     })
   })
 })
+
+// The bus is ONE object per process — it has to be, on a runtime that rebuilds
+// its container per request — so it is the one thing `forOrg` cannot hand out a
+// scoped copy of, and the only place the boundary had to be closed by hand.
+describe('the live attention stream', () => {
+  it('keeps one org\u2019s subscribers off another org\u2019s events', async () => {
+    const fanout = new InMemoryAttentionBus()
+    const container = closedHarness().container
+    const heard: string[] = []
+    // A subscriber in each org, through the SCOPED view each container binds.
+    withOrg({ ...container, attentionFanout: fanout }, 'org-a').bus.subscribe(() => heard.push('a'))
+    withOrg({ ...container, attentionFanout: fanout }, 'org-b').bus.subscribe(() => heard.push('b'))
+
+    withOrg({ ...container, attentionFanout: fanout }, 'org-a').bus.publish({
+      kind: 'opened',
+      request: attentionIn('a1'),
+    })
+
+    // Not filtered by the audience rule, which knows about skills and teams
+    // and nothing about orgs: an ask with no required skills and no same-team
+    // gate concerns ANY available reviewer, so a shared fan-out would have
+    // pushed this onto every open stream in the process.
+    expect(heard).toStrictEqual(['a'])
+  })
+
+  it('drops an org\u2019s listener set with its last stream', async () => {
+    const fanout = new InMemoryAttentionBus()
+    const container = closedHarness().container
+    const stop = withOrg({ ...container, attentionFanout: fanout }, 'org-a').bus.subscribe(() => {})
+    expect(fanout.subscriberCount('org-a')).toBe(1)
+    stop()
+    // A process that has served a thousand tenancies must not hold a thousand
+    // empty sets for ever.
+    expect(fanout.subscriberCount('org-a')).toBe(0)
+  })
+})
+
+/** An ask nobody is named in and no skill gates: what every available reviewer concerns. */
+function attentionIn(id: string) {
+  return {
+    id,
+    pullRequest: {
+      provider: 'github' as const,
+      owner: 'platform',
+      repo: 'api',
+      number: 12,
+      url: 'https://github.com/platform/api/pull/12',
+    },
+    title: `Attention ${id}`,
+    requestedById: 'r1',
+    requestedByName: 'Somebody',
+    requiredSkills: [],
+    sameTeamOnly: false,
+    team: null,
+    neededCommitments: 1,
+    commitments: [],
+    note: null,
+    status: 'open' as const,
+    createdAt: 1_000,
+    updatedAt: 1_000,
+    resolvedAt: null,
+  }
+}

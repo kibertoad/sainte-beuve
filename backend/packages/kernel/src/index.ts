@@ -35,7 +35,7 @@ export type {
   VcsGateway,
   VcsIdentityGateway,
 } from './ports/gateways.js'
-export type { AttentionBus } from './ports/realtime.js'
+export type { AttentionBus, ScopedAttentionBus } from './ports/realtime.js'
 export { isStoredRowError, StoredRowError } from './ports/repositories.js'
 export type {
   AiReviewRunRepository,

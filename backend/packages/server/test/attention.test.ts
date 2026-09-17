@@ -1,4 +1,5 @@
 import type { AttentionEvent, AttentionRequest } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryAttentionBus } from '../src/realtime/InMemoryAttentionBus.js'
 import {
@@ -22,7 +23,10 @@ const ATTENTION = '/api/v1/attention'
 
 /** A deployment whose credential acts as `username`, so that is who the viewer is. */
 function harnessFor(username: string, bus = new InMemoryAttentionBus()): TestHarness {
-  return buildHarness({ vcs: environmentVcs(viewerVcs(username)), bus })
+  // The bus goes in as the PROCESS-WIDE fan-out, not as a container override:
+  // `container.bus` is the view `withOrg` binds to an org, and replacing that
+  // with a raw bus would be a stream nothing ever publishes to.
+  return buildHarness({ vcs: environmentVcs(viewerVcs(username)) }, { bus })
 }
 
 async function raise(
@@ -298,12 +302,12 @@ describe('the live stream', () => {
     const harness = harnessFor('kibertoad', bus)
     const res = await harness.app.fetch(get(`${ATTENTION}/stream`))
     expect(res.headers.get('content-type')).toBe('text/event-stream')
-    expect(bus.subscriberCount).toBe(1)
+    expect(bus.subscriberCount(DEFAULT_ORG_ID)).toBe(1)
 
     await res.body?.cancel()
     // A long-lived process must not accumulate one listener per page anybody
     // ever opened.
-    expect(bus.subscriberCount).toBe(0)
+    expect(bus.subscriberCount(DEFAULT_ORG_ID)).toBe(0)
   })
 })
 

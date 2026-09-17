@@ -16,14 +16,22 @@ import type { AttentionBus } from '@sainte-beuve/kernel'
  * per invocation (the Worker does: bindings only exist inside one) the bus has
  * to be held at module level, or every subscriber would be listening to a bus
  * nothing ever publishes on.
+ *
+ * Which is exactly why the ORG is in the signature rather than bound into the
+ * object: a process-wide bus is the one thing on the container `forOrg` cannot
+ * hand out a scoped copy of, so the listeners are kept in a set PER ORG and a
+ * publish never walks another tenancy's. `scopedBus` is what binds it for the
+ * services above.
  */
 export class InMemoryAttentionBus implements AttentionBus {
-  private readonly listeners = new Set<(event: AttentionEvent) => void>()
+  private readonly byOrg = new Map<string, Set<(event: AttentionEvent) => void>>()
 
-  publish(event: AttentionEvent): void {
+  publish(orgId: string, event: AttentionEvent): void {
+    const listeners = this.byOrg.get(orgId)
+    if (listeners === undefined) return
     // Deleting from a Set mid-iteration is well defined, which is what lets the
     // dead-subscriber cleanup below happen in place.
-    for (const listener of this.listeners) {
+    for (const listener of listeners) {
       try {
         listener(event)
       } catch {
@@ -32,20 +40,25 @@ export class InMemoryAttentionBus implements AttentionBus {
         // happens after a write that already succeeded, and letting one dead
         // connection fail that write would turn a browser tab closing into a
         // 500 for the person who raised the request.
-        this.listeners.delete(listener)
+        listeners.delete(listener)
       }
     }
   }
 
-  subscribe(listener: (event: AttentionEvent) => void): () => void {
-    this.listeners.add(listener)
+  subscribe(orgId: string, listener: (event: AttentionEvent) => void): () => void {
+    const listeners = this.byOrg.get(orgId) ?? new Set()
+    listeners.add(listener)
+    this.byOrg.set(orgId, listeners)
     return () => {
-      this.listeners.delete(listener)
+      listeners.delete(listener)
+      // The org's set goes with its last stream, so a process that has served a
+      // thousand tenancies does not hold a thousand empty sets for ever.
+      if (listeners.size === 0) this.byOrg.delete(orgId)
     }
   }
 
-  /** How many streams are attached. For `/health` and for a test. */
-  get subscriberCount(): number {
-    return this.listeners.size
+  /** How many streams are attached, in one org. For `/health` and for a test. */
+  subscriberCount(orgId: string): number {
+    return this.byOrg.get(orgId)?.size ?? 0
   }
 }

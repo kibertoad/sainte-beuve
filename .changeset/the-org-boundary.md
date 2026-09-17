@@ -75,9 +75,18 @@ inside the default one and behaves exactly as it did. See `docs/orgs.md`.
   begin with, and a `listDue` reaching across every tenancy would have been the
   single read that could return another org's rows, on the one path with nobody to
   refuse it.
-- The SPA hides Configuration from a member rather than letting them find the 403,
-  names the org in the rail on a deployment that has more than one, and the
-  reviewer form grows a role.
+- **The attention bus carries the org.** It is one object per process, so it is
+  the one thing `forOrg` cannot hand out a scoped copy of: the org is a parameter
+  of `publish`/`subscribe` and `withOrg` binds a `ScopedAttentionBus` beside the
+  repositories, so no service passes one. Without it the leak is quiet and
+  complete — a live event is filtered by the audience rule, which knows about
+  skills and teams and nothing about orgs, and an ask with no required skills
+  concerns any available reviewer.
+- The SPA asks for none of the admin-only reads when the caller is a member,
+  rather than letting them find three 403s; it names the org in the rail on a
+  deployment that has more than one, and the reviewer form and the key-minting
+  form both grow a role. The Configuration link stays in the rail for everybody,
+  because it holds the only sign-out button there is.
 - **A Slack command still acts on the default org**, and that is the known limit.
   One Slack app serves every tenancy because its signing secret is deployment
   wiring; placing a command by searching every org's directory for the Slack id

@@ -16,6 +16,7 @@ import type {
   PersistenceKind,
   PersistenceProvider,
   Repositories,
+  ScopedAttentionBus,
   SecretCipher,
   StateSigner,
   VcsGateway,
@@ -23,6 +24,7 @@ import type {
 import { DEFAULT_REMINDER_POLICY, systemClock, uuidGenerator } from '@sainte-beuve/kernel'
 import type { SecretsWiring } from './crypto/WebCryptoSecretCipher.js'
 import { InMemoryAttentionBus } from './realtime/InMemoryAttentionBus.js'
+import { scopedBus } from './realtime/scopedBus.js'
 
 /** The environment's own gateway per host. Absent for a host nothing configured. */
 export type EnvironmentVcsGateways = Record<VcsProvider, VcsGateway | null>
@@ -190,12 +192,21 @@ export interface AppContainer {
    */
   secretsRejectedReason: string | null
   /**
-   * Fans attention events out to the pages that are connected right now. Never
-   * null: the workspace's REST inbox is what makes the feature correct, and the
-   * bus is the optimisation on top, so a facade that forgets to wire one gets
-   * an in-process bus rather than a stream that silently delivers nothing.
+   * Fans attention events out to the pages that are connected right now, IN
+   * THIS ORG. Never null: the workspace's REST inbox is what makes the feature
+   * correct, and the bus is the optimisation on top, so a facade that forgets to
+   * wire one gets an in-process bus rather than a stream that silently delivers
+   * nothing.
+   *
+   * Bound by `withOrg`, exactly as `repositories` is, so no service passes an
+   * org and none can reach another tenancy's streams.
    */
-  bus: AttentionBus
+  bus: ScopedAttentionBus
+  /**
+   * The process-wide fan-out the bound view above is taken from. A facade wires
+   * this one; nothing but `withOrg` reads it.
+   */
+  attentionFanout: AttentionBus
   github: GitHubWiring
   slack: SlackWiring
   auth: AuthWiring
@@ -311,7 +322,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     // A fresh bus per container is right for a facade that builds one at boot
     // and wrong for one that builds a container per request, which is why the
     // Worker holds its own at module level and passes it in here.
-    bus: options.bus ?? new InMemoryAttentionBus(),
+    ...attentionBuses(options.bus ?? new InMemoryAttentionBus()),
     gateways: options.gateways ?? null,
     secrets: secrets.cipher,
     states: secrets.states,
@@ -338,5 +349,22 @@ export function createContainer(options: ContainerOptions): AppContainer {
  */
 export function withOrg(container: AppContainer, orgId: string): AppContainer {
   if (container.orgId === orgId) return container
-  return { ...container, orgId, repositories: container.stores.forOrg(orgId) }
+  return {
+    ...container,
+    orgId,
+    repositories: container.stores.forOrg(orgId),
+    // The BUS is rebound too, and forgetting it here is the whole of the leak
+    // this exists to prevent: a spread would carry the previous org's bound view
+    // into the new container, and the audience rule a subscriber filters on
+    // knows nothing about orgs.
+    bus: scopedBus(container.attentionFanout, orgId),
+  }
+}
+
+/** The process-wide bus a facade wired, and the default org's view of it. */
+function attentionBuses(fanout: AttentionBus): {
+  attentionFanout: AttentionBus
+  bus: ScopedAttentionBus
+} {
+  return { attentionFanout: fanout, bus: scopedBus(fanout, DEFAULT_ORG_ID) }
 }

@@ -7,7 +7,13 @@ import type {
   ReviewRequest,
   VcsProvider,
 } from '@sainte-beuve/contracts'
-import type { ChatGateway, GatewayFactory, Logger, VcsGateway } from '@sainte-beuve/kernel'
+import type {
+  AttentionBus,
+  ChatGateway,
+  GatewayFactory,
+  Logger,
+  VcsGateway,
+} from '@sainte-beuve/kernel'
 import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
 import type { Hono } from 'hono'
 import { expect } from 'vitest'
@@ -59,6 +65,15 @@ export interface HarnessOptions {
    * reading real time would treat it as expired the moment it is presented.
    */
   encryptionKey?: string
+  /**
+   * The PROCESS-WIDE attention bus, for a case that wants to inspect it.
+   *
+   * An option rather than a container override, because the container carries
+   * two: `attentionFanout` is the one a facade wires, and `bus` is the view
+   * `withOrg` binds to an org. Overriding the bound one with a raw bus would
+   * type-error and, worse, would be a stream nothing publishes to.
+   */
+  bus?: AttentionBus
 }
 
 export function buildHarness(
@@ -74,6 +89,7 @@ export function buildHarness(
       ids: sequentialIds(),
       // A fixed draw so an assertion can name the reviewer the router picked.
       random: () => 0,
+      bus: options.bus,
       secrets:
         options.encryptionKey === undefined
           ? null

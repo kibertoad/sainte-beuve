@@ -123,6 +123,17 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
     )
   }),
 
+  // Which of two claims wins has to be the SAME answer on every store and on
+  // every restart, or an inbound delivery lands in a different tenancy from one
+  // minute to the next. The oldest claim wins; the in-memory store cannot lean
+  // on map order for it.
+  tenancyCase('the older claim on a repository is the one an intake follows', async (stores) => {
+    await stores.forOrg(ORG_B).projects.create(project('p-late', { createdAt: 2_000 }))
+    await stores.forOrg(ORG_A).projects.create(project('p-early', { createdAt: 1_000 }))
+    const ref = { provider: 'github', owner: 'platform', repo: 'api' }
+    assert.strictEqual(await stores.tenancy.findOrgIdForProject(ref), ORG_A)
+  }),
+
   // A rename keeps somebody's workspace WITHIN their org, and one GitHub account
   // is a different person in each tenancy that knows them.
   tenancyCase('one host account is a separate person in each org', async (stores) => {

@@ -6,6 +6,7 @@ import type {
   TenancyDirectory,
 } from '@sainte-beuve/kernel'
 import { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
+import { byText } from './order.js'
 import { InMemoryOrgRepository } from './orgs.js'
 import { createInMemoryRepositories } from './stores.js'
 import { InMemoryProjectRepository } from './workspace-stores.js'
@@ -71,15 +72,29 @@ class InMemoryPersistence implements PersistenceProvider {
     return null
   }
 
+  /**
+   * The org whose claim on a repository is OLDEST, not whichever dataset this
+   * process happened to build first.
+   *
+   * Both durable stores answer this with `ORDER BY created_at, id` so an inbound
+   * delivery lands in the same tenancy every time; iterating the map in
+   * insertion order would make that depend on which org served a request first
+   * since the last restart, and this adapter would disagree with the ones a
+   * deployment actually runs.
+   */
   private async scanProjects(ref: {
     provider: string
     owner: string
     repo: string
   }): Promise<string | null> {
+    let claim: { orgId: string; createdAt: number; id: string } | null = null
     for (const [orgId, dataset] of this.datasets) {
-      if ((await dataset.projects.getByRef(ref)) !== null) return orgId
+      const held = await dataset.projects.getByRef(ref)
+      if (held === null) continue
+      const found = { orgId, createdAt: held.createdAt, id: held.id }
+      if (claim === null || olderClaim(found, claim)) claim = found
     }
-    return null
+    return claim?.orgId ?? null
   }
 }
 
@@ -95,6 +110,14 @@ interface OrgDataset extends Repositories {
   sessions: InMemorySessionRepository
   apiKeys: InMemoryApiKeyRepository
   projects: InMemoryProjectRepository
+}
+
+/** `ORDER BY created_at, id`, as the durable stores spell it. See `order.ts`. */
+function olderClaim(
+  a: { createdAt: number; id: string },
+  b: { createdAt: number; id: string },
+): boolean {
+  return a.createdAt !== b.createdAt ? a.createdAt < b.createdAt : byText(a.id, b.id) < 0
 }
 
 /** The whole in-memory store, orgs and all: what a facade with no database boots with. */
