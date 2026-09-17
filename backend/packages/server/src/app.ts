@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
 import { errorBody, handleError } from './http/errors.js'
+import { requestOrigin } from './http/forwarded.js'
 import { allowedOrigin, intendedMethod, WILDCARD, writeOriginGuard } from './http/origins.js'
 import { attentionController } from './modules/attention/AttentionController.js'
 import { authController } from './modules/auth/AuthController.js'
@@ -94,6 +95,10 @@ function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
       origin: (origin, c) =>
         allowedOrigin(originsFor(scopeOf(c)), {
           origin,
+          // Which deployment this IS, so the loopback echo local development
+          // needs is not also a credentialed grant to every page on the
+          // operator's machine. See `allowedOrigin`.
+          addressed: requestOrigin(c),
           path: c.req.path,
           method: intendedMethod(c),
         }),
@@ -101,14 +106,19 @@ function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
   )
 
   app.use('*', async (c, next) => {
+    // Beside the container and for the same reason: everything below this line
+    // reads what this request resolved to rather than reading configuration a
+    // second time. The session cookie's SameSite is decided from it.
+    c.set('corsOrigins', originsFor(scopeOf(c)))
     c.set('container', await options.resolveContainer(scopeOf(c)))
     await next()
   })
 
   // Before the caller is resolved, because refusing this costs nothing and
   // resolving a session for a request that is about to be refused costs a store
-  // read: a cross-site write carries the session cookie whether or not CORS
-  // will show the answer, so it has to be refused rather than merely hidden.
+  // read: a cross-site request carries the session cookie whether or not CORS
+  // will show the answer, so the ones the wildcard does not cover have to be
+  // refused rather than merely hidden.
   app.use(
     '/api/v1/*',
     writeOriginGuard((c) => originsFor(scopeOf(c))),

@@ -91,13 +91,21 @@ read it, so nothing in the page can. "On https" is read from `X-Forwarded-Proto`
 first and from the request's own scheme only after: a single-host deployment
 behind nginx receives `http://` on every request however the browser reached it,
 and the scheme alone would drop `Secure` from the one cookie that must never
-travel in the clear. When the deployment's `APP_BASE_URL` is on a
-different HOSTNAME from the API, it becomes `SameSite=None; Secure` instead,
-because `Lax` is not sent on a cross-site fetch and the sign-in would otherwise
-complete and never stick. The comparison is on the hostname rather than the
-registrable domain, which over-applies `None` to a deployment split across two
-subdomains of one domain; `None` still works there, and a missed cross-site case
-is a sign-in that silently does nothing.
+travel in the clear. When an origin the deployment NAMED is on a different
+HOSTNAME from the one the browser addressed, it becomes `SameSite=None; Secure`
+instead, because `Lax` is not sent on a cross-site fetch and the sign-in would
+otherwise complete and never stick. Every named origin counts, not `APP_BASE_URL`
+alone: a split-host deployment that listed its SPA in `CORS_ORIGINS` and nothing
+else has stated the same fact, and answering `Lax` there is a sign-in that fails
+on the callback and blames the operator's browser for it.
+
+The hostname it is compared against is the one the browser addressed — the same
+`X-Forwarded-Host` reading the same-origin check makes — so a single-host
+deployment behind a proxy that rewrites `Host` does not call itself cross-site
+and throw away the protection `Lax` was giving it. The comparison is on the
+hostname rather than the registrable domain, which over-applies `None` to a
+deployment split across two subdomains of one domain; `None` still works there,
+and a missed cross-site case is a sign-in that silently does nothing.
 
 **CORS matters here**, and more than it first looks. A browser sends a cookie
 cross-origin only to an origin the response NAMES, `Access-Control-Allow-Credentials`
@@ -110,23 +118,37 @@ So the SPA origin has to be one the deployment named — through `CORS_ORIGINS`,
 through `APP_BASE_URL`, whose origin is folded into the list by every runtime
 facade. That second path is not a duplicate spelling of the first: the deployment
 already had to say where its SPA is for the sign-in's return leg, and a variable
-that states a fact should not have to state it twice. Loopback is echoed by name
-even under the wildcard, which is what makes local development work.
+that states a fact should not have to state it twice.
 
-### Writes from another origin
+Loopback is echoed by name even under the wildcard — but only when the deployment
+is **itself** loopback, which is what makes local development work and is the
+whole of the exception. Against a hosted deployment, a page on
+`http://localhost:<port>` is some other program on the operator's machine (a dev
+server, an installed app, a package's postinstall), and naming it would hand that
+program the credentials header and, with it, the operator's session on the
+Configuration screen. An operator who really does run the SPA locally against a
+hosted API lists that origin like any other.
+
+### Requests from another origin
 
 CORS decides what a browser may **read**. It does not decide what runs. A
 cross-site `POST` with a `text/plain` body is a _simple_ request: no preflight is
 sent, the session cookie rides along on a `SameSite=None` deployment, and all
 CORS withholds is the response — by which time the write has happened.
 
-Every unsafe method under `/api/v1` therefore goes through an `Origin` check
-before anything else: the origin has to be the one the browser addressed
-(same-origin), or one the deployment named. A caller that sends no `Origin` is
+Everything under `/api/v1` that the wildcard does not cover therefore goes
+through an `Origin` check before anything else: the origin has to be the one the
+browser addressed (same-origin), or one the deployment named. That is the same
+list CORS reads — every unsafe method, the configuration routes, and the
+AI-review routes — rather than unsafe methods alone, because a GET is not always
+a read: answering one under `/ai-review` polls cat-factory with this deployment's
+key and writes what it learns onto the run, and hiding that answer from a
+cross-site page leaves the spend already made. A caller that sends no `Origin` is
 not a browser — a CI job on an API key, or an inbound webhook, which carries its
-own signature — and passes. Same-origin is compared against `X-Forwarded-Host`
-and `X-Forwarded-Proto` where they are set, so a deployment behind a terminator
-does not refuse its own SPA over a scheme it never sees.
+own signature — and passes; so does a preflight, which the CORS layer above
+answers on its own. Same-origin is compared against `X-Forwarded-Host` and
+`X-Forwarded-Proto` where they are set, so a deployment behind a terminator does
+not refuse its own SPA over a scheme it never sees.
 
 ## Signing in
 

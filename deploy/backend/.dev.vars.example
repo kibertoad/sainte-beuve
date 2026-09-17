@@ -59,7 +59,9 @@ APP_BASE_URL=http://localhost:3000
 #
 # Note CORS: a browser only sends the session cookie to an origin the response
 # NAMES, so a hosted SPA has to be listed in CORS_ORIGINS. A wildcard serves
-# reads and can never carry a session.
+# reads and can never carry a session. Loopback is the one origin the wildcard
+# names outright, and only while the deployment is itself on loopback: `wrangler
+# dev`, not a deployed Worker.
 # ---------------------------------------------------------------------------
 AUTH_MODE=open
 # Presented as `Authorization: Bearer <key>`. Matched before the store, so it

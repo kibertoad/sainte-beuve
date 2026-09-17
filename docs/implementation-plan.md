@@ -402,7 +402,8 @@ is [auth.md](./auth.md); what that slice decided, in short:
   invalid beside `*`. A hosted deployment therefore has to list its SPA in
   `CORS_ORIGINS` or have an SPA that can read the board and never sign in — which
   is the loud failure rather than the quiet one. Loopback is echoed by name even
-  under the wildcard, which is what keeps local development working.
+  under the wildcard when the deployment is itself loopback, which is what keeps
+  local development working.
 - **The sweep rides the reminder tick.** It is the one periodic pass both
   runtimes already have, and a sweep wired on the Node interval and not on the
   Worker's cron would be exactly the asymmetry this layout exists to prevent.

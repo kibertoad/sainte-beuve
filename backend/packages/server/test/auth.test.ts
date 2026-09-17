@@ -46,10 +46,13 @@ function stubSignIn(username = 'kibertoad'): VcsIdentityGateway {
 }
 
 /** A deployment somebody can actually sign in to: an OAuth client and a key to sign the state. */
-function signable(overrides: Parameters<typeof buildHarness>[0] = {}): TestHarness {
+function signable(
+  overrides: Parameters<typeof buildHarness>[0] = {},
+  options: Omit<Parameters<typeof buildHarness>[1] & object, 'encryptionKey'> = {},
+): TestHarness {
   return buildHarness(
     { gateways: stubGateways({ signIn: everyHost(stubSignIn()) }), ...overrides },
-    { encryptionKey: KEY },
+    { encryptionKey: KEY, ...options },
   )
 }
 
@@ -410,6 +413,50 @@ describe('a round trip', () => {
     jar.keep(first)
     // The callback cleared it, so the browser no longer holds the nonce.
     expect((await harness.app.fetch(get(path, jar.headers()))).status).toBe(400)
+  })
+
+  it('carries the cookies cross-site for a deployment that named its SPA in CORS_ORIGINS', async () => {
+    // A split-host deployment states where its SPA is ONCE, and `CORS_ORIGINS`
+    // is one of the two ways to say it. Reading only `APP_BASE_URL` answers
+    // `SameSite=Lax` here, and `Lax` is not sent on the SPA's own cross-site
+    // fetch: a sign-in that completes, a session never presented again, and a
+    // callback that blames the operator's browser for it.
+    const harness = signable({}, { corsOrigins: ['https://board.example.com'] })
+    const jar = cookieJar()
+    const start = await harness.app.fetch(get('/api/v1/auth/sign-in/github'))
+    jar.keep(start)
+    expect(start.headers.get('set-cookie')).toContain('SameSite=None')
+
+    const state = new URL(((await start.json()) as { url: string }).url).searchParams.get('state')
+    const callback = await harness.app.fetch(
+      get(`/connect/github/callback?code=abc&state=${encodeURIComponent(state ?? '')}`, {
+        ...jar.headers(),
+      }),
+    )
+    const cookie = callback.headers.get('set-cookie') ?? ''
+    expect(cookie).toContain('sb_session=')
+    // `None` is refused outright by a browser without `Secure`, so the pair is
+    // never split. See `reachedOverTls`.
+    expect(cookie).toContain('SameSite=None')
+    expect(cookie).toContain('Secure')
+  })
+
+  it('keeps the cookies same-site behind a proxy that rewrote the Host', async () => {
+    // The SPA and the API are one host, and nginx hands this process an
+    // internal one. Comparing against the URL this process was given rather
+    // than the host the browser addressed reads that as a split-host
+    // deployment and answers `SameSite=None` — which works, and throws away the
+    // browser's own cross-site protection on the deployment that had it.
+    const harness = signable({ appBaseUrl: 'https://board.example.com' })
+    const start = await harness.app.fetch(
+      new Request('http://internal-8788/api/v1/auth/sign-in/github', {
+        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'board.example.com' },
+      }),
+    )
+    const cookie = start.headers.get('set-cookie') ?? ''
+    expect(cookie).toContain('sb_flow=')
+    expect(cookie).toContain('SameSite=Lax')
+    expect(cookie).toContain('Secure')
   })
 
   it('marks the session cookie Secure behind a proxy that terminated the TLS', async () => {

@@ -74,6 +74,11 @@ export interface HarnessOptions {
    * type-error and, worse, would be a stream nothing publishes to.
    */
   bus?: AttentionBus
+  /**
+   * The origins the deployment named, as a facade would have computed them.
+   * Defaults to the wildcard every runtime ships, which is what most cases mean.
+   */
+  corsOrigins?: string[]
 }
 
 export function buildHarness(
@@ -101,7 +106,11 @@ export function buildHarness(
     }),
     ...overrides,
   }
-  return { app: createApp({ resolveContainer: () => container }), container, clock }
+  const app = createApp({
+    resolveContainer: () => container,
+    ...(options.corsOrigins === undefined ? {} : { corsOrigins: options.corsOrigins }),
+  })
+  return { app, container, clock }
 }
 
 /**
