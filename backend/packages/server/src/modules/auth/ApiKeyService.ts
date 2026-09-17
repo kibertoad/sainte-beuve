@@ -85,12 +85,21 @@ export class ApiKeyService {
    * The environment's key is matched FIRST, and not by digest: it never went
    * through `mint`, and matching it before the store is what keeps a deployment
    * reachable while its database is being restored.
+   *
+   * It is also matched before the PREFIX, which is the order that matters. An
+   * operator sets `AUTH_API_KEY` to whatever their secret manager generated, and
+   * nothing anywhere asks them for `sbk_`; a prefix check in front of that
+   * comparison turns the one credential that answers the bootstrap into a value
+   * that is silently never a caller, on a deployment `/health` still reports as
+   * having one. The prefix is a cheap way to skip a store read for a value that
+   * cannot be a MINTED key, and it is only worth that much.
    */
   async verify(token: string | null): Promise<ApiKeyPrincipal | null> {
-    if (token === null || !token.startsWith(API_KEY_PREFIX)) return null
+    if (token === null || token.length === 0) return null
     if (this.isEnvironmentKey(token)) {
       return { keyId: ENVIRONMENT_KEY_ID, label: ENVIRONMENT_KEY_ID }
     }
+    if (!token.startsWith(API_KEY_PREFIX)) return null
     const { apiKeys } = this.container.repositories
     const held = await apiKeys.findByDigest(await digestOf(token))
     if (held === null) return null

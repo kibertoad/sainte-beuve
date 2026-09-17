@@ -23,6 +23,7 @@ export {
   type WebCryptoSecretCipherOptions,
 } from './crypto/WebCryptoSecretCipher.js'
 export { errorBody, handleError, requireCapability } from './http/errors.js'
+export { withAppOrigin } from './http/origins.js'
 export { HINT_LENGTH, hintOf } from './integrations/credentials.js'
 export {
   type CredentialSource,

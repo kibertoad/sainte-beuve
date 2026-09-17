@@ -86,7 +86,11 @@ a field an operator reads in days.
 ### The cookie
 
 `HttpOnly; Path=/; SameSite=Lax`, `Secure` on https. Nothing in the page needs to
-read it, so nothing in the page can. When the deployment's `APP_BASE_URL` is on a
+read it, so nothing in the page can. "On https" is read from `X-Forwarded-Proto`
+first and from the request's own scheme only after: a single-host deployment
+behind nginx receives `http://` on every request however the browser reached it,
+and the scheme alone would drop `Secure` from the one cookie that must never
+travel in the clear. When the deployment's `APP_BASE_URL` is on a
 different HOSTNAME from the API, it becomes `SameSite=None; Secure` instead,
 because `Lax` is not sent on a cross-site fetch and the sign-in would otherwise
 complete and never stick. The comparison is on the hostname rather than the
@@ -94,12 +98,34 @@ registrable domain, which over-applies `None` to a deployment split across two
 subdomains of one domain; `None` still works there, and a missed cross-site case
 is a sign-in that silently does nothing.
 
-**CORS matters here.** A browser sends a cookie cross-origin only to an origin the
-response NAMES, and `Access-Control-Allow-Credentials` is invalid beside `*`. So a
-hosted deployment has to list its SPA in `CORS_ORIGINS`; one left on the wildcard
-serves reads and can never carry a session. Loopback is the exception and is
-echoed by name even under the wildcard, which is what makes local development
-work.
+**CORS matters here**, and more than it first looks. A browser sends a cookie
+cross-origin only to an origin the response NAMES, `Access-Control-Allow-Credentials`
+is invalid beside `*`, and a browser refuses a `*` answer **outright** on any
+request that asked to send a credential. The SPA's client asks on every call, so
+a hosted deployment whose SPA origin is not named does not serve reads and fail
+at sign-in: it serves nothing.
+
+So the SPA origin has to be one the deployment named — through `CORS_ORIGINS`, or
+through `APP_BASE_URL`, whose origin is folded into the list by every runtime
+facade. That second path is not a duplicate spelling of the first: the deployment
+already had to say where its SPA is for the sign-in's return leg, and a variable
+that states a fact should not have to state it twice. Loopback is echoed by name
+even under the wildcard, which is what makes local development work.
+
+### Writes from another origin
+
+CORS decides what a browser may **read**. It does not decide what runs. A
+cross-site `POST` with a `text/plain` body is a _simple_ request: no preflight is
+sent, the session cookie rides along on a `SameSite=None` deployment, and all
+CORS withholds is the response — by which time the write has happened.
+
+Every unsafe method under `/api/v1` therefore goes through an `Origin` check
+before anything else: the origin has to be the one the browser addressed
+(same-origin), or one the deployment named. A caller that sends no `Origin` is
+not a browser — a CI job on an API key, or an inbound webhook, which carries its
+own signature — and passes. Same-origin is compared against `X-Forwarded-Host`
+and `X-Forwarded-Proto` where they are set, so a deployment behind a terminator
+does not refuse its own SPA over a scheme it never sees.
 
 ## Signing in
 
@@ -122,6 +148,24 @@ connect flow is under `/api/v1/settings` and is therefore behind the guard, whil
 connects the deployment's credential afterwards — or reaches the settings routes
 with `AUTH_API_KEY` if there is no OAuth client to sign in with at all.
 
+### The state is bound to the browser that started the flow
+
+Signed and recent is not enough on its own. Anybody may start a flow here and be
+handed a state this deployment really signed; handing the finished callback URL
+to somebody else would sign **them** in on the attacker's account — login CSRF —
+and on the `connect` flow would store the attacker's credential as the
+deployment's.
+
+So the state carries a `nonce`, and the answer that hands out the authorize URL
+sets the same value in a short-lived `HttpOnly` cookie with the session cookie's
+attributes. The callback accepts the round trip only where the two match, spends
+the cookie, and clears it either way. Producing a matching pair means holding
+both halves, which is what a second browser does not.
+
+A deployment where that cookie cannot be stored is one where the session cookie
+could not have been stored either, so this refuses nothing that would otherwise
+have worked.
+
 The person behind the account is resolved by `PeopleService`, which is the same
 claim rule the viewer read uses: an existing directory row with that handle is
 ADOPTED rather than forked, and the `(provider, subject)` key decides the winner
@@ -138,11 +182,24 @@ They live under `/settings` with the credential routes on purpose: minting one
 produces a credential, and that prefix is what the wildcard CORS default already
 stops at.
 
+Minting is also the **one** route an `open` deployment still refuses an anonymous
+caller. `open` means the deployment refuses nobody, and that holds for every route
+whose effect is bounded by the mode: whoever can empty the project registry today
+is whoever can reach the deployment today, and `AUTH_MODE=required` takes it back
+tomorrow. A minted key does not come back — it is a durable bearer credential that
+keeps answering after the switch — so the route that produces one asks who is
+calling even where nothing else does. Listing and revoking are not guarded:
+neither creates anything that outlives the mode, and guarding the read would take
+the Configuration screen away from the laptop the open default exists for.
+
 Beside them there is `AUTH_API_KEY`, the deployment's OWN key, read from the
 environment. It answers the bootstrap — a `required` deployment has no sessions
 and no minted keys, so the route that mints the first key would be the route
-nobody can reach — and it is matched before the store, so it keeps working while
-the database is being restored. It cannot be revoked through the API, and the
+nobody can reach, and an `open` one has the same problem now that minting asks
+who is calling. It is matched before the store, so it keeps working while the
+database is being restored, and before the `sbk_` prefix check, so it is
+whatever value an operator's secret manager produced rather than something they
+had to spell a particular way. It cannot be revoked through the API, and the
 refusal says to clear the variable rather than answering "no such key".
 
 ## What this does not do yet

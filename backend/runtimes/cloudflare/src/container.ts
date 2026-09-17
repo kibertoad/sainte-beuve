@@ -26,6 +26,7 @@ import {
   InMemoryAttentionBus,
   type SecretsWiring,
   secretsFrom,
+  withAppOrigin,
 } from '@sainte-beuve/server'
 import type { WorkerEnv } from './env.js'
 
@@ -282,9 +283,20 @@ function authFor(env: WorkerEnv): AuthWiring {
   }
 }
 
+/**
+ * The origins this Worker answers.
+ *
+ * The SPA's own origin is folded in, because a deployment that said where its
+ * SPA lives has NAMED an origin: the client sends `credentials: 'include'` on
+ * every call and a browser refuses any answer to one carrying
+ * `Access-Control-Allow-Origin: *`, so a hosted deployment left on the wildcard
+ * `wrangler.toml` ships would otherwise lose every request rather than only its
+ * sign-in. Node reads it the same way. See `withAppOrigin`.
+ */
 export function corsOriginsFor(env: WorkerEnv): string[] {
   const configured = env.CORS_ORIGINS?.split(',')
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0)
-  return configured === undefined || configured.length === 0 ? ['*'] : configured
+  const origins = configured === undefined || configured.length === 0 ? ['*'] : configured
+  return withAppOrigin(origins, env.APP_BASE_URL)
 }

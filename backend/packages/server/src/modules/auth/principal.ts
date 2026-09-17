@@ -142,3 +142,20 @@ export function principalOf<E extends AppEnv, P extends string, I extends Input>
 export function refuseIfMachine(principal: RequestPrincipal): void {
   if (principal.kind === 'api_key') throw new ForbiddenError(NOT_A_PERSON)
 }
+
+/**
+ * The one way in for a caller this deployment cannot name, whichever mode it is in.
+ *
+ * `open` means the deployment refuses nobody, and the guard above therefore lets
+ * an anonymous caller everywhere. That is the contract, and it holds for every
+ * route whose effect is bounded by the mode: whoever can empty the project
+ * registry today is whoever can reach the deployment today, and switching to
+ * `required` takes that back. A minted API key is the one thing here that does
+ * NOT come back — it is a durable bearer credential that keeps answering after
+ * the switch — so the route that produces one asks who is calling even where
+ * nothing else does. The caller names itself with a session or with
+ * `AUTH_API_KEY`, which is the same bootstrap `required` already runs on.
+ */
+export function refuseIfAnonymous(principal: RequestPrincipal, reason: string): void {
+  if (principal.kind === 'anonymous') throw new UnauthenticatedError(reason)
+}

@@ -9,7 +9,7 @@ import { ValidationError } from '@sainte-beuve/kernel'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { writeSessionCookie } from '../auth/cookies.js'
+import { clearFlowCookie, readFlowCookie, writeSessionCookie } from '../auth/cookies.js'
 import { ConnectionsService } from './ConnectionsService.js'
 
 /**
@@ -36,8 +36,15 @@ export function connectController(): Hono<AppEnv> {
   }
 
   app.get(GITHUB_APP_SETUP_PATH, async (c) => {
-    const { returnTo } = await new ConnectionsService(c.get('container')).completeAppInstall(
+    const container = c.get('container')
+    // Spent BEFORE the state is checked, and cleared either way: a nonce is good
+    // for exactly one callback, and leaving it behind means a browser holding a
+    // value that could still finish a round trip somebody else can reach.
+    const nonce = readFlowCookie(c)
+    clearFlowCookie(c, container)
+    const { returnTo } = await new ConnectionsService(container).completeAppInstall(
       c.req.query('state') ?? null,
+      nonce,
     )
     // Nothing is stored: an installation is resolved from the repository it is
     // used for, so the App is usable the moment GitHub says it is installed.
@@ -64,6 +71,9 @@ async function finishSignIn(c: Context<AppEnv>, provider: VcsProvider): Promise<
     )
   }
   const container = c.get('container')
+  // Read and cleared before anything is spent. See the App setup callback above.
+  const nonce = readFlowCookie(c)
+  clearFlowCookie(c, container)
   const { login, returnTo, session, purpose } = await new ConnectionsService(
     container,
   ).completeSignIn({
@@ -71,6 +81,7 @@ async function finishSignIn(c: Context<AppEnv>, provider: VcsProvider): Promise<
     code,
     state: c.req.query('state') ?? null,
     origin: new URL(c.req.url).origin,
+    nonce,
   })
   // The cookie is set BEFORE the redirect, on the response that carries it: a
   // 302 keeps its headers, and there is no JavaScript anywhere in this round

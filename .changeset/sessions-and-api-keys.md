@@ -7,6 +7,8 @@
 '@sainte-beuve/persistence-postgres': minor
 '@sainte-beuve/persistence-conformance': minor
 '@sainte-beuve/app': minor
+'@sainte-beuve/node-server': minor
+'@sainte-beuve/worker': minor
 ---
 
 Know who is calling: sessions for people, API keys for machines.
@@ -45,7 +47,33 @@ See `docs/auth.md`.
   `@sainte-beuve/persistence-conformance`, a D1 migration and a generated Postgres
   one. Neither carries a payload column: every field is read, and what must not be
   readable is a digest.
+- Minting a key is the one route an `open` deployment still refuses an anonymous
+  caller: it is the only thing here that outlives the mode, so a key minted a
+  minute before `AUTH_MODE=required` would go on answering after it. `AUTH_API_KEY`
+  is matched before the `sbk_` prefix check as well as before the store, so it is
+  whatever value an operator's secret manager produced.
+- The round-trip state is bound to the browser that started the flow. Signed and
+  recent is not enough on its own: anybody may start a flow and be handed a state
+  this deployment really signed, and handing the finished callback URL to somebody
+  else would sign THEM in on the attacker's account. A nonce rides in the state and
+  in a short-lived `HttpOnly` cookie, and the callback accepts only a matching pair.
 - CORS became load-bearing, because a browser sends a cookie only to an origin the
-  response NAMES and the credentials header is invalid beside `*`. A hosted
-  deployment has to list its SPA in `CORS_ORIGINS`; loopback is now echoed by name
-  even under the wildcard, which is what keeps local development working.
+  response NAMES, the credentials header is invalid beside `*`, and a browser
+  refuses a `*` answer outright on any request that asked to send a credential —
+  which the SPA's client does on every call. A hosted deployment's SPA origin
+  therefore has to be one it named, through `CORS_ORIGINS` or through
+  `APP_BASE_URL`, whose origin every runtime facade folds into the list. Loopback
+  is echoed by name even under the wildcard, which is what keeps local development
+  working.
+- CORS is not the whole of it, so every unsafe method under `/api/v1` now goes
+  through an `Origin` check: a cross-site `text/plain` POST is a simple request,
+  carries the session cookie on a `SameSite=None` deployment, and is only denied
+  its ANSWER by CORS — after the write has run. `Secure` on the session cookie and
+  the same-origin comparison both read `X-Forwarded-Proto`/`X-Forwarded-Host`, so a
+  deployment behind a TLS terminator neither issues a cookie in the clear nor
+  refuses its own SPA.
+- The Access card renders above the credential cards rather than inside them, and
+  takes `null` for keys it could not read. It holds the only sign-in button there
+  is, and the routes beside it are exactly the ones a `required` deployment refuses
+  to anybody anonymous — so gating it on their success made the documented way in
+  unreachable in the one mode it exists for.

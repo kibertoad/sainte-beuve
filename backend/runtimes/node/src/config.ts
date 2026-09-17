@@ -1,5 +1,9 @@
 import type { AuthMode, GitHubLabelRules } from '@sainte-beuve/contracts'
-import { DEFAULT_GITHUB_LABELS, DEFAULT_SESSION_LIFETIME_MS } from '@sainte-beuve/server'
+import {
+  DEFAULT_GITHUB_LABELS,
+  DEFAULT_SESSION_LIFETIME_MS,
+  withAppOrigin,
+} from '@sainte-beuve/server'
 
 /**
  * The Node facade's configuration, read from the process environment.
@@ -119,7 +123,7 @@ function intFrom(value: string | undefined, fallback: number): number {
 
 /**
  * An optional COUNT: absent, unparseable and out of range all mean "leave the
- * default".
+ * default". Also how every DURATION here is read, for the same reason.
  *
  * Zero or less is in that bucket rather than passed through, because a pool
  * ceiling of `-1` is not a small pool: node-postgres compares
@@ -163,7 +167,13 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     // Defaults ON, so the durable path is what an operator gets by leaving the
     // variable out, and turning migrations off is a decision somebody typed.
     databaseMigrate: boolFrom(env.DATABASE_MIGRATE, true),
-    corsOrigins: listFrom(env.CORS_ORIGINS, ['*']),
+    // The SPA's own origin is folded in, because a deployment that said where
+    // its SPA lives has NAMED an origin: the client sends `credentials:
+    // 'include'` on every call and a browser refuses any answer to one carrying
+    // `Access-Control-Allow-Origin: *`, so a hosted deployment left on the
+    // wildcard default would otherwise lose every request rather than only its
+    // sign-in. The Worker reads it the same way. See `withAppOrigin`.
+    corsOrigins: withAppOrigin(listFrom(env.CORS_ORIGINS, ['*']), env.APP_BASE_URL),
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),
     catFactory: catFactoryFrom(env),
@@ -193,7 +203,12 @@ function authFrom(env: Env): AuthConfig {
   return {
     mode: (env.AUTH_MODE ?? '').trim().toLowerCase() === 'required' ? 'required' : 'open',
     apiKey: env.AUTH_API_KEY || null,
-    sessionLifetimeMs: intFrom(env.AUTH_SESSION_LIFETIME_MS, DEFAULT_SESSION_LIFETIME_MS),
+    // `optionalCountFrom` rather than `intFrom`, and the Worker reads it the
+    // same way: zero or less is not a short session, it is every session
+    // expiring on the millisecond it is issued, so a sign-in completes and
+    // never sticks with nothing anywhere saying why.
+    sessionLifetimeMs:
+      optionalCountFrom(env.AUTH_SESSION_LIFETIME_MS) ?? DEFAULT_SESSION_LIFETIME_MS,
   }
 }
 

@@ -56,3 +56,15 @@ export async function digestOf(token: string): Promise<string> {
 export function hintOfToken(token: string): string {
   return token.slice(-HINT_LENGTH)
 }
+
+/**
+ * A value with nothing to guess and no prefix to recognise, for pairing a signed
+ * round-trip state with the browser that started it. See `RoundTripState`.
+ *
+ * The same 32 bytes as the credentials above, from the same mint, because the
+ * property it needs is the property they need: an attacker who could predict one
+ * could complete somebody else's flow.
+ */
+export function mintNonce(): string {
+  return mintToken('')
+}

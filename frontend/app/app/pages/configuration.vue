@@ -19,15 +19,22 @@ const toast = useToast()
 const auth = useAuthState()
 
 const { data, pending, error, refresh } = await useAsyncData('configuration', async () => {
-  // The Access card is read HERE with the rest, for the reason the two
-  // credential reads are one call: minting a key and connecting a host both
-  // change what this page says about who may call, and a card that refreshed
-  // only its own half would report a state that never existed.
+  // Who is calling is read FIRST and ON ITS OWN, which is the whole shape of
+  // this. Everything below it is under `/api/v1/settings` and is refused
+  // outright on a `required` deployment nobody has signed in to yet, while the
+  // Access card this feeds holds the only sign-in button there is: a page that
+  // let that refusal take the card down with it would make the documented way
+  // in unreachable in the one mode it exists for. `auth.refresh()` never
+  // rejects, so this settles either way.
+  await auth.refresh()
+  // The rest is one call for the reason the two credential reads are one call:
+  // minting a key and connecting a host both change what this page says about
+  // who may call, and a card that refreshed only its own half would report a
+  // state that never existed.
   const [connections, settings, keys] = await Promise.all([
     api.getConnections(),
     api.getIntegrationSettings(),
     api.listApiKeys(),
-    auth.refresh(),
   ])
   return { connections, integrations: settings.integrations, apiKeys: keys.apiKeys }
 })
@@ -203,21 +210,29 @@ onMounted(() => {
       </UButton>
     </div>
 
+    <!--
+      Outside the block below, and above the failure it reports. The rest of this
+      screen reads the credential routes, which a `required` deployment refuses
+      to anybody who has not signed in — and signing in is what this card is for.
+      Its key half takes `null` for "this caller could not read them", which is
+      the same refusal seen from the other side.
+    -->
+    <AccessCard
+      v-if="auth.state.value"
+      v-model:issued="issuedKey"
+      class="mb-4"
+      :state="auth.state.value"
+      :api-keys="data?.apiKeys ?? null"
+      :busy="busy"
+      @sign-in="signIn($event)"
+      @sign-out="endSession()"
+      @create-key="mintKey($event)"
+      @revoke-key="revokeKey($event)"
+    />
+
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the configuration" />
 
     <div v-else-if="data" class="flex flex-col gap-4">
-      <AccessCard
-        v-if="auth.state.value"
-        v-model:issued="issuedKey"
-        :state="auth.state.value"
-        :api-keys="data.apiKeys"
-        :busy="busy"
-        @sign-in="signIn($event)"
-        @sign-out="endSession()"
-        @create-key="mintKey($event)"
-        @revoke-key="revokeKey($event)"
-      />
-
       <VcsConnectionCard
         v-for="connection in data.connections.vcs"
         :key="connection.provider"

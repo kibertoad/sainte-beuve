@@ -232,9 +232,15 @@ export function createSainteBeuveApi(apiBase: string) {
   // `credentials: 'include'`, because the session is an `HttpOnly` cookie and
   // the SPA is served from its own origin: without it a browser sends the
   // cookie only same-origin, so a deployment whose API is on another host would
-  // sign somebody in and then render every screen as anonymous. The API answers
-  // `Access-Control-Allow-Credentials` only for an origin it was configured
-  // with, so this asks and the deployment decides (see `allowedOrigin` in
+  // sign somebody in and then render every screen as anonymous.
+  //
+  // It is ALL OR NOTHING, and that is worth stating where it is typed. A browser
+  // refuses a response carrying `Access-Control-Allow-Origin: *` outright once a
+  // request has asked to send a credential — not just the cookie, the whole
+  // answer — so a cross-origin deployment that never named this SPA does not
+  // degrade to anonymous reads, it fails every call. Which is why the backend
+  // folds `APP_BASE_URL`'s origin into its CORS list rather than leaving a
+  // hosted deployment on the wildcard it ships (see `withAppOrigin` in
   // @sainte-beuve/server).
   const client = wretch(`${apiBase}${API_PREFIX}`).options({ credentials: 'include' })
 

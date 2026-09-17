@@ -12,7 +12,15 @@ import { vcsDisplayName } from '@sainte-beuve/contracts'
 // discover it from a 403.
 const props = defineProps<{
   state: AuthState
-  apiKeys: ApiKey[]
+  /**
+   * The keys this deployment has minted, or NULL for a caller who could not read
+   * them. The list lives under `/api/v1/settings`, which a `required` deployment
+   * refuses to anybody anonymous — and this card is where they sign in, so it has
+   * to render for exactly that caller. Empty and unreadable are different
+   * answers, and saying "no keys have been minted here" to somebody who was
+   * refused the question would be the wrong one.
+   */
+  apiKeys: ApiKey[] | null
   busy: string | null
 }>()
 
@@ -118,59 +126,80 @@ function mint() {
 
     <div class="text-sm">
       <p class="font-medium mb-1">API keys</p>
-      <p class="text-muted mb-3">
-        For CI and scripts, presented as <code>Authorization: Bearer &lt;key&gt;</code>. A key is
-        not a person, so it can read and write the board and has no workspace of its own. It is
-        shown once and stored as a digest: lose it and mint another.
+      <p v-if="apiKeys === null" class="text-muted">
+        Sign in to mint a key or see the ones this deployment already has. A key is for CI and
+        scripts, and minting one needs a caller this deployment can name — including here, where it
+        would otherwise refuse nobody.
       </p>
+      <template v-else>
+        <p class="text-muted mb-3">
+          For CI and scripts, presented as <code>Authorization: Bearer &lt;key&gt;</code>. A key is
+          not a person, so it can read and write the board and has no workspace of its own. It is
+          shown once and stored as a digest: lose it and mint another.
+        </p>
 
-      <UAlert
-        v-if="issued"
-        class="mb-3"
-        color="success"
-        variant="subtle"
-        title="Copy this key now"
-        :description="issued"
-        :close="true"
-        @update:open="issued = null"
-      />
-
-      <div class="flex gap-2 mb-3">
-        <UInput
-          v-model="label"
-          class="flex-1"
-          placeholder="What is it for? e.g. release pipeline"
-          @keyup.enter="mint()"
+        <UAlert
+          v-if="issued"
+          class="mb-3"
+          color="success"
+          variant="subtle"
+          title="Copy this key now"
+          :description="issued"
+          :close="true"
+          @update:open="issued = null"
         />
-        <UButton
-          icon="i-lucide-plus"
-          :disabled="label.trim().length === 0"
-          :loading="busy === 'create-key'"
-          @click="mint()"
-        >
-          Mint
-        </UButton>
-      </div>
 
-      <p v-if="apiKeys.length === 0" class="text-muted">No keys have been minted here.</p>
-      <ul v-else class="flex flex-col divide-y divide-default">
-        <li v-for="key in apiKeys" :key="key.id" class="flex items-center gap-3 py-2">
-          <span class="font-medium truncate">{{ key.label }}</span>
-          <code class="text-muted">…{{ key.hint }}</code>
-          <span class="text-muted ml-auto">
-            {{ key.lastUsedAt === null ? 'never used' : 'in use' }}
-          </span>
+        <!--
+          The form is hidden rather than shown and refused. Minting is the one
+          route an `open` deployment still asks who is calling on, because a key
+          outlives the mode it was minted in, so an anonymous operator here has a
+          button that can only fail — and the reason is worth reading before the
+          click rather than in a toast after it.
+        -->
+        <p v-if="principal.kind === 'anonymous'" class="text-muted mb-3">
+          Sign in above to mint one, or call
+          <code>POST /api/v1/settings/api-keys</code> with this deployment's own
+          <code>AUTH_API_KEY</code>. A key keeps working after <code>AUTH_MODE=required</code>, so
+          this deployment will not hand one to a caller it cannot name even while it refuses nobody
+          else.
+        </p>
+        <div v-else class="flex gap-2 mb-3">
+          <UInput
+            v-model="label"
+            class="flex-1"
+            placeholder="What is it for? e.g. release pipeline"
+            @keyup.enter="mint()"
+          />
           <UButton
-            icon="i-lucide-trash-2"
-            variant="ghost"
-            color="error"
-            :loading="busy === key.id"
-            @click="emit('revokeKey', key.id)"
+            icon="i-lucide-plus"
+            :disabled="label.trim().length === 0"
+            :loading="busy === 'create-key'"
+            @click="mint()"
           >
-            Revoke
+            Mint
           </UButton>
-        </li>
-      </ul>
+        </div>
+
+        <p v-if="apiKeys.length === 0" class="text-muted">No keys have been minted here.</p>
+        <ul v-else class="flex flex-col divide-y divide-default">
+          <li v-for="key in apiKeys" :key="key.id" class="flex items-center gap-3 py-2">
+            <span class="font-medium truncate">{{ key.label }}</span>
+            <code class="text-muted">…{{ key.hint }}</code>
+            <span class="text-muted ml-auto">
+              {{ key.lastUsedAt === null ? 'never used' : 'in use' }}
+            </span>
+            <UButton
+              icon="i-lucide-trash-2"
+              variant="ghost"
+              color="error"
+              :loading="busy === key.id"
+              @click="emit('revokeKey', key.id)"
+            >
+              Revoke
+            </UButton>
+          </li>
+        </ul>
+      </template>
     </div>
   </UCard>
 </template>

@@ -171,20 +171,62 @@ export function recordingChat(): ChatGateway & { posted: { target: string; kind:
   }
 }
 
-function json(method: string, path: string, body: unknown): Request {
+function json(
+  method: string,
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Request {
   return new Request(`http://localhost${path}`, {
     method,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
 }
 
-export const post = (path: string, body: unknown) => json('POST', path, body)
-export const patch = (path: string, body: unknown) => json('PATCH', path, body)
-export const put = (path: string, body: unknown) => json('PUT', path, body)
-export const del = (path: string): Request =>
-  new Request(`http://localhost${path}`, { method: 'DELETE' })
-export const get = (path: string): Request => new Request(`http://localhost${path}`)
+export const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+  json('POST', path, body, headers)
+export const patch = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+  json('PATCH', path, body, headers)
+export const put = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+  json('PUT', path, body, headers)
+export const del = (path: string, headers: Record<string, string> = {}): Request =>
+  new Request(`http://localhost${path}`, { method: 'DELETE', headers })
+export const get = (path: string, headers: Record<string, string> = {}): Request =>
+  new Request(`http://localhost${path}`, { headers })
+
+/**
+ * A browser's cookie jar, for the round trips that now span two responses.
+ *
+ * A connect or sign-in flow sets a cookie on the answer that hands out the
+ * authorize URL and reads it back on the callback, so a case that forwarded only
+ * the `state` query parameter would be exercising a round trip no browser makes.
+ * See `RoundTripState`.
+ */
+export function cookieJar(): {
+  keep: (res: Response) => void
+  headers: () => Record<string, string>
+} {
+  const held = new Map<string, string>()
+  return {
+    keep(res: Response): void {
+      for (const line of res.headers.getSetCookie()) {
+        const pair = line.split(';')[0] ?? ''
+        const separator = pair.indexOf('=')
+        if (separator <= 0) continue
+        const value = pair.slice(separator + 1)
+        // An empty value is a cookie being CLEARED, which is what `deleteCookie`
+        // sends; keeping it would present a spent nonce on the next request.
+        if (value.length === 0) held.delete(pair.slice(0, separator))
+        else held.set(pair.slice(0, separator), value)
+      }
+    },
+    headers(): Record<string, string> {
+      if (held.size === 0) return {}
+      return { cookie: [...held].map(([name, value]) => `${name}=${value}`).join('; ') }
+    },
+  }
+}
 
 /** A form-encoded POST, which is the only shape Slack sends. */
 export function form(path: string, body: string, headers: Record<string, string> = {}): Request {

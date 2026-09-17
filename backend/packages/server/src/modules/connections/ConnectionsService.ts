@@ -11,14 +11,16 @@ import {
   vcsOauthCredentialKey,
   vcsPatCredentialKey,
 } from '@sainte-beuve/contracts'
-import { type RoundTripState, ValidationError, type VcsAccount } from '@sainte-beuve/kernel'
+import type { RoundTripState, VcsAccount } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
+import { mintNonce } from '../../crypto/tokens.js'
 import { requireCapability } from '../../http/errors.js'
 import { hintOf } from '../../integrations/credentials.js'
 import { resolveChat, resolveVcs } from '../../integrations/resolve.js'
 import { SessionService } from '../auth/SessionService.js'
 import { PeopleService } from '../identity/PeopleService.js'
+import { notOurState, startedByThisBrowser } from './roundTrip.js'
 
 /**
  * How this deployment reaches its source-control hosts and Slack, and how an
@@ -79,6 +81,20 @@ function noOAuth(provider: VcsProvider): string {
   )
 }
 
+/**
+ * A round trip that has been started: where to send the browser, and the value
+ * that says the browser coming back is this one.
+ *
+ * The nonce leaves this service rather than being written from inside it,
+ * because a cookie is a RESPONSE and a service does not have one. The controller
+ * that hands the URL to the browser is the one that hands it the cookie, in the
+ * same answer. See `writeFlowCookie`.
+ */
+export interface StartedFlow {
+  url: string
+  nonce: string
+}
+
 /** A session the callback has to hand to the browser. See `writeSessionCookie`. */
 export interface IssuedSession {
   token: string
@@ -115,12 +131,12 @@ export class ConnectionsService {
    * Where to install the App. The signed state rides along so the setup callback
    * can refuse a return leg this deployment did not start.
    */
-  async appInstallUrl(): Promise<string> {
+  async appInstallUrl(): Promise<StartedFlow> {
     const slug = requireCapability(this.container.github.appSlug, NO_APP)
-    const state = await this.mintState(APP_INSTALL_FLOW)
+    const { state, nonce } = await this.mintState(APP_INSTALL_FLOW)
     const url = new URL(`/apps/${slug}/installations/new`, 'https://github.com')
     url.searchParams.set('state', state)
-    return url.toString()
+    return { url: url.toString(), nonce }
   }
 
   /**
@@ -134,22 +150,23 @@ export class ConnectionsService {
     provider: VcsProvider,
     origin: string,
     purpose: SignInPurpose = 'connect',
-  ): Promise<string> {
+  ): Promise<StartedFlow> {
     const identity = requireCapability(
       this.container.gateways?.signIn(provider) ?? null,
       noOAuth(provider),
     )
-    return identity.authorizeUrl({
-      redirectUri: callbackUrl(provider, origin),
-      // A session sign-in lands back on the workspace and a connect lands on the
-      // Configuration screen, because those are the pages the two were started
-      // from and a round trip that dumps somebody somewhere else reads as a
-      // failure even when it worked.
-      state: await this.mintState(
-        signInFlow(provider, purpose),
-        purpose === 'connect' ? '/configuration' : '/',
-      ),
-    })
+    // A session sign-in lands back on the workspace and a connect lands on the
+    // Configuration screen, because those are the pages the two were started
+    // from and a round trip that dumps somebody somewhere else reads as a
+    // failure even when it worked.
+    const { state, nonce } = await this.mintState(
+      signInFlow(provider, purpose),
+      purpose === 'connect' ? '/configuration' : '/',
+    )
+    return {
+      url: identity.authorizeUrl({ redirectUri: callbackUrl(provider, origin), state }),
+      nonce,
+    }
   }
 
   /** The hosts a sign-in can actually be started on. See `authStateSchema`. */
@@ -175,9 +192,11 @@ export class ConnectionsService {
     code: string
     state: string | null
     origin: string
+    /** What the browser carried back in its flow cookie. See `RoundTripState`. */
+    nonce: string | null
   }): Promise<CompletedSignIn> {
     const { provider } = input
-    const { claims, purpose } = await this.verifySignInState(input.state, provider)
+    const { claims, purpose } = await this.verifySignInState(input.state, provider, input.nonce)
     const identity = requireCapability(
       this.container.gateways?.signIn(provider) ?? null,
       noOAuth(provider),
@@ -250,8 +269,11 @@ export class ConnectionsService {
    * here started, so an install cannot be attributed to this deployment by
    * anybody who can construct a URL.
    */
-  async completeAppInstall(state: string | null): Promise<{ returnTo: string | null }> {
-    return { returnTo: (await this.verifyState(state, APP_INSTALL_FLOW)).returnTo }
+  async completeAppInstall(
+    state: string | null,
+    nonce: string | null,
+  ): Promise<{ returnTo: string | null }> {
+    return { returnTo: (await this.verifyState(state, APP_INSTALL_FLOW, nonce)).returnTo }
   }
 
   /** Drop one host's sign-in credential. The App and the environment are untouched. */
@@ -318,16 +340,24 @@ export class ConnectionsService {
     return (await this.container.repositories.integrationTokens.get(key))?.subject ?? null
   }
 
-  private async mintState(flow: string, returnPath = '/configuration'): Promise<string> {
+  private async mintState(
+    flow: string,
+    returnPath = '/configuration',
+  ): Promise<{ state: string; nonce: string }> {
     const signer = requireCapability(this.container.states, NO_STATE)
     const { appBaseUrl, clock } = this.container
-    return signer.sign({
-      flow,
-      // Back to the page the flow was started from, when the deployment said
-      // where the SPA is.
-      returnTo: appBaseUrl === null ? null : `${appBaseUrl}${returnPath}`,
-      exp: clock.now() + STATE_LIFETIME_MS,
-    })
+    const nonce = mintNonce()
+    return {
+      state: await signer.sign({
+        flow,
+        nonce,
+        // Back to the page the flow was started from, when the deployment said
+        // where the SPA is.
+        returnTo: appBaseUrl === null ? null : `${appBaseUrl}${returnPath}`,
+        exp: clock.now() + STATE_LIFETIME_MS,
+      }),
+      nonce,
+    }
   }
 
   /**
@@ -342,33 +372,26 @@ export class ConnectionsService {
   private async verifySignInState(
     value: string | null,
     provider: VcsProvider,
+    nonce: string | null,
   ): Promise<{ claims: RoundTripState; purpose: SignInPurpose }> {
     const signer = requireCapability(this.container.states, NO_STATE)
     for (const purpose of SIGN_IN_PURPOSES) {
       const claims = await signer.verify(value, signInFlow(provider, purpose))
-      if (claims !== null) return { claims, purpose }
+      if (claims !== null) return { claims: startedByThisBrowser(claims, nonce), purpose }
     }
     throw notOurState()
   }
 
-  private async verifyState(value: string | null, flow: string): Promise<RoundTripState> {
+  private async verifyState(
+    value: string | null,
+    flow: string,
+    nonce: string | null,
+  ): Promise<RoundTripState> {
     const signer = requireCapability(this.container.states, NO_STATE)
     const claims = await signer.verify(value, flow)
     if (claims === null) throw notOurState()
-    return claims
+    return startedByThisBrowser(claims, nonce)
   }
-}
-
-/**
- * A validation error, not a forbidden one: the overwhelmingly common cause is an
- * operator finishing a flow they started an hour ago, and the message has to say
- * "start again" rather than accuse them of anything.
- */
-function notOurState(): ValidationError {
-  return new ValidationError(
-    'This callback did not carry a state this deployment recently issued. Start the ' +
-      'connection again from the Configuration screen.',
-  )
 }
 
 function callbackUrl(provider: VcsProvider, origin: string): string {

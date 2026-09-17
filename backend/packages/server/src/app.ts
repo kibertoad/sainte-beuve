@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
 import { errorBody, handleError } from './http/errors.js'
+import { allowedOrigin, intendedMethod, WILDCARD, writeOriginGuard } from './http/origins.js'
 import { attentionController } from './modules/attention/AttentionController.js'
 import { authController } from './modules/auth/AuthController.js'
 import { authentication } from './modules/auth/principal.js'
@@ -47,81 +48,6 @@ export interface AppOptions {
    * every facade ships and what local mode runs on.
    */
   corsOrigins?: string[] | ((scope: RequestScope) => string[])
-}
-
-const WILDCARD = '*'
-
-/** The routes that read and write a credential. See SettingsController. */
-const CONFIGURATION_PATH = '/api/v1/settings'
-
-/**
- * The AI-review routes, whose reads are not reads. Answering one POLLS
- * cat-factory with this deployment's key and writes what it learns onto the run,
- * so the method says nothing about what the request costs. See AiReviewService.
- */
-const AI_REVIEW_PATH = '/api/v1/ai-review'
-/** The same routes addressed by review: `/api/v1/reviews/<id>/ai-review`. */
-const AI_REVIEW_SUFFIX = '/ai-review'
-
-/** The methods that change nothing. A path can still be guarded on its own. */
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
-
-/** The SPA in local development, on whatever port Nuxt settled for. */
-const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/
-
-/**
- * What to echo back as `Access-Control-Allow-Origin`. The wildcard is answered with
- * the literal `*`: Hono matches a configured LIST against the request's origin, so a
- * list holding `'*'` matches no real origin and the response carries no CORS header
- * at all, which is the browser-side symptom of "the API is up and the SPA cannot
- * reach it".
- *
- * The wildcard opens READS. It stops at every request that changes something, at
- * the configuration routes whether they are read or written, and at the AI-review
- * routes whose GETs spend the deployment's cat-factory key, because no route here
- * carries a session to check: `*` on a write would let any page an operator
- * happens to visit preflight a `DELETE /api/v1/projects/<id>` and empty the
- * registry, or resolve somebody else's attention request, or overwrite this
- * deployment's tokens, and `*` on an AI-review read would let it lift the
- * findings of a private pull request and loop the request to burn the key. Those
- * answer an origin the deployment NAMED, plus loopback, which is the local SPA
- * and is already code running on the operator's own machine. A hosted deployment
- * therefore has to list its SPA origin in CORS_ORIGINS to do anything but read,
- * which is the trade this makes on purpose.
- *
- * An inbound webhook is unaffected: GitHub and Slack send no `Origin`, and a
- * missing `Access-Control-Allow-Origin` is a rule for browsers rather than a
- * refusal.
- */
-function allowedOrigin(
-  configured: readonly string[],
-  request: { origin: string; path: string; method: string },
-): string | null {
-  if (configured.includes(request.origin)) return request.origin
-  if (!configured.includes(WILDCARD)) return null
-  // Loopback is echoed BY NAME even where the wildcard would do, and that is
-  // what makes the session work in local development. The credentials header is
-  // invalid beside `*`, so a local SPA answered with the wildcard would be told
-  // it may read the board and never allowed to send its cookie: signed in on
-  // the API and anonymous on every screen.
-  if (LOOPBACK_ORIGIN.test(request.origin)) return request.origin
-  return isGuarded(request) ? null : WILDCARD
-}
-
-/** Whether this is a request the wildcard does not cover. */
-function isGuarded(request: { path: string; method: string }): boolean {
-  if (request.path.startsWith(CONFIGURATION_PATH) || !SAFE_METHODS.has(request.method)) return true
-  return request.path.startsWith(AI_REVIEW_PATH) || request.path.endsWith(AI_REVIEW_SUFFIX)
-}
-
-/**
- * What the browser is asking to do. On a preflight that is the header rather
- * than the method: the preflight itself is an OPTIONS, and reading the method
- * off it would report every write as safe.
- */
-function intendedMethod(c: Context<AppEnv>): string {
-  if (c.req.method !== 'OPTIONS') return c.req.method
-  return (c.req.header('access-control-request-method') ?? c.req.method).toUpperCase()
 }
 
 function scopeOf(c: Context<AppEnv>): RequestScope {
@@ -170,6 +96,15 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
     c.set('container', await options.resolveContainer(scopeOf(c)))
     await next()
   })
+
+  // Before the caller is resolved, because refusing this costs nothing and
+  // resolving a session for a request that is about to be refused costs a store
+  // read: a cross-site write carries the session cookie whether or not CORS
+  // will show the answer, so it has to be refused rather than merely hidden.
+  app.use(
+    '/api/v1/*',
+    writeOriginGuard((c) => originsFor(scopeOf(c))),
+  )
 
   // After the container and before every route under it: the caller is resolved
   // once per request, and a deployment that insists on knowing who is calling
