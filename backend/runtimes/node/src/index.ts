@@ -1,8 +1,9 @@
 import { once } from 'node:events'
 import { serve } from '@hono/node-server'
 import type { Logger } from '@sainte-beuve/kernel'
-import { createApp, runReminderTick } from '@sainte-beuve/server'
+import { createApp } from '@sainte-beuve/server'
 import { pino } from 'pino'
+import { startReminderClock } from './clock.js'
 import { type NodeConfig, loadConfig } from './config.js'
 import { buildContainer } from './container.js'
 import { type NodeStore, openStore } from './persistence.js'
@@ -57,14 +58,7 @@ async function listen(
   // with a live pool behind it. Waiting for `listening` turns it into a
   // rejection the caller can report and the guard above can clean up after.
   await once(server, 'listening')
-  const timer = setInterval(() => {
-    void runReminderTick(container).catch((err: unknown) => {
-      container.logger.error({ err }, 'reminder tick failed')
-    })
-  }, config.reminderIntervalMs)
-  // Do not hold the process open for the clock alone: a shutdown should be decided
-  // by the HTTP server closing, not by a timer nobody is waiting on.
-  timer.unref()
+  const timer = startReminderClock(container, config.reminderIntervalMs)
 
   // One line naming every optional capability, because "which integrations did
   // this process actually wire?" is the first question a deploy raises and the

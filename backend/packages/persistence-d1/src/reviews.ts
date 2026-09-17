@@ -203,18 +203,26 @@ export class SqlReminderRepository implements ReminderRepository {
   }
 }
 
-const RUN_UPSERT = `INSERT INTO ai_review_runs (org_id, id, review_id, status, requested_at, data)
-VALUES (?, ?, ?, ?, ?, ?)
+const RUN_UPSERT = `INSERT INTO ai_review_runs (org_id, id, review_id, status, requested_at, last_polled_at, data)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (org_id, id) DO UPDATE SET
   review_id = excluded.review_id,
   status = excluded.status,
   requested_at = excluded.requested_at,
+  last_polled_at = excluded.last_polled_at,
   data = excluded.data`
 
-/** `AI_REVIEW_IN_FLIGHT_STATUSES` as the `IN (...)` list the clock's read needs. */
+/**
+ * `AI_REVIEW_IN_FLIGHT_STATUSES` as the `IN (...)` list the clock's read needs,
+ * in the rotation `AiReviewRunRepository.listInFlight` documents.
+ *
+ * `NULLS FIRST` is spelled out rather than left to the engine. SQLite already
+ * sorts nulls first on an ascending key, but Postgres sorts them last and this
+ * read has to answer the same way on both, so neither store leans on its default.
+ */
 const IN_FLIGHT = `SELECT data FROM ai_review_runs
 WHERE org_id = ? AND status IN (${placeholders(AI_REVIEW_IN_FLIGHT_STATUSES.length)})
-ORDER BY requested_at, id
+ORDER BY last_polled_at ASC NULLS FIRST, requested_at, id
 LIMIT ?`
 
 export class SqlAiReviewRunRepository implements AiReviewRunRepository {
@@ -264,6 +272,7 @@ export class SqlAiReviewRunRepository implements AiReviewRunRepository {
       run.reviewId,
       run.status,
       run.requestedAt,
+      run.lastPolledAt,
       encodeData(run),
     ])
   }

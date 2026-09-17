@@ -253,7 +253,14 @@ export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
           inArray(aiReviewRuns.status, [...AI_REVIEW_IN_FLIGHT_STATUSES]),
         ),
       )
-      .orderBy(asc(aiReviewRuns.requestedAt), asc(aiReviewRuns.id))
+      // `NULLS FIRST` spelled out: Postgres sorts nulls LAST on an ascending
+      // key, and a run nobody has polled yet is the one that most needs polling.
+      // The other two stores answer the same way; the conformance suite pins it.
+      .orderBy(
+        sql`${aiReviewRuns.lastPolledAt} asc nulls first`,
+        asc(aiReviewRuns.requestedAt),
+        asc(aiReviewRuns.id),
+      )
       .limit(limit)
     return rows.map((row) => row.data)
   }
@@ -286,6 +293,7 @@ export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
       reviewId: run.reviewId,
       status: run.status,
       requestedAt: run.requestedAt,
+      lastPolledAt: run.lastPolledAt,
       data: run,
     }
     await this.db

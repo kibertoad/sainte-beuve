@@ -47,6 +47,44 @@ export interface CatFactoryOptions {
 }
 
 /**
+ * How long any one call to cat-factory may take before it is given up on.
+ *
+ * A deadline rather than none, because the clock's sweep spends two of these per
+ * run in flight, sequentially, inside one cron invocation. A single instance that
+ * accepts a connection and then never answers would otherwise hold that whole
+ * pass open: on the Worker it burns the invocation, and on Node it is the pass
+ * every later interval is skipped in favour of. Given up on, the run records a
+ * refused poll on its row — which is what the board already shows — and the sweep
+ * moves to the next one.
+ *
+ * Generous enough that nothing merely busy is cut off: cat-factory's own reads
+ * answer in milliseconds, and the review itself is asynchronous, so no call this
+ * gateway makes is waiting on a model.
+ */
+const CALL_TIMEOUT_MS = 20_000
+
+/**
+ * The same fetch, with a deadline on every request.
+ *
+ * Wrapped at the transport rather than at each call site, so the READ path gets
+ * it too: a board showing four reviews polls all four, and one instance hanging
+ * must not hold a person's request open until their browser gives up.
+ *
+ * A signal the SDK supplies is kept and combined rather than replaced — the
+ * caller's own cancellation is not ours to drop.
+ */
+function withDeadline(impl: typeof globalThis.fetch, timeoutMs: number): typeof globalThis.fetch {
+  return (input, init) => {
+    const deadline = AbortSignal.timeout(timeoutMs)
+    const caller = init?.signal
+    return impl(input, {
+      ...init,
+      signal: caller == null ? deadline : AbortSignal.any([caller, deadline]),
+    })
+  }
+}
+
+/**
  * The cat-factory run states that END a review, and what each means to us. Anything
  * absent from this table is in flight: a run is `blocked`/`paused` when it is
  * waiting on a human decision, and from sainte-beuve's side that is an unfinished
@@ -107,7 +145,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       userAgent: 'sainte-beuve',
-      fetch: options.fetch,
+      fetch: withDeadline(options.fetch ?? globalThis.fetch, CALL_TIMEOUT_MS),
     })
   }
 

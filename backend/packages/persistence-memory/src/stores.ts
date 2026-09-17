@@ -19,7 +19,7 @@ import type {
 } from '@sainte-beuve/kernel'
 import { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
 import { clone, patched } from './clone.js'
-import { byText, newestFirst, oldestFirst } from './order.js'
+import { byText, leastRecentlyPolledFirst, newestFirst, oldestFirst } from './order.js'
 import {
   InMemoryAttentionRepository,
   InMemoryIdentityRepository,
@@ -201,7 +201,12 @@ export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
   async listInFlight(limit: number): Promise<AiReviewRun[]> {
     return [...this.rows.values()]
       .filter((row) => IN_FLIGHT.has(row.status))
-      .sort(oldestFirst((row) => row.requestedAt))
+      .sort(
+        leastRecentlyPolledFirst(
+          (row) => row.lastPolledAt,
+          (row) => row.requestedAt,
+        ),
+      )
       .slice(0, limit)
       .map(clone)
   }

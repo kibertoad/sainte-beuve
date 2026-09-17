@@ -1,8 +1,11 @@
 import type { Reminder, Reviewer, ReviewRequest } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type { ChatGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { snoozeReview } from '../src/reminders/snooze.js'
+import { withOrg } from '../src/container.js'
 import { runReminderTick } from '../src/reminders/tick.js'
+import { stubAiReview } from './ai-review-doubles.js'
 import {
   type TestHarness,
   addReviewer,
@@ -10,6 +13,7 @@ import {
   buildHarness,
   openReview,
   patch,
+  PR,
 } from './helpers.js'
 
 const HOUR = 60 * 60 * 1000
@@ -182,5 +186,96 @@ describe('reminder tick', () => {
     expect(chat.delivered).toStrictEqual([])
     const statuses = (await remindersFor(harness, review.id)).map((r) => r.status)
     expect(new Set(statuses)).toStrictEqual(new Set(['cancelled']))
+  })
+})
+
+/**
+ * The order the two halves of a pass run in, across tenancies.
+ *
+ * A nudge has a deadline and a passenger does not, and the passengers are the
+ * outbound half: the AI-review poll is a batch of calls to a cat-factory instance
+ * one org configured and nobody else can vouch for. Walked one whole org at a
+ * time, that org's poll sits in front of every later org's reminders, so a single
+ * slow instance spends the invocation and the tenancies behind it send nothing —
+ * every tick, for as long as it stays slow.
+ */
+describe('a tick across tenancies', () => {
+  const OTHER_ORG = 'org-second'
+
+  /** One org with a nudge due and one AI review in flight. */
+  async function seed(harness: TestHarness, orgId: string, n: number): Promise<void> {
+    const { repositories, clock } = withOrg(harness.container, orgId)
+    const review = await repositories.reviews.create({
+      id: `review-${orgId}`,
+      pullRequest: { ...PR, number: n, url: `https://example.com/pull/${n}` },
+      title: 'A change',
+      authorLogin: 'author',
+      requiredSkills: [],
+      priority: 'normal',
+      status: 'open',
+      assignedReviewerIds: [],
+      createdAt: clock.now(),
+      updatedAt: clock.now(),
+      assignedAt: null,
+      dueAt: null,
+    })
+    await repositories.reminders.create({
+      id: `reminder-${orgId}`,
+      reviewId: review.id,
+      kind: 'unassigned',
+      channel: 'slack_channel',
+      reviewerId: null,
+      dueAt: clock.now(),
+      status: 'scheduled',
+      sentAt: null,
+      failureReason: null,
+      createdAt: clock.now(),
+    })
+    await repositories.aiReviewRuns.create({
+      id: `run-${orgId}`,
+      reviewId: review.id,
+      status: 'running',
+      catFactoryTaskId: `cf-task-${orgId}`,
+      catFactoryRunId: 'cf-run-1',
+      catFactoryUrl: null,
+      summary: null,
+      failureReason: null,
+      curation: null,
+      requestedAt: clock.now(),
+      lastPolledAt: null,
+      completedAt: null,
+    })
+  }
+
+  it('sends every org its nudges before any org polls cat-factory', async () => {
+    const order: string[] = []
+    const catFactory = stubAiReview()
+    catFactory.onPoll = async () => {
+      order.push('poll')
+    }
+    const harness = buildHarness({
+      aiReview: catFactory,
+      chat: {
+        announceReview: async () => ({ messageId: 'm-1' }),
+        sendReminder: async () => {
+          order.push('nudge')
+        },
+      },
+      slack: { signingSecret: null, announcementChannelId: 'C-reviews' },
+    })
+    await harness.container.stores.orgs.create({
+      id: OTHER_ORG,
+      slug: 'second',
+      name: 'Second',
+      createdAt: harness.clock.now(),
+    })
+    await seed(harness, DEFAULT_ORG_ID, 11)
+    await seed(harness, OTHER_ORG, 12)
+
+    const result = await runReminderTick(harness.container)
+
+    expect(result).toMatchObject({ sent: 2, aiReviewsPolled: 2 })
+    // Not ['nudge', 'poll', 'nudge', 'poll'], which is what one walk gives.
+    expect(order).toStrictEqual(['nudge', 'nudge', 'poll', 'poll'])
   })
 })

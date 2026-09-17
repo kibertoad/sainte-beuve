@@ -32,6 +32,16 @@ import { scheduleNextReminder } from './schedule.js'
  * from anything but the authentication middleware. The alternative, a `listDue`
  * that reached across every tenancy, would be the single read that could return
  * another org's rows, on the one path with nobody to refuse it.
+ *
+ * It walks them TWICE, and the order is the point: every org's nudges go out
+ * before any org's passengers run. Interleaved — one org's whole pass, then the
+ * next org's — the first tenancy's passengers sit in front of the second
+ * tenancy's reminders, and the AI-review poll is a batch of outbound calls to a
+ * cat-factory instance that org configured and nobody else can vouch for. One
+ * slow instance would spend the invocation's whole budget and the orgs behind it
+ * would send nothing at all, every tick, for as long as it stayed slow. The
+ * nudges are the thing with a deadline; the passengers are what the pass does
+ * with what is left.
  */
 const DEFAULT_BATCH = 50
 
@@ -62,20 +72,66 @@ export interface TickResult {
   aiReviewsPolled: number
 }
 
+/** What one org's nudges did. The half of a pass that has a deadline. */
+type Nudges = Pick<TickResult, 'sent' | 'failed' | 'skipped'>
+
+/** What one org's passengers did. The half that rides whatever budget is left. */
+type Passengers = Pick<TickResult, 'sessionsSwept' | 'aiReviewsPolled'>
+
+/** One tenancy's pass, filled in over the two walks. */
+interface OrgPass {
+  readonly container: AppContainer
+  nudges: Nudges
+  passengers: Passengers
+}
+
 export async function runReminderTick(
   container: AppContainer,
   batchSize: number = DEFAULT_BATCH,
 ): Promise<TickResult> {
-  const total: TickResult = { sent: 0, failed: 0, skipped: 0, sessionsSwept: 0, aiReviewsPolled: 0 }
-  for (const orgId of await tenancies(container)) {
-    const pass = await tickOrg(withOrg(container, orgId), batchSize)
-    total.sent += pass.sent
-    total.failed += pass.failed
-    total.skipped += pass.skipped
-    total.sessionsSwept += pass.sessionsSwept
-    total.aiReviewsPolled += pass.aiReviewsPolled
+  const passes: OrgPass[] = (await tenancies(container)).map((orgId) => ({
+    container: withOrg(container, orgId),
+    nudges: { sent: 0, failed: 0, skipped: 0 },
+    passengers: { sessionsSwept: 0, aiReviewsPolled: 0 },
+  }))
+  // FIRST every org's nudges, because they are the half with a deadline.
+  for (const pass of passes) pass.nudges = await sendDue(pass.container, batchSize)
+  // THEN every org's passengers, on whatever budget the pass has left.
+  for (const pass of passes) pass.passengers = await ridePassengers(pass.container, batchSize)
+  return passes.reduce(added, empty())
+}
+
+function empty(): TickResult {
+  return { sent: 0, failed: 0, skipped: 0, sessionsSwept: 0, aiReviewsPolled: 0 }
+}
+
+/**
+ * One org's two halves, added into the running total and logged on the way past.
+ *
+ * Spelled out field by field rather than looped over the keys: a `TickResult`
+ * that grew a field which is not a count would be added up as one anyway, and
+ * silently.
+ */
+function added(total: TickResult, pass: OrgPass): TickResult {
+  const result: TickResult = { ...pass.nudges, ...pass.passengers }
+  report(pass.container, result)
+  return {
+    sent: total.sent + result.sent,
+    failed: total.failed + result.failed,
+    skipped: total.skipped + result.skipped,
+    sessionsSwept: total.sessionsSwept + result.sessionsSwept,
+    aiReviewsPolled: total.aiReviewsPolled + result.aiReviewsPolled,
   }
-  return total
+}
+
+/**
+ * One line per org that did something. A tick over a deployment of forty
+ * tenancies is forty lines otherwise, thirty-nine of which say nothing happened.
+ */
+function report(container: AppContainer, result: TickResult): void {
+  if (Object.values(result).some((count) => count > 0)) {
+    container.logger.info({ ...result, org: container.orgId }, 'reminder tick complete')
+  }
 }
 
 /**
@@ -92,16 +148,10 @@ async function tenancies(container: AppContainer): Promise<string[]> {
   return [...new Set([DEFAULT_ORG_ID, ...stored.map((org) => org.id)])]
 }
 
-/** One org's pass. `container` is already bound to it. */
-async function tickOrg(container: AppContainer, batchSize: number): Promise<TickResult> {
+/** One org's nudges. `container` is already bound to it. */
+async function sendDue(container: AppContainer, batchSize: number): Promise<Nudges> {
   const due = await container.repositories.reminders.listDue(container.clock.now(), batchSize)
-  const result: TickResult = {
-    sent: 0,
-    failed: 0,
-    skipped: 0,
-    sessionsSwept: 0,
-    aiReviewsPolled: 0,
-  }
+  const nudges: Nudges = { sent: 0, failed: 0, skipped: 0 }
   // Resolved ONCE for the batch, and once PER ORG: every reminder in this pass
   // goes out over this tenancy's own credential, and resolving per reminder
   // means re-reading the stored bot token, re-deriving its HKDF key and opening
@@ -109,17 +159,17 @@ async function tickOrg(container: AppContainer, batchSize: number): Promise<Tick
   const chat = due.length === 0 ? null : await resolveChat(container)
   for (const reminder of due) {
     const outcome = await deliver(container, reminder, chat)
-    result[outcome] += 1
+    nudges[outcome] += 1
   }
-  result.sessionsSwept = await sweepSessions(container)
-  result.aiReviewsPolled = await pollAiReviews(container, batchSize)
-  if (due.length > 0 || result.sessionsSwept > 0 || result.aiReviewsPolled > 0) {
-    container.logger.info(
-      { ...result, due: due.length, org: container.orgId },
-      'reminder tick complete',
-    )
+  return nudges
+}
+
+/** One org's passengers, run once every org's nudges have gone out. */
+async function ridePassengers(container: AppContainer, batchSize: number): Promise<Passengers> {
+  return {
+    sessionsSwept: await sweepSessions(container),
+    aiReviewsPolled: await pollAiReviews(container, batchSize),
   }
-  return result
 }
 
 /**
@@ -141,8 +191,10 @@ async function sweepSessions(container: AppContainer): Promise<number> {
  *
  * The same batch cap as the nudges, for the same reason: every poll is an
  * outbound call, and a tenancy with two hundred runs in flight would otherwise
- * spend one tick's whole budget here and send no reminder at all. The oldest are
- * read first, so what is left over is picked up next tick rather than starved.
+ * spend one tick's whole budget here. The LEAST RECENTLY POLLED are read first,
+ * so what the cap leaves over is picked up next tick rather than starved — see
+ * `AiReviewRunRepository.listInFlight`, where that ordering is the difference
+ * between a cap and a queue nothing ever leaves.
  *
  * A sweep that fails does NOT fail the tick, exactly as the session sweep does
  * not: the reminders in this pass have already gone out, and a cat-factory that

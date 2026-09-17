@@ -480,11 +480,31 @@ waiting on them. The reminder tick asks on everybody's behalf. What it decided:
   simply stop handing parked reviews to the clock.
 - **The sweep cannot fail the tick, and is capped like the nudges.** The
   reminders in a pass have already gone out when it runs, so a cat-factory that
-  is down for a minute is not a reason to re-send every nudge next minute. The
-  cap is the same one the nudges get, applied per tenancy, and the oldest run is
-  polled first so what a cap leaves over is picked up next tick rather than
-  starved. A poll that is merely refused is recorded on the row, where the board
-  shows it, exactly as a read's is.
+  is down for a minute is not a reason to re-send every nudge next minute. A poll
+  that is merely refused is recorded on the row, where the board shows it,
+  exactly as a read's is.
+- **The cap is a rate limit, which takes a second column.** `awaiting_selection`
+  is a state no poll can end — only a person curating can — so a batch read
+  oldest-request-first would be filled for ever by a tenancy's parked reviews and
+  the clock would never reach a newer one: a cap with a permanent head is not a
+  cap. `last_polled_at` is the cursor that fixes it. The read is least recently
+  polled first, so a run polled on this tick goes to the back and everything in
+  flight comes round; a null sorts first, which both durable stores spell out
+  because Postgres would otherwise sort it last.
+- **What can never be polled is settled rather than skipped.** A run left in
+  `requested` with no task id is what a process dying between the row and the call
+  leaves behind. Nothing on cat-factory's side can ever settle it, so after a
+  grace period the sweep does, and it stops being both a permanent occupant of
+  the rotation and a review the board says is still starting.
+- **Every org's nudges go out before any org's passengers run.** The tick walks
+  the tenancies twice. Interleaved, one org's poll — outbound calls to an instance
+  that org configured and nobody else can vouch for — sits in front of every later
+  org's reminders, and one slow instance would spend the invocation while the
+  tenancies behind it sent nothing.
+- **A poll writes onto the row as it stands NOW.** The clock made overlapping
+  polls ordinary — a snapshotted batch walked while reads and curation verbs write
+  the same rows — so a refusal is not stamped on a run that settled underneath it,
+  and a curation from before the last post no longer overwrites the receipt.
 
 ### Slice 8: what is next
 

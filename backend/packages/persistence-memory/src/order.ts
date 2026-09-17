@@ -32,6 +32,28 @@ export function newestFirst<Row extends Keyed>(
 }
 
 /**
+ * `ORDER BY <last polled> ASC NULLS FIRST, <requested>, id`: the rotation the
+ * clock's in-flight read walks.
+ *
+ * A run nobody has polled yet has no timestamp to compare, and it is the one that
+ * most needs polling, so a null sorts before every real reading. Both durable
+ * stores spell that explicitly — Postgres would otherwise put nulls LAST — and
+ * this is the comparator that has to agree with them.
+ */
+export function leastRecentlyPolledFirst<Row extends Keyed>(
+  polled: (row: Row) => number | null,
+  requested: (row: Row) => number,
+): (a: Row, b: Row) => number {
+  return (a, b) =>
+    nullsFirst(polled(a), polled(b)) || requested(a) - requested(b) || byText(a.id, b.id)
+}
+
+function nullsFirst(a: number | null, b: number | null): number {
+  if (a === null) return b === null ? 0 : -1
+  return b === null ? 1 : a - b
+}
+
+/**
  * Code-point order, which is what SQLite and Postgres both compare `TEXT` in.
  * Not `localeCompare`, which reorders punctuation and case by locale and would
  * put a reviewer id like `r-1` on either side of `r1` depending on where the

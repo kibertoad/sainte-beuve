@@ -210,6 +210,20 @@ export const aiReviewRunSchema = v.object({
   /** What there is to curate right now. See {@link aiReviewCurationSchema}. */
   curation: v.nullable(aiReviewCurationSchema),
   requestedAt: v.number(),
+  /**
+   * When a poll last reached cat-factory about this run. Null until one has.
+   *
+   * It is what makes the clock's batch a RATE LIMIT rather than a queue with a
+   * head: the sweep reads the least recently polled runs first, so a run polled
+   * on this tick goes to the back and every run in flight comes round. Ordered
+   * by `requestedAt` instead, an org holding a batch's worth of reviews parked
+   * on their findings — which only a person can unpark, never a poll — would fill
+   * the batch for ever and no newer review would be polled at all.
+   *
+   * Stamped by the poll rather than by the report, so a cat-factory that refuses
+   * one still moves the run down the rotation instead of monopolising it.
+   */
+  lastPolledAt: v.nullable(v.number()),
   completedAt: v.nullable(v.number()),
 })
 export type AiReviewRun = v.InferOutput<typeof aiReviewRunSchema>

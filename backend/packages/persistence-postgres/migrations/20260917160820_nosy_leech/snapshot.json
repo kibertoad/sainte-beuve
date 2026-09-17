@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "6cf0db7d-f709-4ceb-921e-a5912331c492",
+  "id": "bbb392e7-8ac5-4302-8ea5-bd66b211a3eb",
   "prevIds": ["494325c5-636b-4168-8c8b-6222f547a02c"],
   "ddl": [
     {
@@ -137,6 +137,19 @@
       "generated": null,
       "identity": null,
       "name": "requested_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_review_runs"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_polled_at",
       "entityType": "columns",
       "schema": "public",
       "table": "ai_review_runs"
@@ -1091,10 +1104,10 @@
           "opclass": null
         },
         {
-          "value": "requested_at",
+          "value": "last_polled_at",
           "isExpression": false,
           "asc": true,
-          "nullsFirst": false,
+          "nullsFirst": true,
           "opclass": null
         }
       ],
