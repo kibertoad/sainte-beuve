@@ -185,12 +185,29 @@ export const aiReviewRuns = pgTable(
     orgId: orgId(),
     id: text('id').notNull(),
     reviewId: text('review_id').notNull(),
+    status: text('status').notNull(),
     requestedAt: epochMs('requested_at').notNull(),
+    /** Nullable: a run nobody has polled yet has no reading, and sorts first. */
+    lastPolledAt: epochMs('last_polled_at'),
     data: payload<AiReviewRun>('data', 'ai_review_runs', aiReviewRunSchema).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
     index('ai_review_runs_review_idx').on(table.orgId, table.reviewId, table.requestedAt),
+    // The reminder tick's AI-review read: what is unsettled in the org it is
+    // ticking, least recently polled first. cat-factory calls nothing back, so
+    // this is what the clock polls instead of waiting for somebody to open the
+    // row, and the rotation is what stops a batch's worth of parked reviews
+    // holding the cap for ever. See `AiReviewRunRepository.listInFlight`.
+    // `NULLS FIRST` on the index and not only in the query: Postgres stores an
+    // ascending key nulls-LAST, so an index that disagreed with the order the
+    // read asks for would be scanned and then sorted, which is the scan this
+    // column exists to avoid.
+    index('ai_review_runs_status_idx').on(
+      table.orgId,
+      table.status,
+      table.lastPolledAt.asc().nullsFirst(),
+    ),
   ],
 )
 

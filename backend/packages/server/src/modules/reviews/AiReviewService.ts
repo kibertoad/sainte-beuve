@@ -1,10 +1,13 @@
-import type { AiReviewCuration, AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import type { AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
 import { ConflictError, ValidationError, assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { type Resolved, resolveAiReview } from '../../integrations/resolve.js'
 import type { CredentialSource } from '../../integrations/resolve.js'
+import { abandonIfOrphaned } from './orphans.js'
+import { curationFor } from './reconcile.js'
 
 /**
  * Delegating a review to cat-factory, and driving the loop it parks in.
@@ -23,6 +26,14 @@ import type { CredentialSource } from '../../integrations/resolve.js'
  * being two different moments. A cat-factory-side callback is a later
  * OPTIMISATION over this, never a replacement: see docs/implementation-plan.md,
  * slice 4.
+ *
+ * Polls come from two places and neither replaces the other. A READ polls the
+ * runs it is about, so an open row is live. The reminder CLOCK polls what a
+ * tenancy has in flight (`sweepInFlight`), so a review that parked while
+ * everybody's board was closed is a fact the deployment holds rather than one
+ * waiting to be discovered. Without the first, an open row would go stale under
+ * somebody's eyes; without the second, a review would wait on a person who has
+ * no way of knowing it is waiting on them.
  */
 
 /** The message a route answers with when cat-factory is not configured at all. */
@@ -31,18 +42,19 @@ const NOT_CONFIGURED =
   'an API key with the `decide` scope (the key can be entered on the Configuration screen)'
 
 /** The states a poll can still learn something from. Anything else is settled. */
-const IN_FLIGHT = new Set<AiReviewRun['status']>(['requested', 'running', 'awaiting_selection'])
+const IN_FLIGHT = new Set<AiReviewRun['status']>(AI_REVIEW_IN_FLIGHT_STATUSES)
 
 export class AiReviewService {
   /**
    * The cat-factory resolution for THIS request, made at most once.
    *
-   * One service instance answers one route, which is the lifetime this may be
-   * cached for and no longer: a key entered on the Configuration screen has to
-   * take effect without a redeploy. Within the request it is worth caching,
-   * because every resolution is a credential read plus an HKDF derivation plus an
-   * AES-GCM open, and a review with four runs on it would otherwise pay for all
-   * four. `VcsResolutions` does the same job for source control.
+   * One service instance answers one route, or one org's pass of the clock,
+   * which is the lifetime this may be cached for and no longer: a key entered on
+   * the Configuration screen has to take effect without a redeploy. Within that
+   * pass it is worth caching, because every resolution is a credential read plus
+   * an HKDF derivation plus an AES-GCM open, and a review with four runs on it —
+   * or a tenancy with forty in flight — would otherwise pay for every one.
+   * `VcsResolutions` does the same job for source control.
    */
   private resolution: Promise<Resolved<AiReviewGateway, CredentialSource> | null> | null = null
 
@@ -66,6 +78,7 @@ export class AiReviewService {
       failureReason: null,
       curation: null,
       requestedAt: clock.now(),
+      lastPolledAt: null,
       completedAt: null,
     })
 
@@ -123,6 +136,53 @@ export class AiReviewService {
   async refresh(runId: string): Promise<AiReviewRun | null> {
     const run = await this.container.repositories.aiReviewRuns.getById(runId)
     return run === null ? null : this.refreshed(run)
+  }
+
+  /**
+   * Poll every run this org has in flight, and say how many were asked about.
+   *
+   * What the reminder clock calls, and the half of the loop a read cannot
+   * supply: cat-factory calls nothing back, so until something asks on a
+   * schedule, a review that parks with its findings is waiting on a person who
+   * has no way of knowing it is. Opening the row still polls, because that is
+   * what makes an open row live; this is what makes a CLOSED one true.
+   *
+   * SEQUENTIAL rather than `Promise.all`, unlike the read path. A read polls the
+   * runs of one review, which is a handful; this polls a whole tenancy's, and a
+   * tick that opened thirty connections to one cat-factory at once would be
+   * rate-limited into exactly the silence it exists to end.
+   *
+   * The STORE is asked first and the credential only after it has something to
+   * answer for. A tenancy with nothing in flight is the common case on the
+   * clock — most orgs are not mid-review most minutes — and the in-flight read is
+   * one indexed, capped lookup where resolving is a credential read plus an HKDF
+   * derivation plus an AES-GCM open. Ordered the other way round, every org paid
+   * for a gateway on every tick to learn there was nothing to use it on.
+   */
+  async sweepInFlight(limit: number): Promise<number> {
+    const runs = await this.container.repositories.aiReviewRuns.listInFlight(limit)
+    let polled = 0
+    for (const run of runs) {
+      if (await this.sweepOne(run)) polled += 1
+    }
+    return polled
+  }
+
+  /**
+   * One run out of the sweep's batch. Answers whether cat-factory was asked
+   * about it.
+   *
+   * Nothing here ends the sweep. A poll that was refused is recorded on the row
+   * by `pollRefused` and the next run in the batch is a different review, often
+   * with a different outcome; a run with nothing to poll is written off rather
+   * than skipped, for the reason `abandonIfOrphaned` gives.
+   */
+  private async sweepOne(run: AiReviewRun): Promise<boolean> {
+    if (run.catFactoryTaskId === null) {
+      await abandonIfOrphaned(this.container, run)
+      return false
+    }
+    return (await this.refreshed(run)) !== null
   }
 
   /**
@@ -242,8 +302,17 @@ export class AiReviewService {
       { runId: run.id, taskId: run.catFactoryTaskId },
       `could not read the AI review from cat-factory: ${reason}`,
     )
-    return this.container.repositories.aiReviewRuns.update(run.id, {
+    // Onto the row as it stands NOW, for the reason `write` re-reads. The sweep
+    // walks a batch it snapshotted and spends two calls per run, so a refusal
+    // can come back after a read or a curation verb has settled the run — and a
+    // settled run is never polled again, so nothing would ever clear the reason.
+    // The board would say for ever that a finished review could not be read.
+    const { aiReviewRuns } = this.container.repositories
+    const current = await aiReviewRuns.getById(run.id)
+    if (current === null || !IN_FLIGHT.has(current.status)) return current
+    return aiReviewRuns.update(run.id, {
       failureReason: `the AI review could not be read from cat-factory: ${reason}`,
+      lastPolledAt: this.container.clock.now(),
     })
   }
 
@@ -273,22 +342,11 @@ export class AiReviewService {
       summary: reported.summary,
       failureReason: reported.failureReason,
       curation: curationFor(reported, current),
+      // Stamped by the POLL and not by the report, so a run the clock has just
+      // asked about goes to the back of the rotation whatever came back. See
+      // `AiReviewRunRepository.listInFlight`.
+      lastPolledAt: this.container.clock.now(),
       completedAt: settled ? (current.completedAt ?? this.container.clock.now()) : null,
     })
   }
-}
-
-/**
- * The curation a poll writes, which KEEPS what the row already holds when the
- * report carries none.
- *
- * cat-factory drops the decision from a run's list the moment the loop it belongs
- * to settles, so the poll that sees a review finish is the poll that sees no
- * decision. Writing that through would destroy the post receipt, the findings and
- * the recorded selection at exactly the moment somebody wants to read what
- * landed, and nothing could recover them: the receipt would only ever be visible
- * in the accidental window between the post and the run settling.
- */
-function curationFor(reported: AiReviewReport, current: AiReviewRun): AiReviewCuration | null {
-  return reported.curation ?? current.curation
 }

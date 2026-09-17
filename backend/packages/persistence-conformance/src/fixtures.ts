@@ -137,6 +137,7 @@ export function aiReviewRun(id: string, overrides: Partial<AiReviewRun> = {}): A
     failureReason: null,
     curation: curation(),
     requestedAt: 1_000,
+    lastPolledAt: null,
     completedAt: null,
     ...overrides,
   }

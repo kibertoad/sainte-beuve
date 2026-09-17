@@ -36,6 +36,23 @@ export const aiReviewStatusSchema = v.picklist([
 ])
 export type AiReviewStatus = v.InferOutput<typeof aiReviewStatusSchema>
 
+/**
+ * The statuses a run can still learn something from, and the one definition of
+ * them.
+ *
+ * It is on the contract rather than in the service because three stores and a
+ * poll now agree on it: `listInFlight` is a WHERE clause in two SQL dialects and
+ * a filter in the third, and a fourth status added here has to reach all of them
+ * at once. A set spelled out per store is a set that drifts, and the drift is
+ * silent — a store that forgot `awaiting_selection` would simply stop handing
+ * parked reviews to the clock.
+ */
+export const AI_REVIEW_IN_FLIGHT_STATUSES: readonly AiReviewStatus[] = [
+  'requested',
+  'running',
+  'awaiting_selection',
+]
+
 /** How bad the reviewer thinks one finding is. cat-factory's own ladder. */
 export const aiReviewSeveritySchema = v.picklist(['blocker', 'high', 'medium', 'low', 'nit'])
 export type AiReviewSeverity = v.InferOutput<typeof aiReviewSeveritySchema>
@@ -193,6 +210,20 @@ export const aiReviewRunSchema = v.object({
   /** What there is to curate right now. See {@link aiReviewCurationSchema}. */
   curation: v.nullable(aiReviewCurationSchema),
   requestedAt: v.number(),
+  /**
+   * When a poll last reached cat-factory about this run. Null until one has.
+   *
+   * It is what makes the clock's batch a RATE LIMIT rather than a queue with a
+   * head: the sweep reads the least recently polled runs first, so a run polled
+   * on this tick goes to the back and every run in flight comes round. Ordered
+   * by `requestedAt` instead, an org holding a batch's worth of reviews parked
+   * on their findings — which only a person can unpark, never a poll — would fill
+   * the batch for ever and no newer review would be polled at all.
+   *
+   * Stamped by the poll rather than by the report, so a cat-factory that refuses
+   * one still moves the run down the rotation instead of monopolising it.
+   */
+  lastPolledAt: v.nullable(v.number()),
   completedAt: v.nullable(v.number()),
 })
 export type AiReviewRun = v.InferOutput<typeof aiReviewRunSchema>

@@ -187,6 +187,90 @@ export const aiReviewCases: readonly ConformanceCase[] = [
   conformanceCase('patching a run that is not there answers null', async (repos) => {
     assert.strictEqual(await repos.aiReviewRuns.update('nobody', { status: 'failed' }), null)
   }),
+
+  conformanceCase('in-flight runs come back oldest first, across reviews', async (repos) => {
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-parked', { status: 'awaiting_selection', requestedAt: 3_000 }),
+    )
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-running', { status: 'running', requestedAt: 2_000, reviewId: 'review-2' }),
+    )
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-filed', { status: 'requested', requestedAt: 1_000 }),
+    )
+    const ids = (await repos.aiReviewRuns.listInFlight(10)).map((row) => row.id)
+    // Nothing has been polled, so `requested_at` is what is left to order by,
+    // and the run that has been waiting longest goes first.
+    assert.deepStrictEqual(ids, ['run-filed', 'run-running', 'run-parked'])
+  }),
+
+  conformanceCase('a run that has been polled goes to the back of the rotation', async (repos) => {
+    // The property the clock's batch cap rests on. `run-parked` is the oldest
+    // request AND the one state a poll can never end — only a person leaves
+    // `awaiting_selection` — so ordered by `requested_at` alone it would hold the
+    // head of every capped batch for ever and the two newer runs would never be
+    // polled at all. Polled first, it sorts LAST.
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-parked', {
+        status: 'awaiting_selection',
+        requestedAt: 1_000,
+        lastPolledAt: 9_000,
+      }),
+    )
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-polled', { status: 'running', requestedAt: 2_000, lastPolledAt: 8_000 }),
+    )
+    await repos.aiReviewRuns.create(
+      aiReviewRun('run-fresh', { status: 'running', requestedAt: 3_000, lastPolledAt: null }),
+    )
+    const ids = (await repos.aiReviewRuns.listInFlight(10)).map((row) => row.id)
+    // A null reading sorts FIRST and not last, which is the one thing the two
+    // SQL dialects disagree about by default: a run nobody has polled is the one
+    // that most needs polling.
+    assert.deepStrictEqual(ids, ['run-fresh', 'run-polled', 'run-parked'])
+  }),
+
+  conformanceCase('the rotation survives a poll being recorded', async (repos) => {
+    // `last_polled_at` is a column in the durable stores AND a field of the
+    // payload. A store that wrote only the payload would go on handing the same
+    // run to the clock every tick while the rest of the tenancy waited.
+    await repos.aiReviewRuns.create(aiReviewRun('run-a', { status: 'running', requestedAt: 1_000 }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-b', { status: 'running', requestedAt: 2_000 }))
+    assert.deepStrictEqual(
+      (await repos.aiReviewRuns.listInFlight(1)).map((row) => row.id),
+      ['run-a'],
+    )
+    await repos.aiReviewRuns.update('run-a', { lastPolledAt: 5_000 })
+    assert.deepStrictEqual(
+      (await repos.aiReviewRuns.listInFlight(1)).map((row) => row.id),
+      ['run-b'],
+    )
+  }),
+
+  conformanceCase('a settled run is not in flight', async (repos) => {
+    await repos.aiReviewRuns.create(aiReviewRun('run-done', { status: 'completed' }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-failed', { status: 'failed' }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-gone', { status: 'cancelled' }))
+    assert.deepStrictEqual(await repos.aiReviewRuns.listInFlight(10), [])
+  }),
+
+  conformanceCase('settling a run takes it out of the in-flight read', async (repos) => {
+    // The status is a column in the durable stores AND a field of the payload,
+    // so this is what proves an update moves both: a store that wrote only the
+    // payload would go on handing a finished run to the clock for ever.
+    await repos.aiReviewRuns.create(aiReviewRun('run-1', { status: 'running' }))
+    assert.strictEqual((await repos.aiReviewRuns.listInFlight(10)).length, 1)
+    await repos.aiReviewRuns.update('run-1', { status: 'completed' })
+    assert.deepStrictEqual(await repos.aiReviewRuns.listInFlight(10), [])
+  }),
+
+  conformanceCase('the in-flight read stops at its limit', async (repos) => {
+    await repos.aiReviewRuns.create(aiReviewRun('run-1', { requestedAt: 1_000 }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-2', { requestedAt: 2_000 }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-3', { requestedAt: 3_000 }))
+    const ids = (await repos.aiReviewRuns.listInFlight(2)).map((row) => row.id)
+    assert.deepStrictEqual(ids, ['run-1', 'run-2'])
+  }),
 ]
 
 export const integrationTokenCases: readonly ConformanceCase[] = [

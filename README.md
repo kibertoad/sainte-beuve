@@ -46,8 +46,11 @@ already landed rather than commenting twice. And if the reviewer wedges with
 every slice of the diff already in, **Resume** re-dispatches only the slices that
 never reported, so a review that stalled on its last turn is not thrown away.
 
-Nothing here polls in the background: the board reads cat-factory when you open
-the row, and stops when you close it.
+Opening the row reads cat-factory, and closing it stops. What does not stop is
+the deployment's own clock: the same tick that sends the reminders asks after
+every review still in flight, so one that parks while every board is closed is
+already on the row when somebody next looks, rather than waiting to be
+discovered.
 
 ## Asking for attention
 

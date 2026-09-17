@@ -5,6 +5,7 @@ import type {
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
+import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type {
   AiReviewRunRepository,
   EpochMs,
@@ -242,6 +243,28 @@ export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
     return rows.map((row) => row.data)
   }
 
+  async listInFlight(limit: number): Promise<AiReviewRun[]> {
+    const rows = await this.db
+      .select()
+      .from(aiReviewRuns)
+      .where(
+        and(
+          eq(aiReviewRuns.orgId, this.orgId),
+          inArray(aiReviewRuns.status, [...AI_REVIEW_IN_FLIGHT_STATUSES]),
+        ),
+      )
+      // `NULLS FIRST` spelled out: Postgres sorts nulls LAST on an ascending
+      // key, and a run nobody has polled yet is the one that most needs polling.
+      // The other two stores answer the same way; the conformance suite pins it.
+      .orderBy(
+        sql`${aiReviewRuns.lastPolledAt} asc nulls first`,
+        asc(aiReviewRuns.requestedAt),
+        asc(aiReviewRuns.id),
+      )
+      .limit(limit)
+    return rows.map((row) => row.data)
+  }
+
   async getById(runId: string): Promise<AiReviewRun | null> {
     const rows = await this.db
       .select()
@@ -268,7 +291,9 @@ export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
       orgId: this.orgId,
       id: run.id,
       reviewId: run.reviewId,
+      status: run.status,
       requestedAt: run.requestedAt,
+      lastPolledAt: run.lastPolledAt,
       data: run,
     }
     await this.db

@@ -56,6 +56,15 @@ export interface StubAiReview extends AiReviewGateway {
   resumed: string[]
   /** How many times it has been polled, so a case can assert a read asked nothing. */
   polls: number
+  /** The cat-factory task id of every poll, in order. What a rotation is asserted on. */
+  polled: string[]
+  /**
+   * Run before each poll answers, so a case can make the store move UNDER a poll
+   * that is already in flight. That race is the one the clock made ordinary: it
+   * polls a whole tenancy sequentially while reads and curation verbs write the
+   * same rows.
+   */
+  onPoll: ((taskId: string) => Promise<void>) | null
   /** What the next `getStatus` answers. Reassign it to advance the review. */
   report: AiReviewReport
   /** Make the next poll fail, the way an unreachable instance does. */
@@ -69,6 +78,8 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
     resolved: [],
     resumed: [],
     polls: 0,
+    polled: [],
+    onPoll: null,
     pollFails: false,
     report: {
       status: 'running',
@@ -80,10 +91,15 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
     },
     requestReview: async (input) => {
       stub.requested.push({ title: input.title, instructions: input.instructions })
-      return { taskId: 'cf-task-1', url: 'https://cat-factory.example.com/tasks/cf-task-1' }
+      // Numbered, not fixed: a case about the clock's rotation files several
+      // reviews and asserts WHICH of them a given tick polled.
+      const taskId = `cf-task-${stub.requested.length}`
+      return { taskId, url: `https://cat-factory.example.com/tasks/${taskId}` }
     },
-    getStatus: async () => {
+    getStatus: async (taskId) => {
       stub.polls += 1
+      stub.polled.push(taskId)
+      await stub.onPoll?.(taskId)
       if (stub.pollFails) throw new UpstreamFailedError('cat-factory could not be reached')
       return stub.report
     },
