@@ -31,6 +31,12 @@ import { type NodeConfig, type RunningServer, loadConfig, start } from '@sainte-
  *   - CORS opens to `*` for the board; the configuration routes read that as
  *     loopback only, which is the local SPA and nothing else. See `allowedOrigin`
  *     in @sainte-beuve/server.
+ *   - Authentication is OPEN, so the workspace renders for whoever the
+ *     source-control credential acts as and nothing has to be signed in to.
+ *     `AUTH_MODE=required` exercises the signed-in path against the same code a
+ *     hosted deployment runs; it needs an OAuth client, because there is then no
+ *     other way in. Either way loopback is answered by NAME rather than with the
+ *     wildcard, which is what lets the local SPA send its session cookie at all.
  *
  * Everything a hosted deployment configures is still configurable here, and nothing
  * is required. That is the property that matters: a local run exercises the same

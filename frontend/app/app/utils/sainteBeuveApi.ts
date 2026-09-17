@@ -16,15 +16,18 @@ import {
   clearIntegrationTokenContract,
   commitToAttentionContract,
   commitToPullRequestContract,
+  createApiKeyContract,
   createReviewerContract,
   disconnectVcsSignInContract,
   dismissAiReviewFindingContract,
+  getAuthStateContract,
   getConnectionsContract,
   getIntegrationSettingsContract,
   getViewerContract,
   getWorkspaceContract,
   issuePath,
   listAiReviewRunsContract,
+  listApiKeysContract,
   listAttentionContract,
   listProjectsContract,
   listReviewersContract,
@@ -35,8 +38,11 @@ import {
   requestAttentionContract,
   resolveAiReviewContract,
   resumeAiReviewContract,
+  revokeApiKeyContract,
   setIntegrationTokenContract,
+  signOutContract,
   startGitHubAppInstallContract,
+  startSessionSignInContract,
   startVcsSignInContract,
   streamAttentionContract,
   updateProjectContract,
@@ -223,7 +229,14 @@ async function checkRequest(contract: ApiContract, params: unknown): Promise<voi
  * that reads the URL out of runtime config and calls this.
  */
 export function createSainteBeuveApi(apiBase: string) {
-  const client = wretch(`${apiBase}${API_PREFIX}`)
+  // `credentials: 'include'`, because the session is an `HttpOnly` cookie and
+  // the SPA is served from its own origin: without it a browser sends the
+  // cookie only same-origin, so a deployment whose API is on another host would
+  // sign somebody in and then render every screen as anonymous. The API answers
+  // `Access-Control-Allow-Credentials` only for an origin it was configured
+  // with, so this asks and the deployment decides (see `allowedOrigin` in
+  // @sainte-beuve/server).
+  const client = wretch(`${apiBase}${API_PREFIX}`).options({ credentials: 'include' })
 
   async function call<TContract extends ApiContract>(
     contract: TContract,
@@ -256,6 +269,20 @@ export function createSainteBeuveApi(apiBase: string) {
      * live half survives a laptop closing. The contract still owns the path.
      */
     attentionStreamUrl: `${apiBase}${API_PREFIX}${mapApiContractToPath(streamAttentionContract)}`,
+
+    // Who is calling, and whether this deployment cares. Never refused, in
+    // either mode: a screen that had to be signed in to discover that it is not
+    // signed in has nowhere to start.
+    getAuthState: () => call(getAuthStateContract, {}),
+    signOut: () => call(signOutContract, { body: {} }),
+    /** Where to send the browser to sign IN, as opposed to connecting a credential. */
+    startSessionSignIn: (provider: VcsProvider) =>
+      call(startSessionSignInContract, { pathParams: { provider } }),
+
+    listApiKeys: () => call(listApiKeysContract, {}),
+    /** The answer carries the key itself, which is the only time it is readable. */
+    createApiKey: (label: string) => call(createApiKeyContract, { body: { label } }),
+    revokeApiKey: (keyId: string) => call(revokeApiKeyContract, { pathParams: { keyId } }),
 
     getViewer: () => call(getViewerContract, {}),
     getWorkspace: () => call(getWorkspaceContract, {}),

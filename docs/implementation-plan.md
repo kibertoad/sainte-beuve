@@ -65,7 +65,7 @@ provider)` from that host's own credential. Above the adapter there is no
 ## What works today
 
 - **A durable board, on both runtimes**: D1 behind the Worker, Postgres behind
-  the Node service, the same nine tables in each, and one conformance suite that
+  the Node service, the same eleven tables in each, and one conformance suite that
   proves the three stores (those two and the in-memory one) answer alike. A
   facade with neither bound still boots, and `/health` reports which store it is
   on. See [persistence.md](./persistence.md).
@@ -121,20 +121,26 @@ provider)` from that host's own credential. Above the adapter there is no
   mounted from, so a path, a method or a response field cannot drift between the
   two halves, and a body that does not match its schema is refused where the call
   was made rather than three components later.
+- **Sessions, and keys for the machines**: a sign-in that establishes an
+  `HttpOnly` session rather than only storing a credential, so the workspace
+  renders for whoever is SIGNED IN rather than for whoever the deployment's token
+  acts as; API keys for CI, which are deliberately not people; and one guard over
+  both, off by default and turned on with `AUTH_MODE=required`. See
+  [auth.md](./auth.md).
 - **The reviewer directory is editable**: adding somebody, editing their skills,
   team, per-host handles, Slack id and weight, and pausing or resuming them in one
   click.
 
 ## What is a placeholder, and why it is still here
 
-| Placeholder                               | Why it exists now                                                                                                                                                                                                                   |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single cat-factory service id             | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
-| A stored credential is never re-checked   | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
-| An AI review is polled on the READ        | Nothing drives `refresh()` on a clock, so a review that parks while nobody is looking sits there until somebody opens the row. The reminder tick is where that belongs.                                                             |
-| The viewer is the deployment's credential | Whoever the source-control token acts as is who the workspace renders for. Right for one person's local run, wrong for a shared deployment, and exactly what slice 6 replaces.                                                      |
-| The attention stream is per process       | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
-| No GitLab intake                          | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
+| Placeholder                             | Why it exists now                                                                                                                                                                                                                   |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
+| A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
+| An AI review is polled on the READ      | Nothing drives `refresh()` on a clock, so a review that parks while nobody is looking sits there until somebody opens the row. The reminder tick is where that belongs.                                                             |
+| No org boundary behind the session      | A session says WHO is calling and nothing says what they may reach: every authenticated caller sees the same board, the same directory and the same registry. It is the second half of slice 6 and it touches every table.          |
+| The attention stream is per process     | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
+| No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
 
 ## Slices, in order
 
@@ -353,38 +359,68 @@ What is left over from it:
   no unit of work, and adding one costs the in-memory store its simplicity, so
   it waits for a case where the gap is visible.
 
-### Slice 6: auth and tenancy
+### Slice 6a: sessions and keys (done)
 
-Everything above is single-tenant and unauthenticated, which is fine for local mode
-and wrong for a hosted deployment. Sessions, an org boundary around the reviewer pool
-and the board, and API keys for the machine callers.
+Sessions for people, API keys for machines, and one guard over both. The design
+is [auth.md](./auth.md); what that slice decided, in short:
 
-The workspace raises the stakes and does not change the shape of the answer.
-It renders for a VIEWER, and the viewer is currently whoever the deployment's
-source-control credential acts as: correct for one person's local run, and on a
-shared deployment it means everyone sees the same person's lists. What closes
-it is one substitution, not a redesign: `ViewerService` stops asking a gateway
-who the credential belongs to and reads the session's subject instead. The
-identity layer under it is already the shape a session needs, because a session
-resolves to `(provider, subject)` and that is what the store is keyed on.
+- **The mode is typed, not derived.** Both derivations fail in the direction that
+  hurts: `required` inferred from "an OAuth client exists" locks a laptop out of
+  its own board the day somebody configures a sign-in, and `open` inferred from
+  "nothing is configured" leaves a hosted deployment open because a variable was
+  mistyped. `AUTH_MODE` is a decision somebody typed, and `/health` reports what
+  took effect beside the hosts a sign-in could use, so a deployment nobody can
+  enter is visible from outside the process.
+- **Opaque session, not a JWT.** A self-describing token cannot be revoked, and
+  the two things this has to be able to do — sign somebody out, and drop every
+  session of a reviewer who was paused or merged away — are both revocations. The
+  price is one indexed read per request against a store the request was going to
+  touch anyway. The digest is UNKEYED, because at 256 bits there is nothing to
+  guess, and keying it would sign everybody out on a key rotation for no gain.
+- **A key is not a person, and the refusal says so.** An API key has no reviewer
+  row, so the routes that render for a viewer refuse it by name rather than
+  inventing somebody: the same answer a GitHub App installation already got, for
+  the same reason. Guessing a person for a CI job would put somebody else's work
+  on its screen.
+- **Two sign-in flows over one OAuth client.** Connecting the DEPLOYMENT's
+  credential is an operator's act on shared state; proving who the caller is is
+  everybody's. One button doing both would mean every person who signed in
+  overwrote the repository-write credential the board runs on. They are told
+  apart by the signed state, which is what the flow name was already for.
+- **The bootstrap is an environment credential**, `AUTH_API_KEY`, matched before
+  the store. A `required` deployment has no sessions and no minted keys, so the
+  route that mints the first key would be the route nobody can reach; the same
+  shape as `GITHUB_TOKEN` beside a stored GitHub credential, and it keeps working
+  while the database is being restored.
+- **The session is a cookie, so CORS became load-bearing.** A browser sends a
+  credential only to an origin the response NAMES, and the credentials header is
+  invalid beside `*`. A hosted deployment therefore has to list its SPA in
+  `CORS_ORIGINS` or have an SPA that can read the board and never sign in — which
+  is the loud failure rather than the quiet one. Loopback is echoed by name even
+  under the wildcard, which is what keeps local development working.
+- **The sweep rides the reminder tick.** It is the one periodic pass both
+  runtimes already have, and a sweep wired on the Node interval and not on the
+  Worker's cron would be exactly the asymmetry this layout exists to prevent.
 
-The configuration routes are the ones this is most overdue for, because they hold a
-credential rather than a board row. Until it lands they are guarded by two things
-that are not authentication: a credential can be written and never read back, and
-`/api/v1/settings` is excluded from the wildcard CORS default, so a page the operator
-happens to visit cannot preflight a write into the token store. A caller that reaches
-the deployment directly still can, and that is what a session closes.
+### Slice 6b: the org boundary
 
-The connect flows raise the stakes and do not change the shape of the answer. A
-sign-in is signed end to end (the state is HMAC'd under a key derived from the
-deployment's own, checked before the code is spent, and scoped to its flow so one
-callback cannot accept another's), so nobody can bind their GitHub account to this
-deployment by handing an operator a link. What they still cannot do is prove WHO
-started the flow, because there is no identity to bind it to yet. That is the same
-gap, on a route that now stores a repository-write credential.
+A session says who is calling; nothing yet says what they may reach. Every
+authenticated caller sees the same board, the same reviewer directory and the
+same project registry, and every API key is as powerful as every other.
 
-Deliberately last: it is the slice whose shape depends most on how the first five are
-actually used, and the least useful one to guess at now.
+Closing it is not a new idea on top of 6a, it is a column: a tenancy on every
+table, a scope on every port, a migration per dialect, and a case per store in
+`@sainte-beuve/persistence-conformance`. It is deliberately separate because it
+touches all eleven tables and the half above it — knowing who is calling — is
+worth having before it lands rather than after.
+
+Two smaller things fall out of 6a and belong here:
+
+- **Pausing somebody does not sign them out.** `deleteForReviewer` exists on the
+  session port and nothing calls it, because what pausing should mean for ACCESS
+  (as opposed to for selection) is a policy question this slice did not answer.
+- **Roles are the same gap one level down.** "Can revoke an API key" and "can
+  read the board" are the same permission today.
 
 ## Decisions worth recording
 

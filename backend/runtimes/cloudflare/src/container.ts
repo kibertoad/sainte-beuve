@@ -18,8 +18,10 @@ import { createD1Repositories } from '@sainte-beuve/persistence-d1'
 import { createInMemoryRepositories } from '@sainte-beuve/persistence-memory'
 import {
   type AppContainer,
+  type AuthWiring,
   createContainer,
   DEFAULT_GITHUB_LABELS,
+  DEFAULT_SESSION_LIFETIME_MS,
   type EnvironmentVcsGateways,
   InMemoryAttentionBus,
   type SecretsWiring,
@@ -258,8 +260,26 @@ export function containerFor(env: WorkerEnv): AppContainer {
       signingSecret: env.SLACK_SIGNING_SECRET || null,
       announcementChannelId: env.SLACK_CHANNEL_ID || null,
     },
+    auth: authFor(env),
     appBaseUrl: env.APP_BASE_URL || null,
   })
+}
+
+/**
+ * How much this Worker insists on knowing who is calling.
+ *
+ * Anything but the literal `required` is `open`, including a typo: a variable
+ * nobody can spell must not be the difference between a closed deployment and
+ * an open one that thinks it is closed, and `/health` reports what took effect.
+ */
+function authFor(env: WorkerEnv): AuthWiring {
+  const lifetime = Number.parseInt(env.AUTH_SESSION_LIFETIME_MS ?? '', 10)
+  return {
+    mode: env.AUTH_MODE?.trim().toLowerCase() === 'required' ? 'required' : 'open',
+    environmentApiKey: env.AUTH_API_KEY || null,
+    sessionLifetimeMs:
+      Number.isNaN(lifetime) || lifetime <= 0 ? DEFAULT_SESSION_LIFETIME_MS : lifetime,
+  }
 }
 
 export function corsOriginsFor(env: WorkerEnv): string[] {

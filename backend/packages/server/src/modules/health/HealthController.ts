@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import { resolveAiReview, resolveChat, resolveVcs } from '../../integrations/resolve.js'
+import { ConnectionsService } from '../connections/ConnectionsService.js'
 
 /**
  * `GET /health`: a liveness probe that also reports which optional capabilities
@@ -43,6 +44,21 @@ export function healthController(): Hono<AppEnv> {
         // here rather than after an isolate recycle.
         persistence: container.persistence,
         persistenceReady,
+        // Beside the capabilities for the same reason the store is: every
+        // deployment has an answer and what an operator needs to know is WHICH.
+        // `open` is the honest answer for local mode and an alarm on anything
+        // shared, and a deployment that thought it had closed the door finds
+        // out here rather than from whoever walked through it.
+        auth: {
+          mode: container.auth.mode,
+          /**
+           * The hosts somebody could sign in on. Empty beside `required` is the
+           * state to catch here: a deployment nobody can enter, including the
+           * operator who set the variable.
+           */
+          signInProviders: new ConnectionsService(container).signInProviders(),
+          environmentApiKey: container.auth.environmentApiKey !== null,
+        },
         capabilities: {
           chat: chat !== null,
           // Per host, not one flag. A deployment connected to GitHub and not to

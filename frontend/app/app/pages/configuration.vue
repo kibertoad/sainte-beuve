@@ -16,15 +16,49 @@ const api = useSainteBeuveApi()
 const route = useRoute()
 const toast = useToast()
 
+const auth = useAuthState()
+
 const { data, pending, error, refresh } = await useAsyncData('configuration', async () => {
-  const [connections, settings] = await Promise.all([
+  // The Access card is read HERE with the rest, for the reason the two
+  // credential reads are one call: minting a key and connecting a host both
+  // change what this page says about who may call, and a card that refreshed
+  // only its own half would report a state that never existed.
+  const [connections, settings, keys] = await Promise.all([
     api.getConnections(),
     api.getIntegrationSettings(),
+    api.listApiKeys(),
+    auth.refresh(),
   ])
-  return { connections, integrations: settings.integrations }
+  return { connections, integrations: settings.integrations, apiKeys: keys.apiKeys }
 })
 
 const { busy, run } = useApiAction({ refresh })
+
+/** The one time a minted key is readable. See AccessCard. */
+const issuedKey = ref<string | null>(null)
+
+async function mintKey(label: string) {
+  let token: string | null = null
+  const minted = await run(
+    async () => {
+      token = (await api.createApiKey(label)).token
+    },
+    'Could not mint an API key',
+    'create-key',
+  )
+  if (minted) issuedKey.value = token
+}
+
+function revokeKey(keyId: string) {
+  // Cleared first: leaving a secret on screen beside a list it is no longer in
+  // invites somebody to store a key that stopped working a moment ago.
+  issuedKey.value = null
+  return run(() => api.revokeApiKey(keyId), 'Could not revoke the API key', keyId)
+}
+
+async function endSession() {
+  await run(() => api.signOut(), 'Could not sign out', 'sign-out')
+}
 
 // The credential inputs, so a successful save can clear the one it landed on.
 // Held on the page rather than inside each field because only the page knows
@@ -115,6 +149,20 @@ async function connect(start: () => Promise<{ url: string }>, failure: string, k
   if (started && url !== null) window.location.assign(url)
 }
 
+/**
+ * Start a sign-in that establishes a SESSION, as opposed to the button on a host
+ * card, which connects the deployment's own credential. Two flows over one OAuth
+ * client, because one of them is an operator acting on shared state.
+ */
+function signIn(provider: string) {
+  if (!isVcsProvider(provider)) return
+  return connect(
+    () => api.startSessionSignIn(provider),
+    'Could not start the sign-in',
+    `sign-in-${provider}`,
+  )
+}
+
 async function signOut(provider: VcsProvider) {
   await run(
     () => api.disconnectSignIn(provider),
@@ -158,6 +206,18 @@ onMounted(() => {
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the configuration" />
 
     <div v-else-if="data" class="flex flex-col gap-4">
+      <AccessCard
+        v-if="auth.state.value"
+        v-model:issued="issuedKey"
+        :state="auth.state.value"
+        :api-keys="data.apiKeys"
+        :busy="busy"
+        @sign-in="signIn($event)"
+        @sign-out="endSession()"
+        @create-key="mintKey($event)"
+        @revoke-key="revokeKey($event)"
+      />
+
       <VcsConnectionCard
         v-for="connection in data.connections.vcs"
         :key="connection.provider"

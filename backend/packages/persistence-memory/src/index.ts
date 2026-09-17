@@ -1,6 +1,7 @@
 // `@sainte-beuve/persistence-memory`: the store every runtime boots with until a
 // durable adapter is wired, and the fixture the domain suites run against.
 
+export { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
 export {
   createInMemoryRepositories,
   InMemoryAiReviewRunRepository,

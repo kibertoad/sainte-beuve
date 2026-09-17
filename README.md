@@ -126,8 +126,9 @@ a reduced build.
 
 Read [docs/implementation-plan.md](./docs/implementation-plan.md) for what is built,
 what is a placeholder, and what lands next,
-[docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design, and
-[docs/persistence.md](./docs/persistence.md) for where the board lives.
+[docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design,
+[docs/persistence.md](./docs/persistence.md) for where the board lives, and
+[docs/auth.md](./docs/auth.md) for who is allowed to call it.
 
 ## Connecting GitHub, GitLab and Slack
 
@@ -155,6 +156,25 @@ Slack needs a bot token to post, and separately a signing secret to trust the
 `/review` command and the message buttons coming back. Every URL that has to be
 registered is shown on the Configuration screen with this deployment's own base
 URL filled in. Full setup: [docs/integrations.md](./docs/integrations.md).
+
+## Who is allowed to call it
+
+A deployment runs `open` by default, which is what a laptop wants: nothing is
+refused for being anonymous, and the workspace renders for whoever the
+deployment's own source-control credential acts as. Set `AUTH_MODE=required` and
+every route but the sign-in ones needs a caller.
+
+A **person** signs in through GitHub or GitLab and is carried by an `HttpOnly`
+session cookie; the workspace then renders for THEM rather than for the
+deployment's credential. A **machine** presents an API key minted on the
+Configuration screen (`Authorization: Bearer sbk_…`), and a key is deliberately
+not a person: it can drive the board and it has no workspace of its own.
+
+`GET /health` reports the mode beside the hosts a sign-in could actually use, so
+a deployment nobody can enter is visible from outside the process. One thing to
+know before turning it on: a browser sends its session only to an origin the API
+NAMES, so a hosted SPA has to be listed in `CORS_ORIGINS`. Full design, including
+what is still missing: [docs/auth.md](./docs/auth.md).
 
 ## Hosting it
 

@@ -2,6 +2,7 @@ import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
 import { type ChatGateway, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../container.js'
 import { type CredentialSource, type Resolved, resolveChat } from '../integrations/resolve.js'
+import { SessionService } from '../modules/auth/SessionService.js'
 import { scheduleNextReminder } from './schedule.js'
 
 /**
@@ -24,6 +25,17 @@ export interface TickResult {
   sent: number
   failed: number
   skipped: number
+  /**
+   * Expired sessions dropped on the way past.
+   *
+   * It rides the reminder clock rather than having a clock of its own, because
+   * this is the one periodic pass both runtimes already have: a sweep wired on
+   * the Node interval and not on the Worker's cron would be exactly the
+   * asymmetry this layout exists to prevent. A session that expires is refused
+   * on read either way, so the sweep is about the table growing a row per
+   * sign-in for ever rather than about correctness.
+   */
+  sessionsSwept: number
 }
 
 export async function runReminderTick(
@@ -31,7 +43,7 @@ export async function runReminderTick(
   batchSize: number = DEFAULT_BATCH,
 ): Promise<TickResult> {
   const due = await container.repositories.reminders.listDue(container.clock.now(), batchSize)
-  const result: TickResult = { sent: 0, failed: 0, skipped: 0 }
+  const result: TickResult = { sent: 0, failed: 0, skipped: 0, sessionsSwept: 0 }
   // Resolved ONCE for the batch. Every reminder in it goes out over the same
   // credential, and resolving per reminder means re-reading the stored bot
   // token, re-deriving its HKDF key and opening the envelope again for each
@@ -41,10 +53,25 @@ export async function runReminderTick(
     const outcome = await deliver(container, reminder, chat)
     result[outcome] += 1
   }
-  if (due.length > 0) {
+  result.sessionsSwept = await sweepSessions(container)
+  if (due.length > 0 || result.sessionsSwept > 0) {
     container.logger.info({ ...result, due: due.length }, 'reminder tick complete')
   }
   return result
+}
+
+/**
+ * A sweep that fails does NOT fail the tick. The reminders in this pass have
+ * already gone out, and a store that refused a delete is a fault an operator
+ * reads in the log rather than a reason to re-send every nudge next minute.
+ */
+async function sweepSessions(container: AppContainer): Promise<number> {
+  try {
+    return await new SessionService(container).sweepExpired()
+  } catch (err) {
+    container.logger.warn({ err }, 'could not sweep expired sessions')
+    return 0
+  }
 }
 
 async function deliver(

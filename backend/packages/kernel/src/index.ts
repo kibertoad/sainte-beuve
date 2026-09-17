@@ -10,6 +10,7 @@ export {
   getErrorMessage,
   isDomainError,
   NotFoundError,
+  UnauthenticatedError,
   UnavailableError,
   UpstreamFailedError,
   ValidationError,
@@ -38,6 +39,7 @@ export type { AttentionBus } from './ports/realtime.js'
 export { isStoredRowError, StoredRowError } from './ports/repositories.js'
 export type {
   AiReviewRunRepository,
+  ApiKeyRepository,
   AttentionRepository,
   IdentityRepository,
   IntegrationTokenRepository,
@@ -48,7 +50,10 @@ export type {
   ReviewCommitmentRepository,
   ReviewerRepository,
   ReviewRequestRepository,
+  SessionRepository,
+  StoredApiKey,
   StoredIntegrationToken,
+  StoredSession,
 } from './ports/repositories.js'
 export type { RoundTripState, StateSigner } from './ports/state.js'
 export {

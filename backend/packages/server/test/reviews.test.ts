@@ -36,6 +36,9 @@ describe('review board API', () => {
       // Answered by READING the store, not by naming it: see the degraded case
       // below for what the name alone cannot tell an operator.
       persistenceReady: true,
+      // Beside the store for the same reason: every deployment has an answer
+      // and the one an operator has to be able to read from outside is WHICH.
+      auth: { mode: 'open', signInProviders: [], environmentApiKey: false },
       capabilities: {
         chat: false,
         vcs: { github: false, gitlab: false },
@@ -194,14 +197,29 @@ describe('review board API', () => {
     expect(await outstanding(harness, reviewer.id)).toBe(1)
   })
 
-  it('allows the SPA on the wildcard every runtime defaults to', async () => {
+  it('answers the local SPA by name, so it can send its session', async () => {
+    // Loopback is echoed rather than covered by the wildcard, and the
+    // difference is the whole of local development: the credentials header is
+    // invalid beside `*`, so a page answered with the wildcard may read the
+    // board and may never send its cookie.
     const res = await harness.app.fetch(
       new Request('http://localhost/api/v1/reviews', {
         headers: { origin: 'http://localhost:3000' },
       }),
     )
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000')
+    expect(res.headers.get('access-control-allow-credentials')).toBe('true')
+  })
+
+  it('allows any other origin to read on the wildcard every runtime defaults to', async () => {
+    const res = await harness.app.fetch(
+      new Request('http://localhost/api/v1/reviews', {
+        headers: { origin: 'https://somebody-elses-page.example' },
+      }),
+    )
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
-    // A wildcard and credentials are invalid together, so the pair is never sent.
+    // A wildcard and credentials are invalid together, so the pair is never
+    // sent: an origin this deployment did not name reads, and is nobody.
     expect(res.headers.get('access-control-allow-credentials')).toBeNull()
   })
 

@@ -9,6 +9,7 @@ import { getErrorMessage, type VcsGateway } from '@sainte-beuve/kernel'
 import { partitionForViewer } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
+import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
 
 /**
@@ -30,14 +31,18 @@ const NO_CREDENTIAL =
   'no credential for this host: connect it on the Configuration screen, or set its token on the deployment'
 
 export class WorkspaceService {
-  constructor(private readonly container: AppContainer) {}
+  constructor(
+    private readonly container: AppContainer,
+    /** Who the sweep is being cut for. See `ViewerService`. */
+    private readonly principal: RequestPrincipal,
+  ) {}
 
   async read(): Promise<Workspace> {
     // One resolution cache for the whole read: the viewer and the sweep both
     // need this deployment's credential for a host, and each resolution opens a
     // sealed envelope.
     const resolutions = new VcsResolutions(this.container)
-    const viewer = await new ViewerService(this.container, resolutions).current()
+    const viewer = await new ViewerService(this.container, this.principal, resolutions).current()
     const projects = await this.container.repositories.projects.list()
     const gateways = await this.gatewaysByProvider(resolutions, projects)
 

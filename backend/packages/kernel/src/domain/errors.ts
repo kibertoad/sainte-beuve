@@ -7,6 +7,7 @@ export type DomainErrorCode =
   | 'not_found'
   | 'validation'
   | 'conflict'
+  | 'unauthenticated'
   | 'forbidden'
   | 'unavailable'
   | 'upstream_failed'
@@ -38,6 +39,20 @@ export class ValidationError extends DomainError {
 export class ConflictError extends DomainError {
   constructor(message: string, details?: unknown) {
     super('conflict', message, details)
+  }
+}
+
+/**
+ * Nobody proved who they are, and this deployment insists.
+ *
+ * Separate from `ForbiddenError`, because the two send a caller to different
+ * places: this one says sign in (or present a key), and that one says you are
+ * signed in and it is still not yours. Collapsing them would have a screen
+ * offering a sign-in button to somebody already signed in.
+ */
+export class UnauthenticatedError extends DomainError {
+  constructor(message: string, details?: unknown) {
+    super('unauthenticated', message, details)
   }
 }
 

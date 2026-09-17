@@ -16,6 +16,7 @@ import type {
   ReviewRequestRepository,
   StoredIntegrationToken,
 } from '@sainte-beuve/kernel'
+import { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
 import { clone, patched } from './clone.js'
 import { byText, newestFirst, oldestFirst } from './order.js'
 import {
@@ -41,8 +42,8 @@ import {
  *
  * Every read returns a COPY (see `clone.ts` for why), which is one of the
  * behaviours `@sainte-beuve/persistence-conformance` holds all three stores to.
- * The workspace stores live in `workspace-stores.ts`; the split is a size
- * budget, not a boundary.
+ * The workspace stores live in `workspace-stores.ts` and the sessions and API
+ * keys in `auth-stores.ts`; the splits are a size budget, not a boundary.
  */
 
 export class InMemoryReviewerRepository implements ReviewerRepository {
@@ -254,5 +255,7 @@ export function createInMemoryRepositories(): Repositories {
     identities: new InMemoryIdentityRepository(),
     attention: new InMemoryAttentionRepository(),
     commitments: new InMemoryReviewCommitmentRepository(),
+    sessions: new InMemorySessionRepository(),
+    apiKeys: new InMemoryApiKeyRepository(),
   }
 }

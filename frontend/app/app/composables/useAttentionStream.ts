@@ -54,7 +54,10 @@ export function useAttentionStream() {
 
   function connect(): void {
     if (typeof EventSource === 'undefined') return
-    source = new EventSource(api.attentionStreamUrl)
+    // `withCredentials`, so the stream carries the session cookie the fetches
+    // carry. Without it a signed-in page would read its inbox as itself and
+    // stream somebody else's, which is worse than not streaming at all.
+    source = new EventSource(api.attentionStreamUrl, { withCredentials: true })
     source.addEventListener('open', () => {
       live.value = true
       // Every event published while the connection was down went to a

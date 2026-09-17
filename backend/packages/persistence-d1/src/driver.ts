@@ -3,7 +3,7 @@
  *
  * Four methods, no query builder: every statement in this package is a string
  * with `?` placeholders, which is D1's own binding syntax, so there is nothing
- * here to translate. What the seam buys is that nine stores never touch
+ * here to translate. What the seam buys is that eleven stores never touch
  * `prepare`/`bind`/`all`, so the one D1-specific rule (a statement with no
  * parameters is not bound at all) lives in one class.
  *

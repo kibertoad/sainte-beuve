@@ -20,6 +20,10 @@ const STATUS_BY_CODE: Record<DomainErrorCode, ContentfulStatusCode> = {
   not_found: 404,
   validation: 400,
   conflict: 409,
+  // 401 with no `WWW-Authenticate`: the browser's own auth dialog is the wrong
+  // answer for an API whose sign-in is an OAuth round trip, and a `Basic` or
+  // `Bearer` challenge would pop one.
+  unauthenticated: 401,
   forbidden: 403,
   unavailable: 503,
   // The dependency answered and the answer was a failure. 502, not 500: the fault

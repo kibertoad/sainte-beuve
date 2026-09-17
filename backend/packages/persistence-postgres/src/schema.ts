@@ -1,6 +1,7 @@
 import type {
   AiReviewRun,
   AttentionRequest,
+  IdentityProvider,
   LinkedIdentity,
   Project,
   Reminder,
@@ -25,7 +26,7 @@ import { decodePayload } from './rows.js'
 /**
  * The board and the workspace, in Postgres types.
  *
- * The same nine tables and the same columns the D1 adapter carries
+ * The same eleven tables and the same columns the D1 adapter carries
  * (`@sainte-beuve/persistence-d1/migrations`), so the two durable stores read
  * the same in a database console and a deployment can be described once. What
  * differs is only what the engines spell differently: `jsonb` where SQLite has
@@ -212,4 +213,52 @@ export const reviewCommitments = pgTable(
     data: payload<ReviewCommitment>('data', 'review_commitments', reviewCommitmentSchema).notNull(),
   },
   (table) => [index('review_commitments_reviewer_idx').on(table.reviewerId, table.createdAt)],
+)
+
+/**
+ * The sessions a browser is carried by.
+ *
+ * No payload column, beside `integration_tokens` and for the same reason: the
+ * row is flat and every field is read. What is stored of the credential is a
+ * DIGEST, so a dump of this table lets nobody present anything.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    /**
+     * SHA-256 of the cookie's value, base64url. UNIQUE because a digest
+     * addresses exactly one session: two rows for one value would make which
+     * person is calling depend on which row the planner reached first.
+     */
+    tokenDigest: text('token_digest').notNull().unique('sessions_digest_idx'),
+    reviewerId: text('reviewer_id').notNull(),
+    provider: text('provider').$type<IdentityProvider>().notNull(),
+    subject: text('subject').notNull(),
+    createdAt: epochMs('created_at').notNull(),
+    lastSeenAt: epochMs('last_seen_at').notNull(),
+    expiresAt: epochMs('expires_at').notNull(),
+  },
+  (table) => [
+    index('sessions_reviewer_idx').on(table.reviewerId),
+    // The tick's sweep: everything already expired.
+    index('sessions_expiry_idx').on(table.expiresAt),
+  ],
+)
+
+/** The keys a machine calls with. Beside the sessions, and stored the same way. */
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: text('id').primaryKey(),
+    tokenDigest: text('token_digest').notNull().unique('api_keys_digest_idx'),
+    label: text('label').notNull(),
+    /** The last four characters, so a row can be matched to a secret store's entry. */
+    hint: text('hint').notNull(),
+    /** The reviewer who minted it, when a person did. Null for one nobody is behind. */
+    createdBy: text('created_by'),
+    createdAt: epochMs('created_at').notNull(),
+    lastUsedAt: epochMs('last_used_at'),
+  },
+  (table) => [index('api_keys_created_idx').on(table.createdAt)],
 )

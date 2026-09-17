@@ -31,21 +31,30 @@ store is a behaviour proved for the code path every deployment runs.
 
 ## One schema, in two dialects
 
-Both durable stores carry the same nine tables with the same columns. Only the
+Both durable stores carry the same eleven tables with the same columns. Only the
 types differ, because only the types have to: `jsonb` where SQLite has `TEXT`,
 `bigint` where it has `INTEGER`.
 
-| Table                | Key                   | Columns beside `data`                                      |
-| -------------------- | --------------------- | ---------------------------------------------------------- |
-| `reviewers`          | `id`                  | `outstanding_reviews`, `created_at`                        |
-| `review_requests`    | `id`                  | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at` |
-| `reminders`          | `id`                  | `review_id`, `status`, `due_at`                            |
-| `ai_review_runs`     | `id`                  | `review_id`, `requested_at`                                |
-| `integration_tokens` | `integration_id`      | `sealed`, `hint`, `subject`, `updated_at` (no payload)     |
-| `projects`           | `id`                  | `ref_key` (UNIQUE), `created_at`                           |
-| `identities`         | `(provider, subject)` | `reviewer_id`                                              |
-| `attention_requests` | `id`                  | `status`, `created_at`                                     |
-| `review_commitments` | `id`                  | `reviewer_id`, `pull_request_key`, `created_at`            |
+| Table                | Key                   | Columns beside `data`                                                                                                  |
+| -------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `reviewers`          | `id`                  | `outstanding_reviews`, `created_at`                                                                                    |
+| `review_requests`    | `id`                  | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at`                                                             |
+| `reminders`          | `id`                  | `review_id`, `status`, `due_at`                                                                                        |
+| `ai_review_runs`     | `id`                  | `review_id`, `requested_at`                                                                                            |
+| `integration_tokens` | `integration_id`      | `sealed`, `hint`, `subject`, `updated_at` (no payload)                                                                 |
+| `projects`           | `id`                  | `ref_key` (UNIQUE), `created_at`                                                                                       |
+| `identities`         | `(provider, subject)` | `reviewer_id`                                                                                                          |
+| `attention_requests` | `id`                  | `status`, `created_at`                                                                                                 |
+| `review_commitments` | `id`                  | `reviewer_id`, `pull_request_key`, `created_at`                                                                        |
+| `sessions`           | `id`                  | `token_digest` (UNIQUE), `reviewer_id`, `provider`, `subject`, `created_at`, `last_seen_at`, `expires_at` (no payload) |
+| `api_keys`           | `id`                  | `token_digest` (UNIQUE), `label`, `hint`, `created_by`, `created_at`, `last_used_at` (no payload)                      |
+
+`integration_tokens`, `sessions` and `api_keys` are the three tables with no
+payload column, and for one reason: every field in them is queried or shown, and
+the one that must never be readable is stored as a DIGEST or an ENVELOPE rather
+than as the credential. Wrapping those rows in JSON would hide the hint, the
+label and the subject an operator reads from anybody looking at the database, and
+buy nothing. See [auth.md](./auth.md) for what a session and a key are.
 
 ### The payload IS the row
 

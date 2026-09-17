@@ -1,5 +1,5 @@
-import type { GitHubLabelRules } from '@sainte-beuve/contracts'
-import { DEFAULT_GITHUB_LABELS } from '@sainte-beuve/server'
+import type { AuthMode, GitHubLabelRules } from '@sainte-beuve/contracts'
+import { DEFAULT_GITHUB_LABELS, DEFAULT_SESSION_LIFETIME_MS } from '@sainte-beuve/server'
 
 /**
  * The Node facade's configuration, read from the process environment.
@@ -54,6 +54,26 @@ export interface GitLabConfig {
   oauth: { clientId: string; clientSecret: string; scope?: string } | null
 }
 
+/**
+ * How much this deployment insists on knowing who is calling.
+ *
+ * `open` is the default and is what every deployment ran before sessions
+ * existed; `required` refuses an anonymous call to anything but the sign-in
+ * routes. It is read as a decision rather than derived from what else is
+ * configured, for the reason `authModeSchema` gives, and `/health` reports
+ * which one took effect.
+ */
+interface AuthConfig {
+  mode: AuthMode
+  /**
+   * The deployment's own API key, for CI and for the first call into a
+   * `required` deployment that has no sessions yet. Beside it, keys minted on
+   * the Configuration screen live in the store as digests.
+   */
+  apiKey: string | null
+  sessionLifetimeMs: number
+}
+
 export interface NodeConfig {
   port: number
   /**
@@ -81,6 +101,7 @@ export interface NodeConfig {
   github: GitHubConfig
   gitlab: GitLabConfig
   slack: { botToken: string | null; signingSecret: string | null; channelId: string | null }
+  auth: AuthConfig
   appBaseUrl: string | undefined
   /**
    * Master key for the credentials entered on the Configuration screen, base64,
@@ -156,8 +177,23 @@ export function loadConfig(env: Env = process.env): NodeConfig {
       signingSecret: env.SLACK_SIGNING_SECRET || null,
       channelId: env.SLACK_CHANNEL_ID || null,
     },
+    auth: authFrom(env),
     appBaseUrl: env.APP_BASE_URL || undefined,
     encryptionKey: env.SETTINGS_ENCRYPTION_KEY || null,
+  }
+}
+
+/**
+ * Anything but the literal `required` is `open`, including a typo. A variable
+ * nobody can spell must not be the difference between a closed deployment and
+ * an open one that believes it is closed, and `/health` reports what took
+ * effect so the mistake is visible from outside the process.
+ */
+function authFrom(env: Env): AuthConfig {
+  return {
+    mode: (env.AUTH_MODE ?? '').trim().toLowerCase() === 'required' ? 'required' : 'open',
+    apiKey: env.AUTH_API_KEY || null,
+    sessionLifetimeMs: intFrom(env.AUTH_SESSION_LIFETIME_MS, DEFAULT_SESSION_LIFETIME_MS),
   }
 }
 

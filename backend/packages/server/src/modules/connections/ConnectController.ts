@@ -9,6 +9,7 @@ import { ValidationError } from '@sainte-beuve/kernel'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { writeSessionCookie } from '../auth/cookies.js'
 import { ConnectionsService } from './ConnectionsService.js'
 
 /**
@@ -62,13 +63,28 @@ async function finishSignIn(c: Context<AppEnv>, provider: VcsProvider): Promise<
         'Start the sign-in again from the Configuration screen.',
     )
   }
-  const { login, returnTo } = await new ConnectionsService(c.get('container')).completeSignIn({
+  const container = c.get('container')
+  const { login, returnTo, session, purpose } = await new ConnectionsService(
+    container,
+  ).completeSignIn({
     provider,
     code,
     state: c.req.query('state') ?? null,
     origin: new URL(c.req.url).origin,
   })
-  return finish(c, returnTo, `Connected to ${vcsDisplayName(provider)} as ${login}.`, provider)
+  // The cookie is set BEFORE the redirect, on the response that carries it: a
+  // 302 keeps its headers, and there is no JavaScript anywhere in this round
+  // trip to take a token out of a body instead.
+  writeSessionCookie(c, container, session)
+  const host = vcsDisplayName(provider)
+  return finish(
+    c,
+    returnTo,
+    purpose === 'connect'
+      ? `Connected to ${host} as ${login}, and signed in as ${login}.`
+      : `Signed in to ${host} as ${login}.`,
+    provider,
+  )
 }
 
 /**

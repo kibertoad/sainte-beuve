@@ -1,10 +1,12 @@
-import type { Context } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
 import { errorBody, handleError } from './http/errors.js'
 import { attentionController } from './modules/attention/AttentionController.js'
+import { authController } from './modules/auth/AuthController.js'
+import { authentication } from './modules/auth/principal.js'
 import { connectController } from './modules/connections/ConnectController.js'
 import { connectionsController } from './modules/connections/ConnectionsController.js'
 import { healthController } from './modules/health/HealthController.js'
@@ -97,8 +99,13 @@ function allowedOrigin(
 ): string | null {
   if (configured.includes(request.origin)) return request.origin
   if (!configured.includes(WILDCARD)) return null
-  if (isGuarded(request)) return LOOPBACK_ORIGIN.test(request.origin) ? request.origin : null
-  return WILDCARD
+  // Loopback is echoed BY NAME even where the wildcard would do, and that is
+  // what makes the session work in local development. The credentials header is
+  // invalid beside `*`, so a local SPA answered with the wildcard would be told
+  // it may read the board and never allowed to send its cookie: signed in on
+  // the API and anonymous on every screen.
+  if (LOOPBACK_ORIGIN.test(request.origin)) return request.origin
+  return isGuarded(request) ? null : WILDCARD
 }
 
 /** Whether this is a request the wildcard does not cover. */
@@ -121,14 +128,32 @@ function scopeOf(c: Context<AppEnv>): RequestScope {
   return { req: c.req.raw, env: c.env }
 }
 
+/**
+ * Let a browser send its session, but only to an origin this deployment named.
+ *
+ * The session cookie is a CREDENTIAL, and a browser sends one cross-origin only
+ * where the response says it may. The header is invalid beside a wildcard
+ * origin and browsers refuse the pair outright, so it is added AFTERWARDS and
+ * only where `allowedOrigin` echoed a real origin. A hosted deployment that
+ * leaves CORS_ORIGINS at `*` therefore has an SPA that can read the board and
+ * can never sign in, which is the loud failure rather than the quiet one.
+ */
+const allowCredentials: MiddlewareHandler<AppEnv> = async (c, next) => {
+  await next()
+  const echoed = c.res.headers.get('access-control-allow-origin')
+  if (echoed !== null && echoed !== WILDCARD) {
+    c.res.headers.set('access-control-allow-credentials', 'true')
+  }
+}
+
 export function createApp(options: AppOptions): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
   const { corsOrigins } = options
   const originsFor =
     typeof corsOrigins === 'function' ? corsOrigins : () => corsOrigins ?? [WILDCARD]
 
-  // No `Access-Control-Allow-Credentials`: the API carries no cookie session, and
-  // the header is invalid beside a wildcard origin, which is the default.
+  app.use('*', allowCredentials)
+
   app.use(
     '*',
     cors({
@@ -146,12 +171,19 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
     await next()
   })
 
+  // After the container and before every route under it: the caller is resolved
+  // once per request, and a deployment that insists on knowing who is calling
+  // refuses here rather than in each controller. The webhook and connect paths
+  // sit outside `/api/v1` and are authenticated by their own signatures.
+  app.use('/api/v1/*', authentication())
+
   app.route('/', healthController())
   app.route('/', webhookController())
   app.route('/', connectController())
   app.route('/api/v1', workspaceController())
   app.route('/api/v1', projectController())
   app.route('/api/v1', attentionController())
+  app.route('/api/v1', authController())
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
   app.route('/api/v1', aiReviewController())

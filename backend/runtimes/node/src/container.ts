@@ -61,6 +61,11 @@ export function buildContainer(config: NodeConfig, store: NodeStore, logger: Log
       signingSecret: config.slack.signingSecret,
       announcementChannelId: config.slack.channelId,
     },
+    auth: {
+      mode: config.auth.mode,
+      environmentApiKey: config.auth.apiKey,
+      sessionLifetimeMs: config.auth.sessionLifetimeMs,
+    },
     appBaseUrl: config.appBaseUrl ?? null,
   })
 }
