@@ -295,10 +295,15 @@ function lineOf(finding: { path: string; line: number | null }): string {
           request until you say so.
         </p>
         <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
+          <!--
+            `error`, like every other button here that cannot be undone. It
+            discards the whole review, and it sat beside Post in the neutral grey
+            the Cancel-shaped buttons on this app use. The panel asks first.
+          -->
           <UButton
             size="sm"
             variant="ghost"
-            color="neutral"
+            color="error"
             :loading="busy === 'finish'"
             @click="emit('resolve', 'finish', [])"
           >

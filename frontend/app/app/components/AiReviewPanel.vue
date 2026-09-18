@@ -22,6 +22,7 @@ const { data, pending, error, refresh } = useAsyncData(
 
 const runs = computed<AiReviewRun[]>(() => data.value?.runs ?? [])
 const { busy, run: act } = useApiAction({ refresh })
+const { confirm } = useConfirm()
 
 /** The states a run can still leave by itself. Anything else has stopped for good. */
 const SETTLED = new Set<AiReviewRun['status']>(['completed', 'failed', 'cancelled'])
@@ -76,16 +77,37 @@ async function dismiss(runId: string, findingId: string): Promise<void> {
   await act(() => api.dismissAiReviewFinding(runId, findingId), 'Could not dismiss it', findingId)
 }
 
+/**
+ * Act on a curated selection.
+ *
+ * `finish` is the one that ASKS first. It is the ghost button beside Post, it
+ * takes no selection, and what it does is throw away everything cat-factory
+ * found: the run settles, nothing reaches the pull request, and the findings are
+ * not recoverable — the only way back is to delegate the whole review again and
+ * pay for it twice.
+ */
 async function resolve(
   runId: string,
   action: AiReviewResolution,
   findingIds: string[],
 ): Promise<void> {
+  if (action === 'finish' && !(await confirmDiscard(runId))) return
   await act(
     () => api.resolveAiReview(runId, action, findingIds),
     action === 'post' ? 'Could not post the comments' : `Could not ${action} the review`,
     action,
   )
+}
+
+function confirmDiscard(runId: string): Promise<boolean> {
+  const found = runs.value.find((entry) => entry.id === runId)?.curation?.findings.length ?? 0
+  return confirm({
+    title: found === 1 ? 'Discard this finding?' : `Discard all ${found} findings?`,
+    description:
+      'The review is closed with nothing posted on the pull request, and what cat-factory found ' +
+      'is not kept. Delegating the review again is the only way to see it back.',
+    confirmLabel: 'Finish without posting',
+  })
 }
 
 async function resume(runId: string): Promise<void> {
@@ -111,6 +133,14 @@ async function resume(runId: string): Promise<void> {
     </div>
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the AI reviews" />
+
+    <!--
+      PENDING before empty. The read is lazy, so `runs` is empty while it is
+      still in the air, and checking the length first told everybody who opened a
+      row that nothing had been delegated — for as long as the cat-factory read
+      took, which on a slow one is long enough to be believed and acted on.
+    -->
+    <LoadingCard v-else-if="pending && data === null" :rows="1" />
 
     <p v-else-if="runs.length === 0" class="text-sm text-muted">
       Nothing delegated yet. Press <span class="font-medium">AI review</span> to hand this pull

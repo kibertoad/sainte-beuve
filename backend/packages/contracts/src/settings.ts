@@ -35,6 +35,26 @@ export const integrationIdSchema = v.picklist([
 ])
 export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
 
+// What each integration is CALLED, so a screen asking about one names a product
+// rather than a store key: "the GitHub token" reads like a thing an operator
+// has, where `github-pat` reads like a bug report. Private table and exported
+// reader, the shape `vcsDisplayName` already uses.
+const INTEGRATION_LABELS: Record<IntegrationId, string> = {
+  'github-pat': 'GitHub token',
+  'gitlab-pat': 'GitLab token',
+  'slack-bot-token': 'Slack bot token',
+  'cat-factory': 'cat-factory key',
+}
+
+/**
+ * The integration as a person reads it. Falls back to the id, because the API is
+ * versioned separately from the SPA and a deployment can serve a credential this
+ * build has never heard of.
+ */
+export function integrationLabel(integrationId: string): string {
+  return INTEGRATION_LABELS[integrationId as IntegrationId] ?? integrationId
+}
+
 /** The store keys a sign-in credential is held under, one per source-control host. */
 export const vcsOauthCredentialKeySchema = v.picklist(['github-oauth', 'gitlab-oauth'])
 export type VcsOauthCredentialKey = v.InferOutput<typeof vcsOauthCredentialKeySchema>

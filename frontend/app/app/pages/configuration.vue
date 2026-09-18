@@ -5,7 +5,12 @@ import type {
   Role,
   VcsProvider,
 } from '@sainte-beuve/contracts'
-import { isVcsProvider, vcsDisplayName, vcsPatCredentialKey } from '@sainte-beuve/contracts'
+import {
+  integrationLabel,
+  isVcsProvider,
+  vcsDisplayName,
+  vcsPatCredentialKey,
+} from '@sainte-beuve/contracts'
 
 // Configuration: how this deployment reaches the systems it depends on.
 //
@@ -73,6 +78,7 @@ const { data, pending, error, refresh } = useAsyncData(
 )
 
 const { busy, run } = useApiAction({ refresh })
+const { confirm } = useConfirm()
 
 /** The one time a minted key is readable. See AccessCard. */
 const issuedKey = ref<string | null>(null)
@@ -89,11 +95,28 @@ async function mintKey(key: { label: string; role: Role }) {
   if (minted) issuedKey.value = token
 }
 
-function revokeKey(keyId: string) {
+/**
+ * Revoke a key, once somebody has said so twice.
+ *
+ * Whatever is calling with it stops calling at the next request, and there is no
+ * way back: the store holds a digest, so the key cannot be reinstated, only
+ * replaced by a new one somebody has to go and configure. The button is a bin
+ * icon in a list row, which is one slip away from the row above.
+ */
+async function revokeKey(keyId: string) {
+  const key = data.value?.apiKeys.find((row) => row.id === keyId)
+  const confirmed = await confirm({
+    title: `Revoke ${key?.label ?? 'this API key'}?`,
+    description:
+      'Anything calling with it stops working at its next request. The key cannot be restored — ' +
+      'this deployment holds only a digest of it — so whatever uses it needs a new one.',
+    confirmLabel: 'Revoke the key',
+  })
+  if (!confirmed) return
   // Cleared first: leaving a secret on screen beside a list it is no longer in
   // invites somebody to store a key that stopped working a moment ago.
   issuedKey.value = null
-  return run(() => api.revokeApiKey(keyId), 'Could not revoke the API key', keyId)
+  await run(() => api.revokeApiKey(keyId), 'Could not revoke the API key', keyId)
 }
 
 async function endSession() {
@@ -177,8 +200,24 @@ async function save(integrationId: IntegrationId, token: string, field: DraftHol
   if (stored) field?.clearDraft()
 }
 
-function clear(integrationId: IntegrationId) {
-  return run(
+/**
+ * Forget a stored credential, once somebody has said so twice.
+ *
+ * A credential is write-only here, so clearing one is not reversible from this
+ * screen by anybody who does not still have the token: the deployment loses the
+ * capability it was the key to — a host it can no longer read, a channel it can
+ * no longer post to — until somebody fetches the secret again.
+ */
+async function clear(integrationId: IntegrationId) {
+  const confirmed = await confirm({
+    title: `Forget the ${integrationLabel(integrationId)} credential?`,
+    description:
+      'This deployment loses what the credential reached until another one is stored, and it ' +
+      'cannot be shown again: you will need the token itself to put it back.',
+    confirmLabel: 'Clear the credential',
+  })
+  if (!confirmed) return
+  await run(
     () => api.clearIntegrationToken(integrationId),
     'Could not clear the credential',
     integrationId,

@@ -63,5 +63,12 @@ const { open: navOpen, close: closeNav } = useNavigationOverlay()
         <NuxtPage />
       </main>
     </div>
+
+    <!--
+      Mounted ONCE, here, rather than per screen. Four of the actions that ask a
+      question through it are on three different pages, and a modal per caller is
+      how two of them end up open at the same time. See `useConfirm`.
+    -->
+    <ConfirmDialog />
   </UApp>
 </template>

@@ -1,4 +1,5 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
+import { boardReviewUrl } from '@sainte-beuve/contracts'
 import { formatPullRequest } from '@sainte-beuve/kernel'
 import { SLACK_ACTIONS } from './commands.js'
 
@@ -89,6 +90,13 @@ export function announcementMessage(review: ReviewRequest): SlackMessage {
  * request as the thing to open, because it is the one whose answer is not on the
  * pull request: nothing has been posted there yet, and the point of the loop is
  * that nothing is until somebody has said which findings deserve it.
+ *
+ * The board URL comes from `boardReviewPath` in the contracts rather than being
+ * written here. It was written here, as `/reviews/<id>`, and the SPA has never
+ * had that route: every nudge this deployment ever sent landed on an error page
+ * with no way back, and the parked-review nudge — the one message whose whole
+ * point is that the answer is NOT on the pull request — was the one it hurt
+ * most.
  */
 export function reminderMessage(
   reminder: Reminder,
@@ -96,7 +104,7 @@ export function reminderMessage(
   appBaseUrl: string | undefined,
 ): SlackMessage {
   const link = slackLink(review.pullRequest.url, formatPullRequest(review.pullRequest))
-  const board = appBaseUrl === undefined ? '' : ` ${appBaseUrl}/reviews/${review.id}`
+  const board = appBaseUrl === undefined ? '' : ` ${boardReviewUrl(appBaseUrl, review.id)}`
   if (reminder.kind === 'unassigned') {
     return { text: `${link} is still waiting for a reviewer.${board}` }
   }

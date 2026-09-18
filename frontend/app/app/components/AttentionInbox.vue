@@ -13,6 +13,17 @@ const props = defineProps<{
   viewerId: string
   /** Whether the live half is attached. A false here is a slower inbox, not a broken one. */
   live: boolean
+  /**
+   * Why the inbox could not be read, or null when it could.
+   *
+   * It has to be a prop rather than something the card infers, because the two
+   * states it distinguishes look IDENTICAL from here: a failed read leaves the
+   * list empty, and an empty list is also what "nobody is waiting" looks like.
+   * The card rendered the second sentence over the first, which is the one
+   * failure `ApiErrorAlert` was written to end and the one place it had not
+   * reached.
+   */
+  error: string | null
   busy: string | null
 }>()
 
@@ -43,13 +54,22 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
             Pull requests your team has asked someone with your skills to pick up.
           </p>
         </div>
-        <UBadge :color="live ? 'success' : 'neutral'" variant="subtle">
+        <UBadge v-if="error === null" :color="live ? 'success' : 'neutral'" variant="subtle">
           {{ live ? 'live' : 'refresh to update' }}
         </UBadge>
+        <UBadge v-else color="error" variant="subtle">unreadable</UBadge>
       </div>
     </template>
 
-    <p v-if="requests.length === 0" class="text-sm text-muted">
+    <UAlert
+      v-if="error"
+      color="error"
+      variant="subtle"
+      title="This deployment could not read the asks"
+      :description="error"
+    />
+
+    <p v-else-if="requests.length === 0" class="text-sm text-muted">
       Nobody is waiting on a reviewer. An ask disappears from here the moment enough people commit.
     </p>
 

@@ -27,6 +27,31 @@ export const reviewStatusSchema = v.picklist([
 ])
 export type ReviewStatus = v.InferOutput<typeof reviewStatusSchema>
 
+// What each status is CALLED, in one place. Three surfaces render this
+// vocabulary — the board, the Slack replies and the bot's comment — and every
+// one of them was rendering the stored value, so a person read `in_review` and a
+// screen reader read it letter by letter. Private table and exported reader, the
+// shape `vcsDisplayName` already uses.
+const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
+  open: 'Unassigned',
+  assigned: 'Assigned',
+  in_review: 'In review',
+  approved: 'Approved',
+  changes_requested: 'Changes requested',
+  closed: 'Closed',
+}
+
+/**
+ * The status as a person reads it.
+ *
+ * It takes a plain string and falls back to the value, because the API is
+ * versioned separately from the SPA: a deployment serving a status this build
+ * has never heard of has to render as itself rather than as `undefined`.
+ */
+export function reviewStatusLabel(status: string): string {
+  return REVIEW_STATUS_LABELS[status as ReviewStatus] ?? status
+}
+
 /**
  * The statuses a board is ABOUT: the three a review can still move out of.
  *
@@ -145,10 +170,40 @@ export function shortfallRemedy(reason: ShortfallReason): string | null {
   return SHORTFALL_REMEDIES[reason]
 }
 
+/** A person on the hook, named. The id alone is not something anybody can read. */
+export const assignedReviewerSchema = v.object({
+  reviewerId: v.string(),
+  displayName: v.string(),
+})
+export type AssignedReviewer = v.InferOutput<typeof assignedReviewerSchema>
+
+/**
+ * A review as the BOARD reads it: the stored aggregate plus the names of the
+ * people on it.
+ *
+ * A read model rather than a wider `ReviewRequest`, because the names are not
+ * part of the aggregate: they live on the reviewer rows, they change when
+ * somebody is renamed, and writing them onto the review would be a second copy
+ * to keep in step for a fact the directory already holds. The board is the one
+ * reader that needs them — a row whose whole purpose is "who has this" cannot
+ * show an opaque id — so the join happens on the way out, once per read.
+ */
+export const boardReviewSchema = v.object({
+  ...reviewRequestSchema.entries,
+  /**
+   * The people on the hook, in assignment order, for the ids in
+   * `assignedReviewerIds`. An id whose reviewer has since been removed from the
+   * directory is absent rather than invented, so the two lists can differ in
+   * length and the row says what it can.
+   */
+  assignedReviewers: v.array(assignedReviewerSchema),
+})
+export type BoardReview = v.InferOutput<typeof boardReviewSchema>
+
 export const assignReviewersResultSchema = v.object({
   review: reviewRequestSchema,
   /** The reviewers this call added, in the order the router picked them. */
-  assigned: v.array(v.object({ reviewerId: v.string(), displayName: v.string() })),
+  assigned: v.array(assignedReviewerSchema),
   /** Why fewer reviewers than requested came back. Null on a full match. */
   shortfallReason: v.nullable(shortfallReasonSchema),
 })

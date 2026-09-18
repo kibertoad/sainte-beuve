@@ -1,5 +1,6 @@
 import type {
   AssignReviewersResult,
+  BoardReview,
   CreateReviewRequest,
   Reviewer,
   ReviewRequest,
@@ -8,7 +9,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import { handleOf } from '@sainte-beuve/contracts'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
-import { isSameHandle, selectReviewers } from '@sainte-beuve/reviewers'
+import { buildBoard, isSameHandle, selectReviewers } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
@@ -25,6 +26,24 @@ import { announceReview } from './announce.js'
  */
 export class ReviewService {
   constructor(private readonly container: AppContainer) {}
+
+  /**
+   * The board: the reviews a filter selects, with the people on them named and
+   * the most urgent first.
+   *
+   * TWO reads, not one per row. The directory is the small table here — a
+   * deployment has tens of reviewers and thousands of reviews — so it is read
+   * whole and the join happens in memory, which is one round trip rather than
+   * the N+1 a `getById` per assignment would have been.
+   */
+  async board(filter: { status: ReviewStatus[]; limit: number }): Promise<BoardReview[]> {
+    const { repositories, clock } = this.container
+    const [reviews, reviewers] = await Promise.all([
+      repositories.reviews.list(filter),
+      repositories.reviewers.list(),
+    ])
+    return buildBoard(reviews, reviewers, clock.now())
+  }
 
   async create(input: CreateReviewRequest): Promise<ReviewRequest> {
     const { repositories, clock, ids } = this.container

@@ -3,6 +3,7 @@ import * as v from 'valibot'
 import {
   assignReviewersResultSchema,
   assignReviewersSchema,
+  boardReviewSchema,
   createReviewRequestSchema,
   reviewRequestSchema,
   reviewStatusSchema,
@@ -17,7 +18,11 @@ import { errorResponses, singleStringParam } from './_shared.js'
 // `routes/ai-review.ts`, because that loop has its own run-addressed surface.
 // ---------------------------------------------------------------------------
 
-const reviewListSchema = v.object({ reviews: v.array(reviewRequestSchema) })
+// The LIST answers board rows rather than bare aggregates: the people on a
+// review are ids on the stored row, and a screen whose question is "who has
+// this" cannot ask the reader to resolve them. Every other route here answers
+// the aggregate, because every other route is about writing one.
+const reviewListSchema = v.object({ reviews: v.array(boardReviewSchema) })
 const reviewIdParams = singleStringParam('reviewId')
 
 /**
@@ -76,7 +81,7 @@ const reviewFilterSchema = v.object({
 })
 
 /**
- * The board. Unfiltered it answers the ACTIVE reviews, newest first, capped —
+ * The board. Unfiltered it answers the ACTIVE reviews, most urgent first, capped —
  * see `ReviewController` for where that default is applied and why it is not in
  * the schema: a default here would be indistinguishable, to a caller reading the
  * contract, from a filter they asked for.
