@@ -21,7 +21,7 @@ defineProps<{
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-baseline justify-between gap-4">
+      <div class="flex items-baseline justify-between gap-3">
         <div class="min-w-0">
           <h2 class="font-medium">{{ title }}</h2>
           <p class="text-sm text-muted">{{ description }}</p>
@@ -36,20 +36,22 @@ defineProps<{
       <div
         v-for="pr in pullRequests"
         :key="pr.pullRequest.url"
-        class="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
+        class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
       >
         <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <ULink :to="pr.pullRequest.url" target="_blank" class="font-medium truncate">
+          <div class="flex items-center gap-2 min-w-0">
+            <ULink :to="pr.pullRequest.url" target="_blank" class="font-medium line-clamp-2">
               {{ pr.title }}
             </ULink>
-            <UBadge v-if="pr.draft" size="sm" variant="subtle" color="neutral">draft</UBadge>
+            <UBadge v-if="pr.draft" size="sm" variant="subtle" color="neutral" class="shrink-0">
+              draft
+            </UBadge>
           </div>
           <p class="text-xs text-muted">
             {{ formatPullRequestRef(pr.pullRequest) }} &middot; {{ pr.authorLogin }}
           </p>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <slot name="actions" :pull-request="pr" />
           <UButton
             :to="pr.pullRequest.url"

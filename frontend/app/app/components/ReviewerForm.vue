@@ -77,9 +77,9 @@ function submit() {
 
 <template>
   <div class="flex flex-col gap-4">
-    <div class="flex flex-wrap items-end gap-3">
+    <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-end">
       <UFormField label="Name">
-        <UInput v-model="draft.displayName" placeholder="Ada Lovelace" />
+        <UInput v-model="draft.displayName" class="w-full" placeholder="Ada Lovelace" />
       </UFormField>
       <UFormField
         v-for="host in hosts"
@@ -87,22 +87,22 @@ function submit() {
         :label="host.label"
         description="Optional. Without it, their pull requests on that host are invisible here."
       >
-        <UInput v-model="draft.handles[host.provider]" placeholder="ada" />
+        <UInput v-model="draft.handles[host.provider]" class="w-full" placeholder="ada" />
       </UFormField>
       <UFormField label="Team" description="Optional. What an ask can be kept inside.">
-        <UInput v-model="draft.team" placeholder="platform" />
+        <UInput v-model="draft.team" class="w-full" placeholder="platform" />
       </UFormField>
       <UFormField label="Slack user id" description="Optional. Where a reminder is delivered.">
-        <UInput v-model="draft.slackUserId" placeholder="U01ABCDEF" />
+        <UInput v-model="draft.slackUserId" class="w-full" placeholder="U01ABCDEF" />
       </UFormField>
     </div>
 
-    <div class="flex flex-wrap items-end gap-3">
+    <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-end">
       <UFormField
         label="Skills"
         description="Comma separated. A review needs ALL of the skills it asks for, so a partial match is never picked."
       >
-        <UInput v-model="draft.skills" class="w-96" placeholder="typescript, payments" />
+        <UInput v-model="draft.skills" class="w-full sm:w-96" placeholder="typescript, payments" />
       </UFormField>
       <UFormField
         label="Availability"
@@ -112,14 +112,14 @@ function submit() {
           v-model="draft.availability"
           :items="availabilities"
           value-key="value"
-          class="w-36"
+          class="w-full sm:w-36"
         />
       </UFormField>
       <UFormField
         label="Role"
         description="An admin can change this org's credentials, keys, registry and directory."
       >
-        <USelect v-model="draft.role" :items="roles" value-key="value" class="w-36" />
+        <USelect v-model="draft.role" :items="roles" value-key="value" class="w-full sm:w-36" />
       </UFormField>
       <UFormField
         label="Weight"
@@ -131,7 +131,7 @@ function submit() {
           min="0.1"
           max="10"
           step="0.1"
-          class="w-24"
+          class="w-full sm:w-24"
         />
       </UFormField>
     </div>

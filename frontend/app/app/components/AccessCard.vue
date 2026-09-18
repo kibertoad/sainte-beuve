@@ -75,12 +75,16 @@ function mint() {
 
 <template>
   <UCard>
-    <div class="flex items-start justify-between gap-4 mb-4">
+    <div
+      class="flex flex-col-reverse gap-2 mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+    >
       <div class="min-w-0">
         <p class="font-medium">Access</p>
         <p class="text-sm text-muted">Who may call this deployment, and as whom.</p>
       </div>
-      <UBadge :color="mode.color" variant="subtle" class="shrink-0">{{ mode.label }}</UBadge>
+      <UBadge :color="mode.color" variant="subtle" class="self-start sm:shrink-0">
+        {{ mode.label }}
+      </UBadge>
     </div>
 
     <UAlert
@@ -100,7 +104,7 @@ function mint() {
       description="This deployment requires a caller to identify itself and has no OAuth client to identify anybody with. Only an API key gets in. Configure GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET (or the GitLab pair), plus SETTINGS_ENCRYPTION_KEY, which signs the round trip."
     />
 
-    <div class="flex items-center justify-between gap-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div class="text-sm min-w-0">
         <p v-if="principal.kind === 'session'">
           Signed in as <strong>{{ principal.viewer.reviewer.displayName }}</strong>
@@ -112,7 +116,7 @@ function mint() {
         </p>
         <p v-else class="text-muted">Not signed in.</p>
       </div>
-      <div class="flex gap-2 shrink-0">
+      <div class="flex flex-wrap gap-2 sm:shrink-0">
         <UButton
           v-if="principal.kind === 'session'"
           variant="ghost"
@@ -160,6 +164,7 @@ function mint() {
           color="success"
           variant="subtle"
           title="Copy this key now"
+          :ui="{ description: 'break-all font-mono' }"
           :description="issued"
           :close="true"
           @update:open="issued = null"
@@ -179,27 +184,34 @@ function mint() {
           this deployment will not hand one to a caller it cannot name even while it refuses nobody
           else.
         </p>
-        <div v-else class="flex gap-2 mb-3">
+        <div v-else class="flex flex-col items-stretch gap-2 mb-3 sm:flex-row sm:items-center">
           <UInput
             v-model="label"
-            class="flex-1"
+            class="w-full sm:flex-1"
             placeholder="What is it for? e.g. release pipeline"
             @keyup.enter="mint()"
           />
-          <USelect v-model="role" :items="roles" value-key="value" class="w-32" />
-          <UButton
-            icon="i-lucide-plus"
-            :disabled="label.trim().length === 0"
-            :loading="busy === 'create-key'"
-            @click="mint()"
-          >
-            Mint
-          </UButton>
+          <div class="flex items-center gap-2 sm:shrink-0">
+            <USelect v-model="role" :items="roles" value-key="value" class="grow sm:w-32" />
+            <UButton
+              icon="i-lucide-plus"
+              class="grow justify-center sm:grow-0"
+              :disabled="label.trim().length === 0"
+              :loading="busy === 'create-key'"
+              @click="mint()"
+            >
+              Mint
+            </UButton>
+          </div>
         </div>
 
         <p v-if="apiKeys.length === 0" class="text-muted">No keys have been minted here.</p>
         <ul v-else class="flex flex-col divide-y divide-default">
-          <li v-for="key in apiKeys" :key="key.id" class="flex items-center gap-3 py-2">
+          <li
+            v-for="key in apiKeys"
+            :key="key.id"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+          >
             <span class="font-medium truncate">{{ key.label }}</span>
             <UBadge v-if="key.role === 'admin'" color="warning" variant="subtle">admin</UBadge>
             <code class="text-muted">…{{ key.hint }}</code>

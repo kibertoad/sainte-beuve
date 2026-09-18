@@ -78,8 +78,8 @@ async function release(commitmentId: string) {
 </script>
 
 <template>
-  <UContainer class="py-8">
-    <div class="flex items-start justify-between gap-4 mb-6">
+  <UContainer class="py-6 sm:py-8">
+    <div class="flex items-start justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Workspace</h1>
         <p class="text-sm text-muted">
@@ -89,7 +89,13 @@ async function release(commitmentId: string) {
           <template v-else>Everything open across your projects.</template>
         </p>
       </div>
-      <UButton icon="i-lucide-refresh-cw" variant="ghost" :loading="pending" @click="refresh()">
+      <UButton
+        icon="i-lucide-refresh-cw"
+        variant="ghost"
+        class="shrink-0"
+        :loading="pending"
+        @click="refresh()"
+      >
         Refresh
       </UButton>
     </div>
@@ -139,7 +145,7 @@ async function release(commitmentId: string) {
 
       <UCard>
         <template #header>
-          <div class="flex items-baseline justify-between gap-4">
+          <div class="flex items-baseline justify-between gap-3">
             <div>
               <h2 class="font-medium">You committed to reviewing</h2>
               <p class="text-sm text-muted">
@@ -156,15 +162,19 @@ async function release(commitmentId: string) {
           <div
             v-for="commitment in workspace.committed"
             :key="commitment.id"
-            class="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
+            class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
           >
             <div class="min-w-0">
-              <ULink :to="commitment.pullRequest.url" target="_blank" class="font-medium truncate">
+              <ULink
+                :to="commitment.pullRequest.url"
+                target="_blank"
+                class="font-medium line-clamp-2"
+              >
                 {{ commitment.title }}
               </ULink>
               <p class="text-xs text-muted">{{ formatPullRequestRef(commitment.pullRequest) }}</p>
             </div>
-            <div class="flex items-center gap-2 shrink-0">
+            <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
               <UButton
                 size="sm"
                 variant="ghost"

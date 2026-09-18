@@ -95,7 +95,7 @@ async function resume(runId: string): Promise<void> {
 
 <template>
   <div class="flex flex-col gap-3">
-    <div class="flex items-center justify-between gap-4">
+    <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-muted">
         AI reviews of this pull request. cat-factory finds, you choose, then the comments go up.
       </p>

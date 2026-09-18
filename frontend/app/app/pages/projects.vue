@@ -67,15 +67,21 @@ function remove(project: Project) {
 </script>
 
 <template>
-  <UContainer class="py-8">
-    <div class="flex items-start justify-between gap-4 mb-6">
+  <UContainer class="py-6 sm:py-8">
+    <div class="flex items-start justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Projects</h1>
         <p class="text-sm text-muted">
           The repositories your workspace sweeps, and what a reviewer can be asked for on each.
         </p>
       </div>
-      <UButton icon="i-lucide-refresh-cw" variant="ghost" :loading="pending" @click="refresh()">
+      <UButton
+        icon="i-lucide-refresh-cw"
+        variant="ghost"
+        class="shrink-0"
+        :loading="pending"
+        @click="refresh()"
+      >
         Refresh
       </UButton>
     </div>
@@ -84,23 +90,28 @@ function remove(project: Project) {
       <template #header>
         <h2 class="font-medium">Add a project</h2>
       </template>
-      <div class="flex flex-wrap items-end gap-3">
+      <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <UFormField label="Host">
-          <USelect v-model="provider" :items="providers" value-key="value" class="w-32" />
+          <USelect v-model="provider" :items="providers" value-key="value" class="w-full sm:w-32" />
         </UFormField>
         <UFormField label="Owner" description="A GitHub org, or a GitLab namespace.">
-          <UInput v-model="owner" placeholder="kibertoad" />
+          <UInput v-model="owner" class="w-full" placeholder="kibertoad" />
         </UFormField>
         <UFormField label="Repository">
-          <UInput v-model="repo" placeholder="sainte-beuve" />
+          <UInput v-model="repo" class="w-full" placeholder="sainte-beuve" />
         </UFormField>
         <UFormField
           label="Page"
           description="Optional. A self-hosted install has no guessable URL."
         >
-          <UInput v-model="webUrl" placeholder="https://gitlab.example.com/platform/api" />
+          <UInput
+            v-model="webUrl"
+            class="w-full"
+            placeholder="https://gitlab.example.com/platform/api"
+          />
         </UFormField>
         <UButton
+          class="justify-center"
           :disabled="owner.trim().length === 0 || repo.trim().length === 0"
           :loading="busy === 'add'"
           @click="add()"
@@ -123,9 +134,9 @@ function remove(project: Project) {
 
     <div v-else class="flex flex-col gap-3">
       <UCard v-for="project in projects" :key="project.id">
-        <div class="flex items-start justify-between gap-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div class="min-w-0">
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <UBadge variant="subtle" color="neutral">
                 {{ vcsDisplayName(project.provider) }}
               </UBadge>
@@ -134,20 +145,21 @@ function remove(project: Project) {
               </ULink>
               <span v-else class="font-medium">{{ project.owner }}/{{ project.repo }}</span>
             </div>
-            <div class="flex items-end gap-2 mt-3">
+            <div class="flex flex-col items-stretch gap-2 mt-3 sm:flex-row sm:items-end">
               <UFormField
                 label="Skills an attention request can ask for"
                 description="Comma separated. This is the list the ask picks from, so a team names its own areas here."
               >
                 <UInput
                   :model-value="draftFor(project)"
-                  class="w-96"
+                  class="w-full sm:w-96"
                   @update:model-value="drafts[project.id] = String($event)"
                 />
               </UFormField>
               <UButton
                 size="sm"
                 variant="soft"
+                class="justify-center"
                 :loading="busy === project.id"
                 @click="saveSkills(project)"
               >
@@ -160,6 +172,7 @@ function remove(project: Project) {
             variant="ghost"
             color="error"
             icon="i-lucide-trash-2"
+            class="self-start sm:shrink-0"
             :loading="busy === project.id"
             @click="remove(project)"
           >

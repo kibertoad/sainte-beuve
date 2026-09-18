@@ -95,15 +95,15 @@ function togglePause(reviewer: Reviewer) {
 </script>
 
 <template>
-  <UContainer class="py-8">
-    <div class="flex items-start justify-between gap-4 mb-6">
+  <UContainer class="py-6 sm:py-8">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Reviewers</h1>
         <p class="text-sm text-muted">
           The pool a review is routed into, and the skills each person can be asked for.
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <UButton icon="i-lucide-refresh-cw" variant="ghost" :loading="pending" @click="refresh()">
           Refresh
         </UButton>
@@ -149,7 +149,10 @@ function togglePause(reviewer: Reviewer) {
           />
         </div>
 
-        <div v-else class="flex items-start justify-between gap-4">
+        <div
+          v-else
+          class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+        >
           <div class="min-w-0">
             <p class="font-medium">{{ reviewer.displayName }}</p>
             <p class="text-sm text-muted">
@@ -169,8 +172,8 @@ function togglePause(reviewer: Reviewer) {
             </div>
           </div>
 
-          <div class="flex items-center gap-3 shrink-0">
-            <div class="text-right">
+          <div class="flex flex-wrap items-center gap-3 sm:shrink-0">
+            <div class="sm:text-right">
               <UBadge
                 :color="reviewer.availability === 'available' ? 'success' : 'neutral'"
                 variant="subtle"
