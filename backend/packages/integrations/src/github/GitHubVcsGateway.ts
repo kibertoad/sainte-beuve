@@ -1,6 +1,6 @@
 import type { OpenPullRequest, ProjectRef, PullRequestRef } from '@sainte-beuve/contracts'
 import type { VcsAccount, VcsGateway } from '@sainte-beuve/kernel'
-import { githubRequest } from './client.js'
+import { githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
 
 /**
@@ -84,9 +84,10 @@ export class GitHubVcsGateway implements VcsGateway {
     const pulls: GitHubPullRequest[] = []
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const batch = await githubRequest<GitHubPullRequest[]>({
-        path:
-          `/repos/${project.owner}/${project.repo}/pulls` +
-          `?state=open&per_page=${PAGE_SIZE}&page=${page}&sort=updated&direction=desc`,
+        path: repoPath(
+          project,
+          `/pulls?state=open&per_page=${PAGE_SIZE}&page=${page}&sort=updated&direction=desc`,
+        ),
         token,
         baseUrl: this.options.baseUrl,
         fetchImpl: this.options.fetchImpl,
@@ -102,7 +103,7 @@ export class GitHubVcsGateway implements VcsGateway {
     if (logins.length === 0) return
     await this.call(pr, {
       method: 'POST',
-      path: `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/requested_reviewers`,
+      path: repoPath(pr, `/pulls/${pr.number}/requested_reviewers`),
       body: { reviewers: logins },
     })
   }
@@ -114,7 +115,7 @@ export class GitHubVcsGateway implements VcsGateway {
       // Same path as the request, minus the reviewers named in the body. GitHub
       // answers 200 whether or not they were requested, so a reroll on a pull
       // request nobody was requested on is not a failure.
-      path: `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/requested_reviewers`,
+      path: repoPath(pr, `/pulls/${pr.number}/requested_reviewers`),
       body: { reviewers: logins },
     })
   }
@@ -123,7 +124,7 @@ export class GitHubVcsGateway implements VcsGateway {
     await this.call(pr, {
       method: 'POST',
       // A pull request IS an issue for the comments API; `issue_number` is the PR number.
-      path: `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments`,
+      path: repoPath(pr, `/issues/${pr.number}/comments`),
       body: { body },
     })
   }

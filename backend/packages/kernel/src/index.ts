@@ -3,6 +3,7 @@
 
 export {
   assertFound,
+  ConfigurationError,
   ConflictError,
   DomainError,
   type DomainErrorCode,
@@ -10,6 +11,7 @@ export {
   getErrorMessage,
   isDomainError,
   NotFoundError,
+  PayloadTooLargeError,
   UnauthenticatedError,
   UnavailableError,
   UpstreamFailedError,

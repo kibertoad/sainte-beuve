@@ -40,6 +40,25 @@ export function githubApiStatusOf(err: unknown): number | undefined {
   return err instanceof GitHubApiError ? err.status : undefined
 }
 
+/**
+ * A path under `/repos/{owner}/{repo}`, with both segments ENCODED.
+ *
+ * Every GitHub call this package makes about a repository goes through here,
+ * and the encoding is the reason it exists rather than the five template
+ * literals it replaces. `owner` and `repo` arrive from a route body, and `fetch`
+ * normalises `..` and truncates at `?` before the request leaves the process: an
+ * unencoded pair therefore chooses the METHOD and the PATH the org’s credential
+ * is spent on, not merely the repository it is spent about. The contracts refuse
+ * those characters as well (see `repoOwnerSchema`), and this is the half that
+ * holds for a ref from a store written by an older build.
+ *
+ * `suffix` is composed here rather than passed as segments because everything
+ * after the repository is a fixed string plus a validated integer.
+ */
+export function repoPath(ref: { owner: string; repo: string }, suffix = ''): string {
+  return `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}${suffix}`
+}
+
 export interface GitHubRequest {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   path: string

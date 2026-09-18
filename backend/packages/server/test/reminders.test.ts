@@ -583,6 +583,7 @@ describe('a tick across tenancies', () => {
       id: OTHER_ORG,
       slug: 'second',
       name: 'Second',
+      enrolment: 'invite',
       createdAt: harness.clock.now(),
     })
     await seed(harness, DEFAULT_ORG_ID, 11)

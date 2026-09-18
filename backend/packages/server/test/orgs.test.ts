@@ -1,4 +1,10 @@
-import type { AuthState, Org, Reviewer } from '@sainte-beuve/contracts'
+import type {
+  AuthState,
+  Org,
+  Reviewer,
+  VcsHandlesInput,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type { VcsIdentityGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -10,6 +16,7 @@ import {
   cookieJar,
   everyHost,
   get,
+  patch,
   post,
   stubGateways,
   type TestHarness,
@@ -35,6 +42,7 @@ const KEY = btoa('0123456789abcdef0123456789abcdef')
 const SESSION = '/api/v1/auth/session'
 const ORGS = '/api/v1/settings/orgs'
 const REVIEWERS = '/api/v1/reviewers'
+const PROJECTS = '/api/v1/projects'
 const BOOTSTRAP = 'the-operators-key'
 
 function stubSignIn(username: string, subject: string): VcsIdentityGateway {
@@ -71,23 +79,89 @@ function asBootstrap(): Record<string, string> {
  * org. The cookie is the whole of what a browser keeps, so presenting it on the
  * next request is exactly what a browser does.
  */
-async function signIn(harness: TestHarness, org?: string): Promise<string> {
+async function signIn(
+  harness: TestHarness,
+  org?: string,
+  provider: VcsProvider = 'github',
+): Promise<string> {
   const jar = cookieJar()
-  const path =
-    org === undefined ? '/api/v1/auth/sign-in/github' : `/api/v1/auth/sign-in/github?org=${org}`
-  const start = await harness.app.fetch(get(path))
+  const start = await harness.app.fetch(get(signInPath(org, provider)))
   expect(start.status).toBe(200)
   jar.keep(start)
   const state = new URL(((await start.json()) as { url: string }).url).searchParams.get('state')
   const callback = await harness.app.fetch(
     get(
-      `/connect/github/callback?code=abc&state=${encodeURIComponent(state ?? '')}`,
+      `/connect/${provider}/callback?code=abc&state=${encodeURIComponent(state ?? '')}`,
       jar.headers(),
     ),
   )
   expect(callback.headers.get('set-cookie')).toContain('sb_session=')
   jar.keep(callback)
   return jar.headers().cookie ?? ''
+}
+
+/**
+ * Walk a sign-in that may be REFUSED, and hand back the callback's answer.
+ *
+ * Beside `signIn` rather than replacing it, because the two are different
+ * assertions: one says "this is what a browser keeps", and this one says "this
+ * deployment would not let that browser in".
+ */
+async function attemptSignIn(
+  harness: TestHarness,
+  org?: string,
+  provider: VcsProvider = 'github',
+): Promise<Response> {
+  const jar = cookieJar()
+  const start = await harness.app.fetch(get(signInPath(org, provider)))
+  expect(start.status).toBe(200)
+  jar.keep(start)
+  const state = new URL(((await start.json()) as { url: string }).url).searchParams.get('state')
+  return harness.app.fetch(
+    get(
+      `/connect/${provider}/callback?code=abc&state=${encodeURIComponent(state ?? '')}`,
+      jar.headers(),
+    ),
+  )
+}
+
+/** Where a sign-in starts, on the host it starts from and into the org it names. */
+function signInPath(org: string | undefined, provider: VcsProvider): string {
+  const path = `/api/v1/auth/sign-in/${provider}`
+  return org === undefined ? path : `${path}?org=${org}`
+}
+
+/** The same deployment seen by a second host account. */
+function asAccount(harness: TestHarness, username: string, subject: string): TestHarness {
+  return buildHarness(
+    {
+      ...harness.container,
+      gateways: stubGateways({ signIn: everyHost(stubSignIn(username, subject)) }),
+    },
+    { encryptionKey: KEY },
+  )
+}
+
+/** What an admin may say about somebody they are registering, beyond the handle. */
+interface Registration {
+  role?: 'admin' | 'member'
+  /** Replaces the default `{ github: handle }`, for a person known on both hosts. */
+  handles?: VcsHandlesInput
+}
+
+/** Register somebody by hand, which is what `invite` enrolment is an invitation from. */
+async function register(
+  harness: TestHarness,
+  headers: Record<string, string>,
+  handle: string,
+  registration: Registration = {},
+): Promise<Reviewer> {
+  const { role = 'member', handles = { github: handle } } = registration
+  const res = await harness.app.fetch(
+    post(REVIEWERS, { displayName: handle, handles, role }, headers),
+  )
+  expect(res.status).toBe(201)
+  return (await res.json()) as Reviewer
 }
 
 async function authState(harness: TestHarness, cookie: string): Promise<AuthState> {
@@ -133,6 +207,7 @@ describe('the org boundary', () => {
         id: DEFAULT_ORG_ID,
         slug: 'default',
         name: 'Default',
+        enrolment: 'invite',
         createdAt: 0,
       })
       // Synthesised, not stored: the route every page polls must not be a write.
@@ -165,6 +240,9 @@ describe('the org boundary', () => {
   describe('what a session can reach', () => {
     it('shows a session its own org and not the one next to it', async () => {
       await makeOrg(harness, 'acme')
+      // The default org first, so this account is its founder rather than a
+      // stranger its enrolment would refuse. See `decideEnrolment`.
+      const here = await signIn(harness)
       const other = withOrg(harness.container, DEFAULT_ORG_ID)
       await other.repositories.reviewers.create({
         id: 'r-default',
@@ -182,7 +260,7 @@ describe('the org boundary', () => {
       // Signing in to `acme` claims the account there, so the directory holds
       // exactly the one person and never the default org's.
       expect(await reviewersOn(harness, await signIn(harness, 'acme'))).toStrictEqual(['ada'])
-      expect(await reviewersOn(harness, await signIn(harness))).toContain('Somebody Else')
+      expect(await reviewersOn(harness, here)).toContain('Somebody Else')
     })
 
     it('makes one host account a separate person in each org', async () => {
@@ -201,29 +279,17 @@ describe('the org boundary', () => {
       expect((await authState(harness, await signIn(harness, 'acme'))).role).toBe('admin')
     })
 
-    it('makes everybody after them a member', async () => {
-      const first = closedHarness({ username: 'ada', subject: '1' })
-      await signIn(first, undefined)
-      // The same deployment, a second account: the directory is no longer empty.
-      const second = buildHarness(
-        {
-          ...first.container,
-          gateways: stubGateways({ signIn: everyHost(stubSignIn('grace', '2')) }),
-        },
-        { encryptionKey: KEY },
-      )
+    it('makes everybody the admin registered after them a member', async () => {
+      const founder = await signIn(harness, undefined)
+      await register(harness, { cookie: founder }, 'grace')
+      const second = asAccount(harness, 'grace', '2')
       expect((await authState(second, await signIn(second))).role).toBe('member')
     })
 
     it('refuses a member the routes that configure the deployment', async () => {
-      await signIn(harness, undefined)
-      const second = buildHarness(
-        {
-          ...harness.container,
-          gateways: stubGateways({ signIn: everyHost(stubSignIn('grace', '2')) }),
-        },
-        { encryptionKey: KEY },
-      )
+      const founder = await signIn(harness, undefined)
+      await register(harness, { cookie: founder }, 'grace')
+      const second = asAccount(harness, 'grace', '2')
       const cookie = await signIn(second)
       for (const path of [ORGS, '/api/v1/settings/api-keys', '/api/v1/settings/integrations']) {
         expect((await second.app.fetch(get(path, { cookie }))).status).toBe(403)
@@ -233,14 +299,9 @@ describe('the org boundary', () => {
     })
 
     it('lets a member read the directory a review is assigned out of', async () => {
-      await signIn(harness, undefined)
-      const second = buildHarness(
-        {
-          ...harness.container,
-          gateways: stubGateways({ signIn: everyHost(stubSignIn('grace', '2')) }),
-        },
-        { encryptionKey: KEY },
-      )
+      const founder = await signIn(harness, undefined)
+      await register(harness, { cookie: founder }, 'grace')
+      const second = asAccount(harness, 'grace', '2')
       const cookie = await signIn(second)
       expect((await second.app.fetch(get(REVIEWERS, { cookie }))).status).toBe(200)
       // The WRITE is an admin's, because it decides who else may administer.
@@ -295,6 +356,33 @@ describe('the org boundary', () => {
     })
   })
 
+  describe('the project registry', () => {
+    const REF = { provider: 'github', owner: 'acme', repo: 'payments' }
+
+    it('refuses a repository another org registered first', async () => {
+      // An inbound delivery carries no credential of ours, so the registry is
+      // what places it: the oldest claim wins, and without this the org that
+      // registers somebody else's repository first quietly collects its pull
+      // requests, its reviewer assignments and its AI-review spend.
+      expect((await harness.app.fetch(post(PROJECTS, REF, asBootstrap()))).status).toBe(201)
+      await makeOrg(harness, 'acme')
+      const cookie = await signIn(harness, 'acme')
+
+      const res = await harness.app.fetch(post(PROJECTS, REF, { cookie }))
+      expect(res.status).toBe(409)
+      // The refusal names no org: which tenancy holds a claim is not a caller's
+      // business, and saying would make this route an enumeration of the
+      // deployment.
+      expect(JSON.stringify(await res.json())).not.toContain(DEFAULT_ORG_ID)
+    })
+
+    it('leaves an unclaimed repository to whoever registers it', async () => {
+      await makeOrg(harness, 'acme')
+      const cookie = await signIn(harness, 'acme')
+      expect((await harness.app.fetch(post(PROJECTS, REF, { cookie }))).status).toBe(201)
+    })
+  })
+
   describe('the reminder tick', () => {
     it('walks every org, including the default one with no row', async () => {
       const acme = await makeOrg(harness, 'acme')
@@ -317,6 +405,165 @@ describe('the org boundary', () => {
       // deployment's everything is.
       expect((await runReminderTick(harness.container)).sessionsSwept).toBe(2)
     })
+  })
+})
+
+// H1 and H2 of docs/security-review.md: before this, completing an OAuth round
+// trip WAS the authorisation. Any GitHub or GitLab account could sign in to any
+// org whose slug it knew, and a pre-registered row handed its role — `admin`
+// included — to whoever held the username.
+describe('who may join', () => {
+  let harness: TestHarness
+
+  beforeEach(() => {
+    harness = closedHarness()
+  })
+
+  it('refuses an account nobody registered', async () => {
+    await signIn(harness, undefined)
+    const stranger = asAccount(harness, 'mallory', '9')
+
+    const res = await attemptSignIn(stranger)
+    expect(res.status).toBe(403)
+    expect(res.headers.get('set-cookie')).not.toContain('sb_session=')
+    // And the refusal does not leave a directory row behind either.
+    expect(await harness.container.repositories.reviewers.list()).toHaveLength(1)
+  })
+
+  it('admits whoever an admin registered, by handle', async () => {
+    const founder = await signIn(harness, undefined)
+    await register(harness, { cookie: founder }, 'grace')
+    const second = asAccount(harness, 'grace', '2')
+
+    const state = await authState(second, await signIn(second))
+    // Adopted rather than forked: one row, and it is the one the admin set up.
+    expect(await harness.container.repositories.reviewers.list()).toHaveLength(2)
+    expect(state.principal.kind === 'session' && state.principal.viewer.reviewer.role).toBe(
+      'member',
+    )
+  })
+
+  it('does not hand admin to a handle once an admin has signed in', async () => {
+    const founder = await signIn(harness, undefined)
+    // The documented workflow, and the trap in it: a typo, a released login or
+    // simply the wrong Bob would otherwise inherit the role permanently.
+    await register(harness, { cookie: founder }, 'grace', { role: 'admin' })
+    const second = asAccount(harness, 'grace', '2')
+
+    expect((await authState(second, await signIn(second))).role).toBe('member')
+  })
+
+  it('admits anybody where an admin opened enrolment', async () => {
+    const founder = await signIn(harness, undefined)
+    const opened = await harness.app.fetch(
+      patch(`${ORGS}/current`, { enrolment: 'open' }, { cookie: founder }),
+    )
+    expect(opened.status).toBe(200)
+    expect(((await opened.json()) as Org).enrolment).toBe('open')
+
+    const stranger = asAccount(harness, 'mallory', '9')
+    expect((await authState(stranger, await signIn(stranger))).role).toBe('member')
+  })
+
+  it('seats the founder an operator named, so nobody wins the org by racing', async () => {
+    const res = await harness.app.fetch(
+      post(
+        ORGS,
+        { slug: 'acme', name: 'Acme', founder: { provider: 'github', handle: 'ada' } },
+        asBootstrap(),
+      ),
+    )
+    expect(res.status).toBe(201)
+
+    // Whoever else knows the slug is not the founder, and the directory is no
+    // longer empty, so there is nothing for them to found.
+    const stranger = asAccount(harness, 'mallory', '9')
+    expect((await attemptSignIn(stranger, 'acme')).status).toBe(403)
+    // And the account the operator named takes the row, with its role.
+    expect((await authState(harness, await signIn(harness, 'acme'))).role).toBe('admin')
+  })
+
+  it('lets somebody already inside add their account on a second host', async () => {
+    // The other half of H2, and the one it overshot: a claim is spent PER HOST.
+    // Adoption is the only thing that ever links a second account — `refresh`
+    // re-records the handle of a provider already linked and nothing else — so
+    // skipping every row that any account had proved itself against left a
+    // person who signed in with GitHub unable to add their GitLab account at
+    // all: 403 forever under `invite`, and under `open` a second directory row,
+    // which is the fork adoption exists to prevent.
+    const founder = await signIn(harness, undefined)
+    await register(harness, { cookie: founder }, 'grace', {
+      handles: { github: 'grace', gitlab: 'grace-gl' },
+    })
+    const onGitHub = asAccount(harness, 'grace', '2')
+    await signIn(onGitHub)
+
+    const onGitLab = asAccount(harness, 'grace-gl', '20')
+    const state = await authState(onGitLab, await signIn(onGitLab, undefined, 'gitlab'))
+
+    // One person, not two: the same row, reached from the other host.
+    const directory = await harness.container.repositories.reviewers.list()
+    expect(directory).toHaveLength(2)
+    expect(directory.map((row) => row.displayName).sort()).toStrictEqual(['ada', 'grace'])
+    expect(state.principal.kind === 'session' && state.principal.viewer.reviewer.displayName).toBe(
+      'grace',
+    )
+  })
+
+  it('does not demote an admin who signs in on their second host', async () => {
+    // Their own row, already linked on the first host, so the cap has no
+    // unclaimed registration to protect: applying it here would take an org's
+    // administrator away for connecting a GitLab account.
+    const founder = await signIn(harness, undefined)
+    const [ada] = await harness.container.repositories.reviewers.list()
+    const named = await harness.app.fetch(
+      patch(
+        `${REVIEWERS}/${ada?.id ?? ''}`,
+        { handles: { github: 'ada', gitlab: 'ada-gl' } },
+        { cookie: founder },
+      ),
+    )
+    expect(named.status).toBe(200)
+
+    const onGitLab = asAccount(harness, 'ada-gl', '10')
+    expect((await authState(onGitLab, await signIn(onGitLab, undefined, 'gitlab'))).role).toBe(
+      'admin',
+    )
+    expect(await harness.container.repositories.reviewers.list()).toHaveLength(1)
+  })
+
+  it('still refuses a stranger holding a handle nobody registered on that host', async () => {
+    // Per host cuts both ways. `grace` is registered on GitHub only, so whoever
+    // holds the GitLab login `grace` is matched by nothing and is a stranger.
+    const founder = await signIn(harness, undefined)
+    await register(harness, { cookie: founder }, 'grace')
+    const impostor = asAccount(harness, 'grace', '99')
+
+    expect((await attemptSignIn(impostor, undefined, 'gitlab')).status).toBe(403)
+  })
+
+  it('refuses a second account against a row already linked on that host', async () => {
+    // What H2 is actually about, and what survives: the row's GitHub slot is
+    // spent, so a different GitHub account holding the same login takes nothing.
+    const founder = await signIn(harness, undefined)
+    await register(harness, { cookie: founder }, 'grace')
+    await signIn(asAccount(harness, 'grace', '2'))
+
+    const renamedAway = asAccount(harness, 'grace', '99')
+    expect((await attemptSignIn(renamedAway)).status).toBe(403)
+  })
+
+  it('leaves an account that already signed in alone when the door closes', async () => {
+    const founder = await signIn(harness, undefined)
+    await register(harness, { cookie: founder }, 'grace')
+    const second = asAccount(harness, 'grace', '2')
+    await signIn(second)
+
+    // Enrolment is about who may JOIN. Taking somebody's access away is
+    // `availability: paused`, and it is a different route.
+    const again = await attemptSignIn(second)
+    expect(again.status).toBe(200)
+    expect(again.headers.get('set-cookie')).toContain('sb_session=')
   })
 })
 

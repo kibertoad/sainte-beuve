@@ -36,6 +36,29 @@ the raw `Host` header, and `javascript:` URLs accepted where the SPA renders lin
 | Low           | 11    |
 | Informational | 8     |
 
+## Status
+
+All six **High** findings are fixed; the code and line numbers below are as of the
+reviewed commit and no longer describe the tree. What landed, in one line each:
+
+- **H1** — an org carries `enrolment` (`invite` by default), `createOrg` takes a
+  `founder`, and a plain sign-in is refused where the org did not admit the
+  account. See [docs/orgs.md](./orgs.md).
+- **H2** — adoption by handle skips a row an account already proved itself
+  against on that host, and confers `admin` only while no admin of the org has
+  signed in.
+- **H3** — `POST /api/v1/projects` refuses a repository another tenancy claimed.
+- **H4** — `owner` and `repo` are held to the hosts' alphabet in the contracts,
+  and every GitHub path segment is encoded (`repoPath`).
+- **H5** — `hono/body-limit` on the webhook paths and under `/api/v1`, mounted
+  before anything reads a byte.
+- **H6** — an unrecognised `AUTH_MODE` is a configuration error, `open` beside a
+  public origin refuses to start, and both hosted templates ship `required`. On a
+  runtime with no boot to fail in, the refusal is a `misconfigured` 503 on every
+  path rather than an anonymous 500.
+
+The Medium, Low and Informational findings below are open.
+
 ## Findings
 
 Each finding cites the code it was verified against. Line numbers are as of the

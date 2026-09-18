@@ -80,6 +80,7 @@ describe('Postgres repositories', () => {
     it(testCase.name, async () => {
       await testCase.run({
         repositories: createPostgresPersistence(db).forOrg(DEFAULT_ORG_ID),
+        orgs: createPostgresPersistence(db).orgs,
         writeRawReviewer: async (id, payload) => {
           await db.execute(
             sql`INSERT INTO reviewers (org_id, id, outstanding_reviews, created_at, data)
@@ -92,6 +93,12 @@ describe('Postgres repositories', () => {
                   (org_id, id, review_id, status, requested_at, last_polled_at, data)
                 VALUES (${DEFAULT_ORG_ID}, ${id}, ${reviewId}, 'awaiting_selection', 1000, NULL,
                         ${JSON.stringify(payload)}::jsonb)`,
+          )
+        },
+        writeRawOrg: async (id, slug, payload) => {
+          await db.execute(
+            sql`INSERT INTO orgs (id, slug, created_at, data)
+                VALUES (${id}, ${slug}, 1000, ${JSON.stringify(payload)}::jsonb)`,
           )
         },
       })

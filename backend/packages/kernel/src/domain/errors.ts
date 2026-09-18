@@ -11,6 +11,8 @@ export type DomainErrorCode =
   | 'forbidden'
   | 'unavailable'
   | 'upstream_failed'
+  | 'payload_too_large'
+  | 'misconfigured'
 
 export class DomainError extends Error {
   readonly code: DomainErrorCode
@@ -63,9 +65,47 @@ export class ForbiddenError extends DomainError {
 }
 
 /** A capability the deployment did not wire, e.g. Slack with no bot token. */
+/**
+ * The request body is longer than this deployment will read.
+ *
+ * Its own code rather than a validation failure, because the two are refused at
+ * different moments and an operator has to be able to tell them apart: a
+ * validation error describes a body that was READ, and this one is the body that
+ * was not. See the body limits in `createApp`.
+ */
+export class PayloadTooLargeError extends DomainError {
+  constructor(message: string, details?: unknown) {
+    super('payload_too_large', message, details)
+  }
+}
+
 export class UnavailableError extends DomainError {
   constructor(message: string, details?: unknown) {
     super('unavailable', message, details)
+  }
+}
+
+/**
+ * The deployment's own configuration is wrong, and nothing it could serve would
+ * be right.
+ *
+ * A DOMAIN error rather than a bare `Error` because of where it is thrown from.
+ * Node reads its configuration once at boot, so a throw there is a process that
+ * refuses to start with the reason on stderr. A Worker has no boot with its
+ * bindings in hand — `env` arrives with the request — so the same throw comes
+ * out of the container factory on every request, and as an anonymous `Error` it
+ * became an opaque 500 with the reason only in `wrangler tail`. As this, it is a
+ * 503 carrying the operator's message in the ordinary envelope, so `curl` says
+ * what stderr says on Node and the two runtimes stop diverging on exactly the
+ * property the refusal exists to enforce.
+ *
+ * Its own code rather than `unavailable`, which means a capability this
+ * deployment chose not to wire: that is a deployment working as configured, and
+ * this is one that cannot work at all.
+ */
+export class ConfigurationError extends DomainError {
+  constructor(message: string, details?: unknown) {
+    super('misconfigured', message, details)
   }
 }
 

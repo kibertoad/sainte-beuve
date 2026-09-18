@@ -220,7 +220,7 @@ export class ConnectionsService {
       // thing. An operator who just connected this deployment's credential has
       // demonstrated exactly what a sign-in demonstrates, and making them click
       // a second button to be recognised would be a round trip for nothing.
-      session: await establishSession(inOrg, provider, account),
+      session: await establishSession(inOrg, { provider, account, purpose }),
       purpose,
     }
   }
