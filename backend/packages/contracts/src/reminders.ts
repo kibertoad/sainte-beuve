@@ -42,8 +42,22 @@ export type ReminderChannel = v.InferOutput<typeof reminderChannelSchema>
  * `cancelled` is a real terminal state, not a delete: a review answered before its
  * nudge fired should leave a trace that the nudge was scheduled and became moot,
  * so cadence can be tuned against what actually happened.
+ *
+ * `sending` is the CLAIM. A tick takes a row out of `scheduled` before it posts
+ * anything, conditionally and in one statement, so a second pass over the same
+ * batch — two Node replicas, or a Worker cron firing while the last invocation
+ * is still inside `waitUntil` — finds nothing to take and nobody is nudged
+ * twice. It is transient by intent: the same delivery writes `sent` or `failed`
+ * a moment later, and a row left in it is a process that died mid-send, which
+ * the next re-plan of that review's ladder supersedes.
  */
-export const reminderStatusSchema = v.picklist(['scheduled', 'sent', 'cancelled', 'failed'])
+export const reminderStatusSchema = v.picklist([
+  'scheduled',
+  'sending',
+  'sent',
+  'cancelled',
+  'failed',
+])
 export type ReminderStatus = v.InferOutput<typeof reminderStatusSchema>
 
 export const reminderSchema = v.object({

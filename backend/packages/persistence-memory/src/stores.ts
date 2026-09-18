@@ -97,12 +97,15 @@ export class InMemoryReviewerRepository implements ReviewerRepository {
 export class InMemoryReviewRequestRepository implements ReviewRequestRepository {
   private readonly rows = new Map<string, ReviewRequest>()
 
-  async list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]> {
+  async list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]> {
     const wanted = filter?.status
-    return [...this.rows.values()]
+    const matched = [...this.rows.values()]
       .filter((row) => wanted === undefined || wanted.includes(row.status))
       .sort(newestFirst((row) => row.createdAt))
-      .map(clone)
+    // Sliced AFTER the sort, which is what the two durable stores do with their
+    // `LIMIT` on an ordered read: the cap takes the newest rows, not an
+    // arbitrary handful.
+    return (filter?.limit === undefined ? matched : matched.slice(0, filter.limit)).map(clone)
   }
 
   async getById(reviewId: string): Promise<ReviewRequest | null> {
@@ -154,6 +157,19 @@ export class InMemoryReminderRepository implements ReminderRepository {
       .sort(oldestFirst((row) => row.dueAt))
       .slice(0, limit)
       .map(clone)
+  }
+
+  /**
+   * Check and set, which is what the durable stores do with one conditional
+   * statement. A store a restart empties has one process reading it, so this
+   * cannot actually race; it answers the same way so a suite written against
+   * the port proves the same behaviour everywhere.
+   */
+  async claim(reminder: Reminder): Promise<boolean> {
+    const row = this.rows.get(reminder.id)
+    if (row === undefined || row.status !== 'scheduled') return false
+    this.rows.set(reminder.id, { ...clone(reminder), status: 'sending' })
+    return true
   }
 
   async create(reminder: Reminder): Promise<Reminder> {

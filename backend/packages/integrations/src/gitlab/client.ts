@@ -1,4 +1,4 @@
-import { UpstreamFailedError, getErrorMessage } from '@sainte-beuve/kernel'
+import { UpstreamFailedError, getErrorMessage, withDeadline } from '@sainte-beuve/kernel'
 
 /**
  * The only place in the tree that calls GitLab.
@@ -66,7 +66,7 @@ export async function gitlabRequest<T>(request: GitLabRequest): Promise<T> {
   const url = `${trimBase(request.baseUrl)}${API_PREFIX}${request.path}`
   let response: Response
   try {
-    response = await (request.fetchImpl ?? globalThis.fetch)(url, {
+    response = await withDeadline(request.fetchImpl)(url, {
       method: request.method ?? 'GET',
       headers: {
         accept: 'application/json',

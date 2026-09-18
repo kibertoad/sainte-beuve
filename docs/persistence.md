@@ -129,7 +129,10 @@ merge request with the GitHub pull request of the same number.
 `projects.ref_key` carries a UNIQUE index, which is the uniqueness the port
 declares and the in-memory store can only promise.
 
-## The claim that has to be atomic
+## The claims that have to be atomic
+
+There are two, and both are a read that cannot be trusted to still be true by the
+time the write lands.
 
 `IdentityRepository.link` answers "whose account is this NOW", and the answer is
 not always the reviewer that was passed in. Two first sign-ins that both find no
@@ -140,6 +143,17 @@ Both durable stores settle it in one statement: insert, and on a conflict with
 caller that already holds the key refreshes the handle on the same trip, which
 is what keeps a rename visible. The in-memory store reads and then writes, and
 can only promise the same outcome.
+
+`ReminderRepository.claim` answers "am I the one sending this nudge". `listDue`
+is a read, so every pass over a batch sees the same rows — and two passes is what
+a second Node replica is, or a Worker cron firing while the last invocation is
+still inside `waitUntil`. Both durable stores move the row out of `scheduled` in
+one conditional statement (`UPDATE ... WHERE ... AND status = 'scheduled'`,
+answering through `RETURNING` whether a row changed), so exactly one caller gets
+it and the rest skip; in memory it is a check-and-set. The payload is written
+whole rather than edited in place, because the status is a column AND a field of
+the payload, and `jsonb_set`/`json_set` is the dialect branch these two packages
+exist not to have.
 
 ## Migrations
 

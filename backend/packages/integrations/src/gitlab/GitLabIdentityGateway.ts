@@ -3,6 +3,7 @@ import {
   type VcsAccount,
   type VcsIdentityGateway,
   getErrorMessage,
+  withDeadline,
 } from '@sainte-beuve/kernel'
 import { GITLAB_BASE_URL, gitlabRequest } from './client.js'
 
@@ -97,7 +98,7 @@ export class GitLabIdentityGateway implements VcsIdentityGateway {
     const url = new URL('/oauth/token', this.root())
     let response: Response
     try {
-      response = await (this.options.fetchImpl ?? globalThis.fetch)(url, {
+      response = await withDeadline(this.options.fetchImpl)(url, {
         method: 'POST',
         headers: { accept: 'application/json', 'content-type': 'application/json' },
         body: JSON.stringify({

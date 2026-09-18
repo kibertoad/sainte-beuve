@@ -61,6 +61,24 @@ afterEach(() => {
 })
 
 describe('createSainteBeuveApi', () => {
+  it('asks for the board with no filter, and folds one into the query when given', async () => {
+    // The wire format the contract's schema parses back: one parameter per
+    // status, the cap as a string, and neither key present at all when the
+    // caller named none — the API's own default (the active statuses, capped)
+    // is what the board wants, and a key that is present and undefined would go
+    // out as an empty parameter the contract refuses.
+    const calls = stubFetch(jsonResponse({ reviews: [] }), jsonResponse({ reviews: [] }))
+    const api = createSainteBeuveApi(API_BASE)
+
+    await api.listReviews()
+    await api.listReviews({ status: ['open', 'closed'], limit: 20 })
+
+    expect(calls.map((call) => call.url)).toEqual([
+      `${API_BASE}/api/v1/reviews`,
+      `${API_BASE}/api/v1/reviews?status=open&status=closed&limit=20`,
+    ])
+  })
+
   it('sends the method and path the contract declares, under the API version', async () => {
     const calls = stubFetch(jsonResponse({ reviewers: [reviewer] }))
 

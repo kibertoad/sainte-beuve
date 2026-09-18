@@ -57,6 +57,7 @@ export type {
 } from './ports/repositories.js'
 export type { OrgRepository, PersistenceProvider, TenancyDirectory } from './ports/tenancy.js'
 export type { RoundTripState, StateSigner } from './ports/state.js'
+export { UPSTREAM_TIMEOUT_MS, withDeadline } from './upstream.js'
 export {
   type Clock,
   type IdGenerator,

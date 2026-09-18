@@ -12,7 +12,14 @@ import { blankToNull, parseSkills } from '../utils/text'
 // and see exactly which connection is missing, rather than being sent to the
 // Configuration screen with nothing to explain why.
 const api = useSainteBeuveApi()
-const { data, pending, error, refresh } = await useAsyncData('projects', () => api.listProjects())
+// LAZY, and not awaited: a page that awaits its read at setup holds the previous
+// screen on screen until the whole list is down, validated and mounted, so a
+// click on this destination looks like nothing happened. Rendered immediately
+// instead, the skeleton below says what is coming. `AiReviewPanel` has done this
+// since it was written, for the same reason.
+const { data, pending, error, refresh } = useAsyncData('projects', () => api.listProjects(), {
+  lazy: true,
+})
 
 const projects = computed<Project[]>(() => data.value?.projects ?? [])
 const { busy, run } = useApiAction({ refresh })
@@ -114,6 +121,8 @@ function remove(project: Project) {
     </UCard>
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the projects" />
+
+    <LoadingCard v-else-if="pending && data === null" />
 
     <UCard v-else-if="projects.length === 0">
       <p class="text-sm text-muted">

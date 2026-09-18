@@ -42,6 +42,18 @@ export const reviewCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.reviews.list({ status: [] }), [])
   }),
 
+  conformanceCase('a capped board takes the newest rows, not any rows', async (repos) => {
+    // The cap has to be applied to the ORDERED read, or a board that asks for
+    // twenty shows twenty arbitrary reviews out of everything ever tracked.
+    await repos.reviews.create(review('rev-1', { createdAt: 1_000 }))
+    await repos.reviews.create(review('rev-2', { createdAt: 2_000 }))
+    await repos.reviews.create(review('rev-3', { createdAt: 3_000 }))
+    const ids = (await repos.reviews.list({ limit: 2 })).map((row) => row.id)
+    assert.deepStrictEqual(ids, ['rev-3', 'rev-2'])
+    const open = (await repos.reviews.list({ status: ['open'], limit: 1 })).map((row) => row.id)
+    assert.deepStrictEqual(open, ['rev-3'])
+  }),
+
   conformanceCase('finds the review a pull request already opened', async (repos) => {
     // What keeps a webhook replay from opening a second row for one pull
     // request.
@@ -129,6 +141,35 @@ export const reminderCases: readonly ConformanceCase[] = [
   conformanceCase('a delivery against a reminder that is gone does nothing', async (repos) => {
     await repos.reminders.updateStatus('nobody', 'sent', { sentAt: 1 })
     assert.deepStrictEqual(await repos.reminders.listByReview('review-1'), [])
+  }),
+
+  conformanceCase('a nudge is claimed once, and the second pass gets nothing', async (repos) => {
+    // What stops two senders posting the same nudge: `listDue` is a read, and a
+    // deployment with two replicas — or a cron firing while the last invocation
+    // is still finishing — has two passes over the same batch.
+    await repos.reminders.create(reminder('rem-1'))
+    const [due] = await repos.reminders.listDue(10_000, 10)
+    assert.ok(due !== undefined)
+    assert.strictEqual(await repos.reminders.claim(due), true)
+    assert.strictEqual(await repos.reminders.claim(due), false)
+    const [stored] = await repos.reminders.listByReview('review-1')
+    // The column AND the payload moved, or the next read reports a nudge as
+    // still scheduled and the tick takes it again.
+    assert.strictEqual(stored?.status, 'sending')
+    // A claimed nudge is out of the due set, which is what the guard is for.
+    assert.deepStrictEqual(await repos.reminders.listDue(10_000, 10), [])
+    // And it is still a nudge: what was claimed keeps everything else it carried.
+    assert.strictEqual(stored?.kind, due.kind)
+    assert.strictEqual(stored?.dueAt, due.dueAt)
+  }),
+
+  conformanceCase('a nudge that is no longer scheduled cannot be claimed', async (repos) => {
+    // A cancelled schedule (the review reached a verdict between the read and
+    // the send) and a row that is simply gone answer the same way: not yours.
+    await repos.reminders.create(reminder('rem-1', { status: 'cancelled' }))
+    assert.strictEqual(await repos.reminders.claim(reminder('rem-1')), false)
+    assert.strictEqual(await repos.reminders.claim(reminder('nobody')), false)
+    assert.strictEqual((await repos.reminders.listByReview('review-1'))[0]?.status, 'cancelled')
   }),
 
   conformanceCase('cancelling a schedule that is not there does nothing', async (repos) => {

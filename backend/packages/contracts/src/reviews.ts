@@ -27,6 +27,18 @@ export const reviewStatusSchema = v.picklist([
 ])
 export type ReviewStatus = v.InferOutput<typeof reviewStatusSchema>
 
+/**
+ * The statuses a board is ABOUT: the three a review can still move out of.
+ *
+ * One definition, because three callers now agree on it — the board route's
+ * default, the SPA that reads it, and `/review list` in Slack — and a set
+ * spelled out per caller is a set that drifts. It is the complement of the
+ * terminal three above, which is what makes it the right default for a read
+ * that would otherwise grow with everything the deployment has ever tracked:
+ * an approved review from last quarter is history, not a board.
+ */
+export const ACTIVE_REVIEW_STATUSES: readonly ReviewStatus[] = ['open', 'assigned', 'in_review']
+
 /** How urgently the review should be picked up. Drives the reminder cadence. */
 export const reviewPrioritySchema = v.picklist(['low', 'normal', 'high'])
 export type ReviewPriority = v.InferOutput<typeof reviewPrioritySchema>

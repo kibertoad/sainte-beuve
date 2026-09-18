@@ -1,6 +1,7 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import { type ChatGateway, getErrorMessage } from '@sainte-beuve/kernel'
+import { mapWithConcurrency } from '../concurrency.js'
 import { type AppContainer, withOrg } from '../container.js'
 import { type CredentialSource, type Resolved, resolveChat } from '../integrations/resolve.js'
 import { SessionService } from '../modules/auth/SessionService.js'
@@ -42,8 +43,31 @@ import { scheduleNextReminder } from './schedule.js'
  * would send nothing at all, every tick, for as long as it stayed slow. The
  * nudges are the thing with a deadline; the passengers are what the pass does
  * with what is left.
+ *
+ * Each walk is BOUNDED-CONCURRENT rather than serial, and the two walks are
+ * still ordered one after the other. Serially, an idle org still cost three
+ * store round trips before the next one was looked at and a due nudge cost
+ * about seven plus an outbound post, none of them overlapping: on D1, where
+ * every statement is a network hop, a single tenancy's batch could take longer
+ * than the interval that started it, and a Node tick that overruns its interval
+ * is skipped — which delays the reminders that caused it, which is positive
+ * feedback. Nothing in a pass depends on another pass, so the only thing the
+ * serial walk bought was latency.
  */
 const DEFAULT_BATCH = 50
+
+/**
+ * How many orgs are in flight in one walk, and how many nudges inside one org.
+ *
+ * Small on purpose. The point is to hide latency, not to spend the store's
+ * connection pool or Slack's rate limit: a handful of overlapping round trips
+ * turns a tenancy's batch from seconds into a fraction of one, and going wider
+ * buys progressively less while making the tick the noisiest client the
+ * deployment has. Both are ceilings rather than targets — a pass with one due
+ * nudge starts one worker.
+ */
+const ORG_FAN_OUT = 4
+const NUDGE_FAN_OUT = 4
 
 export interface TickResult {
   sent: number
@@ -75,6 +99,9 @@ export interface TickResult {
 /** What one org's nudges did. The half of a pass that has a deadline. */
 type Nudges = Pick<TickResult, 'sent' | 'failed' | 'skipped'>
 
+/** What one delivery did, which is the counter it adds to. */
+type Outcome = keyof Nudges
+
 /** What one org's passengers did. The half that rides whatever budget is left. */
 type Passengers = Pick<TickResult, 'sessionsSwept' | 'aiReviewsPolled'>
 
@@ -95,9 +122,13 @@ export async function runReminderTick(
     passengers: { sessionsSwept: 0, aiReviewsPolled: 0 },
   }))
   // FIRST every org's nudges, because they are the half with a deadline.
-  for (const pass of passes) pass.nudges = await sendDue(pass.container, batchSize)
+  await mapWithConcurrency(passes, ORG_FAN_OUT, async (pass) => {
+    pass.nudges = await sendDue(pass.container, batchSize)
+  })
   // THEN every org's passengers, on whatever budget the pass has left.
-  for (const pass of passes) pass.passengers = await ridePassengers(pass.container, batchSize)
+  await mapWithConcurrency(passes, ORG_FAN_OUT, async (pass) => {
+    pass.passengers = await ridePassengers(pass.container, batchSize)
+  })
   return passes.reduce(added, empty())
 }
 
@@ -157,11 +188,35 @@ async function sendDue(container: AppContainer, batchSize: number): Promise<Nudg
   // means re-reading the stored bot token, re-deriving its HKDF key and opening
   // the envelope again for each one, on a runtime billed by CPU time.
   const chat = due.length === 0 ? null : await resolveChat(container)
-  for (const reminder of due) {
-    const outcome = await deliver(container, reminder, chat)
-    nudges[outcome] += 1
-  }
+  const lanes = await mapWithConcurrency(lanesOf(due), NUDGE_FAN_OUT, async (lane) => {
+    const outcomes: Outcome[] = []
+    for (const reminder of lane) outcomes.push(await deliver(container, reminder, chat))
+    return outcomes
+  })
+  for (const outcome of lanes.flat()) nudges[outcome] += 1
   return nudges
+}
+
+/**
+ * The batch split into lanes that may run at the same time: one lane per REVIEW,
+ * in the order the batch came back.
+ *
+ * Per review rather than per reminder, because sending is not the end of a
+ * delivery — it re-plans that review's ladder, and a re-plan cancels the
+ * outstanding schedule and writes the next rung. Two deliveries for one review
+ * overlapping would interleave a cancel with a create and could leave the review
+ * with two scheduled nudges, or none. The schedule holds one outstanding row per
+ * review, so this is normally one reminder per lane and the grouping costs
+ * nothing; it is what makes the fan-out safe when it is not.
+ */
+function lanesOf(due: readonly Reminder[]): Reminder[][] {
+  const lanes = new Map<string, Reminder[]>()
+  for (const reminder of due) {
+    const lane = lanes.get(reminder.reviewId)
+    if (lane === undefined) lanes.set(reminder.reviewId, [reminder])
+    else lane.push(reminder)
+  }
+  return [...lanes.values()]
 }
 
 /** One org's passengers, run once every org's nudges have gone out. */
@@ -211,11 +266,30 @@ async function pollAiReviews(container: AppContainer, batchSize: number): Promis
   }
 }
 
+/**
+ * One nudge, from the row to the post, and the only place a reminder is sent.
+ *
+ * It CLAIMS the row before it posts anything, and skips what it could not
+ * claim. `listDue` is a read: two passes over the same batch both see the same
+ * fifty rows, and two passes is not hypothetical — a deployment running two
+ * Node replicas has two clocks, and the Worker's cron can fire while the last
+ * invocation is still inside `waitUntil`. The claim is one conditional
+ * statement, so exactly one of them wins and nobody is nudged twice. It comes
+ * FIRST, before the review and the target are read, so a pass that lost the race
+ * spends one statement rather than three.
+ *
+ * What it does not buy is exactly-once. A process that dies between the claim
+ * and the mark leaves a row in `sending` and that nudge is not re-sent — which
+ * is the trade this makes deliberately: a reminder that arrives twice is worse
+ * than one that arrives late, and the review's next re-plan puts the ladder back
+ * on its feet.
+ */
 async function deliver(
   container: AppContainer,
   reminder: Reminder,
   chat: Resolved<ChatGateway, CredentialSource> | null,
-): Promise<'sent' | 'failed' | 'skipped'> {
+): Promise<Outcome> {
+  if (!(await container.repositories.reminders.claim(reminder))) return 'skipped'
   const review = await container.repositories.reviews.getById(reminder.reviewId)
   if (review === null) {
     // Nothing left to chase, which is what `cancelled` means. Every other way a

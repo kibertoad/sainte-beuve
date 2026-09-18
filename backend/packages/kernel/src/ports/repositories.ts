@@ -73,7 +73,16 @@ export interface ReviewerRepository {
 }
 
 export interface ReviewRequestRepository {
-  list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]>
+  /**
+   * The board, newest first, ties broken on the id.
+   *
+   * `limit` is not a nicety: terminal reviews are never archived, so an
+   * unbounded read grows with everything the deployment has ever tracked and
+   * the JSON it decodes grows with it. Every caller that wants the BOARD passes
+   * one; the ones that want a set they have already narrowed (a status filter
+   * over the active three) may leave it off.
+   */
+  list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]>
   getById(reviewId: string): Promise<ReviewRequest | null>
   /** Look up by pull request so a webhook replay updates the row instead of duplicating it. */
   getByPullRequest(ref: {
@@ -89,6 +98,23 @@ export interface ReminderRepository {
   listByReview(reviewId: string): Promise<Reminder[]>
   /** Reminders whose `dueAt` has passed and which are still `scheduled`. The tick's only read. */
   listDue(now: EpochMs, limit: number): Promise<Reminder[]>
+  /**
+   * TAKE a due reminder, so that exactly one sender posts it. True if this
+   * caller got it, false if it was already taken or is no longer scheduled.
+   *
+   * One conditional statement on both durable stores — the move out of
+   * `scheduled` and the write of the payload together — because that is the
+   * only shape that answers the question honestly. `listDue` is a read, and two
+   * passes over the same batch are not a hypothetical: a deployment running two
+   * Node replicas has two clocks, and the Worker's cron can fire while the last
+   * invocation is still inside `waitUntil`. Without a claim both post, and a
+   * duplicated nudge is exactly the thing reminders must not do.
+   *
+   * It takes the reminder rather than its id because the status lives in the
+   * payload as well as in the column, and the two must not disagree; the caller
+   * is holding the row it just read.
+   */
+  claim(reminder: Reminder): Promise<boolean>
   create(reminder: Reminder): Promise<Reminder>
   updateStatus(
     reminderId: string,

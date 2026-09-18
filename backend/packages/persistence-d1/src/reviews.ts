@@ -48,15 +48,19 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
     private readonly orgId: string,
   ) {}
 
-  async list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]> {
+  async list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]> {
     const wanted = filter?.status
     // A filter naming no status matches nothing, and `IN ()` parses on neither
     // engine, so that answer is given without a statement.
     if (wanted !== undefined && wanted.length === 0) return []
     const where = wanted === undefined ? '' : ` AND status IN (${placeholders(wanted.length)})`
+    // The cap is pushed into SQL, not applied to what came back: with
+    // `review_requests_created_idx` the engine walks the newest rows and stops,
+    // where a read of everything decodes a payload per row the caller drops.
+    const cap = filter?.limit === undefined ? '' : ' LIMIT ?'
     const rows = await this.db.all(
-      `SELECT data FROM review_requests WHERE org_id = ?${where} ORDER BY created_at DESC, id DESC`,
-      [this.orgId, ...(wanted ?? [])],
+      `SELECT data FROM review_requests WHERE org_id = ?${where} ORDER BY created_at DESC, id DESC${cap}`,
+      [this.orgId, ...(wanted ?? []), ...(filter?.limit === undefined ? [] : [filter.limit])],
     )
     return decodeRows(reviewRequestSchema, 'review_requests', rows)
   }
@@ -148,6 +152,28 @@ export class SqlReminderRepository implements ReminderRepository {
       [this.orgId, now, limit],
     )
     return decodeRows(reminderSchema, 'reminders', rows)
+  }
+
+  /**
+   * ONE conditional statement: the status column, the payload and the guard
+   * together, answering through `RETURNING` whether this caller took the row.
+   *
+   * `AND status = 'scheduled'` is the whole point. A `listDue` followed by an
+   * unconditional write hands the same batch to every pass that reads it, and
+   * two passes over one batch is what an overlapping cron invocation or a
+   * second replica is. The payload is written whole rather than edited in
+   * place, because the status lives in both and `json_set` is the dialect
+   * branch this package exists not to have.
+   */
+  async claim(reminder: Reminder): Promise<boolean> {
+    const claimed: Reminder = { ...reminder, status: 'sending' }
+    const row = await this.db.first(
+      `UPDATE reminders SET status = ?, data = ?
+WHERE org_id = ? AND id = ? AND status = 'scheduled'
+RETURNING id`,
+      [claimed.status, encodeData(claimed), this.orgId, reminder.id],
+    )
+    return row !== null
   }
 
   async create(reminder: Reminder): Promise<Reminder> {

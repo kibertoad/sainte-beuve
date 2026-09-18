@@ -84,6 +84,27 @@ describe('reminder tick', () => {
     expect(scheduled(await remindersFor(harness, review.id))).toStrictEqual([])
   })
 
+  it('sends a due nudge once even when two passes run over the same batch', async () => {
+    // The shape a horizontally scaled deployment is in: two Node replicas have
+    // two clocks, and the Worker's cron can fire while the last invocation is
+    // still inside `waitUntil`. Both passes read the same due row — `listDue`
+    // is a read — and only the one that CLAIMS it posts.
+    await assignedReview(harness)
+    harness.clock.advance(DAY)
+
+    const [first, second] = await Promise.all([
+      runReminderTick(harness.container),
+      runReminderTick(harness.container),
+    ])
+
+    expect(chat.delivered).toHaveLength(1)
+    expect(first.sent + second.sent).toBe(1)
+    // The pass that lost the race says so rather than reporting a failure: a
+    // nudge somebody else is sending is not a fault to record on the row.
+    expect(first.failed + second.failed).toBe(0)
+    expect(first.skipped + second.skipped).toBe(1)
+  })
+
   it('plans the next nudge after sending one, up to the pending budget', async () => {
     const { review } = await assignedReview(harness)
 

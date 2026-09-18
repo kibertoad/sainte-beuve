@@ -153,7 +153,21 @@ export const reviewRequests = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
-    index('review_requests_status_idx').on(table.orgId, table.status, table.createdAt),
+    // Both board reads, and the ORDER is part of each. The list is answered
+    // newest first with the id as the tie-break and a `LIMIT` on top, so an
+    // index that stopped at `created_at` would still leave the engine sorting
+    // for the tie and an ascending one would be scanned backwards from the far
+    // end of the org's history.
+    index('review_requests_status_idx').on(
+      table.orgId,
+      table.status,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
+    // The same read with no status named, which is the unfiltered board: served
+    // by nothing before this, because a composite that starts with the status
+    // cannot answer a query that does not mention one.
+    index('review_requests_created_idx').on(table.orgId, table.createdAt.desc(), table.id.desc()),
     // A webhook replay looks a review up by the pull request it is about, so
     // this is the index that keeps an intake from scanning the board.
     index('review_requests_pr_idx').on(table.orgId, table.prOwner, table.prRepo, table.prNumber),

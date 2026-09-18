@@ -17,10 +17,20 @@ compatibility_flags = ["nodejs_compat"]
 enabled = true
 head_sampling_rate = 1
 
-# The reminder clock. Hourly matches the cadence the policy works in; a finer
-# trigger only buys invocations that find nothing due.
+# The reminder clock, every five minutes.
+#
+# It is not only about reminders any more, which is what makes hourly the wrong
+# floor: the same tick polls the AI reviews in flight and an hourly cron meant a
+# delegated review that parked on its findings waited up to an hour to be said
+# out loud, where the Node runtime (REMINDER_INTERVAL_MS, sixty seconds by
+# default) noticed within a minute. A capability wired differently on the two
+# runtimes is the asymmetry this layout exists to prevent.
+#
+# Five minutes rather than one: the reminder ladder is measured in hours, so this
+# is about the ceiling, not the cadence, and a pass over an idle deployment is a
+# handful of indexed reads that find nothing due.
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/5 * * * *"]
 
 # The board's own database. Create it once with
 # `wrangler d1 create sainte-beuve` and paste the id it prints; the migrations

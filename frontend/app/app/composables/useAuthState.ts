@@ -1,6 +1,21 @@
 import type { AuthState } from '@sainte-beuve/contracts'
 
 /**
+ * The read that is already on its way, so two callers make one request.
+ *
+ * The shell starts this on first paint and a screen that needs the answer
+ * before it decides what else to ask for (Configuration) may want it a moment
+ * later, from a component that cannot see the shell's promise. Holding the
+ * PROMISE rather than a boolean is what lets the second caller await the first
+ * one's answer instead of issuing a second `GET /auth` beside it.
+ *
+ * Module-scoped because this layer is a client-only SPA (`ssr: false`): there is
+ * one browser and one instance of this module per page load, so there is no
+ * request whose state could leak into another's.
+ */
+let inFlight: Promise<void> | null = null
+
+/**
  * Who this browser is, shared by every screen that asks.
  *
  * `useState` rather than a fetch per component: the shell renders a name, the
@@ -20,7 +35,7 @@ export function useAuthState() {
   const state = useState<AuthState | null>('auth-state', () => null)
   const pending = useState<boolean>('auth-state-pending', () => false)
 
-  async function refresh(): Promise<void> {
+  async function read(): Promise<void> {
     pending.value = true
     try {
       state.value = await api.getAuthState()
@@ -29,6 +44,15 @@ export function useAuthState() {
     } finally {
       pending.value = false
     }
+  }
+
+  function refresh(): Promise<void> {
+    // Cleared on settle rather than kept: this is a de-duplication window, not a
+    // cache. A later `refresh()` — after a sign-out, say — has to ask again.
+    inFlight ??= read().finally(() => {
+      inFlight = null
+    })
+    return inFlight
   }
 
   /** The person, when a person is signed in. Null for anonymous and for a key. */

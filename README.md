@@ -205,9 +205,9 @@ Both backends serve the same Hono app and the same routes; pick whichever matche
 your infrastructure.
 
 - **Cloudflare Worker** ([deploy/backend](./deploy/backend/README.md)): the reminder
-  clock runs on a cron trigger.
+  clock runs on a cron trigger, every five minutes.
 - **Node.js service** ([deploy/node](./deploy/node/README.md)): the same clock on an
-  interval, in a container.
+  interval, in a container, every minute by default (`REMINDER_INTERVAL_MS`).
 - **SPA** ([deploy/frontend](./deploy/frontend/README.md)): a static Nuxt build on
   Cloudflare Pages, or any static host.
 
