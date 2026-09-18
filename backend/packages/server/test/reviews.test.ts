@@ -46,6 +46,11 @@ describe('review board API', () => {
       // Answered by READING the store, not by naming it: see the degraded case
       // below for what the name alone cannot tell an operator.
       persistenceReady: true,
+      // And which fan-out the attention stream is on. `memory` is the whole of
+      // a Node deployment — one process, so every open page is on it — and on a
+      // Worker it means an event reaches the isolate it was published on and no
+      // other, which is a degradation only the probe can report.
+      realtime: 'memory',
       // Beside the store for the same reason: every deployment has an answer
       // and the one an operator has to be able to read from outside is WHICH.
       auth: { mode: 'open', signInProviders: [], environmentApiKey: false },

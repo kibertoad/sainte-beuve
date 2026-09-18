@@ -134,10 +134,11 @@ Read [docs/implementation-plan.md](./docs/implementation-plan.md) for what is bu
 what is a placeholder, and what lands next,
 [docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design,
 [docs/persistence.md](./docs/persistence.md) for where the board lives,
-[docs/auth.md](./docs/auth.md) for who is allowed to call it, and
-[docs/orgs.md](./docs/orgs.md) for what they may reach once they are in, and
-[docs/performance-review.md](./docs/performance-review.md) for where it will
-scale badly first.
+[docs/auth.md](./docs/auth.md) for who is allowed to call it,
+[docs/orgs.md](./docs/orgs.md) for what they may reach once they are in,
+[docs/realtime.md](./docs/realtime.md) for how the attention stream is fanned
+out, and [docs/performance-review.md](./docs/performance-review.md) for where it
+will scale badly first.
 
 ## Connecting GitHub, GitLab and Slack
 
@@ -215,6 +216,13 @@ The board is durable on both: D1 on the Worker, Postgres on the Node service, on
 schema and one suite behind them ([docs/persistence.md](./docs/persistence.md)). A
 deployment that binds neither still boots, on a store a restart empties, and
 `GET /health` reports which one it is on and whether it answers.
+
+The live attention stream reaches the whole deployment on both, too: one process
+is one bus on Node, and the Worker binds a Durable Object per org so an ask
+raised on one isolate reaches the pages attached to every other
+([docs/realtime.md](./docs/realtime.md)). A Worker that binds none still serves
+the board — the REST inbox carries the same payload — and `/health` reports which
+fan-out is in force.
 
 ## Working in the repo
 

@@ -21,7 +21,11 @@ import type { WorkerEnv } from './env.js'
  * router again on a runtime billed by CPU time.
  */
 const app = createApp({
-  resolveContainer: (scope) => containerFor(scope.env as WorkerEnv),
+  // The request's `waitUntil` goes down with the bindings, and it is what makes
+  // the attention fan-out reliable rather than occasional: a publish follows a
+  // write that already succeeded, so it must not be awaited, and this runtime
+  // cancels unawaited I/O the moment the response is returned.
+  resolveContainer: (scope) => containerFor(scope.env as WorkerEnv, scope.waitUntil),
   corsOrigins: (scope) => corsOriginsFor(scope.env as WorkerEnv),
 })
 
@@ -35,7 +39,9 @@ export default {
     env: WorkerEnv,
     ctx: ExecutionContext,
   ): Promise<void> {
-    const container = containerFor(env)
+    const container = containerFor(env, (work) => {
+      ctx.waitUntil(work)
+    })
     // `waitUntil` so a slow Slack call cannot make the cron invocation time out
     // and be retried with half its batch already delivered. The rejection handler
     // matches the Node facade's: a tick that throws inside `waitUntil` is
@@ -50,3 +56,9 @@ export default {
 
 export { containerFor, corsOriginsFor } from './container.js'
 export type { WorkerEnv } from './env.js'
+/**
+ * The attention hub, exported so wrangler can find the class its `ATTENTION`
+ * binding names. A deployment re-exports it beside `default`; a deployment that
+ * does not bind it at all still boots, on the in-isolate fan-out.
+ */
+export { AttentionHub } from './realtime/AttentionHub.js'

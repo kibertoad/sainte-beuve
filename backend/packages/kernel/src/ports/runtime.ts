@@ -28,3 +28,16 @@ export const systemClock: Clock = {
 export const uuidGenerator: IdGenerator = {
   next: () => crypto.randomUUID(),
 }
+
+/**
+ * Keep work alive past the response that started it.
+ *
+ * The seam exists because the two runtimes disagree about what happens to a
+ * promise nobody awaited: a Node process runs it to completion, and a Worker
+ * may cancel every outstanding I/O the moment the response is returned. A
+ * publish that fans an event out over the network is exactly that shape — it
+ * must not be awaited, because it happens after a write that already succeeded
+ * and cannot be allowed to fail it — so the facade hands down the runtime's own
+ * `waitUntil`, and a runtime that has none supplies a swallow.
+ */
+export type Deferral = (work: Promise<unknown>) => void

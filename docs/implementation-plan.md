@@ -79,6 +79,11 @@ provider)` from that host's own credential. Above the adapter there is no
   needs, an optional same-team gate and a critical mass; delivered live over
   server-sent events and over a REST inbox that carries the same payload;
   resolved and withdrawn from every inbox the moment enough people commit.
+- **The live half reaches the whole deployment**: on the Worker the fan-out is a
+  Durable Object per org rather than a bus per isolate, so an ask raised on one
+  isolate reaches the pages attached to every other. Optional like every other
+  binding — a Worker without it still serves the board on the in-isolate bus —
+  and `/health` reports which fan-out is in force. See [realtime.md](./realtime.md).
 - **Identity that is not a login**: a person is a reviewer row, and the
   accounts they are known by are `(provider, subject)` rows keyed on each
   host's stable id. A rename keeps somebody's workspace, and one person can
@@ -145,13 +150,12 @@ provider)` from that host's own credential. Above the adapter there is no
 
 ## What is a placeholder, and why it is still here
 
-| Placeholder                             | Why it exists now                                                                                                                                                                                                                   |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                             |
-| A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                              |
-| A Slack command acts on the default org | A GitHub delivery names a repository the registry can place; a slash command names a Slack user, and one Slack app serves every tenancy. An org's own Slack connection closes it.                                                   |
-| The attention stream is per process     | An in-memory bus reaches every page on the Node service and only one isolate's on the Worker. The REST inbox carries the same payload and is what makes the feature correct; a Durable Object behind `AttentionBus` closes the gap. |
-| No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                  |
+| Placeholder                             | Why it exists now                                                                                                                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                            |
+| A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                             |
+| A Slack command acts on the default org | A GitHub delivery names a repository the registry can place; a slash command names a Slack user, and one Slack app serves every tenancy. An org's own Slack connection closes it.  |
+| No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason. |
 
 ## Slices, in order
 
@@ -566,11 +570,85 @@ CURATOR rather than on a reviewer. What it decided:
   still there and the board still says so, but a pull request that has been
   approved or closed is not something to interrupt anybody about.
 
-### Slice 9: what is next
+### Slice 9: the stream reaches the whole deployment (done)
 
-The placeholders above are the list, and the loudest is now the attention stream,
-which is still per process. Beside it, the Slack intake is the one surface the
-org boundary does not reach.
+The attention inbox has always had two paths: a REST fetch that reads the store,
+and a live stream over server-sent events. The first was correct everywhere. The
+second was correct on the Node service — one process, one bus, every open page on
+it — and on the Worker it reached the pages that happened to share the isolate
+the publish landed on, which on a busy deployment is most of the time a
+respectable number and never all of them. This slice puts a Durable Object behind
+`AttentionBus` on the Worker. What it decided:
+
+- **The port did not move, because it was written for this.** `AttentionBus` took
+  an org on every method from the day the tenancy landed, for a reason that turns
+  out to be the same reason: the bus is the one thing on the container `withOrg`
+  cannot hand a scoped copy of, so the org had to be a parameter rather than a
+  binding. A second implementation slots in under `scopedBus` and nothing above
+  it — no service, no controller, no contract — knows which one it is talking to.
+- **One hub per ORG, and the tenancy is the object's identity.**
+  `idFromName(orgId)` is the whole of the boundary here: an event published in
+  one org reaches a different object from the one another org's streams are
+  attached to. There is no filter to get wrong, which matters because the filter
+  a subscriber DOES apply — the audience rule — knows about skills and teams and
+  nothing about orgs. It is also the sharding: one object per tenancy rather than
+  one per deployment, so a large org's fan-out is not in front of a small one's.
+- **The hub stores nothing.** Every byte it holds is a socket somebody has a page
+  open on, which is what lets the sockets be accepted for HIBERNATION: the
+  runtime holds them while the object is evicted, and a publish wakes it with the
+  connections still there. An attention event is worth a fan-out and is not worth
+  a write — the row it describes is already in the store the REST inbox reads,
+  and a hub that replayed history would be a second, worse copy of it that could
+  disagree.
+- **The bus is built PER REQUEST, which is the opposite of the in-memory one.**
+  The in-memory bus has to be held at module level because its state IS the
+  subscriber list; a bus built with the Worker's per-request container would have
+  one subscriber and no publisher. This one holds no state at all, and it needs
+  two things that belong to a request: the runtime's `waitUntil`, and an I/O
+  context. workerd refuses a socket used from a request other than the one that
+  opened it, so a bus cached across requests would be the one shape the runtime
+  rejects outright.
+- **`waitUntil` goes down with the bindings.** A publish must not be awaited — it
+  follows a write that already succeeded, and letting a fan-out fail that write
+  would turn a slow hub into a 500 for the person who raised the ask — and this
+  runtime cancels unawaited I/O the moment the response is returned. Those two
+  together mean a publish is either deferred by the runtime or occasionally not
+  made at all, so `RequestScope` carries the deferral and a runtime with no
+  execution context supplies a swallow.
+- **The loopback is not optimised away.** A publish does not also fan out locally
+  to the isolate it was made on. Doing both would be faster for the fraction of
+  readers who share an isolate with the writer, and it would need every frame to
+  carry the id of the isolate that sent it so a subscriber could drop its own
+  echo — a de-duplication rule paid for on every event, everywhere, to save one
+  round trip some of the time.
+- **A subscription that dies says so, and the browser is what reconnects.** The
+  in-process bus cannot lose a subscriber without being told; one that reaches
+  over a socket can, and a response left open afterwards would report itself live
+  and deliver nothing for ever. `subscribe` grew an optional `onClose`, the SSE
+  response closes on it, and the reconnect belongs to the `EventSource` — which
+  retries on its own and refetches the inbox each time it comes back. Rebuilding
+  the socket underneath a stream instead would be the one path where events go
+  missing with nobody told.
+- **Optional, like every other binding, and reported.** A Worker with no
+  `ATTENTION` binding still boots, on the in-isolate bus, because the REST inbox
+  is what the feature is correct on. `/health` answers `realtime` beside
+  `persistence` for the same reason the store is there: every deployment has one
+  and what an operator needs to know is WHICH, so a deployment that thought it
+  had bound the hub finds out from the probe rather than from the one person
+  whose page did not move.
+- **Node is not symmetric here, and the asymmetry is in the runtime.** One
+  process has no fraction of its pages to miss, so there is nothing to bind. What
+  the two facades do share is the answer on `/health`, which is where it will
+  show the day the Node service is run behind a load balancer.
+
+### Slice 10: what is next
+
+The placeholders above are the list, and the loudest is now the Slack intake,
+which is the one surface the org boundary does not reach: a GitHub delivery names
+a repository the registry can place, where a slash command names a Slack user and
+one Slack app serves every tenancy. Beside it, a stored credential is still never
+re-checked, so one revoked after it was entered reads as connected until a call
+fails.
 
 ## Decisions worth recording
 

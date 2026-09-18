@@ -15,6 +15,7 @@ import type {
   Logger,
   PersistenceKind,
   PersistenceProvider,
+  RealtimeKind,
   Repositories,
   ScopedAttentionBus,
   SecretCipher,
@@ -207,6 +208,13 @@ export interface AppContainer {
    * this one; nothing but `withOrg` reads it.
    */
   attentionFanout: AttentionBus
+  /**
+   * Which fan-out that is, for `/health` to report beside the store. The same
+   * argument as `persistence`: every deployment has one and what an operator
+   * needs to know is WHICH, because `memory` on a Worker means an event reaches
+   * the isolate it was published on and no other.
+   */
+  realtime: RealtimeKind
   github: GitHubWiring
   slack: SlackWiring
   auth: AuthWiring
@@ -231,6 +239,8 @@ export interface ContainerOptions {
   vcs?: Partial<EnvironmentVcsGateways> | null
   aiReview?: AiReviewGateway | null
   bus?: AttentionBus
+  /** Defaults to `memory`, which is what the bus a facade left unwired is. */
+  realtime?: RealtimeKind
   gateways?: GatewayFactory | null
   /** The cipher, the state signer, and the reason there is neither, as `secretsFrom` reports them. */
   secrets?: SecretsWiring | null
@@ -323,6 +333,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     // and wrong for one that builds a container per request, which is why the
     // Worker holds its own at module level and passes it in here.
     ...attentionBuses(options.bus ?? new InMemoryAttentionBus()),
+    realtime: options.realtime ?? 'memory',
     gateways: options.gateways ?? null,
     secrets: secrets.cipher,
     states: secrets.states,

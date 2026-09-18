@@ -297,6 +297,9 @@ importers:
       '@sainte-beuve/ai-review':
         specifier: workspace:*
         version: link:../../packages/ai-review
+      '@sainte-beuve/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@sainte-beuve/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
@@ -312,6 +315,9 @@ importers:
       '@sainte-beuve/server':
         specifier: workspace:*
         version: link:../../packages/server
+      valibot:
+        specifier: ^1.4.2
+        version: 1.4.2(typescript@7.0.2)
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0

@@ -50,6 +50,29 @@ database_name = "sainte-beuve"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
 migrations_dir = "node_modules/@sainte-beuve/persistence-d1/migrations"
 
+# The attention hub: one Durable Object per org, holding the attention streams
+# that org has open across every isolate of this Worker.
+#
+# It needs no account resource and no id to paste: `wrangler deploy` creates the
+# namespace from the migration below, and an org's hub comes into being the
+# first time somebody in it opens the workspace.
+#
+# Without this binding the Worker still boots, on a bus held at module level
+# that reaches the streams sharing ONE isolate, and /health reports
+# `realtime: "memory"`. The REST inbox carries the same payload either way, so
+# what the binding buys is the live half of the attention inbox rather than the
+# feature itself.
+[[durable_objects.bindings]]
+name = "ATTENTION"
+class_name = "AttentionHub"
+
+# The class is exported from src/index.ts, which re-exports it from the
+# installed @sainte-beuve/worker. SQLite-backed because that is the current
+# storage backend for a new class; the hub stores nothing at all.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AttentionHub"]
+
 [vars]
 # Origins the SPA is served from. Comma-separated; `*` only for a preview, and
 # even then the Configuration screen needs the SPA's own origin named here: the

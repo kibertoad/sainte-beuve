@@ -33,11 +33,13 @@
   },
   "dependencies": {
     "@sainte-beuve/ai-review": "workspace:*",
+    "@sainte-beuve/contracts": "workspace:*",
     "@sainte-beuve/integrations": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*",
     "@sainte-beuve/persistence-d1": "workspace:*",
     "@sainte-beuve/persistence-memory": "workspace:*",
-    "@sainte-beuve/server": "workspace:*"
+    "@sainte-beuve/server": "workspace:*",
+    "valibot": "^1.4.2"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",

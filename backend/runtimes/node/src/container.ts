@@ -49,7 +49,16 @@ export function buildContainer(config: NodeConfig, store: NodeStore, logger: Log
     gateways: gatewaysFor(config),
     // Built once, with the container, because this facade is one process: every
     // stream a page opens against it is on the same bus.
+    //
+    // This is where the two runtimes are NOT symmetric, and the asymmetry is in
+    // the runtime rather than in the wiring. A Worker is many isolates, so its
+    // in-process bus reaches a fraction of the open pages and it binds a
+    // Durable Object to reach the rest; one Node process has no fraction to
+    // reach. What the two share is the answer on `/health` — `memory` here is
+    // the whole deployment, and the day this facade is run behind a load
+    // balancer it is a fraction again, and the honest place to say so.
     bus: new InMemoryAttentionBus(),
+    realtime: 'memory',
     secrets: secretsFrom({ masterKeyBase64: config.encryptionKey, logger }),
     github: {
       appSlug: config.github.appSlug,

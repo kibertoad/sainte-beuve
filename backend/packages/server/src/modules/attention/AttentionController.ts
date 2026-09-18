@@ -99,9 +99,12 @@ async function openStream<E extends AppEnv, P extends string, I extends Input>(
   const viewer = await viewerOf(c)
   return sseStream({
     eventName: 'attention',
-    subscribe: (emit) =>
+    // `end` rather than a silent drop: a bus that reaches its subscribers over
+    // a socket can lose one without the browser noticing, and a page that
+    // thinks it is live is worse than one that reconnects and refetches.
+    subscribe: (emit, end) =>
       container.bus.subscribe((event) => {
         if (reaches(event, viewer.reviewer)) emit(event)
-      }),
+      }, end),
   })
 }

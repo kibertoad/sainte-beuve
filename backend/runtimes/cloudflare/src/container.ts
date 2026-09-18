@@ -8,11 +8,14 @@ import {
 } from '@sainte-beuve/integrations'
 import type {
   AiReviewGateway,
+  AttentionBus,
   ChatGateway,
+  Deferral,
   GatewayFactory,
   Logger,
   PersistenceKind,
   PersistenceProvider,
+  RealtimeKind,
 } from '@sainte-beuve/kernel'
 import { createD1Store } from '@sainte-beuve/persistence-d1'
 import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
@@ -30,6 +33,7 @@ import {
   withAppOrigin,
 } from '@sainte-beuve/server'
 import type { WorkerEnv } from './env.js'
+import { DurableObjectAttentionBus } from './realtime/DurableObjectAttentionBus.js'
 
 /**
  * The fallback store, for a Worker with no `DB` binding.
@@ -57,25 +61,49 @@ function storeFor(env: WorkerEnv): { stores: PersistenceProvider; kind: Persiste
     : { stores: createD1Store(env.DB), kind: 'd1' }
 }
 
-/**
- * The attention fan-out, held per ISOLATE for the same reason the store is: the
- * container is rebuilt per request here, and a bus built with it would have one
- * subscriber and no publisher.
- *
- * What that buys on this runtime is honest and limited: an event reaches the
- * streams attached to THIS isolate and no other. The REST inbox
- * (`GET /api/v1/attention`) is what makes the feature correct everywhere, and it
- * carries the same payload. Cross-isolate delivery is a Durable Object behind
- * the same port, and it changes nothing above it.
- */
-const bus = new InMemoryAttentionBus()
-
 /** `console` is the Workers-native logger; Workers Logs picks up structured lines. */
 const workerLogger: Logger = {
   debug: (obj, msg) => console.debug(msg ?? '', obj),
   info: (obj, msg) => console.info(msg ?? '', obj),
   warn: (obj, msg) => console.warn(msg ?? '', obj),
   error: (obj, msg) => console.error(msg ?? '', obj),
+}
+
+/**
+ * The FALLBACK attention fan-out, for a Worker with no `ATTENTION` binding.
+ *
+ * Held per ISOLATE for the same reason the in-memory store is: the container is
+ * rebuilt per request here, and a bus built with it would have one subscriber
+ * and no publisher.
+ *
+ * What it buys on this runtime is honest and limited, and `/health` says so
+ * (`realtime: "memory"`): an event reaches the streams attached to THIS isolate
+ * and no other. Bind the hub and this line is never reached. The REST inbox
+ * (`GET /api/v1/attention`) carries the same payload either way, which is why
+ * the workspace is correct on both and only the live half differs.
+ */
+const fallbackBus = new InMemoryAttentionBus()
+
+/**
+ * The fan-out this request publishes on.
+ *
+ * The hub bus is built PER REQUEST, unlike the fallback above, and the
+ * asymmetry is the point: the in-memory one's state is its subscriber list, so
+ * it has to outlive the container, while this one holds no state and does need
+ * the request's own `waitUntil` — and a socket opened in one request's I/O
+ * context cannot be used from another's, so a cached instance would be the one
+ * shape workerd refuses outright.
+ */
+function busFor(env: WorkerEnv, waitUntil: Deferral): { bus: AttentionBus; kind: RealtimeKind } {
+  if (env.ATTENTION === undefined) return { bus: fallbackBus, kind: 'memory' }
+  return {
+    bus: new DurableObjectAttentionBus({
+      namespace: env.ATTENTION,
+      waitUntil,
+      logger: workerLogger,
+    }),
+    kind: 'durable-object',
+  }
 }
 
 /**
@@ -229,8 +257,20 @@ function buildVcs(env: WorkerEnv): EnvironmentVcsGateways {
   }
 }
 
-export function containerFor(env: WorkerEnv): AppContainer {
+/**
+ * `waitUntil` is the request's, and defaults to a swallow for a caller that has
+ * no execution context to hand over — a test, or a facade calling this outside
+ * a request. A publish made through the default still reaches the hub whenever
+ * the runtime lets the fetch finish, and is never awaited either way.
+ */
+export function containerFor(
+  env: WorkerEnv,
+  waitUntil: Deferral = (work) => {
+    void work.catch(() => {})
+  },
+): AppContainer {
   const store = storeFor(env)
+  const fanout = busFor(env, waitUntil)
   return createContainer({
     stores: store.stores,
     persistence: store.kind,
@@ -239,7 +279,8 @@ export function containerFor(env: WorkerEnv): AppContainer {
     vcs: buildVcs(env),
     aiReview: buildAiReview(env),
     gateways: gatewaysFor(env),
-    bus,
+    bus: fanout.bus,
+    realtime: fanout.kind,
     secrets: secretsFor(env),
     // `||` throughout, not `??`, exactly as the Node facade's `loadConfig` does
     // it: a binding left blank is one somebody has not set, `.dev.vars.example`

@@ -20,6 +20,6 @@ import type { AttentionBus, ScopedAttentionBus } from '@sainte-beuve/kernel'
 export function scopedBus(bus: AttentionBus, orgId: string): ScopedAttentionBus {
   return {
     publish: (event) => bus.publish(orgId, event),
-    subscribe: (listener) => bus.subscribe(orgId, listener),
+    subscribe: (listener, onClose) => bus.subscribe(orgId, listener, onClose),
   }
 }
