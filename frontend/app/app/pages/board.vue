@@ -2,6 +2,7 @@
 import type { AssignedReviewer, BoardReview, ShortfallReason } from '@sainte-beuve/contracts'
 import {
   ACTIVE_REVIEW_STATUSES,
+  ALL_REVIEW_STATUSES,
   BOARD_REVIEW_QUERY,
   formatPullRequestRef,
   shortfallCause,
@@ -47,8 +48,19 @@ const linked = computed(() => {
  */
 const showSettled = ref(linked.value !== null)
 
-/** Undefined asks for everything; the active three are the default a board wants. */
-const statusFilter = computed(() => (showSettled.value ? undefined : ACTIVE_REVIEW_STATUSES))
+/**
+ * Which statuses the read asks for. EVERY status, spelled out, or the active three.
+ *
+ * Not `undefined` for the first: an absent `status` is not "everything" to this
+ * API, it is "the default", and the default is the active three — so omitting
+ * the key re-read the same list the switch was off for and "Show settled"
+ * showed nothing. Which also broke the deep link, whose whole point is that a
+ * nudge about a review approved while the notification sat unread still lands
+ * on its row.
+ */
+const statusFilter = computed(() =>
+  showSettled.value ? ALL_REVIEW_STATUSES : ACTIVE_REVIEW_STATUSES,
+)
 
 // LAZY, and not awaited: a page that awaits its read at setup holds the previous
 // screen on screen until the whole list is down, validated and mounted, so a
@@ -177,17 +189,24 @@ const linkedMissing = computed(
  *
  * `scrollIntoView` on the element rather than a router hash, because the row is
  * a card in a list rather than a navigation target, and the list does not exist
- * until the read lands. It runs once: a later refresh must not yank the page
- * back to a row somebody has scrolled away from.
+ * until the read lands. It runs once — a later refresh must not yank the page
+ * back to a row somebody has scrolled away from — but only once it has actually
+ * SCROLLED: the first list to arrive need not carry the linked review (the
+ * settled read is a second round trip, and a refresh can be what brings it),
+ * and a latch spent on a list without the row meant the read that finally had
+ * it scrolled nowhere.
  */
 let scrolled = false
 watch(
   reviews,
   async () => {
-    if (linked.value === null || scrolled || reviews.value.length === 0) return
-    scrolled = true
+    if (linked.value === null || scrolled) return
+    if (!reviews.value.some((review) => review.id === linked.value)) return
     await nextTick()
-    document.getElementById(`review-${linked.value}`)?.scrollIntoView({ block: 'center' })
+    const row = document.getElementById(`review-${linked.value}`)
+    if (row === null) return
+    scrolled = true
+    row.scrollIntoView({ block: 'center' })
   },
   // IMMEDIATE, because a second visit to this route renders from the payload
   // Nuxt already holds: the list is on screen at setup and never changes

@@ -22,6 +22,10 @@ const props = defineProps<{
    * The card rendered the second sentence over the first, which is the one
    * failure `ApiErrorAlert` was written to end and the one place it had not
    * reached.
+   *
+   * It does NOT imply an empty list. The live half sets one on a malformed
+   * event with every request it has already read still on screen, so the error
+   * is rendered beside the rows rather than in place of them.
    */
   error: string | null
   busy: string | null
@@ -57,23 +61,34 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
         <UBadge v-if="error === null" :color="live ? 'success' : 'neutral'" variant="subtle">
           {{ live ? 'live' : 'refresh to update' }}
         </UBadge>
-        <UBadge v-else color="error" variant="subtle">unreadable</UBadge>
+        <!-- Which failure it is: nothing at all, or rows that have stopped moving. -->
+        <UBadge v-else color="error" variant="subtle">
+          {{ requests.length === 0 ? 'unreadable' : 'out of date' }}
+        </UBadge>
       </div>
     </template>
 
+    <!--
+      ABOVE the list rather than instead of it. The error is not always a failed
+      READ: the live half sets one on a malformed event while the requests it
+      has already rendered stay perfectly good, and blanking an actionable inbox
+      over a bad frame hides more than it explains. What the error rules out is
+      the reassurance below, not the rows.
+    -->
     <UAlert
       v-if="error"
+      class="mb-3"
       color="error"
       variant="subtle"
       title="This deployment could not read the asks"
       :description="error"
     />
 
-    <p v-else-if="requests.length === 0" class="text-sm text-muted">
+    <p v-if="requests.length === 0 && error === null" class="text-sm text-muted">
       Nobody is waiting on a reviewer. An ask disappears from here the moment enough people commit.
     </p>
 
-    <div v-else class="flex flex-col divide-y divide-default">
+    <div v-if="requests.length > 0" class="flex flex-col divide-y divide-default">
       <div
         v-for="request in requests"
         :key="request.id"

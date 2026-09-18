@@ -47,6 +47,22 @@ export const reviewCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(open, ['rev-3'])
   }),
 
+  conformanceCase('a capped board can take the OLDEST rows instead', async (repos) => {
+    // What the board actually reads with. The cap and the order are one
+    // decision: a queue promising "the ones waiting longest" and capped
+    // newest-first drops exactly the rows it promised, and nothing paginates to
+    // them. `rev-4` shares a millisecond with `rev-3`, so the tie-break has to
+    // turn around with the timestamp or the read stops being total.
+    await repos.reviews.create(review('rev-1', { createdAt: 1_000 }))
+    await repos.reviews.create(review('rev-3', { createdAt: 3_000 }))
+    await repos.reviews.create(review('rev-2', { createdAt: 2_000 }))
+    await repos.reviews.create(review('rev-4', { createdAt: 3_000 }))
+    const ids = (await repos.reviews.list({ order: 'oldest' })).map((row) => row.id)
+    assert.deepStrictEqual(ids, ['rev-1', 'rev-2', 'rev-3', 'rev-4'])
+    const capped = (await repos.reviews.list({ order: 'oldest', limit: 2 })).map((row) => row.id)
+    assert.deepStrictEqual(capped, ['rev-1', 'rev-2'])
+  }),
+
   conformanceCase('finds the review a pull request already opened', async (repos) => {
     // What keeps a webhook replay from opening a second row for one pull
     // request.

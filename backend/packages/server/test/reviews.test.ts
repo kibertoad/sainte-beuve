@@ -426,20 +426,19 @@ describe('the board read', () => {
     harness = buildHarness()
   })
 
-  it('caps the board on the newest and answers it most urgent first', async () => {
+  it('caps the QUEUE on the oldest, which is what it is ordered by', async () => {
     const first = await openReview(harness)
     harness.clock.advance(1_000)
     const second = await openReview(harness, {
       pullRequest: { ...PR, number: 8, url: `${PR.url}8` },
     })
 
-    // The two orders are DIFFERENT questions and the route answers both. What
-    // the cap keeps is the newest, because a board that dropped the review
-    // filed a minute ago would be missing the one somebody is looking for; what
-    // the answer is ORDERED by is urgency, and at equal priority that is
-    // whatever has waited longest. See `buildBoard` in @sainte-beuve/reviewers.
+    // The cap and the order are one decision. The board answers whatever has
+    // waited longest first (`buildBoard` in @sainte-beuve/reviewers), so a cap
+    // taken off the newest end would drop exactly the rows the top of the board
+    // is for — and nothing here paginates to them.
     expect(await listedIds(harness)).toStrictEqual([first.id, second.id])
-    expect(await listedIds(harness, '?limit=1')).toStrictEqual([second.id])
+    expect(await listedIds(harness, '?limit=1')).toStrictEqual([first.id])
 
     // Refused rather than clamped: a caller asking for a thousand rows has
     // written something this API will not do, and answering two hundred without
@@ -465,6 +464,33 @@ describe('the board read', () => {
     // it is parsed, which is why the contract takes both.
     expect(await listedIds(harness, '?status=open,closed')).toStrictEqual([review.id])
     expect(await listedIds(harness, '?status=open&status=closed')).toStrictEqual([review.id])
+  })
+
+  it('caps the HISTORY on the newest, and spends the budget on the queue', async () => {
+    // The other half of the same decision, and the opposite answer: a settled
+    // row is only on the screen because somebody asked for history, and the
+    // interesting one there is the review that just settled.
+    const settledFirst = await openReview(harness)
+    await harness.app.fetch(
+      patch(`/api/v1/reviews/${settledFirst.id}/status`, { status: 'approved' }),
+    )
+    harness.clock.advance(1_000)
+    const settledLast = await openReview(harness, {
+      pullRequest: { ...PR, number: 8, url: `${PR.url}8` },
+    })
+    await harness.app.fetch(patch(`/api/v1/reviews/${settledLast.id}/status`, { status: 'closed' }))
+
+    const history = '?status=approved&status=closed'
+    expect(await listedIds(harness, `${history}&limit=1`)).toStrictEqual([settledLast.id])
+
+    // And with both halves asked for, the one cap goes to the rows somebody can
+    // still act on: settled rows sort last, so they are what a full board drops.
+    harness.clock.advance(1_000)
+    const waiting = await openReview(harness, {
+      pullRequest: { ...PR, number: 9, url: `${PR.url}9` },
+    })
+    const everything = '?status=open&status=assigned&status=in_review&status=approved&status=closed'
+    expect(await listedIds(harness, `${everything}&limit=1`)).toStrictEqual([waiting.id])
   })
 
   it('names the people on a board row, because an id is not an answer', async () => {

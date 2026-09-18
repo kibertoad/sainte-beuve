@@ -17,14 +17,15 @@ import { pullRequestRefSchema } from './vcs.js'
  * is exactly the state the reminder policy exists to shorten. The terminal three
  * (`approved`, `changes_requested`, `closed`) stop the reminder clock.
  */
-export const reviewStatusSchema = v.picklist([
+const REVIEW_STATUSES = [
   'open',
   'assigned',
   'in_review',
   'approved',
   'changes_requested',
   'closed',
-])
+] as const
+export const reviewStatusSchema = v.picklist(REVIEW_STATUSES)
 export type ReviewStatus = v.InferOutput<typeof reviewStatusSchema>
 
 // What each status is CALLED, in one place. Three surfaces render this
@@ -63,6 +64,16 @@ export function reviewStatusLabel(status: string): string {
  * an approved review from last quarter is history, not a board.
  */
 export const ACTIVE_REVIEW_STATUSES: readonly ReviewStatus[] = ['open', 'assigned', 'in_review']
+
+/**
+ * EVERY status, which is the only way to ask a board read for history as well.
+ *
+ * Not the same as omitting the filter: the route reads a missing `status` as
+ * the active three, so a caller that means "everything" has to say everything.
+ * The screen with the "Show settled" switch is what needed it — sending no
+ * status turned the switch into a no-op that re-read the same active list.
+ */
+export const ALL_REVIEW_STATUSES: readonly ReviewStatus[] = REVIEW_STATUSES
 
 /** How urgently the review should be picked up. Drives the reminder cadence. */
 export const reviewPrioritySchema = v.picklist(['low', 'normal', 'high'])

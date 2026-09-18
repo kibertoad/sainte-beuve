@@ -99,8 +99,27 @@ async function resolve(
   )
 }
 
+/**
+ * The question, which depends on what there is to lose.
+ *
+ * A parked run with NOTHING on it is a real state — cat-factory can come back
+ * having found nothing, or the last finding can be dismissed one at a time —
+ * and the button stays live there, so the dialog asked "Discard all 0
+ * findings?" under a warning that they are unrecoverable. Nothing is lost in
+ * that case, and saying so is what makes the warning believable in the case
+ * where something is.
+ */
 function confirmDiscard(runId: string): Promise<boolean> {
   const found = runs.value.find((entry) => entry.id === runId)?.curation?.findings.length ?? 0
+  if (found === 0) {
+    return confirm({
+      title: 'Close this review?',
+      description:
+        'There is nothing left to post, so nothing is lost. The run settles and the pull ' +
+        'request hears nothing from cat-factory.',
+      confirmLabel: 'Finish without posting',
+    })
+  }
   return confirm({
     title: found === 1 ? 'Discard this finding?' : `Discard all ${found} findings?`,
     description:

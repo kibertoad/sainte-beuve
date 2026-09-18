@@ -8,8 +8,9 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import { handleOf } from '@sainte-beuve/contracts'
+import type { ReviewListOrder } from '@sainte-beuve/kernel'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
-import { buildBoard, isSameHandle, selectReviewers } from '@sainte-beuve/reviewers'
+import { buildBoard, isSameHandle, isSettledReview, selectReviewers } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
@@ -31,18 +32,46 @@ export class ReviewService {
    * The board: the reviews a filter selects, with the people on them named and
    * the most urgent first.
    *
-   * TWO reads, not one per row. The directory is the small table here — a
-   * deployment has tens of reviewers and thousands of reviews — so it is read
-   * whole and the join happens in memory, which is one round trip rather than
-   * the N+1 a `getById` per assignment would have been.
+   * The directory is read whole and joined in memory rather than a `getById`
+   * per assignment: a deployment has tens of reviewers and thousands of
+   * reviews, so that is one round trip where the N+1 was one per row.
+   *
+   * The queue and the history are read SEPARATELY because the cap is applied
+   * before the order is. A single newest-first read capped at 200 drops the
+   * oldest rows, which on a board advertising "the ones waiting longest first"
+   * is precisely the rows it exists to show — and there is no pagination to
+   * reach them. So the waiting rows are capped from the oldest end and the
+   * settled ones from the newest, each in the order `buildBoard` puts them
+   * back in, and the merged list is cut to the cap the caller asked for.
+   * Settled rows sort last, so that final cut spends the budget on the queue.
    */
   async board(filter: { status: ReviewStatus[]; limit: number }): Promise<BoardReview[]> {
     const { repositories, clock } = this.container
-    const [reviews, reviewers] = await Promise.all([
-      repositories.reviews.list(filter),
+    const queued = filter.status.filter((status) => !isSettledReview(status))
+    const settled = filter.status.filter((status) => isSettledReview(status))
+    const [waiting, history, reviewers] = await Promise.all([
+      this.readSlice(queued, filter.limit, 'oldest'),
+      this.readSlice(settled, filter.limit, 'newest'),
       repositories.reviewers.list(),
     ])
-    return buildBoard(reviews, reviewers, clock.now())
+    return buildBoard([...waiting, ...history], reviewers, clock.now()).slice(0, filter.limit)
+  }
+
+  /**
+   * One end of the board, or nothing at all.
+   *
+   * An empty status list is answered without a read: every store already treats
+   * it as "matches nothing", and the half the caller did not ask for is the
+   * common case rather than an edge one — an unfiltered board never wants the
+   * history half.
+   */
+  private async readSlice(
+    status: ReviewStatus[],
+    limit: number,
+    order: ReviewListOrder,
+  ): Promise<ReviewRequest[]> {
+    if (status.length === 0) return []
+    return this.container.repositories.reviews.list({ status, limit, order })
   }
 
   async create(input: CreateReviewRequest): Promise<ReviewRequest> {

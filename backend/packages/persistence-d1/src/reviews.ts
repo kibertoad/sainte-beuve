@@ -15,6 +15,7 @@ import type {
   AiReviewRunRepository,
   EpochMs,
   ReminderRepository,
+  ReviewListOrder,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
 import type { SqlDriver, SqlParam } from './driver.js'
@@ -48,18 +49,27 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
     private readonly orgId: string,
   ) {}
 
-  async list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]> {
+  async list(filter?: {
+    status?: ReviewStatus[]
+    limit?: number
+    order?: ReviewListOrder
+  }): Promise<ReviewRequest[]> {
     const wanted = filter?.status
     // A filter naming no status matches nothing, and `IN ()` parses on neither
     // engine, so that answer is given without a statement.
     if (wanted !== undefined && wanted.length === 0) return []
     const where = wanted === undefined ? '' : ` AND status IN (${placeholders(wanted.length)})`
+    // Both terms move together, so the read stays total either way: an id
+    // tie-break running against the timestamp would reorder rows sharing a
+    // millisecond between two reads.
+    const direction = filter?.order === 'oldest' ? 'ASC' : 'DESC'
     // The cap is pushed into SQL, not applied to what came back: with
-    // `review_requests_created_idx` the engine walks the newest rows and stops,
-    // where a read of everything decodes a payload per row the caller drops.
+    // `review_requests_created_idx` the engine walks that end of the index and
+    // stops, where a read of everything decodes a payload per row the caller
+    // drops.
     const cap = filter?.limit === undefined ? '' : ' LIMIT ?'
     const rows = await this.db.all(
-      `SELECT data FROM review_requests WHERE org_id = ?${where} ORDER BY created_at DESC, id DESC${cap}`,
+      `SELECT data FROM review_requests WHERE org_id = ?${where} ORDER BY created_at ${direction}, id ${direction}${cap}`,
       [this.orgId, ...(wanted ?? []), ...(filter?.limit === undefined ? [] : [filter.limit])],
     )
     return decodeRows(reviewRequestSchema, 'review_requests', rows)

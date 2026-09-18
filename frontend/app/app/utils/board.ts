@@ -55,9 +55,16 @@ export function dueState(review: Pick<BoardReview, 'dueAt'>, now: number): DueSt
   return review.dueAt - now <= DAY ? 'due' : null
 }
 
-/** What the due marker says, for the state above. */
+/**
+ * What the due marker says, for the state above.
+ *
+ * The bare `overdue` is the first minute, and it is not a nicety: `relativeAge`
+ * answers `just now` below its smallest unit, so an age read straight into this
+ * sentence rendered "just now overdue" — which a deadline exactly on `now` hits,
+ * since `dueState` calls that overdue.
+ */
 export function dueLabel(state: Exclude<DueState, null>, review: BoardReview, now: number): string {
-  return state === 'overdue'
-    ? `${relativeAge(review.dueAt ?? now, now)} overdue`
-    : 'due within a day'
+  if (state !== 'overdue') return 'due within a day'
+  const since = review.dueAt ?? now
+  return now - since < MINUTE ? 'overdue' : `${relativeAge(since, now)} overdue`
 }

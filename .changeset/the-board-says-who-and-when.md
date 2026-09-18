@@ -1,6 +1,11 @@
 ---
 '@sainte-beuve/contracts': minor
 '@sainte-beuve/reviewers': minor
+'@sainte-beuve/kernel': minor
+'@sainte-beuve/persistence-conformance': minor
+'@sainte-beuve/persistence-d1': minor
+'@sainte-beuve/persistence-memory': minor
+'@sainte-beuve/persistence-postgres': minor
 '@sainte-beuve/integrations': patch
 '@sainte-beuve/server': minor
 '@sainte-beuve/app': minor
@@ -26,7 +31,10 @@ false, or lost work without being asked.
   route already defaulted to the active statuses; the screen now agrees with it,
   with a "Show settled" switch that re-reads rather than cutting a list the cap
   was applied to before the filter. What a settled row is, and where it sorts,
-  is one definition.
+  is one definition. The switch names every status
+  (`ALL_REVIEW_STATUSES`) rather than sending none: an absent `status` is this
+  API's DEFAULT, which is the active three, so a read that omitted the key came
+  back with the list the switch was off for.
 
 - **A row did not say who was on the hook.** `GET /reviews` answers board rows —
   the aggregate plus `assignedReviewers`, joined from the directory on the way
@@ -51,6 +59,15 @@ false, or lost work without being asked.
   takes the error and renders it, and the page's Refresh awaits the inbox's read
   as well as its own — the badge that says "refresh to update" now points at a
   button that does.
+
+The cap and the order are one decision, so the board reads its two halves
+separately. `ReviewRequestRepository.list` takes an `order`, implemented in all
+three stores and pinned by a conformance case: the QUEUE is capped from the
+oldest end, because a board promising "the ones waiting longest first" and
+capped newest-first drops exactly those rows and has no pagination to reach
+them; the HISTORY is capped from the newest, because the review that just
+settled is the interesting one. Settled rows sort last, so the cut to the
+caller's limit spends the budget on work somebody can still do.
 
 Two smaller things came with them: the board heading is "Board", which is what
 the rail, the README and the Slack copy call it, and the AI-review panel checks

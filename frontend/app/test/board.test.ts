@@ -62,4 +62,17 @@ describe('dueLabel', () => {
     const review = { dueAt: NOW + HOUR } as Parameters<typeof dueLabel>[1]
     expect(dueLabel('due', review, NOW)).toBe('due within a day')
   })
+
+  it('says plain "overdue" for the first minute, never "just now overdue"', () => {
+    // `relativeAge` answers `just now` below a minute, and a deadline exactly on
+    // `now` is overdue by `dueState`, so the two composed into a sentence that
+    // contradicted itself on the one row a person is meant to act on.
+    const onTheDot = { dueAt: NOW } as Parameters<typeof dueLabel>[1]
+    expect(dueLabel('overdue', onTheDot, NOW)).toBe('overdue')
+    const secondsLate = { dueAt: NOW - (MINUTE - 1) } as Parameters<typeof dueLabel>[1]
+    expect(dueLabel('overdue', secondsLate, NOW)).toBe('overdue')
+    // And the minute it becomes sayable, it is said.
+    const aMinuteLate = { dueAt: NOW - MINUTE } as Parameters<typeof dueLabel>[1]
+    expect(dueLabel('overdue', aMinuteLate, NOW)).toBe('1 minute overdue')
+  })
 })
