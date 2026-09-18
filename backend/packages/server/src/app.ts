@@ -1,4 +1,8 @@
-import { GITHUB_WEBHOOK_PATH, SLACK_WEBHOOK_PATH } from '@sainte-beuve/contracts'
+import {
+  GITHUB_WEBHOOK_PATH,
+  SLACK_ORG_WEBHOOK_PATH,
+  SLACK_WEBHOOK_PATH,
+} from '@sainte-beuve/contracts'
 import type { Deferral } from '@sainte-beuve/kernel'
 import { PayloadTooLargeError } from '@sainte-beuve/kernel'
 import type { Context, MiddlewareHandler } from 'hono'
@@ -179,6 +183,22 @@ function refuseBody(limit: number): MiddlewareHandler<AppEnv> {
  * origin guard decides what may RUN, and only then is the caller resolved and
  * the container bound to their org.
  */
+/**
+ * Before anything READS a byte, and after CORS so the refusal is one a browser
+ * is allowed to read. The webhook services hash the raw body to check a
+ * signature, so a limit applied below them would be a limit applied to a body
+ * already in memory.
+ *
+ * Every inbound path is named, including the one Slack posts to per org: a
+ * pattern left off this list is a route with no limit in front of it.
+ */
+function mountBodyLimits(app: Hono<AppEnv>): void {
+  app.use(GITHUB_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use(SLACK_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use(SLACK_ORG_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use('/api/v1/*', refuseBody(JSON_BODY_LIMIT))
+}
+
 function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
   const { corsOrigins } = options
   const originsFor =
@@ -202,13 +222,7 @@ function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
     }),
   )
 
-  // Before anything READS a byte, and after CORS so the refusal is one a browser
-  // is allowed to read. The webhook services hash the raw body to check a
-  // signature, so a limit applied below them would be a limit applied to a body
-  // already in memory.
-  app.use(GITHUB_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
-  app.use(SLACK_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
-  app.use('/api/v1/*', refuseBody(JSON_BODY_LIMIT))
+  mountBodyLimits(app)
 
   app.use('*', async (c, next) => {
     // Beside the container and for the same reason: everything below this line

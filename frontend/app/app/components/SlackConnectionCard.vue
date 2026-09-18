@@ -4,24 +4,43 @@ import type { IntegrationTokenStatus, SlackConnection } from '@sainte-beuve/cont
 // Where the nudge arrives. Two halves that are configured separately and fail
 // separately: a bot token to post OUT, and a signing secret to trust what comes
 // back IN. A card reporting one flag would call a half-wired workspace healthy.
+//
+// Both are this ORG's, which is what makes the Request URL below worth showing
+// rather than quoting from a constant: one Slack app serves one tenancy, and the
+// slug in that URL is what places a command on this board rather than another's.
 const props = defineProps<{
   connection: SlackConnection
   tokenStatus: IntegrationTokenStatus
+  signingSecretStatus: IntegrationTokenStatus
   apiBase: string
   busy?: boolean
 }>()
 
-const emit = defineEmits<{ save: [token: string]; clear: [] }>()
+const emit = defineEmits<{
+  save: [token: string]
+  clear: []
+  saveSigningSecret: [secret: string]
+  clearSigningSecret: []
+}>()
 
-const field = ref<{ clearDraft: () => void } | null>(null)
-
-function clearDraft() {
-  field.value?.clearDraft()
+/** What the page needs of a credential input: a way to clear the draft in it. */
+interface DraftHolder {
+  clearDraft: () => void
 }
 
-defineExpose({ clearDraft })
+const tokenField = ref<DraftHolder | null>(null)
+const secretField = ref<DraftHolder | null>(null)
 
-const requestUrl = computed(() => `${props.apiBase}/webhooks/slack`)
+// TWO holders rather than one `clearDraft`, because this card holds two
+// credentials and only the page knows which call succeeded: one exposure would
+// let a stored bot token wipe a signing secret somebody had just pasted beside
+// it. Each is a stable object over the field ref, so the page can hold it.
+defineExpose({
+  token: { clearDraft: () => tokenField.value?.clearDraft() },
+  signingSecret: { clearDraft: () => secretField.value?.clearDraft() },
+})
+
+const requestUrl = computed(() => `${props.apiBase}${props.connection.requestPath}`)
 
 const badge = computed(() =>
   props.connection.ready
@@ -57,13 +76,25 @@ const badge = computed(() =>
     />
 
     <CredentialField
-      ref="field"
+      ref="tokenField"
       :status="tokenStatus"
       :busy="busy"
       placeholder="xoxb-…"
       description="The bot token messages are posted with. Sealed before it is stored and never shown again."
       @save="emit('save', $event)"
       @clear="emit('clear')"
+    />
+
+    <USeparator class="my-4" />
+
+    <CredentialField
+      ref="secretField"
+      :status="signingSecretStatus"
+      :busy="busy"
+      placeholder="8f742…"
+      description="The signing secret from the same Slack app, which is what a slash command and a button press are trusted by. It belongs to this org: a command signed with it acts on this board and no other."
+      @save="emit('saveSigningSecret', $event)"
+      @clear="emit('clearSigningSecret')"
     />
 
     <USeparator class="my-4" />
@@ -76,7 +107,7 @@ const badge = computed(() =>
         color="warning"
         variant="subtle"
         title="The command and the buttons are refused"
-        description="A slash command and a button press can only be trusted once SLACK_SIGNING_SECRET matches the signing secret in the Slack app configuration. Both are answered 503 until then, whether or not a bot token is stored."
+        description="A slash command and a button press can only be trusted once the signing secret from the Slack app configuration is stored above — or, for the default org alone, set as SLACK_SIGNING_SECRET on the deployment. Both are answered 503 until then, whether or not a bot token is stored."
       />
       <dl
         class="grid grid-cols-1 gap-x-4 gap-y-1 text-muted sm:grid-cols-[10rem_1fr] [&_code]:break-all"

@@ -131,7 +131,10 @@ GITHUB_LABEL_SKILL_PREFIX = "skill:"
 #   GITLAB_OAUTH_CLIENT_ID     the OAuth application behind "Sign in with GitLab"
 #   GITLAB_OAUTH_CLIENT_SECRET
 #   SLACK_BOT_TOKEN            xoxb-… for the Slack bot
-#   SLACK_SIGNING_SECRET       the secret Slack signs its requests with
+#   SLACK_SIGNING_SECRET       the secret Slack signs its requests with, for the
+#                              DEFAULT org (a second org stores its own on the
+#                              Configuration screen and is posted to at
+#                              /webhooks/slack/<its-slug>)
 #   AUTH_API_KEY               this deployment's own API key, for CI and for the
 #                              first call into a `required` deployment that has
 #                              no sessions yet (`Authorization: Bearer <key>`)

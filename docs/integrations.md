@@ -157,10 +157,29 @@ Outbound needs a bot token (on the Configuration screen, or `SLACK_BOT_TOKEN`):
   row, so all four are snoozable with `/review snooze` and all four record why a
   delivery failed.
 
-Inbound needs `SLACK_SIGNING_SECRET`, which is a **separate** capability: a
-deployment can post out without being able to trust anything coming back, and the
+Inbound needs a **signing secret**, which is a separate capability: a deployment
+can post out without being able to trust anything coming back, and the
 Configuration screen reports the two halves separately for that reason. Both the
-slash command and the buttons POST to `/webhooks/slack`.
+slash command and the buttons POST to the same URL.
+
+**Which URL is per org**, because one Slack app serves one tenancy:
+
+| The org                | The Request URL                                 | The secret it is verified against                      |
+| ---------------------- | ----------------------------------------------- | ------------------------------------------------------ |
+| the default one        | `/webhooks/slack`, or `/webhooks/slack/default` | its stored signing secret, else `SLACK_SIGNING_SECRET` |
+| any other, slug `acme` | `/webhooks/slack/acme`                          | the signing secret stored on ITS Configuration screen  |
+
+The slug in that URL is what places a command on one board rather than another's,
+and the org's own secret is what makes naming it safe: a stranger can write any
+slug and cannot produce a signature that verifies against the secret that slug
+selects. The deployment's own `SLACK_SIGNING_SECRET` is deliberately not lent to a
+named org — it belongs to the deployment's Slack app, and lending it would make
+anybody who can sign for that app able to act on every tenancy.
+
+The Configuration screen shows the URL for the org you are signed in to, with this
+deployment's base URL filled in, so the value to paste into Slack is never
+assembled by hand. A deployment that never made a second org is entirely inside
+the default one, and everything above it is the behaviour it already had.
 
 ```
 /review                      what is waiting
@@ -259,11 +278,14 @@ the failure everybody meets first.
    `chat:write.public` to post in a channel the bot has not been invited to).
    Install it, and put the `xoxb-…` token on the Configuration screen or in
    `SLACK_BOT_TOKEN`.
-3. **Interactivity & Shortcuts**: on, Request URL
-   `https://<your-api>/webhooks/slack`.
+3. **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
+   shows it — `https://<your-api>/webhooks/slack` for the default org, and
+   `https://<your-api>/webhooks/slack/<org-slug>` for any other.
 4. **Slash Commands**: `/review`, same URL.
-5. Copy the **Signing Secret** from Basic Information into
-   `SLACK_SIGNING_SECRET`.
+5. Copy the **Signing Secret** from Basic Information onto the Configuration
+   screen, beside the bot token. The default org may set `SLACK_SIGNING_SECRET`
+   on the deployment instead; a second org has to store it, because the
+   deployment's own secret is not lent across the boundary.
 6. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in.
 
 ### Locally

@@ -1,3 +1,4 @@
+import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import { SLACK_ACTIONS } from '@sainte-beuve/integrations'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { stubAiReview } from './ai-review-doubles.js'
@@ -23,8 +24,9 @@ const PATH = '/webhooks/slack'
 async function signed(
   harness: TestHarness,
   body: string,
-  secret = SECRET,
+  options: { secret?: string; path?: string } = {},
 ): Promise<{ status: number; text: string }> {
+  const { secret = SECRET, path = PATH } = options
   const timestamp = String(Math.floor(harness.clock.now() / 1000))
   const key = await crypto.subtle.importKey(
     'raw',
@@ -40,7 +42,7 @@ async function signed(
   )
   const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('')
   const res = await harness.app.fetch(
-    form(PATH, body, {
+    form(path, body, {
       'X-Slack-Request-Timestamp': timestamp,
       'X-Slack-Signature': `v0=${hex}`,
     }),
@@ -49,8 +51,11 @@ async function signed(
   // `response_url`, because Slack reads a message here as replacing the message
   // the button is on.
   const raw = await res.text()
-  const parsed = raw.length === 0 ? {} : (JSON.parse(raw) as { text?: string })
-  return { status: res.status, text: parsed.text ?? '' }
+  const parsed =
+    raw.length === 0 ? {} : (JSON.parse(raw) as { text?: string; error?: { message?: string } })
+  // A refusal is the error envelope rather than a Slack reply, and the message
+  // on it is what an operator has to read, so a case can assert on either.
+  return { status: res.status, text: parsed.text ?? parsed.error?.message ?? '' }
 }
 
 const RESPONSE_URL = 'https://hooks.slack.com/actions/T1/1/abc'
@@ -102,7 +107,7 @@ describe('Slack interactivity', () => {
   })
 
   it('refuses a request signed with the wrong secret', async () => {
-    expect((await signed(harness, command('list'), 'other')).status).toBe(403)
+    expect((await signed(harness, command('list'), { secret: 'other' })).status).toBe(403)
   })
 
   it('lists what is waiting', async () => {
@@ -267,5 +272,121 @@ describe('Slack interactivity', () => {
     // A deployment with no announcement channel is a supported deployment, so
     // this is silence rather than a failure.
     expect(chat.posted).toStrictEqual([])
+  })
+})
+
+/**
+ * WHICH ORG a command acts on.
+ *
+ * The slug is in the URL the Slack app posts to, and the org's own signing
+ * secret is what makes naming it safe: the cases that matter are the ones where
+ * a slug is named and the secret does not follow it.
+ */
+describe('Slack intake, per org', () => {
+  const ORG_PATH = '/webhooks/slack/acme'
+  const ORG_SECRET = 'the-acme-workspace-secret'
+  let harness: TestHarness
+
+  /** An org with a Slack app of its own, sealed under the deployment's cipher. */
+  async function connectSlack(orgId: string, secret: string): Promise<void> {
+    const cipher = harness.container.secrets
+    if (cipher === null) throw new Error('this case needs the harness cipher')
+    await harness.container.stores.forOrg(orgId).integrationTokens.put({
+      integrationId: 'slack-signing-secret',
+      sealed: await cipher.encrypt(secret, 'slack-signing-secret'),
+      hint: secret.slice(-4),
+      subject: null,
+      updatedAt: harness.clock.now(),
+    })
+  }
+
+  async function makeOrg(slug: string): Promise<string> {
+    const org = await harness.container.stores.orgs.create({
+      id: `org-${slug}`,
+      slug,
+      name: slug,
+      enrolment: 'invite',
+      createdAt: harness.clock.now(),
+    })
+    return org.id
+  }
+
+  /** A review on one org's board, written where the API cannot reach across to it. */
+  async function boardRow(orgId: string, title: string): Promise<void> {
+    await harness.container.stores.forOrg(orgId).reviews.create({
+      id: `rev-${orgId}`,
+      pullRequest: PR,
+      title,
+      authorLogin: 'author',
+      status: 'open',
+      priority: 'normal',
+      assignedReviewerIds: [],
+      requiredSkills: [],
+      createdAt: harness.clock.now(),
+      updatedAt: harness.clock.now(),
+      assignedAt: null,
+      dueAt: null,
+    })
+  }
+
+  beforeEach(() => {
+    harness = buildHarness(
+      { slack: { signingSecret: SECRET, announcementChannelId: null } },
+      { encryptionKey: btoa('0123456789abcdef0123456789abcdef') },
+    )
+  })
+
+  it('answers the default org on its own slug as well as on the bare path', async () => {
+    const res = await signed(harness, command('list'), { path: '/webhooks/slack/default' })
+    // The default org answers to its slug whether or not its row exists, which
+    // is the ordinary state of a deployment that never made a second org.
+    expect(res.status).toBe(200)
+    expect(res.text).toContain('Nothing is waiting')
+  })
+
+  it('refuses a slug nobody has made', async () => {
+    expect((await signed(harness, command('list'), { path: ORG_PATH })).status).toBe(404)
+  })
+
+  it('does not lend the deployment’s own secret to a named org', async () => {
+    await makeOrg('acme')
+    // The whole of why the slug may live in a URL at all: the deployment's Slack
+    // app can sign this request, and signing it must not be enough to act on a
+    // tenancy that never connected it.
+    const res = await signed(harness, command('list'), { path: ORG_PATH })
+    expect(res.status).toBe(503)
+    expect(res.text).toContain('acme')
+  })
+
+  it('verifies a named org against the secret that org stored', async () => {
+    const orgId = await makeOrg('acme')
+    await connectSlack(orgId, ORG_SECRET)
+
+    expect(
+      (await signed(harness, command('list'), { path: ORG_PATH, secret: SECRET })).status,
+    ).toBe(403)
+    expect(
+      (await signed(harness, command('list'), { path: ORG_PATH, secret: ORG_SECRET })).status,
+    ).toBe(200)
+  })
+
+  it('lists the named org’s board and not the default org’s', async () => {
+    const orgId = await makeOrg('acme')
+    await connectSlack(orgId, ORG_SECRET)
+    await boardRow(DEFAULT_ORG_ID, 'A review the default org is chasing')
+    await boardRow(orgId, 'A review Acme is chasing')
+
+    const res = await signed(harness, command('list'), { path: ORG_PATH, secret: ORG_SECRET })
+    expect(res.text).toContain(`rev-${orgId}`)
+    expect(res.text).not.toContain(`rev-${DEFAULT_ORG_ID}`)
+  })
+
+  it('lets the default org replace the deployment’s secret with a stored one', async () => {
+    await connectSlack(DEFAULT_ORG_ID, ORG_SECRET)
+    // A stored credential shadows the environment everywhere else, and there is
+    // no reason for this one to be the exception: an operator who rotated the
+    // secret on the Configuration screen would otherwise be rotating nothing.
+    expect((await signed(harness, command('list'), { secret: SECRET })).status).toBe(403)
+    expect((await signed(harness, command('list'), { secret: ORG_SECRET })).status).toBe(200)
   })
 })

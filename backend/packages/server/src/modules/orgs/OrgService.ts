@@ -1,6 +1,12 @@
 import type { CreateOrgInput, Org, OrgFounder, UpdateOrgInput } from '@sainte-beuve/contracts'
-import { DEFAULT_ORG_ID, defaultOrg, NO_VCS_HANDLES, withHandle } from '@sainte-beuve/contracts'
-import { assertFound, ConflictError } from '@sainte-beuve/kernel'
+import {
+  DEFAULT_ORG_ID,
+  DEFAULT_ORG_SLUG,
+  defaultOrg,
+  NO_VCS_HANDLES,
+  withHandle,
+} from '@sainte-beuve/contracts'
+import { assertFound, ConflictError, NotFoundError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 
 /**
@@ -35,6 +41,43 @@ export class OrgService {
     return this.container.orgId === DEFAULT_ORG_ID
       ? defaultOrg()
       : { ...defaultOrg(), id: this.container.orgId, slug: this.container.orgId }
+  }
+
+  /**
+   * The org a slug names, for the two unauthenticated paths that are allowed to
+   * take one: a sign-in that says which board to establish a session on, and an
+   * inbound Slack delivery that says which board its command acts on.
+   *
+   * A slug nobody has made is a 404 rather than a quiet fall back to the default
+   * org: somebody who typed an org name and was answered by a different board
+   * would have no way to tell, and the two states look identical afterwards.
+   *
+   * The DEFAULT org answers to its slug whether or not its row exists, which is
+   * the ordinary state of a deployment that never made a second one (see
+   * {@link current}). Without this, the one slug every caller can read off their
+   * own auth state — and the only one nobody is allowed to create — is the one
+   * slug these paths refuse.
+   *
+   * One method rather than a rule each caller implements, because the two get to
+   * disagree exactly once: naming an org here is not proof of anything, and what
+   * makes each path safe is what it checks NEXT — a signed state on the sign-in,
+   * the org's own signing secret on the delivery.
+   */
+  async bySlug(slug: string): Promise<Org> {
+    // Normalised the way `orgSlugSchema` normalises what a caller types, because
+    // this arrives from a query string and from a URL somebody pasted into a
+    // Slack app rather than through a contract: a slug stored lowercase and
+    // written `Acme` is one org to whoever typed it and no org to the store.
+    const wanted = slug.trim().toLowerCase()
+    if (wanted === DEFAULT_ORG_SLUG) return this.defaultOrgRow()
+    const held = await this.container.stores.orgs.getBySlug(wanted)
+    if (held === null) throw new NotFoundError(`No org "${wanted}" on this deployment.`)
+    return held
+  }
+
+  /** The default org's row, or the value it is synthesised as. See {@link current}. */
+  private async defaultOrgRow(): Promise<Org> {
+    return (await this.container.stores.orgs.getById(DEFAULT_ORG_ID)) ?? defaultOrg()
   }
 
   /**

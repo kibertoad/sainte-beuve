@@ -310,13 +310,28 @@ describe('GitHub and Slack connections', () => {
     expect(await withApp.container.repositories.integrationTokens.list()).toStrictEqual([])
   })
 
-  it('reports the two halves of Slack separately', async () => {
+  it('reports whether an inbound delivery can be verified at all', async () => {
+    expect((await github(harness)).webhooksReady).toBe(false)
+    const verifying = keyed({
+      github: { ...harness.container.github, webhookSecret: 'secret' },
+    })
+    expect((await github(verifying)).webhooksReady).toBe(true)
+  })
+})
+
+/** What the Slack card on the Configuration screen renders from. */
+describe('the Slack connection', () => {
+  it('reports the two halves separately', async () => {
     // Posting out needs a bot token and trusting what comes back needs the
     // signing secret; a deployment with one and not the other is half wired.
-    expect((await connections(harness)).slack).toStrictEqual({
+    expect((await connections(keyed())).slack).toStrictEqual({
       ready: false,
       announcementChannelId: null,
       interactivityReady: false,
+      // The default org's, which is what an unconfigured deployment is entirely
+      // inside. A second org's card names its own slug, because the slug in that
+      // URL is what places a command on one board rather than another's.
+      requestPath: '/webhooks/slack/default',
     })
 
     const wired = keyed({
@@ -330,14 +345,7 @@ describe('GitHub and Slack connections', () => {
       ready: true,
       announcementChannelId: 'C-reviews',
       interactivityReady: true,
+      requestPath: '/webhooks/slack/default',
     })
-  })
-
-  it('reports whether an inbound delivery can be verified at all', async () => {
-    expect((await github(harness)).webhooksReady).toBe(false)
-    const verifying = keyed({
-      github: { ...harness.container.github, webhookSecret: 'secret' },
-    })
-    expect((await github(verifying)).webhooksReady).toBe(true)
   })
 })

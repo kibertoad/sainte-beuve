@@ -145,7 +145,13 @@ interface DraftHolder {
   clearDraft: () => void
 }
 
-const slack = ref<DraftHolder | null>(null)
+/**
+ * The Slack card holds TWO credentials — a bot token to post out and a signing
+ * secret to trust what comes back — so it exposes one holder each. A single
+ * holder would let a stored bot token clear a signing secret somebody had just
+ * pasted beside it.
+ */
+const slack = ref<{ token: DraftHolder; signingSecret: DraftHolder } | null>(null)
 const catFactory = ref<DraftHolder | null>(null)
 
 /**
@@ -367,10 +373,13 @@ onMounted(() => {
         ref="slack"
         :connection="data.connections.slack"
         :token-status="statusOf('slack-bot-token')"
+        :signing-secret-status="statusOf('slack-signing-secret')"
         :api-base="api.apiBase"
         :busy="busy !== null"
-        @save="save('slack-bot-token', $event, slack)"
+        @save="save('slack-bot-token', $event, slack?.token ?? null)"
         @clear="clear('slack-bot-token')"
+        @save-signing-secret="save('slack-signing-secret', $event, slack?.signingSecret ?? null)"
+        @clear-signing-secret="clear('slack-signing-secret')"
       />
 
       <UCard>

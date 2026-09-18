@@ -71,11 +71,16 @@ a store that may be read-only while a restore is running.
 
 ### Choosing one
 
-There is exactly one moment an org is chosen by something a caller sent:
+There are exactly two moments an org is chosen by something a caller sent, and
+both are unauthenticated paths where naming one buys nothing on its own:
 
 ```
-GET /api/v1/auth/sign-in/github?org=acme
+GET  /api/v1/auth/sign-in/github?org=acme    a sign-in, gated by the SIGNED state
+POST /webhooks/slack/acme                    a slash command, gated by that org's OWN signing secret
 ```
+
+`OrgService.bySlug` decides both, so the rule is one rule. The sign-in is below;
+the Slack half is its own section further down.
 
 `default` is accepted whether or not the default org's row exists, because it is
 the slug every caller can read off their own auth state and the one slug nobody
@@ -265,18 +270,54 @@ route on the deployment, so narrowing it would upgrade a working deployment into
 one whose Configuration screen nobody can open, or break whatever CI job is
 calling with that key.
 
-## What this does not do yet
+## A Slack app belongs to an org
 
-**A Slack command acts on the default org.** A GitHub delivery names a
-repository, and the project registry says which tenancy claimed it; a slash
-command names a Slack user and a channel, and nothing on this deployment maps
-either to an org — the signing secret is deployment wiring rather than an org's
-credential, so one Slack app serves every tenancy. Searching every org's
-directory for the Slack id would be a read across the boundary on an
-unauthenticated path, and would answer ambiguously for anybody who is in two. A
-deployment with a second org reaches it through the SPA and through GitHub.
-Closing this needs an org's own Slack connection, which is a credential change
-rather than a routing one.
+A GitHub delivery names a repository, and the project registry says which tenancy
+claimed it. A slash command names a Slack user and a channel, and **neither places
+anything**: searching every org's directory for the Slack id would be a read
+across the boundary on an unauthenticated path, and it would answer ambiguously
+for anybody who is in two.
+
+So the org is in the URL the Slack app posts to, and the org's own **signing
+secret** is what makes naming it safe:
+
+```
+POST /webhooks/slack           → the default org
+POST /webhooks/slack/acme      → the org whose slug is `acme`
+```
+
+This is the one place outside a sign-in where a caller names a tenancy, and the
+rule that makes it sound is that naming one buys nothing. There is no credential
+on an inbound Slack request until the secret the slug selects has verified it, so
+a stranger can write any slug and cannot sign for it — naming the wrong org
+refuses rather than admits. A slug nobody has made is a 404, decided by the same
+`OrgService.bySlug` the sign-in uses, so `default` answers whether or not its row
+exists.
+
+The secret is therefore an org's **credential** rather than deployment wiring: it
+is `slack-signing-secret` in the same sealed, per-org store as the bot token, and
+it is stored on the Configuration screen like any other. `SLACK_SIGNING_SECRET`
+survives as the fallback **for the default org alone**, which is what keeps every
+deployment that predates this working unchanged — such a deployment is entirely
+inside the default org, so the deployment's secret is its org's secret.
+
+Not lending that secret to a named org is the security property rather than
+tidiness. It belongs to the deployment's own Slack app; if a named org fell back
+to it, anybody who could post a signed command to this deployment could act on any
+tenancy by writing its slug in the URL, which is exactly the cost placing a
+delivery by URL would otherwise have.
+
+The alternative was placing a command by the `team_id` in its body. That needs a
+fourth read across the boundary and a workspace-to-org table, and it would still
+have to be TRUSTED before a signature had been checked against anything.
+`TenancyDirectory` stays at three methods.
+
+What this does not close is the announcement channel: `SLACK_CHANNEL_ID` is still
+one channel per deployment, so a second org that connects its own Slack app posts
+its announcements into the deployment's channel. The bot token it posts WITH is
+already the org's own.
+
+## What this does not do yet
 
 **An inbound delivery for a repository nobody registered lands in the default
 org.** Registering it is the answer, and on a single-tenant deployment the

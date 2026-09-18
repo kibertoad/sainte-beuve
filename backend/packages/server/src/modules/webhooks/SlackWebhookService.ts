@@ -1,4 +1,4 @@
-import { ACTIVE_REVIEW_STATUSES, type ReviewRequest } from '@sainte-beuve/contracts'
+import { ACTIVE_REVIEW_STATUSES, DEFAULT_ORG_ID, type ReviewRequest } from '@sainte-beuve/contracts'
 import { ForbiddenError, formatPullRequest, getErrorMessage } from '@sainte-beuve/kernel'
 import type { SlackIntent, SlackRequest } from '@sainte-beuve/integrations'
 import {
@@ -9,6 +9,7 @@ import {
 } from '@sainte-beuve/integrations'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
+import { resolveSlackSigningSecret } from '../../integrations/resolve.js'
 import { snoozeReview } from '../../reminders/snooze.js'
 import { AiReviewService } from '../reviews/AiReviewService.js'
 import { ReviewService } from '../reviews/ReviewService.js'
@@ -33,26 +34,40 @@ import { ReviewService } from '../reviews/ReviewService.js'
  */
 
 /**
- * WHICH ORG a Slack command lands in is the DEFAULT one, and that is the known
- * limit of the boundary rather than an oversight.
+ * WHICH ORG a command lands in is decided before this service is built, by the
+ * slug in the URL the Slack app posts to, and the org's OWN signing secret is
+ * what makes that placement true.
  *
  * A GitHub delivery names a repository, and the project registry says which
- * tenancy claimed it; a slash command names a Slack user and a channel, and
- * nothing on this deployment maps either to an org — the signing secret is
- * deployment wiring rather than an org's credential, so one Slack app serves
- * every tenancy. Placing a command by searching every org's directory for the
+ * tenancy claimed it. A slash command names a Slack user and a channel, and
+ * nothing in the body places either: searching every org's directory for the
  * Slack id would be a read across the boundary on an unauthenticated path, and
- * would answer ambiguously for anybody who is in two.
+ * would answer ambiguously for anybody who is in two. So the org is named in the
+ * path, which is safe for the one reason that matters here — a stranger can
+ * write any slug and cannot produce a signature that verifies against the secret
+ * that slug selects. Naming the wrong org refuses; it does not admit.
  *
- * So a deployment with a second org reaches it through the SPA and through
- * GitHub, and its Slack commands act on the default org. Closing this needs an
- * org's own Slack connection, which is a credential change rather than a
- * routing one. See docs/orgs.md.
+ * The container this is built with is therefore already bound (see
+ * `WebhookController`), and everything below reads `this.container` exactly as
+ * it did when there was only the default org. See docs/orgs.md.
  */
 
 const NO_SECRET =
   'This deployment cannot verify Slack requests: set SLACK_SIGNING_SECRET to the signing secret ' +
-  'from the Slack app configuration'
+  'from the Slack app configuration, or store it on the Configuration screen'
+
+/**
+ * The same refusal for a NAMED org, which the deployment's own secret
+ * deliberately does not answer for: one Slack app serves one tenancy, so an org
+ * that has not connected its own has nothing here to verify against. See
+ * `resolveSlackSigningSecret`.
+ */
+function noSecretForOrg(slug: string): string {
+  return (
+    `The org "${slug}" has not connected a Slack app: store its signing secret on the ` +
+    'Configuration screen, under Slack, and its commands can be trusted'
+  )
+}
 
 const HELP =
   'Try `/review` to list what is waiting, `/review take <id>` to put yourself on one, ' +
@@ -69,14 +84,37 @@ export interface SlackReply {
 const LIST_LIMIT = 10
 
 export class SlackWebhookService {
-  constructor(private readonly container: AppContainer) {}
+  /**
+   * The container is ALREADY BOUND to the org this delivery named, and the slug
+   * rides along only so a refusal can say which org has nothing stored. Both
+   * come from `WebhookController`, which is the one place the path is read.
+   */
+  constructor(
+    private readonly container: AppContainer,
+    private readonly orgSlug: string,
+  ) {}
+
+  /** This org's secret, or the deployment's when this org is the default one. */
+  private async signingSecret(): Promise<string | null> {
+    return (await resolveSlackSigningSecret(this.container))?.secret ?? null
+  }
+
+  /**
+   * Which refusal to give, which is a different sentence per org because the
+   * remedy is: the default org's is a deployment variable an operator can set,
+   * and a named org's is a credential somebody stores on its own Configuration
+   * screen.
+   */
+  private noSecretMessage(): string {
+    return this.container.orgId === DEFAULT_ORG_ID ? NO_SECRET : noSecretForOrg(this.orgSlug)
+  }
 
   async handle(input: {
     rawBody: string
     timestamp: string | null
     signature: string | null
   }): Promise<SlackReply | null> {
-    const secret = requireCapability(this.container.slack.signingSecret, NO_SECRET)
+    const secret = requireCapability(await this.signingSecret(), this.noSecretMessage())
     const verified = await verifySlackSignature(
       secret,
       input.rawBody,

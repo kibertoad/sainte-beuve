@@ -66,6 +66,7 @@ describe('integration configuration API', () => {
       'github-pat',
       'gitlab-pat',
       'slack-bot-token',
+      'slack-signing-secret',
       'cat-factory',
     ])
     expect(await statusOf(harness)).toStrictEqual(status())

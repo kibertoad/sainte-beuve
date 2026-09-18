@@ -14,6 +14,7 @@ import {
   type CredentialSource,
   resolveAiReview,
   resolveChat,
+  resolveSlackSigningSecret,
   resolveVcs,
 } from '../../integrations/resolve.js'
 
@@ -42,6 +43,7 @@ const KEY_REJECTED =
 interface ActiveCredentials {
   vcs: Record<VcsProvider, VcsAuthMethod | null>
   chat: CredentialSource | null
+  slackSigning: CredentialSource | null
   aiReview: CredentialSource | null
 }
 
@@ -117,15 +119,17 @@ export class IntegrationSettingsService {
   }
 
   private async activeCredentials(): Promise<ActiveCredentials> {
-    const [github, gitlab, chat, aiReview] = await Promise.all([
+    const [github, gitlab, chat, slackSigning, aiReview] = await Promise.all([
       resolveVcs(this.container, 'github'),
       resolveVcs(this.container, 'gitlab'),
       resolveChat(this.container),
+      resolveSlackSigningSecret(this.container),
       resolveAiReview(this.container),
     ])
     return {
       vcs: { github: github?.source ?? null, gitlab: gitlab?.source ?? null },
       chat: chat?.source ?? null,
+      slackSigning: slackSigning?.source ?? null,
       aiReview: aiReview?.source ?? null,
     }
   }
@@ -200,6 +204,10 @@ function inUse(integrationId: IntegrationId, active: ActiveCredentials): boolean
     'github-pat': active.vcs.github === 'pat',
     'gitlab-pat': active.vcs.gitlab === 'pat',
     'slack-bot-token': active.chat === 'stored',
+    // A stored secret always shadows the deployment's own, so `stored` is the
+    // whole answer — but only in the default org does the other source exist at
+    // all, which is why this is a resolution rather than a row read.
+    'slack-signing-secret': active.slackSigning === 'stored',
     'cat-factory': active.aiReview === 'stored',
   }
   return ANSWERS[integrationId]

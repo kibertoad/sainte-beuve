@@ -4,7 +4,7 @@ import type {
   VcsOauthCredentialKey,
   VcsProvider,
 } from '@sainte-beuve/contracts'
-import { vcsOauthCredentialKey, vcsPatCredentialKey } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID, vcsOauthCredentialKey, vcsPatCredentialKey } from '@sainte-beuve/contracts'
 import {
   type AiReviewGateway,
   type ChatGateway,
@@ -148,6 +148,42 @@ export async function resolveChat(
     return { gateway: container.gateways.chat(stored), source: 'stored' }
   }
   return container.chat === null ? null : { gateway: container.chat, source: 'environment' }
+}
+
+/** A resolved secret and where it came from. Beside {@link Resolved}, for a credential nothing is called with. */
+export interface ResolvedSecret {
+  secret: string
+  source: CredentialSource
+}
+
+/**
+ * The secret an inbound Slack request is verified against, for the org this
+ * container is bound to.
+ *
+ * The org's OWN stored secret first, because that is what makes a slash command
+ * reach a tenancy that is not the default one: one Slack app serves one org, and
+ * the secret it signs with is what proves a delivery belongs there.
+ *
+ * The deployment's `SLACK_SIGNING_SECRET` is the fallback FOR THE DEFAULT ORG
+ * ALONE, and the restriction is the security property rather than tidiness.
+ * That secret belongs to the deployment's own Slack app; letting a named org
+ * fall back to it would mean anybody who can post a signed command to this
+ * deployment could act on any org's board by naming its slug in the URL, which
+ * is exactly what placing the delivery by URL would otherwise cost. A named org
+ * with nothing stored is refused, naming the credential to store.
+ *
+ * It is also what keeps every deployment that predates this working unchanged:
+ * such a deployment is entirely inside the default org, so the environment's
+ * secret is its org's secret.
+ */
+export async function resolveSlackSigningSecret(
+  container: AppContainer,
+): Promise<ResolvedSecret | null> {
+  const stored = await openCredential(container, 'slack-signing-secret')
+  if (stored !== null) return { secret: stored, source: 'stored' }
+  if (container.orgId !== DEFAULT_ORG_ID) return null
+  const fromEnvironment = container.slack.signingSecret
+  return fromEnvironment === null ? null : { secret: fromEnvironment, source: 'environment' }
 }
 
 /**

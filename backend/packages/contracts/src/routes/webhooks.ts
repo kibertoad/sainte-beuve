@@ -19,8 +19,39 @@ import type { VcsProvider } from '../vcs.js'
 /** Signed GitHub deliveries (`X-Hub-Signature-256`). */
 export const GITHUB_WEBHOOK_PATH = '/webhooks/github'
 
-/** Slack slash commands and message actions (`X-Slack-Signature`). */
+/**
+ * Slack slash commands and message actions (`X-Slack-Signature`), for the
+ * DEFAULT org.
+ *
+ * Every deployment that registered a Slack app before the intake knew about
+ * tenancies is pointed here, and here is where it stays: the deployment's own
+ * `SLACK_SIGNING_SECRET` is the default org's secret, so this path keeps
+ * behaving exactly as it did.
+ */
 export const SLACK_WEBHOOK_PATH = '/webhooks/slack'
+
+/**
+ * The same surface, for one NAMED org. Mounted as a pattern; built for a screen
+ * to quote with {@link slackWebhookPath}.
+ *
+ * The URL is what places a delivery in a tenancy, and the org's OWN signing
+ * secret is what makes the placement true: a stranger can name any slug here and
+ * cannot sign for it. That is why the slug is allowed to be in a path at all,
+ * where no route under `/api/v1` accepts an org — there is no credential on an
+ * inbound Slack request until the secret this path selects has verified it, and
+ * selecting the wrong one refuses rather than admits.
+ *
+ * The alternative was placing a command by the `team_id` in its body, which
+ * needs a fourth read across the boundary and a workspace-to-org table, and
+ * which would still have to be trusted BEFORE a signature had been checked
+ * against anything.
+ */
+export const SLACK_ORG_WEBHOOK_PATH = `${SLACK_WEBHOOK_PATH}/:org`
+
+/** Where one org's Slack app posts. The default org answers on both this and the bare path. */
+export function slackWebhookPath(orgSlug: string): string {
+  return `${SLACK_WEBHOOK_PATH}/${orgSlug}`
+}
 
 /**
  * Where a host returns the browser after a sign-in. One path per host, so an
