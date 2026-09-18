@@ -1,4 +1,5 @@
 import { GITHUB_WEBHOOK_PATH, SLACK_WEBHOOK_PATH } from '@sainte-beuve/contracts'
+import type { Deferral } from '@sainte-beuve/kernel'
 import { PayloadTooLargeError } from '@sainte-beuve/kernel'
 import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
@@ -43,6 +44,16 @@ export interface RequestScope {
   req: Request
   /** The runtime's bindings: a Worker's `env`. Undefined on a runtime that has none. */
   env: unknown
+  /**
+   * The runtime's own `waitUntil`, for a container whose fan-out reaches the
+   * network. A publish happens after a write that already succeeded and must
+   * not be awaited, and a Worker cancels outstanding I/O the moment a response
+   * is returned: without this, an attention event published on the last line of
+   * a request would be a fetch nothing kept alive. A runtime with no execution
+   * context gets a swallow, which is what a Node process does with an
+   * unawaited promise anyway.
+   */
+  waitUntil: Deferral
 }
 
 export interface AppOptions {
@@ -56,7 +67,29 @@ export interface AppOptions {
 }
 
 function scopeOf(c: Context<AppEnv>): RequestScope {
-  return { req: c.req.raw, env: c.env }
+  return { req: c.req.raw, env: c.env, waitUntil: deferralOf(c) }
+}
+
+/**
+ * The runtime's deferral, or a swallow.
+ *
+ * Hono THROWS off `executionCtx` on a runtime that has none rather than
+ * answering undefined, so the absence is caught rather than tested for. The
+ * fallback still attaches a rejection handler: the work is unawaited by
+ * construction, and an unhandled rejection is how a Node process turns a failed
+ * best-effort publish into a crash.
+ */
+function deferralOf(c: Context<AppEnv>): Deferral {
+  try {
+    const ctx = c.executionCtx
+    return (work) => {
+      ctx.waitUntil(work)
+    }
+  } catch {
+    return (work) => {
+      void work.catch(() => {})
+    }
+  }
 }
 
 /**

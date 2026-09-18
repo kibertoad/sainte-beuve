@@ -40,3 +40,22 @@ CORS_ORIGINS = "*"
 binding = "DB"
 database_name = "sainte-beuve-local"
 database_id = "sainte-beuve-local"
+
+# The attention hub: one Durable Object per org, holding the attention streams
+# that org has open across every isolate.
+#
+# Without it the Worker still boots, on a bus held at module level that reaches
+# the streams sharing ONE isolate, and /health reports `realtime: "memory"`. The
+# REST inbox carries the same payload either way, so the binding is what makes
+# the live half live rather than what makes the feature work.
+#
+# SQLite-backed, because the class is on the current storage backend rather than
+# the legacy key-value one — not because it stores anything. It stores nothing:
+# every byte it holds is a socket somebody has a page open on.
+[[durable_objects.bindings]]
+name = "ATTENTION"
+class_name = "AttentionHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AttentionHub"]

@@ -34,48 +34,61 @@ export function healthController(): Hono<AppEnv> {
       resolveAiReview(container),
       storeAnswers(container),
     ])
-    return c.json(
-      {
-        status: persistenceReady ? 'ok' : 'degraded',
-        // Beside the capabilities rather than inside them, because it is not one:
-        // every deployment has a store, and what an operator needs to know is
-        // WHICH. `memory` is the honest answer for local mode and an alarm
-        // anywhere else, and a deployment that thought it had wired D1 finds out
-        // here rather than after an isolate recycle.
-        persistence: container.persistence,
-        persistenceReady,
-        // Beside the capabilities for the same reason the store is: every
-        // deployment has an answer and what an operator needs to know is WHICH.
-        // `open` is the honest answer for local mode and an alarm on anything
-        // shared, and a deployment that thought it had closed the door finds
-        // out here rather than from whoever walked through it.
-        auth: {
-          mode: container.auth.mode,
-          /**
-           * The hosts somebody could sign in on. Empty beside `required` is the
-           * state to catch here: a deployment nobody can enter, including the
-           * operator who set the variable.
-           */
-          signInProviders: new ConnectionsService(container).signInProviders(),
-          environmentApiKey: container.auth.environmentApiKey !== null,
-        },
-        capabilities: {
-          chat: chat !== null,
-          // Per host, not one flag. A deployment connected to GitHub and not to
-          // GitLab is exactly as healthy as its GitLab projects are unreadable,
-          // and one boolean would report that as either fine or broken.
-          vcs: { github: github !== null, gitlab: gitlab !== null },
-          aiReview: aiReview !== null,
-          secrets: container.secrets !== null,
-          githubWebhooks: container.github.webhookSecret !== null,
-          slackInteractivity: container.slack.signingSecret !== null,
-        },
+    const body = {
+      status: persistenceReady ? 'ok' : 'degraded',
+      ...shape(container),
+      persistenceReady,
+      capabilities: {
+        chat: chat !== null,
+        // Per host, not one flag. A deployment connected to GitHub and not to
+        // GitLab is exactly as healthy as its GitLab projects are unreadable,
+        // and one boolean would report that as either fine or broken.
+        vcs: { github: github !== null, gitlab: gitlab !== null },
+        aiReview: aiReview !== null,
+        secrets: container.secrets !== null,
+        githubWebhooks: container.github.webhookSecret !== null,
+        slackInteractivity: container.slack.signingSecret !== null,
       },
-      persistenceReady ? 200 : 503,
-    )
+    }
+    return c.json(body, persistenceReady ? 200 : 503)
   })
 
   return app
+}
+
+/**
+ * The three facts that are not capabilities: every deployment has an answer to
+ * each, and what an operator needs to know is WHICH. They sit beside the
+ * capability flags rather than inside them for exactly that reason — a boolean
+ * would turn "on the in-memory store" into "has a store", which is true and
+ * useless.
+ */
+function shape(container: AppContainer) {
+  return {
+    // `memory` is the honest answer for local mode and an alarm anywhere else,
+    // and a deployment that thought it had wired D1 finds out here rather than
+    // after an isolate recycle.
+    persistence: container.persistence,
+    // Which fan-out the attention stream is on. `memory` is the whole of the
+    // Node service — one process, so every open page is on it — and on a Worker
+    // it means an event reaches the isolate it was published on and no other. A
+    // deployment that thought it had bound the attention hub finds out here
+    // rather than from the one person whose page did not move.
+    realtime: container.realtime,
+    // `open` is the honest answer for local mode and an alarm on anything
+    // shared, and a deployment that thought it had closed the door finds out
+    // here rather than from whoever walked through it.
+    auth: {
+      mode: container.auth.mode,
+      /**
+       * The hosts somebody could sign in on. Empty beside `required` is the
+       * state to catch here: a deployment nobody can enter, including the
+       * operator who set the variable.
+       */
+      signInProviders: new ConnectionsService(container).signInProviders(),
+      environmentApiKey: container.auth.environmentApiKey !== null,
+    },
+  }
 }
 
 /**

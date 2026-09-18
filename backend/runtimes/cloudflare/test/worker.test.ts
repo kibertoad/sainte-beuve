@@ -15,6 +15,7 @@ declare global {
   namespace Cloudflare {
     interface Env {
       DB: D1Database
+      ATTENTION: DurableObjectNamespace
       TEST_MIGRATIONS: D1Migration[]
     }
   }
@@ -51,6 +52,12 @@ describe('sainte-beuve worker', () => {
       // promise: this suite applies the migrations, and a deployment that
       // skipped them gets `false` and a 503 instead of this.
       persistenceReady: true,
+      // wrangler.toml binds the attention hub, so the live half of the inbox
+      // reaches every isolate rather than the one a publish landed on. A Worker
+      // with no ATTENTION binding still boots and says `memory` here, which is
+      // the degradation an operator would otherwise only learn about from the
+      // one person whose page did not move.
+      realtime: 'durable-object',
       // wrangler.toml leaves AUTH_MODE at `open`, which is what every
       // deployment ran before sessions existed and what this reports so an
       // operator can see it from outside the process.

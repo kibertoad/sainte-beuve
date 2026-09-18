@@ -34,9 +34,32 @@ export interface AttentionBus {
    * within the org — whether an ask concerns this person — is still the
    * caller's; filtering BETWEEN orgs is not, because a caller that could get it
    * wrong is a caller that will.
+   *
+   * `onClose` is the bus giving up on a subscription NOBODY unsubscribed: the
+   * in-process implementation never calls it, and one that reaches across a
+   * network has to, because the alternative is a stream that stays open and
+   * silently stops delivering. Optional, so an implementation that cannot fail
+   * that way ignores it and a caller that has nothing to do about it omits it.
    */
-  subscribe(orgId: string, listener: (event: AttentionEvent) => void): () => void
+  subscribe(
+    orgId: string,
+    listener: (event: AttentionEvent) => void,
+    onClose?: () => void,
+  ): () => void
 }
+
+/**
+ * Which fan-out a deployment actually wired, for `/health` to report beside
+ * `PersistenceKind`.
+ *
+ * `memory` reaches the subscribers of ONE process, which is every page on the
+ * Node service and one isolate's worth on the Worker; `durable-object` reaches
+ * every isolate of a Worker deployment. It is on the probe for the same reason
+ * the store is: "connected" and "connected to the thing you meant" are
+ * different facts, and a Worker that thought it had bound the hub finds out
+ * here rather than from the one person whose page did not move.
+ */
+export type RealtimeKind = 'memory' | 'durable-object'
 
 /**
  * The same bus, already bound to one org: what a service reaches through the
@@ -44,5 +67,5 @@ export interface AttentionBus {
  */
 export interface ScopedAttentionBus {
   publish(event: AttentionEvent): void
-  subscribe(listener: (event: AttentionEvent) => void): () => void
+  subscribe(listener: (event: AttentionEvent) => void, onClose?: () => void): () => void
 }

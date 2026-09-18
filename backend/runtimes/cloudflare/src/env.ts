@@ -17,6 +17,21 @@ export interface WorkerEnv {
    */
   DB?: D1Database
 
+  /**
+   * The Durable Object that fans an attention event out across ISOLATES.
+   *
+   * Optional like everything else, and its absence is a real degradation rather
+   * than a broken deployment: without it the Worker falls back to a bus held at
+   * module level, an event reaches the pages that share the isolate it was
+   * published on, and `/health` reports `realtime: "memory"`. The REST inbox
+   * carries the same payload either way, which is why the board is correct
+   * regardless and only the live half is affected.
+   *
+   * Bind it as `ATTENTION` against the `AttentionHub` class this package
+   * exports, with the migration that declares it; see deploy/backend.
+   */
+  ATTENTION?: DurableObjectNamespace
+
   /** Comma-separated list of origins the SPA is served from. `*` in a preview. */
   CORS_ORIGINS?: string
 

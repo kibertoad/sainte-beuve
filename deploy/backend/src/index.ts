@@ -8,3 +8,7 @@
 // secrets. Swap the workspace dependency in package.json for the published
 // version, e.g. "@sainte-beuve/worker": "^0.1.0".
 export { default } from '@sainte-beuve/worker'
+// The Durable Object behind the ATTENTION binding in wrangler.toml. wrangler
+// looks the class up as a named export of this entry point, so re-exporting it
+// is what connects the binding to the library's implementation.
+export { AttentionHub } from '@sainte-beuve/worker'

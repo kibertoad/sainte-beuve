@@ -1,5 +1,6 @@
 import type { AttentionEvent, AttentionRequest } from '@sainte-beuve/contracts'
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
+import type { AttentionBus } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryAttentionBus } from '../src/realtime/InMemoryAttentionBus.js'
 import {
@@ -22,7 +23,7 @@ import {
 const ATTENTION = '/api/v1/attention'
 
 /** A deployment whose credential acts as `username`, so that is who the viewer is. */
-function harnessFor(username: string, bus = new InMemoryAttentionBus()): TestHarness {
+function harnessFor(username: string, bus: AttentionBus = new InMemoryAttentionBus()): TestHarness {
   // The bus goes in as the PROCESS-WIDE fan-out, not as a container override:
   // `container.bus` is the view `withOrg` binds to an org, and replacing that
   // with a raw bus would be a stream nothing ever publishes to.
@@ -309,7 +310,43 @@ describe('the live stream', () => {
     // ever opened.
     expect(bus.subscriberCount(DEFAULT_ORG_ID)).toBe(0)
   })
+
+  it('closes the response when the BUS drops the subscription', async () => {
+    // The other direction, and the one a bus that reaches across a network has
+    // and the in-process one does not: the fan-out gives up while the browser
+    // is still there. Ending the response is what makes the page reconnect —
+    // `EventSource` retries on its own and this SPA refetches its inbox on
+    // every reconnect — where a response left open would report itself live and
+    // deliver nothing for ever.
+    let drop: () => void = () => {}
+    const harness = harnessFor(
+      'kibertoad',
+      droppingBus((onClose) => (drop = onClose)),
+    )
+    const res = await harness.app.fetch(get(`${ATTENTION}/stream`))
+    const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+    // The retry hint, which is what tells the browser how long to wait before
+    // coming back.
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain('retry:')
+
+    drop()
+    expect((await reader.read()).done).toBe(true)
+  })
 })
+
+/**
+ * A bus that never publishes and hands its `onClose` to the caller, so a case
+ * can drop a live subscription the way a closed socket would.
+ */
+function droppingBus(capture: (onClose: () => void) => void): AttentionBus {
+  return {
+    publish: () => {},
+    subscribe: (_orgId, _listener, onClose) => {
+      capture(onClose ?? (() => {}))
+      return () => {}
+    },
+  }
+}
 
 /**
  * The first `attention` event on a stream, or null when none arrives before the

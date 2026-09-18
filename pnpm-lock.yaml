@@ -297,6 +297,9 @@ importers:
       '@sainte-beuve/ai-review':
         specifier: workspace:*
         version: link:../../packages/ai-review
+      '@sainte-beuve/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@sainte-beuve/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
