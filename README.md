@@ -135,7 +135,9 @@ what is a placeholder, and what lands next,
 [docs/integrations.md](./docs/integrations.md) for the GitHub and Slack design,
 [docs/persistence.md](./docs/persistence.md) for where the board lives,
 [docs/auth.md](./docs/auth.md) for who is allowed to call it, and
-[docs/orgs.md](./docs/orgs.md) for what they may reach once they are in.
+[docs/orgs.md](./docs/orgs.md) for what they may reach once they are in, and
+[docs/performance-review.md](./docs/performance-review.md) for where it will
+scale badly first.
 
 ## Connecting GitHub, GitLab and Slack
 
