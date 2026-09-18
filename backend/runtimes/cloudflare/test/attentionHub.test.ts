@@ -3,7 +3,7 @@ import type { Logger } from '@sainte-beuve/kernel'
 import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { DurableObjectAttentionBus } from '../src/realtime/DurableObjectAttentionBus.js'
-import { type HubStatus, STATUS_URL } from '../src/realtime/protocol.js'
+import { decodeEvent, type HubStatus, STATUS_URL } from '../src/realtime/protocol.js'
 
 // The one thing that can only be proven on the runtime it deploys to, like the
 // D1 binding and the Web Crypto adapters beside it: the attention fan-out
@@ -85,6 +85,42 @@ describe('the attention hub', () => {
     expect(await status('org-c')).toStrictEqual({ subscribers: 0 })
   })
 
+  it('drops a subscription whose listener throws, rather than the connection', async () => {
+    // The listener is the SSE stream's, and it runs inside a websocket message
+    // handler: a throw that got out of here would take the socket with it and
+    // every other stream this isolate holds on it. The port's answer to a
+    // subscriber that throws is to drop it, and dropping it here means ending
+    // the subscription — which closes the response, so the page reconnects and
+    // refetches rather than sitting on a stream that reports itself live.
+    const { bus: publisher, settled } = busForIsolate()
+    const warnings: string[] = []
+    const { bus: subscriber } = busForIsolate(env.ATTENTION, recordingLogger(warnings))
+    let closed = false
+
+    subscriber.subscribe(
+      'org-e',
+      () => {
+        throw new Error('this stream is gone')
+      },
+      () => {
+        closed = true
+      },
+    )
+    await attached('org-e', 1)
+
+    publisher.publish('org-e', eventFor('ask-3'))
+    await settled()
+
+    await until(() => closed)
+    // Said out loud, which is the part that distinguishes a subscription this
+    // isolate DROPPED from a socket the runtime happened to tear down under an
+    // error nobody handled.
+    expect(warnings).toStrictEqual(['attention stream listener threw; dropping the subscription'])
+    // And the socket goes with it: the hub counts what it is holding, and a
+    // subscription nobody can deliver to must not be left on the count.
+    await attached('org-e', 0)
+  })
+
   it('reports the subscription it could not make, rather than holding it open', async () => {
     // A bus whose namespace answers nothing: the page must be told, because the
     // browser reconnects on a closed stream and refetches its inbox, where a
@@ -105,6 +141,36 @@ describe('the attention hub', () => {
   })
 })
 
+describe('the frame the hub carries', () => {
+  // Through the contract's own schema, because the check a hand-written one
+  // makes is the bug: `typeof request === 'object'` passes `null`, and the
+  // audience filter that reads the event walks `request.commitments`. The
+  // realistic writer of a frame this build cannot read is the OTHER build of
+  // the same deployment, mid-rollout.
+
+  it('reads back what the publish path writes', () => {
+    expect(decodeEvent(JSON.stringify(eventFor('ask-4')))).toStrictEqual(eventFor('ask-4'))
+  })
+
+  it('drops a frame that is not an event at all', () => {
+    expect(decodeEvent('not json')).toBeNull()
+    expect(decodeEvent(new ArrayBuffer(4))).toBeNull()
+    expect(decodeEvent(JSON.stringify({ kind: 'opened', request: null }))).toBeNull()
+  })
+
+  it('drops an event whose request the audience filter could not read', () => {
+    const { commitments: _commitments, ...partial } = requestFor('ask-5')
+
+    expect(decodeEvent(JSON.stringify({ kind: 'opened', request: partial }))).toBeNull()
+  })
+
+  it('keeps a frame a newer build wrote, minus what this one does not know', () => {
+    const frame = JSON.stringify({ kind: 'opened', request: requestFor('ask-6'), urgency: 'high' })
+
+    expect(decodeEvent(frame)).toStrictEqual(eventFor('ask-6'))
+  })
+})
+
 /**
  * One isolate's bus, plus a way to wait for the publishes it deferred.
  *
@@ -112,7 +178,10 @@ describe('the attention hub', () => {
  * is never awaited by its caller, so a case that asserted straight after it
  * would be racing the fan-out rather than testing it.
  */
-function busForIsolate(namespace: DurableObjectNamespace = env.ATTENTION): {
+function busForIsolate(
+  namespace: DurableObjectNamespace = env.ATTENTION,
+  logger: Logger = silentLogger(),
+): {
   bus: DurableObjectAttentionBus
   settled: () => Promise<void>
 } {
@@ -120,7 +189,7 @@ function busForIsolate(namespace: DurableObjectNamespace = env.ATTENTION): {
   const bus = new DurableObjectAttentionBus({
     namespace,
     waitUntil: (work) => deferred.push(work),
-    logger: silentLogger(),
+    logger,
   })
   return {
     bus,
@@ -141,6 +210,16 @@ function brokenNamespace(): DurableObjectNamespace {
 
 function silentLogger(): Logger {
   return { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
+}
+
+/** A logger that keeps what was warned about, for a case that asserts on it. */
+function recordingLogger(warnings: string[]): Logger {
+  return {
+    ...silentLogger(),
+    warn: (_obj, msg) => {
+      if (msg !== undefined) warnings.push(msg)
+    },
+  }
 }
 
 async function status(orgId: string): Promise<HubStatus> {

@@ -41,6 +41,14 @@ subscription NOBODY unsubscribed. An in-process implementation never calls it.
 One that reaches across a network has to, because the alternative is a response
 left open that reports itself live and delivers nothing.
 
+Closing a stream is how the reader is told, so it is also how a deployment whose
+hub is unreachable answers every request: the stream opens, the subscribe fails,
+the response ends, and the page comes back. Both ends bound what that costs. The
+response names a much longer `retry` when it ends on `onClose` than when a reader
+merely went away, and the SPA owns the reconnect rather than leaving it to
+`EventSource`'s fixed interval — repeated failures back off to a minute, and a
+stream that lasted starts the next one back at the floor.
+
 ## Two implementations
 
 | Implementation              | Reaches                        | Wired by                        |
@@ -95,9 +103,22 @@ them whose reader happens to be here.
   window the way it closes the reconnect one: it fetches the inbox after
   attaching.
 - **Ordering between two publishes is not guaranteed** once the fan-out is a
-  network hop. Each event carries the whole request row rather than a delta, so
-  the worst case is a page that shows an older snapshot until the next event or
-  the next refetch — and the inbox is the authority.
+  network hop. On the Worker each publish is its own unawaited fetch to the hub,
+  so the `resolved` that followed a `committed` can arrive before it.
+
+  That is not a snapshot that goes stale until the next event, because for the
+  request it is about there IS no next event and no next fetch: each event
+  carries the whole row, so the older one wins by landing second, and a request
+  the server has closed is not in the inbox to be corrected by a refetch. It is
+  the one failure this feature cannot have — an answered ask back on everybody's
+  board.
+
+  So the reader orders them. Every row carries `updatedAt`, the store's own stamp
+  on the write the event announces, and the SPA keeps the newest stamp it has
+  applied per request id and drops anything older — including a row the REST
+  inbox hands it, which is the same race seen from the other side. See
+  `createAttentionLedger`. The ledger remembers requests that have LEFT the list,
+  because a resolved ask is exactly the one a late event would resurrect.
 
 ## Configuring it
 

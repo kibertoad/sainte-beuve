@@ -1,4 +1,6 @@
 import type { AttentionEvent } from '@sainte-beuve/contracts'
+import { attentionEventSchema } from '@sainte-beuve/contracts'
+import * as v from 'valibot'
 
 /**
  * The two-verb protocol between a Worker isolate and its attention hub.
@@ -41,23 +43,30 @@ export interface HubStatus {
 /**
  * One event off the socket, or null for a frame this build cannot read.
  *
+ * THROUGH THE CONTRACT'S OWN SCHEMA, which is the only check that is worth
+ * making here. A hand-written shape test is the bug it is trying to prevent: it
+ * reads `typeof request === 'object'`, which `null` passes, and it says nothing
+ * about the fields the subscriber actually reaches — `reaches` walks
+ * `request.commitments`, and a row without one throws a `TypeError` out of a
+ * websocket message handler that nothing on this runtime catches.
+ *
  * Defensive even though the only writer is the publish path above, because the
- * alternative is a `TypeError` thrown from inside a listener the SSE stream
- * cannot catch. A frame from a newer build mid-rollout is the realistic case,
- * and dropping it costs one event where throwing costs the connection.
+ * realistic case is a rollout: two builds of one deployment share an org's hub
+ * for as long as it takes to replace them. A frame carrying FIELDS this build
+ * does not know is read fine — the schema ignores what it does not name — and
+ * only one missing something the contract requires is dropped, which costs an
+ * event where throwing costs the connection.
  */
 export function decodeEvent(frame: string | ArrayBuffer): AttentionEvent | null {
   if (typeof frame !== 'string') return null
+  const read = v.safeParse(attentionEventSchema, parseJson(frame))
+  return read.success ? read.output : null
+}
+
+function parseJson(frame: string): unknown {
   try {
-    const parsed: unknown = JSON.parse(frame)
-    return isEvent(parsed) ? parsed : null
+    return JSON.parse(frame)
   } catch {
     return null
   }
-}
-
-function isEvent(value: unknown): value is AttentionEvent {
-  if (typeof value !== 'object' || value === null) return false
-  const candidate = value as Partial<AttentionEvent>
-  return typeof candidate.kind === 'string' && typeof candidate.request === 'object'
 }

@@ -66,20 +66,52 @@ export interface AppOptions {
   corsOrigins?: string[] | ((scope: RequestScope) => string[])
 }
 
+/**
+ * The scope of a request, built ONCE for it.
+ *
+ * Four middlewares ask for it — the CORS origin callback, the origin list the
+ * context carries, the container and the write guard — and every one of them
+ * would otherwise rebuild it, which is four objects and, worse, four goes at
+ * the deferral below. Keyed on the context because that is what a request IS
+ * here: Hono builds one per request and drops it with the response, so the map
+ * needs no eviction of its own.
+ */
+const scopes = new WeakMap<Context<AppEnv>, RequestScope>()
+
 function scopeOf(c: Context<AppEnv>): RequestScope {
-  return { req: c.req.raw, env: c.env, waitUntil: deferralOf(c) }
+  const known = scopes.get(c)
+  if (known !== undefined) return known
+  const scope: RequestScope = { req: c.req.raw, env: c.env, waitUntil: deferralOf(c) }
+  scopes.set(c, scope)
+  return scope
 }
 
 /**
- * The runtime's deferral, or a swallow.
+ * The runtime's deferral, resolved on FIRST USE rather than up front.
  *
  * Hono THROWS off `executionCtx` on a runtime that has none rather than
- * answering undefined, so the absence is caught rather than tested for. The
- * fallback still attaches a rejection handler: the work is unawaited by
+ * answering undefined, so the absence is caught rather than tested for — and
+ * catching it costs an `Error` with its stack captured. Most requests defer
+ * nothing at all: they read something and answer. Working the runtime out when
+ * something is actually deferred takes that cost off every one of them and
+ * leaves it on the handful that publish, where it is paid once.
+ */
+function deferralOf(c: Context<AppEnv>): Deferral {
+  let runtime: Deferral | undefined
+  return (work) => {
+    runtime ??= runtimeDeferralOf(c)
+    runtime(work)
+  }
+}
+
+/**
+ * The runtime's own `waitUntil`, or a swallow.
+ *
+ * The fallback still attaches a rejection handler: the work is unawaited by
  * construction, and an unhandled rejection is how a Node process turns a failed
  * best-effort publish into a crash.
  */
-function deferralOf(c: Context<AppEnv>): Deferral {
+function runtimeDeferralOf(c: Context<AppEnv>): Deferral {
   try {
     const ctx = c.executionCtx
     return (work) => {

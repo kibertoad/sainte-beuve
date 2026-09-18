@@ -325,11 +325,18 @@ describe('the live stream', () => {
     )
     const res = await harness.app.fetch(get(`${ATTENTION}/stream`))
     const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+    const decoder = new TextDecoder()
     // The retry hint, which is what tells the browser how long to wait before
     // coming back.
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain('retry:')
+    expect(decoder.decode((await reader.read()).value)).toContain('retry: 3000')
 
     drop()
+    // And a LONGER one on the way out, because a subscription that died under a
+    // reader still holding the response is most often a fan-out this deployment
+    // cannot reach at all. At the reader's own interval, every open page would
+    // ask for a stream and refetch its inbox twenty times a minute for as long
+    // as that lasted.
+    expect(decoder.decode((await reader.read()).value)).toContain('retry: 30000')
     expect((await reader.read()).done).toBe(true)
   })
 })

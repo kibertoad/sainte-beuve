@@ -315,6 +315,9 @@ importers:
       '@sainte-beuve/server':
         specifier: workspace:*
         version: link:../../packages/server
+      valibot:
+        specifier: ^1.4.2
+        version: 1.4.2(typescript@7.0.2)
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0

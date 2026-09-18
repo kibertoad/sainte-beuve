@@ -73,18 +73,29 @@ export class DurableObjectAttentionBus implements AttentionBus {
     // and refetches on every reconnect.
     let socket: WebSocket | null = null
     let done = false
-    const ended = (): void => {
-      if (done) return
+    /**
+     * Tear the subscription down, once, and say whether this call is the one
+     * that did it. It closes the socket rather than merely forgetting it: the
+     * hub counts the connections it holds and a page that went away must not
+     * leave one behind, and the subscription can end from either side of it.
+     */
+    const stop = (): boolean => {
+      if (done) return false
       done = true
+      const open = socket
       socket = null
-      onClose?.()
+      if (open !== null) closeQuietly(open)
+      return true
+    }
+    const ended = (): void => {
+      if (stop()) onClose?.()
     }
 
     this.open(orgId)
       .then((opened) => {
         if (done) return closeQuietly(opened)
         socket = opened
-        listenOn(opened, listener, ended)
+        listenOn({ socket: opened, listener, ended, logger: this.options.logger })
       })
       .catch((err: unknown) => {
         this.options.logger.warn({ err, orgId }, 'attention hub subscribe failed')
@@ -92,9 +103,7 @@ export class DurableObjectAttentionBus implements AttentionBus {
       })
 
     return () => {
-      done = true
-      if (socket !== null) closeQuietly(socket)
-      socket = null
+      stop()
     }
   }
 
@@ -116,6 +125,14 @@ export class DurableObjectAttentionBus implements AttentionBus {
   }
 }
 
+/** What one attached stream is wired out of. */
+interface Wiring {
+  socket: WebSocket
+  listener: (event: AttentionEvent) => void
+  ended: () => void
+  logger: Logger
+}
+
 /**
  * Wire an open socket to a listener.
  *
@@ -126,14 +143,22 @@ export class DurableObjectAttentionBus implements AttentionBus {
  * socket rebuilt underneath a stream would be the one path where events are
  * lost with nobody told.
  */
-function listenOn(
-  socket: WebSocket,
-  listener: (event: AttentionEvent) => void,
-  ended: () => void,
-): void {
+function listenOn({ socket, listener, ended, logger }: Wiring): void {
   socket.addEventListener('message', (message) => {
     const event = decodeEvent(message.data)
-    if (event !== null) listener(event)
+    if (event === null) return
+    try {
+      listener(event)
+    } catch (err) {
+      // A subscriber that throws is what the port says it is: a stream that has
+      // died without saying so, to be dropped rather than retried. Dropping it
+      // here means ENDING the subscription, which closes the response and has
+      // the browser reconnect and refetch — where letting the throw out would
+      // put it through a websocket message handler, which is the one place on
+      // this runtime where nothing catches it and the connection goes with it.
+      logger.warn({ err }, 'attention stream listener threw; dropping the subscription')
+      ended()
+    }
   })
   socket.addEventListener('close', ended)
   socket.addEventListener('error', ended)

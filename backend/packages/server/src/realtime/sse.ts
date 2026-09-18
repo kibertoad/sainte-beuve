@@ -20,8 +20,24 @@
 /** How often a comment goes out to keep an idle connection off a proxy's timeout. */
 const HEARTBEAT_MS = 25_000
 
-/** How long a browser waits before reconnecting after the stream drops. */
+/** How long a browser waits before reconnecting after the READER dropped the stream. */
 const RETRY_MS = 3_000
+
+/**
+ * How long it waits when the SUBSCRIPTION died instead.
+ *
+ * The two are different facts and deserve different numbers. A reader that went
+ * away and came back is a page being used; a subscription that ended under a
+ * reader still holding the response is, on a bus that reaches over a network,
+ * most often a fan-out this deployment cannot reach AT ALL — and that does not
+ * repair itself in three seconds. `EventSource` reconnects on the interval the
+ * last stream gave it and backs off from nothing, and this SPA refetches its
+ * inbox every time the stream comes back, so at the reader's interval an
+ * unreachable hub costs every open page a stream, a subscribe and an inbox read
+ * twenty times a minute for as long as it is down. Saying so on the way out
+ * costs one field.
+ */
+const LOST_RETRY_MS = 30_000
 
 const encoder = new TextEncoder()
 
@@ -96,6 +112,10 @@ function attach(
   }
   const end = (): void => {
     detach(state)
+    // The last thing the reader is told, and the only place this can be said:
+    // the response is about to end and the next one is a new request. See
+    // `LOST_RETRY_MS`.
+    write(`retry: ${LOST_RETRY_MS}\n\n`)
     try {
       controller.close()
     } catch {
