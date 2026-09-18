@@ -32,9 +32,9 @@ Working rules for this repo. Read [README.md](./README.md) for what exists and
   tables; a new indexed column needs a migration in each dialect. See
   [docs/persistence.md](./docs/persistence.md).
 - **The screens are used on a phone.** Every list row stacks below `sm`, every
-  fixed width is `w-full sm:w-<n>`, and a label column is `grid-cols-1
-sm:grid-cols-[...]`. `lg` is the shell's breakpoint alone, where the rail
-  becomes a slideover. Check a new screen at 375px before it lands.
+  fixed width is `w-full sm:w-<n>`, and a label column is
+  `grid-cols-1 sm:grid-cols-[...]`. `lg` is the shell's breakpoint alone, where
+  the rail becomes a slideover. Check a new screen at 375px before it lands.
 - **Format and lint the whole tree**: `pnpm lint:fix`, never a file subset.
 - **Add a changeset** for any change to a versioned package.
 - Run `build` / `typecheck` / `test` through Turbo from the repo root. Test a
