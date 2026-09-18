@@ -16,6 +16,14 @@ import {
 /** The header the CORS cases are all about. */
 const ALLOW_ORIGIN = 'access-control-allow-origin'
 
+/** The board as a list of ids, which is what every filter case asserts on. */
+async function listedIds(harness: TestHarness, query = ''): Promise<string[]> {
+  const res = await harness.app.fetch(new Request(`http://localhost/api/v1/reviews${query}`))
+  expect(res.status).toBe(200)
+  const body = (await res.json()) as { reviews: { id: string }[] }
+  return body.reviews.map((review) => review.id)
+}
+
 describe('review board API', () => {
   let harness: TestHarness
 
@@ -85,6 +93,52 @@ describe('review board API', () => {
     const listed = await harness.app.fetch(new Request('http://localhost/api/v1/reviews'))
     const body = (await listed.json()) as { reviews: { id: string }[] }
     expect(body.reviews.map((r) => r.id)).toStrictEqual([review.id])
+  })
+
+  it('answers the board with the ACTIVE reviews unless asked otherwise', async () => {
+    // Terminal reviews are never archived, so an unfiltered read grew with
+    // everything the deployment had ever tracked and re-decoded a payload per
+    // row nobody looks at. History is still readable — somebody has to ask.
+    const review = await openReview(harness)
+    await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'closed' }))
+
+    expect(await listedIds(harness)).toStrictEqual([])
+    expect(await listedIds(harness, '?status=closed')).toStrictEqual([review.id])
+    // Both shapes a query string carries a list in: the comma form somebody
+    // writing the URL reaches for, and the repeated form the typed client
+    // produces. A single repeated value is indistinguishable from a scalar once
+    // it is parsed, which is why the contract takes both.
+    expect(await listedIds(harness, '?status=open,closed')).toStrictEqual([review.id])
+    expect(await listedIds(harness, '?status=open&status=closed')).toStrictEqual([review.id])
+  })
+
+  it('caps the board, newest first, and refuses a cap it cannot serve', async () => {
+    const first = await openReview(harness)
+    harness.clock.advance(1_000)
+    const second = await openReview(harness, {
+      pullRequest: { ...PR, number: 8, url: `${PR.url}8` },
+    })
+
+    expect(await listedIds(harness)).toStrictEqual([second.id, first.id])
+    expect(await listedIds(harness, '?limit=1')).toStrictEqual([second.id])
+
+    // Refused rather than clamped: a caller asking for a thousand rows has
+    // written something this API will not do, and answering two hundred without
+    // saying so reads as a board that lost the rest.
+    const tooMany = await harness.app.fetch(
+      new Request('http://localhost/api/v1/reviews?limit=1000'),
+    )
+    expect(tooMany.status).toBe(400)
+  })
+
+  it('refuses a status no review can be in', async () => {
+    // A filter that silently matched nothing would read as an empty board,
+    // which is the one answer somebody working from the wrong vocabulary would
+    // not question.
+    const res = await harness.app.fetch(
+      new Request('http://localhost/api/v1/reviews?status=merged'),
+    )
+    expect(res.status).toBe(400)
   })
 
   it('refuses to track the same pull request twice', async () => {

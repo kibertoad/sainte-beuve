@@ -46,7 +46,7 @@ org gets there — no port method takes one, and no service passes one.
 | `orgs`               | `id`                          | `slug` (UNIQUE), `created_at`                                                                                                   |
 | `reviewers`          | `(org_id, id)`                | `outstanding_reviews`, `created_at`                                                                                             |
 | `review_requests`    | `(org_id, id)`                | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at`                                                                      |
-| `reminders`          | `(org_id, id)`                | `review_id`, `status`, `due_at`                                                                                                 |
+| `reminders`          | `(org_id, id)`                | `review_id`, `status`, `due_at`, `claimed_at`                                                                                   |
 | `ai_review_runs`     | `(org_id, id)`                | `review_id`, `status`, `requested_at`, `last_polled_at`                                                                         |
 | `integration_tokens` | `(org_id, integration_id)`    | `sealed`, `hint`, `subject`, `updated_at` (no payload)                                                                          |
 | `projects`           | `(org_id, id)`                | `ref_key` (UNIQUE per org), `created_at`                                                                                        |
@@ -129,7 +129,10 @@ merge request with the GitHub pull request of the same number.
 `projects.ref_key` carries a UNIQUE index, which is the uniqueness the port
 declares and the in-memory store can only promise.
 
-## The claim that has to be atomic
+## The claims that have to be atomic
+
+There are two, and both are a read that cannot be trusted to still be true by the
+time the write lands.
 
 `IdentityRepository.link` answers "whose account is this NOW", and the answer is
 not always the reviewer that was passed in. Two first sign-ins that both find no
@@ -140,6 +143,17 @@ Both durable stores settle it in one statement: insert, and on a conflict with
 caller that already holds the key refreshes the handle on the same trip, which
 is what keeps a rename visible. The in-memory store reads and then writes, and
 can only promise the same outcome.
+
+`ReminderRepository.claim` answers "am I the one sending this nudge". `listDue`
+is a read, so every pass over a batch sees the same rows — and two passes is what
+a second Node replica is, or a Worker cron firing while the last invocation is
+still inside `waitUntil`. Both durable stores move the row out of `scheduled` in
+one conditional statement (`UPDATE ... WHERE ... AND status = 'scheduled'`,
+answering through `RETURNING` whether a row changed), so exactly one caller gets
+it and the rest skip; in memory it is a check-and-set. The payload is written
+whole rather than edited in place, because the status is a column AND a field of
+the payload, and `jsonb_set`/`json_set` is the dialect branch these two packages
+exist not to have.
 
 ## Migrations
 

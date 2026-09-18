@@ -13,7 +13,13 @@
 // says so, which is the honest reading of a workspace that renders for whoever
 // the deployment's credential acts as.
 const auth = useAuthState()
-await auth.refresh()
+// NOT AWAITED. The shell suspends on whatever its setup awaits, so an awaited
+// read here put `GET /auth` in front of every page's own fetch: first paint of
+// any screen was two sequential round trips and a preflight rather than two
+// overlapping ones. Nothing below needs the answer to issue its request — this
+// rail renders a name from it, and `whoami` already tolerates null — so the read
+// is started and the shell renders around it.
+void auth.refresh()
 
 // The overlay rail's open state, and the closes that go with it. A slideover
 // left standing over the page it just navigated to — or over the wide-screen

@@ -23,32 +23,54 @@ const toast = useToast()
 
 const auth = useAuthState()
 
-const { data, pending, error, refresh } = await useAsyncData('configuration', async () => {
-  // Who is calling is read FIRST and ON ITS OWN, which is the whole shape of
-  // this. Everything below it is under `/api/v1/settings` and is refused
-  // outright on a `required` deployment nobody has signed in to yet, while the
-  // Access card this feeds holds the only sign-in button there is: a page that
-  // let that refusal take the card down with it would make the documented way
-  // in unreachable in the one mode it exists for. `auth.refresh()` never
-  // rejects, so this settles either way.
-  await auth.refresh()
-  // NOT ASKED FOR AT ALL unless the caller may have them. Everything below is
-  // admin-only since the org boundary landed, and a member reaching this page —
-  // which they do, because it holds the only sign-out button — would otherwise
-  // get three 403s and an error alert where the honest answer is "this part is
-  // not yours". The API is still the guard; this only decides what to ask.
-  if (!auth.isAdmin.value) return null
-  // The rest is one call for the reason the two credential reads are one call:
-  // minting a key and connecting a host both change what this page says about
-  // who may call, and a card that refreshed only its own half would report a
-  // state that never existed.
-  const [connections, settings, keys] = await Promise.all([
-    api.getConnections(),
-    api.getIntegrationSettings(),
-    api.listApiKeys(),
-  ])
-  return { connections, integrations: settings.integrations, apiKeys: keys.apiKeys }
-})
+// LAZY, and not awaited: a page that awaits its read at setup holds the previous
+// screen on screen until the whole list is down, validated and mounted, so a
+// click on this destination looks like nothing happened. Rendered immediately
+// instead, the skeleton below says what is coming. `AiReviewPanel` has done this
+// since it was written, for the same reason.
+const { data, pending, error, refresh } = useAsyncData(
+  'configuration',
+  async () => {
+    // Who is calling is read FIRST and ON ITS OWN, which is the whole shape of
+    // this. Everything below it is under `/api/v1/settings` and is refused
+    // outright on a `required` deployment nobody has signed in to yet, while the
+    // Access card this feeds holds the only sign-in button there is: a page that
+    // let that refusal take the card down with it would make the documented way
+    // in unreachable in the one mode it exists for. `auth.refresh()` never
+    // rejects, so this settles either way.
+    //
+    // Only when nobody has read it yet, though. The state is shared (`useState`),
+    // the shell starts the same read on first paint, and a second one here put a
+    // third sequential round trip in front of this screen for an answer already on
+    // its way. A visit that arrives before the shell's read lands still makes it,
+    // which is the case this has to cover: the admin check below is what decides
+    // whether the settings calls are made at all.
+    //
+    // What makes holding the answer safe is that the one thing on this page which
+    // changes it says so: `endSession` calls `auth.invalidate()` before the
+    // refresh it triggers reaches here, so a sign-out reads again and this screen
+    // flips to anonymous. Anything else added here that changes who is calling
+    // owes the same call.
+    if (auth.state.value === null) await auth.refresh()
+    // NOT ASKED FOR AT ALL unless the caller may have them. Everything below is
+    // admin-only since the org boundary landed, and a member reaching this page —
+    // which they do, because it holds the only sign-out button — would otherwise
+    // get three 403s and an error alert where the honest answer is "this part is
+    // not yours". The API is still the guard; this only decides what to ask.
+    if (!auth.isAdmin.value) return null
+    // The rest is one call for the reason the two credential reads are one call:
+    // minting a key and connecting a host both change what this page says about
+    // who may call, and a card that refreshed only its own half would report a
+    // state that never existed.
+    const [connections, settings, keys] = await Promise.all([
+      api.getConnections(),
+      api.getIntegrationSettings(),
+      api.listApiKeys(),
+    ])
+    return { connections, integrations: settings.integrations, apiKeys: keys.apiKeys }
+  },
+  { lazy: true },
+)
 
 const { busy, run } = useApiAction({ refresh })
 
@@ -75,7 +97,20 @@ function revokeKey(keyId: string) {
 }
 
 async function endSession() {
-  await run(() => api.signOut(), 'Could not sign out', 'sign-out')
+  await run(
+    async () => {
+      await api.signOut()
+      // BEFORE the refresh below, which is what `run` does next: the handler
+      // keeps whoever it already read (see the guard in it), so a sign-out that
+      // did not say the held answer is stale would re-run the handler against
+      // the signed-in one — leaving the Access card showing the person as
+      // signed in, and `isAdmin` still true, which sends three admin-only
+      // settings calls the API has just started refusing.
+      auth.invalidate()
+    },
+    'Could not sign out',
+    'sign-out',
+  )
 }
 
 // The credential inputs, so a successful save can clear the one it landed on.
@@ -248,6 +283,8 @@ onMounted(() => {
     />
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the configuration" />
+
+    <LoadingCard v-else-if="pending && data === null" />
 
     <UAlert
       v-else-if="!auth.isAdmin.value"

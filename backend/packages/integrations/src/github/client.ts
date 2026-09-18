@@ -1,4 +1,4 @@
-import { UpstreamFailedError, getErrorMessage } from '@sainte-beuve/kernel'
+import { UpstreamFailedError, getErrorMessage, withDeadline } from '@sainte-beuve/kernel'
 
 /**
  * The only place in the tree that calls GitHub.
@@ -13,6 +13,11 @@ import { UpstreamFailedError, getErrorMessage } from '@sainte-beuve/kernel'
  * Every failure leaves here as an `UpstreamFailedError` carrying the status,
  * because that is the one thing a caller can act on: a 401 is a credential to
  * re-enter and a 404 on an installation lookup is an App nobody installed.
+ *
+ * Every call carries a DEADLINE (`withDeadline`), because the widest fan-out in
+ * the tree is here: a workspace read asks every registered project at once, and
+ * one host that accepts a connection and never answers would otherwise hold a
+ * person's whole screen open.
  */
 
 const USER_AGENT = 'sainte-beuve'
@@ -55,7 +60,7 @@ export async function githubRequest<T>(request: GitHubRequest): Promise<T> {
   const url = `${trimBase(request.baseUrl)}${request.path}`
   let response: Response
   try {
-    response = await (request.fetchImpl ?? globalThis.fetch)(url, {
+    response = await withDeadline(request.fetchImpl)(url, {
       method: request.method ?? 'GET',
       headers: {
         accept: 'application/vnd.github+json',

@@ -36,7 +36,7 @@ export type {
   VcsIdentityGateway,
 } from './ports/gateways.js'
 export type { AttentionBus, ScopedAttentionBus } from './ports/realtime.js'
-export { isStoredRowError, StoredRowError } from './ports/repositories.js'
+export { isStoredRowError, StoredRowError } from './ports/stored-row.js'
 export type {
   AiReviewRunRepository,
   ApiKeyRepository,
@@ -57,6 +57,7 @@ export type {
 } from './ports/repositories.js'
 export type { OrgRepository, PersistenceProvider, TenancyDirectory } from './ports/tenancy.js'
 export type { RoundTripState, StateSigner } from './ports/state.js'
+export { UPSTREAM_TIMEOUT_MS, withDeadline } from './upstream.js'
 export {
   type Clock,
   type IdGenerator,

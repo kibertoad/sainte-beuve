@@ -1,4 +1,4 @@
-import { UpstreamFailedError, getErrorMessage } from '@sainte-beuve/kernel'
+import { UpstreamFailedError, getErrorMessage, withDeadline } from '@sainte-beuve/kernel'
 
 /**
  * Answering an interaction on its own `response_url`.
@@ -28,7 +28,7 @@ export async function postSlackResponse(input: {
 }): Promise<void> {
   let response: Response
   try {
-    response = await (input.fetchImpl ?? globalThis.fetch)(input.responseUrl, {
+    response = await withDeadline(input.fetchImpl)(input.responseUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json; charset=utf-8' },
       body: JSON.stringify(input.message),

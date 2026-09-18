@@ -4,6 +4,7 @@ import type {
   CreateProjectInput,
   CreateReviewerInput,
   PullRequestRef,
+  ReviewStatus,
   Role,
   UpdateProject,
   UpdateReviewer,
@@ -297,7 +298,27 @@ export function createSainteBeuveApi(apiBase: string) {
     releaseCommitment: (commitmentId: string) =>
       call(releaseCommitmentContract, { pathParams: { commitmentId } }),
 
-    listReviews: () => call(listReviewsContract, {}),
+    /**
+     * The board. Unfiltered it is the ACTIVE reviews, newest first and capped,
+     * which is the server's default and what every screen here wants: the
+     * terminal ones are never archived, so an unfiltered read grew with
+     * everything the deployment had ever tracked. A caller that wants history
+     * asks for the statuses it means.
+     *
+     * The query object is built key by key rather than spread with
+     * `undefined`s: a key that is present and undefined is serialised as an
+     * EMPTY parameter (`?status=`), which the contract then refuses — an absent
+     * filter has to be an absent key.
+     */
+    listReviews: (filter: { status?: readonly ReviewStatus[]; limit?: number } = {}) => {
+      const queryParams: { status?: ReviewStatus[]; limit?: string } = {}
+      // Copied rather than passed through: the contract's own type is mutable,
+      // and the sets a caller has to hand (`ACTIVE_REVIEW_STATUSES`) are not.
+      if (filter.status !== undefined) queryParams.status = [...filter.status]
+      if (filter.limit !== undefined) queryParams.limit = String(filter.limit)
+      return call(listReviewsContract, { queryParams })
+    },
+
     assignReviewers: (reviewId: string, count = 1) =>
       call(assignReviewersContract, { pathParams: { reviewId }, body: { count } }),
 

@@ -27,6 +27,30 @@ fix that respects the rules in [CLAUDE.md](../CLAUDE.md): a port change lands in
 all three stores with a conformance case, a new indexed column gets a migration
 per dialect, and the runtimes stay symmetric.
 
+## What has since been fixed
+
+Findings 1, 2, 3, 4 and 5 — every High and the Medium-High — have landed, along
+with 14 and 17, which pair with them. The findings below are kept as written:
+they are the reasoning the fixes were made from, and the line numbers in them
+are against the tree at the time of the review.
+
+| #   | What landed                                                                                                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Both walks of the tick are bounded-concurrent, with the nudge/passenger ordering kept; one org's batch fans out by REVIEW so a re-plan cannot interleave |
+| 2   | `ReminderRepository.claim`: one conditional statement in all three stores, a `sending` status on the contract, and delivery skips what it did not claim  |
+| 3   | `GET /reviews` answers the active statuses, newest first, capped at 200, and takes `?status=` and `?limit=`; `list` grew a `limit` in all three stores   |
+| 4   | The shell no longer suspends on `GET /auth`, the pages read lazily behind a skeleton, the auth read de-duplicates, and the API origin is preconnected    |
+| 5   | `withDeadline` moved into the kernel and now wraps GitHub, GitLab and both Slack posters as well as cat-factory                                          |
+| 14  | Both wrangler configs run the clock every five minutes rather than hourly                                                                                |
+| 17  | `review_requests_created_idx`, and the status index rebuilt `DESC` with the id tie-break, in both dialects                                               |
+
+Two things named in finding 1 were deliberately NOT done: the session sweep still
+runs every tick (skipping it on some ticks needs state the tick does not have),
+and the per-reminder lookups are still one read each — a `getByIds` on two ports
+is the step to take when the batch cap is regularly hit. Finding 5's other half,
+reading `retry-after` and `x-ratelimit-reset` off a 403 or 429, is also still
+open.
+
 ## Priority
 
 | #   | Finding                                                      | Impact      | Port change |

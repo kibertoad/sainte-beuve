@@ -97,12 +97,15 @@ export class InMemoryReviewerRepository implements ReviewerRepository {
 export class InMemoryReviewRequestRepository implements ReviewRequestRepository {
   private readonly rows = new Map<string, ReviewRequest>()
 
-  async list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]> {
+  async list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]> {
     const wanted = filter?.status
-    return [...this.rows.values()]
+    const matched = [...this.rows.values()]
       .filter((row) => wanted === undefined || wanted.includes(row.status))
       .sort(newestFirst((row) => row.createdAt))
-      .map(clone)
+    // Sliced AFTER the sort, which is what the two durable stores do with their
+    // `LIMIT` on an ordered read: the cap takes the newest rows, not an
+    // arbitrary handful.
+    return (filter?.limit === undefined ? matched : matched.slice(0, filter.limit)).map(clone)
   }
 
   async getById(reviewId: string): Promise<ReviewRequest | null> {
@@ -138,6 +141,18 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
   }
 }
 
+/**
+ * Whether a claim is old enough to be given up on.
+ *
+ * A null timestamp is a row written before the column existed and answers NO:
+ * a store that cannot say how old the claim is must not sweep a send that may
+ * still be in progress. `claimed_at < ?` in SQL drops those rows for free, and
+ * this is the comparator that has to agree with it.
+ */
+function stalled(claimedAt: number | null, claimedBefore: EpochMs): boolean {
+  return claimedAt !== null && claimedAt < claimedBefore
+}
+
 export class InMemoryReminderRepository implements ReminderRepository {
   private readonly rows = new Map<string, Reminder>()
 
@@ -154,6 +169,44 @@ export class InMemoryReminderRepository implements ReminderRepository {
       .sort(oldestFirst((row) => row.dueAt))
       .slice(0, limit)
       .map(clone)
+  }
+
+  /**
+   * Check and set, which is what the durable stores do with one conditional
+   * statement. A store a restart empties has one process reading it, so this
+   * cannot actually race; it answers the same way so a suite written against
+   * the port proves the same behaviour everywhere.
+   */
+  async claim(reminder: Reminder, claimedAt: EpochMs): Promise<boolean> {
+    const row = this.rows.get(reminder.id)
+    if (row === undefined || row.status !== 'scheduled') return false
+    this.rows.set(reminder.id, { ...clone(reminder), status: 'sending', claimedAt })
+    return true
+  }
+
+  /**
+   * A claim nobody finished. A null `claimedAt` is a row written before this
+   * column existed, and it is NOT stalled: a store with no timestamp cannot say
+   * how old the claim is, and guessing would sweep a send that is in progress.
+   * Both durable stores compare the column, where SQL drops a null the same way.
+   */
+  async listStalledClaims(claimedBefore: EpochMs, limit: number): Promise<Reminder[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.status === 'sending' && stalled(row.claimedAt, claimedBefore))
+      .sort(oldestFirst((row) => row.claimedAt ?? 0))
+      .slice(0, limit)
+      .map(clone)
+  }
+
+  /**
+   * Check and set, as `claim` is, and for the same reason: only one recovery of
+   * a stranded row may go on to re-plan its review's ladder.
+   */
+  async abandonClaim(reminder: Reminder, failureReason: string): Promise<boolean> {
+    const row = this.rows.get(reminder.id)
+    if (row === undefined || row.status !== 'sending') return false
+    this.rows.set(reminder.id, { ...row, status: 'failed', failureReason })
+    return true
   }
 
   async create(reminder: Reminder): Promise<Reminder> {

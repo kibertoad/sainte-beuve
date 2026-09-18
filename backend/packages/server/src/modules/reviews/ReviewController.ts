@@ -1,8 +1,10 @@
 import {
+  ACTIVE_REVIEW_STATUSES,
   assignReviewersContract,
   createReviewContract,
   getReviewContract,
   listReviewsContract,
+  REVIEW_PAGE_LIMIT,
   updateReviewStatusContract,
 } from '@sainte-beuve/contracts'
 import { assertFound } from '@sainte-beuve/kernel'
@@ -19,8 +21,25 @@ import { ReviewService } from './ReviewService.js'
 export function reviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
+  /**
+   * The board, and two defaults that are the difference between a screen and a
+   * table dump.
+   *
+   * A caller that names no status gets the ACTIVE reviews: terminal ones are
+   * never archived, so the unfiltered read grew with everything the deployment
+   * had ever tracked and re-decoded a payload per row for rows nobody looks at.
+   * History is still readable — `?status=closed` asks for it — but somebody has
+   * to ask.
+   *
+   * The cap applies either way, asked for or not, because the point is that the
+   * answer stops growing with the table.
+   */
   buildHonoRoute(app, listReviewsContract, async (c) => {
-    const reviews = await c.get('container').repositories.reviews.list()
+    const { status, limit } = c.req.valid('query')
+    const reviews = await c.get('container').repositories.reviews.list({
+      status: status ?? [...ACTIVE_REVIEW_STATUSES],
+      limit: limit ?? REVIEW_PAGE_LIMIT,
+    })
     return c.json({ reviews }, 200)
   })
 

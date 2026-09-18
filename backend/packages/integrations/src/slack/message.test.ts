@@ -40,6 +40,7 @@ function reminder(kind: Reminder['kind']): Reminder {
     reviewerId: null,
     dueAt: 2,
     snoozedUntil: null,
+    claimedAt: null,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,

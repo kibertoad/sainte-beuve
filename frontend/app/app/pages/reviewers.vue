@@ -17,7 +17,14 @@ import { reviewerPatch } from '../utils/reviewerDraft'
 // reviews and the linked host accounts point AT, so removing one would leave a
 // board row assigned to nobody and a signed-in account attached to nothing.
 const api = useSainteBeuveApi()
-const { data, pending, error, refresh } = await useAsyncData('reviewers', () => api.listReviewers())
+// LAZY, and not awaited: a page that awaits its read at setup holds the previous
+// screen on screen until the whole list is down, validated and mounted, so a
+// click on this destination looks like nothing happened. Rendered immediately
+// instead, the skeleton below says what is coming. `AiReviewPanel` has done this
+// since it was written, for the same reason.
+const { data, pending, error, refresh } = useAsyncData('reviewers', () => api.listReviewers(), {
+  lazy: true,
+})
 
 const reviewers = computed<Reviewer[]>(() => data.value?.reviewers ?? [])
 const { busy, run } = useApiAction({ refresh })
@@ -127,6 +134,8 @@ function togglePause(reviewer: Reviewer) {
     </UCard>
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the reviewer pool" />
+
+    <LoadingCard v-else-if="pending && data === null" />
 
     <UCard v-else-if="reviewers.length === 0 && !adding">
       <p class="text-sm text-muted">

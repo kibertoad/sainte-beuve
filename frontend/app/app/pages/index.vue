@@ -11,10 +11,19 @@ import { formatPullRequestRef } from '@sainte-beuve/contracts'
 // something needs eyes.
 const api = useSainteBeuveApi()
 
-const { data, pending, error, refresh } = await useAsyncData('workspace', async () => {
-  const [workspace, projects] = await Promise.all([api.getWorkspace(), api.listProjects()])
-  return { workspace, projects: projects.projects }
-})
+// LAZY, and not awaited: a page that awaits its read at setup holds the previous
+// screen on screen until the whole list is down, validated and mounted, so a
+// click on this destination looks like nothing happened. Rendered immediately
+// instead, the skeleton below says what is coming. `AiReviewPanel` has done this
+// since it was written, for the same reason.
+const { data, pending, error, refresh } = useAsyncData(
+  'workspace',
+  async () => {
+    const [workspace, projects] = await Promise.all([api.getWorkspace(), api.listProjects()])
+    return { workspace, projects: projects.projects }
+  },
+  { lazy: true },
+)
 
 const attention = useAttentionStream()
 
@@ -105,6 +114,8 @@ async function release(commitmentId: string) {
       :error="error"
       title="This deployment could not build your workspace"
     />
+
+    <LoadingCard v-else-if="pending && data === null" />
 
     <div v-else-if="workspace" class="flex flex-col gap-4">
       <UAlert

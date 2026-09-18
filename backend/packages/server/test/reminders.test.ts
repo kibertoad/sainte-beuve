@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AiReviewService } from '../src/modules/reviews/AiReviewService.js'
 import { snoozeReview } from '../src/reminders/snooze.js'
 import { type AppContainer, withOrg } from '../src/container.js'
+import { CLAIM_LEASE_MS } from '../src/reminders/stalled.js'
 import { runReminderTick } from '../src/reminders/tick.js'
 import { curation, type StubAiReview, stubAiReview } from './ai-review-doubles.js'
 import {
@@ -74,6 +75,7 @@ describe('reminder tick', () => {
       sent: 0,
       failed: 0,
       skipped: 0,
+      recovered: 0,
       sessionsSwept: 0,
       aiReviewsPolled: 0,
     })
@@ -82,6 +84,102 @@ describe('reminder tick', () => {
     expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
     expect(chat.delivered).toStrictEqual([{ kind: 'unassigned', target: 'C-reviews' }])
     expect(scheduled(await remindersFor(harness, review.id))).toStrictEqual([])
+  })
+
+  it('sends a due nudge once even when two passes run over the same batch', async () => {
+    // The shape a horizontally scaled deployment is in: two Node replicas have
+    // two clocks, and the Worker's cron can fire while the last invocation is
+    // still inside `waitUntil`. Both passes read the same due row — `listDue`
+    // is a read — and only the one that CLAIMS it posts.
+    await assignedReview(harness)
+    harness.clock.advance(DAY)
+
+    const [first, second] = await Promise.all([
+      runReminderTick(harness.container),
+      runReminderTick(harness.container),
+    ])
+
+    expect(chat.delivered).toHaveLength(1)
+    expect(first.sent + second.sent).toBe(1)
+    // The pass that lost the race says so rather than reporting a failure: a
+    // nudge somebody else is sending is not a fault to record on the row.
+    expect(first.failed + second.failed).toBe(0)
+    expect(first.skipped + second.skipped).toBe(1)
+  })
+
+  it('gives up on a claim whose sender died, and puts the ladder back', async () => {
+    // The one state a crash can strand a row in. `listDue` reads `scheduled`,
+    // so without recovery this row is invisible to every later pass — and
+    // because the policy re-plans only after a delivery settles, the review is
+    // never chased again, with nothing on the board saying why.
+    const { review } = await assignedReview(harness)
+    harness.clock.advance(DAY)
+    const [due] = await harness.container.repositories.reminders.listDue(harness.clock.now(), 10)
+    expect(due).toBeDefined()
+    expect(await harness.container.repositories.reminders.claim(due!, harness.clock.now())).toBe(
+      true,
+    )
+
+    // Still inside the lease: a claim this young is a send that may be in
+    // flight, and taking it away from a live sender is how a nudge goes twice.
+    expect(await runReminderTick(harness.container)).toMatchObject({ recovered: 0, sent: 0 })
+    expect(chat.delivered).toHaveLength(0)
+
+    harness.clock.advance(CLAIM_LEASE_MS + 1)
+    // Recovered AND sent in the SAME pass: the rung it re-plans is already past
+    // its time, and recovery runs before the due read for exactly that reason.
+    expect(await runReminderTick(harness.container)).toMatchObject({ recovered: 1, sent: 1 })
+    expect(chat.delivered).toHaveLength(1)
+
+    const stranded = (await remindersFor(harness, review.id)).find((r) => r.id === due!.id)
+    expect(stranded?.status).toBe('failed')
+    // On the board rather than only in a log: an operator whose senders keep
+    // dying should be able to see that from the review.
+    expect(stranded?.failureReason).toMatch(/interrupted/)
+    expect(stranded?.claimedAt).not.toBeNull()
+  })
+
+  it('recovers a stranded claim once even when two passes find it', async () => {
+    // The repair has the hazard the claim was written for: giving up re-plans
+    // the review's ladder, which is a cancel and a create, and two passes doing
+    // that would leave the review with two scheduled nudges.
+    const { review } = await assignedReview(harness)
+    harness.clock.advance(DAY)
+    const [due] = await harness.container.repositories.reminders.listDue(harness.clock.now(), 10)
+    await harness.container.repositories.reminders.claim(due!, harness.clock.now())
+    harness.clock.advance(CLAIM_LEASE_MS + 1)
+
+    const [first, second] = await Promise.all([
+      runReminderTick(harness.container),
+      runReminderTick(harness.container),
+    ])
+
+    expect(first.recovered + second.recovered).toBe(1)
+    expect(scheduled(await remindersFor(harness, review.id))).toHaveLength(1)
+  })
+
+  it('recovers a stranded claim on a review that is gone', async () => {
+    // Nothing to re-plan, and the row is still recorded: a recovery that threw
+    // here would take the rest of the pass's nudges down with it.
+    await harness.container.repositories.reminders.create({
+      id: 'rem-orphan',
+      reviewId: 'no-such-review',
+      kind: 'pending',
+      channel: 'slack_dm',
+      reviewerId: null,
+      dueAt: harness.clock.now(),
+      snoozedUntil: null,
+      status: 'sending',
+      claimedAt: harness.clock.now(),
+      sentAt: null,
+      failureReason: null,
+      createdAt: harness.clock.now(),
+    })
+
+    harness.clock.advance(CLAIM_LEASE_MS + 1)
+    expect(await runReminderTick(harness.container)).toMatchObject({ recovered: 1, sent: 0 })
+    const [stranded] = await remindersFor(harness, 'no-such-review')
+    expect(stranded?.status).toBe('failed')
   })
 
   it('plans the next nudge after sending one, up to the pending budget', async () => {
@@ -183,6 +281,7 @@ describe('reminder tick', () => {
       sent: 0,
       failed: 0,
       skipped: 0,
+      recovered: 0,
       sessionsSwept: 0,
       aiReviewsPolled: 0,
     })
@@ -441,6 +540,7 @@ describe('a tick across tenancies', () => {
       reviewerId: null,
       dueAt: clock.now(),
       snoozedUntil: null,
+      claimedAt: null,
       status: 'scheduled',
       sentAt: null,
       failureReason: null,

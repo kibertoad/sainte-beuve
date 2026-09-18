@@ -64,6 +64,7 @@ function sentReminder(overrides: Partial<Reminder> & { kind: Reminder['kind'] })
     reviewerId: null,
     dueAt: 0,
     snoozedUntil: null,
+    claimedAt: null,
     status: 'sent',
     sentAt: 0,
     failureReason: null,

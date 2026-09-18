@@ -11,7 +11,14 @@ import { shortfallCause, shortfallRemedy } from '@sainte-beuve/contracts'
 // webhook created and the reminder ladder is chasing. Merging them would put a
 // team-wide backlog in the way of somebody's own three lists.
 const api = useSainteBeuveApi()
-const { data, pending, error, refresh } = await useAsyncData('reviews', () => api.listReviews())
+// LAZY, and not awaited: a page that awaits its read at setup holds the previous
+// screen on screen until the whole list is down, validated and mounted, so a
+// click on this destination looks like nothing happened. Rendered immediately
+// instead, the skeleton below says what is coming. `AiReviewPanel` has done this
+// since it was written, for the same reason.
+const { data, pending, error, refresh } = useAsyncData('reviews', () => api.listReviews(), {
+  lazy: true,
+})
 
 const reviews = computed<ReviewRequest[]>(() => data.value?.reviews ?? [])
 
@@ -104,6 +111,8 @@ async function requestAiReview(review: ReviewRequest) {
     </div>
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the review board" />
+
+    <LoadingCard v-else-if="pending && data === null" />
 
     <UCard v-else-if="reviews.length === 0">
       <p class="text-sm text-muted">

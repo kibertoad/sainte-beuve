@@ -1,4 +1,4 @@
-import type { ReviewRequest } from '@sainte-beuve/contracts'
+import { ACTIVE_REVIEW_STATUSES, type ReviewRequest } from '@sainte-beuve/contracts'
 import { ForbiddenError, formatPullRequest, getErrorMessage } from '@sainte-beuve/kernel'
 import type { SlackIntent, SlackRequest } from '@sainte-beuve/integrations'
 import {
@@ -161,7 +161,7 @@ export class SlackWebhookService {
    */
   private async list(): Promise<string> {
     const open = await this.container.repositories.reviews.list({
-      status: ['open', 'assigned', 'in_review'],
+      status: [...ACTIVE_REVIEW_STATUSES],
     })
     if (open.length === 0) return 'Nothing is waiting for a review right now.'
     const lines = [...open]

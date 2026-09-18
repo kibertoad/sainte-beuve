@@ -3,6 +3,7 @@ import {
   type VcsAccount,
   type VcsIdentityGateway,
   getErrorMessage,
+  withDeadline,
 } from '@sainte-beuve/kernel'
 import { GITHUB_WEB_BASE_URL, githubRequest } from './client.js'
 
@@ -93,7 +94,7 @@ export class GitHubIdentityGateway implements VcsIdentityGateway {
     const url = new URL('/login/oauth/access_token', this.options.webBaseUrl || GITHUB_WEB_BASE_URL)
     let response: Response
     try {
-      response = await (this.options.fetchImpl ?? globalThis.fetch)(url, {
+      response = await withDeadline(this.options.fetchImpl)(url, {
         method: 'POST',
         headers: { accept: 'application/json', 'content-type': 'application/json' },
         body: JSON.stringify({

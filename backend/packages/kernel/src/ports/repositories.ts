@@ -16,36 +16,6 @@ import type {
 import type { EpochMs } from '../domain/types.js'
 
 /**
- * A stored payload that does not match the contract it is supposed to be.
- *
- * Raised by the durable stores when a `data` column fails its schema on read.
- * That is a deployment fault rather than a caller's: the row was written by an
- * older contract, or by hand, and nothing the request did can fix it. It is
- * deliberately NOT a `DomainError`, so the shared handler answers 500 and logs it
- * instead of turning it into a refusal that reads as the operator's mistake.
- *
- * The message names the table and the row, because the fix is a statement against
- * that row and an operator should not have to go looking for which one.
- */
-export class StoredRowError extends Error {
-  readonly table: string
-  readonly rowId: string
-  readonly issues: readonly string[]
-
-  constructor(table: string, rowId: string, issues: readonly string[]) {
-    super(`Stored ${table} row ${rowId} does not match its contract: ${issues.join('; ')}`)
-    this.name = new.target.name
-    this.table = table
-    this.rowId = rowId
-    this.issues = issues
-  }
-}
-
-export function isStoredRowError(err: unknown): err is StoredRowError {
-  return err instanceof StoredRowError
-}
-
-/**
  * Persistence ports. There are three implementations (in-memory in
  * @sainte-beuve/persistence-memory, D1 in @sainte-beuve/persistence-d1,
  * Postgres in @sainte-beuve/persistence-postgres), one shared suite that proves
@@ -73,7 +43,16 @@ export interface ReviewerRepository {
 }
 
 export interface ReviewRequestRepository {
-  list(filter?: { status?: ReviewStatus[] }): Promise<ReviewRequest[]>
+  /**
+   * The board, newest first, ties broken on the id.
+   *
+   * `limit` is not a nicety: terminal reviews are never archived, so an
+   * unbounded read grows with everything the deployment has ever tracked and
+   * the JSON it decodes grows with it. Every caller that wants the BOARD passes
+   * one; the ones that want a set they have already narrowed (a status filter
+   * over the active three) may leave it off.
+   */
+  list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]>
   getById(reviewId: string): Promise<ReviewRequest | null>
   /** Look up by pull request so a webhook replay updates the row instead of duplicating it. */
   getByPullRequest(ref: {
@@ -89,6 +68,56 @@ export interface ReminderRepository {
   listByReview(reviewId: string): Promise<Reminder[]>
   /** Reminders whose `dueAt` has passed and which are still `scheduled`. The tick's only read. */
   listDue(now: EpochMs, limit: number): Promise<Reminder[]>
+  /**
+   * TAKE a due reminder, so that exactly one sender posts it. True if this
+   * caller got it, false if it was already taken or is no longer scheduled.
+   *
+   * One conditional statement on both durable stores — the move out of
+   * `scheduled` and the write of the payload together — because that is the
+   * only shape that answers the question honestly. `listDue` is a read, and two
+   * passes over the same batch are not a hypothetical: a deployment running two
+   * Node replicas has two clocks, and the Worker's cron can fire while the last
+   * invocation is still inside `waitUntil`. Without a claim both post, and a
+   * duplicated nudge is exactly the thing reminders must not do.
+   *
+   * It takes the reminder rather than its id because the status lives in the
+   * payload as well as in the column, and the two must not disagree; the caller
+   * is holding the row it just read.
+   *
+   * `claimedAt` is stamped on the row the claim writes, and is the LEASE the
+   * recovery read below runs on: without it a row whose sender died is
+   * indistinguishable from one still mid-post, and the ladder it belongs to
+   * ends there. The caller passes its own clock rather than the store reading
+   * one, for the reason every other decision in this tree injects it.
+   */
+  claim(reminder: Reminder, claimedAt: EpochMs): Promise<boolean>
+  /**
+   * Reminders stuck in `sending` since before `claimedBefore`: a sender that
+   * took the row and never came back.
+   *
+   * The counterpart to `claim`, and the reason the claim carries a timestamp.
+   * `listDue` reads `scheduled` only, so a stranded row is invisible to every
+   * later pass, and because the policy re-plans a review's ladder only after a
+   * delivery settles, that review is never nudged again. Recovery is what the
+   * tick does with these — see `recoverStalledClaims`.
+   *
+   * Capped and oldest-claim-first like `listDue`, so a deployment that
+   * crash-looped through a batch recovers a slice per tick rather than in one
+   * unbounded pass.
+   */
+  listStalledClaims(claimedBefore: EpochMs, limit: number): Promise<Reminder[]>
+  /**
+   * GIVE UP on a claim nobody finished: `failed`, with the reason, if the row is
+   * still `sending`. True if this caller is the one that gave up on it.
+   *
+   * Conditional for `claim`'s reason, and against the same two passes. Recovery
+   * re-plans the review's ladder, which is a cancel and a create, and two
+   * recoveries of one row would run that twice — leaving the review with two
+   * scheduled nudges, which is the duplicate the claim exists to prevent,
+   * reintroduced by the thing that repairs it. Only the caller this answers true
+   * re-plans.
+   */
+  abandonClaim(reminder: Reminder, failureReason: string): Promise<boolean>
   create(reminder: Reminder): Promise<Reminder>
   updateStatus(
     reminderId: string,

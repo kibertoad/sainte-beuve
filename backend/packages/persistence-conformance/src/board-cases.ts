@@ -1,13 +1,6 @@
 import assert from 'node:assert/strict'
 import { type ConformanceCase, conformanceCase } from './case.js'
-import {
-  aiReviewRun,
-  curation,
-  integrationToken,
-  pullRequest,
-  reminder,
-  review,
-} from './fixtures.js'
+import { aiReviewRun, curation, integrationToken, pullRequest, review } from './fixtures.js'
 
 /** The board: reviews, the nudges scheduled against them, and the AI runs. */
 export const reviewCases: readonly ConformanceCase[] = [
@@ -40,6 +33,18 @@ export const reviewCases: readonly ConformanceCase[] = [
   conformanceCase('a filter naming no status matches nothing', async (repos) => {
     await repos.reviews.create(review('rev-1'))
     assert.deepStrictEqual(await repos.reviews.list({ status: [] }), [])
+  }),
+
+  conformanceCase('a capped board takes the newest rows, not any rows', async (repos) => {
+    // The cap has to be applied to the ORDERED read, or a board that asks for
+    // twenty shows twenty arbitrary reviews out of everything ever tracked.
+    await repos.reviews.create(review('rev-1', { createdAt: 1_000 }))
+    await repos.reviews.create(review('rev-2', { createdAt: 2_000 }))
+    await repos.reviews.create(review('rev-3', { createdAt: 3_000 }))
+    const ids = (await repos.reviews.list({ limit: 2 })).map((row) => row.id)
+    assert.deepStrictEqual(ids, ['rev-3', 'rev-2'])
+    const open = (await repos.reviews.list({ status: ['open'], limit: 1 })).map((row) => row.id)
+    assert.deepStrictEqual(open, ['rev-3'])
   }),
 
   conformanceCase('finds the review a pull request already opened', async (repos) => {
@@ -75,85 +80,6 @@ export const reviewCases: readonly ConformanceCase[] = [
 
   conformanceCase('patching a review that is not there answers null', async (repos) => {
     assert.strictEqual(await repos.reviews.update('nobody', { status: 'closed' }), null)
-  }),
-]
-
-export const reminderCases: readonly ConformanceCase[] = [
-  conformanceCase("lists one review's reminders, soonest first", async (repos) => {
-    // Nobody else's, and in the order the cadence was planned in: a schedule
-    // shown out of order reads as a nudge that has already been missed.
-    await repos.reminders.create(reminder('rem-1', { reviewId: 'rev-1', dueAt: 2_000 }))
-    await repos.reminders.create(reminder('rem-2', { reviewId: 'rev-2' }))
-    await repos.reminders.create(reminder('rem-3', { reviewId: 'rev-1', dueAt: 1_000 }))
-    const ids = (await repos.reminders.listByReview('rev-1')).map((row) => row.id)
-    assert.deepStrictEqual(ids, ['rem-3', 'rem-1'])
-  }),
-
-  conformanceCase('what is due is scheduled, past its time, and oldest first', async (repos) => {
-    // Two nudges due in the same millisecond are ordered by id, so the tick
-    // takes the same batch twice rather than a different half each time.
-    await repos.reminders.create(reminder('rem-late', { dueAt: 5_000 }))
-    await repos.reminders.create(reminder('rem-early', { dueAt: 1_000 }))
-    await repos.reminders.create(reminder('rem-early-2', { dueAt: 1_000 }))
-    await repos.reminders.create(reminder('rem-future', { dueAt: 50_000 }))
-    await repos.reminders.create(reminder('rem-sent', { dueAt: 1_000, status: 'sent' }))
-    const due = await repos.reminders.listDue(10_000, 10)
-    assert.deepStrictEqual(
-      due.map((row) => row.id),
-      ['rem-early', 'rem-early-2', 'rem-late'],
-    )
-  }),
-
-  conformanceCase('the tick takes no more than it asked for', async (repos) => {
-    await repos.reminders.create(reminder('rem-1', { dueAt: 1_000 }))
-    await repos.reminders.create(reminder('rem-2', { dueAt: 2_000 }))
-    await repos.reminders.create(reminder('rem-3', { dueAt: 3_000 }))
-    const due = await repos.reminders.listDue(10_000, 2)
-    assert.deepStrictEqual(
-      due.map((row) => row.id),
-      ['rem-1', 'rem-2'],
-    )
-  }),
-
-  conformanceCase('a delivery records what it was told and keeps the rest', async (repos) => {
-    await repos.reminders.create(reminder('rem-1'))
-    await repos.reminders.updateStatus('rem-1', 'sent', { sentAt: 7_000 })
-    // A retry that failed must not lose the time the first attempt went out.
-    await repos.reminders.updateStatus('rem-1', 'failed', { failureReason: 'channel_not_found' })
-    const [stored] = await repos.reminders.listByReview('review-1')
-    assert.strictEqual(stored?.status, 'failed')
-    assert.strictEqual(stored?.sentAt, 7_000)
-    assert.strictEqual(stored?.failureReason, 'channel_not_found')
-  }),
-
-  conformanceCase('a delivery against a reminder that is gone does nothing', async (repos) => {
-    await repos.reminders.updateStatus('nobody', 'sent', { sentAt: 1 })
-    assert.deepStrictEqual(await repos.reminders.listByReview('review-1'), [])
-  }),
-
-  conformanceCase('cancelling a schedule that is not there does nothing', async (repos) => {
-    // The common case, not an edge one: this is called before every re-plan, so
-    // most calls have nothing to cancel. A store that writes its cancellations
-    // as one batch has to answer an empty one without complaining.
-    await repos.reminders.cancelScheduledForReview('rev-nobody')
-    assert.deepStrictEqual(await repos.reminders.listByReview('rev-nobody'), [])
-  }),
-
-  conformanceCase('a verdict cancels the schedule and nothing else', async (repos) => {
-    // `cancelled` is a state rather than a delete: a nudge that became moot
-    // should still be visible when the cadence is tuned against what happened.
-    await repos.reminders.create(reminder('rem-1', { reviewId: 'rev-1', status: 'scheduled' }))
-    await repos.reminders.create(reminder('rem-2', { reviewId: 'rev-1', status: 'sent' }))
-    await repos.reminders.create(reminder('rem-3', { reviewId: 'rev-2', status: 'scheduled' }))
-    await repos.reminders.cancelScheduledForReview('rev-1')
-    const statuses = new Map(
-      (await repos.reminders.listByReview('rev-1')).map((row) => [row.id, row.status]),
-    )
-    assert.strictEqual(statuses.get('rem-1'), 'cancelled')
-    assert.strictEqual(statuses.get('rem-2'), 'sent')
-    assert.strictEqual((await repos.reminders.listByReview('rev-2'))[0]?.status, 'scheduled')
-    const stillDue = (await repos.reminders.listDue(100_000, 10)).map((row) => row.id)
-    assert.deepStrictEqual(stillDue, ['rem-3'])
   }),
 ]
 

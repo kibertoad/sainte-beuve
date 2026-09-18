@@ -1,5 +1,10 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
-import { type ChatGateway, UpstreamFailedError, getErrorMessage } from '@sainte-beuve/kernel'
+import {
+  type ChatGateway,
+  UpstreamFailedError,
+  getErrorMessage,
+  withDeadline,
+} from '@sainte-beuve/kernel'
 import { announcementMessage, reminderMessage, type SlackMessage } from './message.js'
 
 /**
@@ -43,7 +48,10 @@ export class SlackChatGateway implements ChatGateway {
 
   constructor(options: SlackGatewayOptions) {
     this.options = options
-    this.fetchImpl = options.fetch ?? globalThis.fetch
+    // Deadlined at the transport: the reminder tick awaits a post per nudge
+    // inside one invocation, so a Slack connection that is accepted and never
+    // answered would hold up every nudge behind it.
+    this.fetchImpl = withDeadline(options.fetch)
   }
 
   async announceReview(review: ReviewRequest, channelId: string): Promise<{ messageId: string }> {
