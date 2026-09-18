@@ -89,6 +89,7 @@ export function reminder(id: string, overrides: Partial<Reminder> = {}): Reminde
     dueAt: 1_000,
     snoozedUntil: null,
     status: 'scheduled',
+    claimedAt: null,
     sentAt: null,
     failureReason: null,
     createdAt: 1_000,

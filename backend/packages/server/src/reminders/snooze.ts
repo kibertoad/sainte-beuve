@@ -46,6 +46,7 @@ export async function snoozeReview(
     dueAt: until,
     snoozedUntil: until,
     status: 'scheduled',
+    claimedAt: null,
     sentAt: null,
     failureReason: null,
     createdAt: now,

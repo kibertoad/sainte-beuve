@@ -12,7 +12,7 @@ import type {
   ReminderRepository,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
-import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
 import { aiReviewRuns, reminders, reviewRequests } from './schema.js'
@@ -182,16 +182,64 @@ export class PostgresReminderRepository implements ReminderRepository {
    * status lives in both and `jsonb_set` is a dialect branch this store and its
    * D1 twin exist not to have.
    */
-  async claim(reminder: Reminder): Promise<boolean> {
-    const claimed: Reminder = { ...reminder, status: 'sending' }
+  async claim(reminder: Reminder, claimedAt: EpochMs): Promise<boolean> {
+    const claimed: Reminder = { ...reminder, status: 'sending', claimedAt }
     const rows = await this.db
       .update(reminders)
-      .set({ status: claimed.status, data: claimed })
+      .set({ status: claimed.status, claimedAt, data: claimed })
       .where(
         and(
           eq(reminders.orgId, this.orgId),
           eq(reminders.id, reminder.id),
           eq(reminders.status, 'scheduled'),
+        ),
+      )
+      .returning({ id: reminders.id })
+    return rows.length > 0
+  }
+
+  /**
+   * The claims nobody finished, oldest first.
+   *
+   * `claimed_at < ?` drops a null for free, which is what a row written before
+   * the column existed carries: a claim with no timestamp cannot be aged, and a
+   * sweep that guessed would give up on a send still in progress. Covered by
+   * `reminders_claimed_idx`, and in the ordinary case `status = 'sending'` is a
+   * handful of rows or none at all.
+   */
+  async listStalledClaims(claimedBefore: EpochMs, limit: number): Promise<Reminder[]> {
+    const rows = await this.db
+      .select()
+      .from(reminders)
+      .where(
+        and(
+          eq(reminders.orgId, this.orgId),
+          eq(reminders.status, 'sending'),
+          lt(reminders.claimedAt, claimedBefore),
+        ),
+      )
+      .orderBy(asc(reminders.claimedAt), asc(reminders.id))
+      .limit(limit)
+    return rows.map((row) => row.data)
+  }
+
+  /**
+   * ONE conditional statement, exactly as `claim` is: `status = 'sending'` is
+   * what makes sure only one pass over a stranded row goes on to re-plan its
+   * review's ladder. `claimed_at` is deliberately left where it is — a failure
+   * whose claim is minutes older than nothing at all is the record of what
+   * happened.
+   */
+  async abandonClaim(reminder: Reminder, failureReason: string): Promise<boolean> {
+    const abandoned: Reminder = { ...reminder, status: 'failed', failureReason }
+    const rows = await this.db
+      .update(reminders)
+      .set({ status: abandoned.status, data: abandoned })
+      .where(
+        and(
+          eq(reminders.orgId, this.orgId),
+          eq(reminders.id, reminder.id),
+          eq(reminders.status, 'sending'),
         ),
       )
       .returning({ id: reminders.id })

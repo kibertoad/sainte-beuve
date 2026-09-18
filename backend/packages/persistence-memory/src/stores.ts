@@ -141,6 +141,18 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
   }
 }
 
+/**
+ * Whether a claim is old enough to be given up on.
+ *
+ * A null timestamp is a row written before the column existed and answers NO:
+ * a store that cannot say how old the claim is must not sweep a send that may
+ * still be in progress. `claimed_at < ?` in SQL drops those rows for free, and
+ * this is the comparator that has to agree with it.
+ */
+function stalled(claimedAt: number | null, claimedBefore: EpochMs): boolean {
+  return claimedAt !== null && claimedAt < claimedBefore
+}
+
 export class InMemoryReminderRepository implements ReminderRepository {
   private readonly rows = new Map<string, Reminder>()
 
@@ -165,10 +177,35 @@ export class InMemoryReminderRepository implements ReminderRepository {
    * cannot actually race; it answers the same way so a suite written against
    * the port proves the same behaviour everywhere.
    */
-  async claim(reminder: Reminder): Promise<boolean> {
+  async claim(reminder: Reminder, claimedAt: EpochMs): Promise<boolean> {
     const row = this.rows.get(reminder.id)
     if (row === undefined || row.status !== 'scheduled') return false
-    this.rows.set(reminder.id, { ...clone(reminder), status: 'sending' })
+    this.rows.set(reminder.id, { ...clone(reminder), status: 'sending', claimedAt })
+    return true
+  }
+
+  /**
+   * A claim nobody finished. A null `claimedAt` is a row written before this
+   * column existed, and it is NOT stalled: a store with no timestamp cannot say
+   * how old the claim is, and guessing would sweep a send that is in progress.
+   * Both durable stores compare the column, where SQL drops a null the same way.
+   */
+  async listStalledClaims(claimedBefore: EpochMs, limit: number): Promise<Reminder[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.status === 'sending' && stalled(row.claimedAt, claimedBefore))
+      .sort(oldestFirst((row) => row.claimedAt ?? 0))
+      .slice(0, limit)
+      .map(clone)
+  }
+
+  /**
+   * Check and set, as `claim` is, and for the same reason: only one recovery of
+   * a stranded row may go on to re-plan its review's ladder.
+   */
+  async abandonClaim(reminder: Reminder, failureReason: string): Promise<boolean> {
+    const row = this.rows.get(reminder.id)
+    if (row === undefined || row.status !== 'sending') return false
+    this.rows.set(reminder.id, { ...row, status: 'failed', failureReason })
     return true
   }
 

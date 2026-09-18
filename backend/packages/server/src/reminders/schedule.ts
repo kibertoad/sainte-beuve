@@ -50,6 +50,9 @@ export async function scheduleNextReminder(
     // pass the person who asked for the quiet never sees.
     snoozedUntil: planned.snoozedUntil,
     status: 'scheduled',
+    // Nobody has taken it: the claim is stamped by `claim`, and a row that
+    // carries one before a sender made it would age towards a recovery sweep.
+    claimedAt: null,
     sentAt: null,
     failureReason: null,
     createdAt: clock.now(),

@@ -22,18 +22,8 @@ import {
   reviewerSchema,
   reviewRequestSchema,
 } from '@sainte-beuve/contracts'
-import {
-  bigint,
-  customType,
-  index,
-  integer,
-  pgTable,
-  primaryKey,
-  text,
-  uniqueIndex,
-} from 'drizzle-orm/pg-core'
-import type * as v from 'valibot'
-import { decodePayload } from './rows.js'
+import { index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { epochMs, orgId, payload } from './columns.js'
 
 /**
  * The board and the workspace, in Postgres types.
@@ -69,45 +59,6 @@ import { decodePayload } from './rows.js'
  * does not fit a JS number), and a `createdAt` that is sometimes a string is a
  * sort that is sometimes lexicographic.
  */
-
-/**
- * The tenancy column every table below carries. Spelled once, because twelve
- * copies of `text('org_id').notNull()` is twelve chances to spell one of them
- * nullable.
- */
-function orgId() {
-  return text('org_id').notNull()
-}
-
-/** Epoch milliseconds, as every contract carries them. */
-function epochMs(name: string) {
-  return bigint(name, { mode: 'number' })
-}
-
-/**
- * A payload column, read back THROUGH the contract it was written from.
- *
- * Here rather than at the twenty-odd read sites, because a decode that has to be
- * remembered is one that will be forgotten: `fromDriver` runs for every select on
- * the column, including the ones added next slice.
- *
- * `$type` alone says what the compiler should believe about the payload, which is a
- * claim about code rather than about the rows already on disk. Nothing downstream
- * checks them either, since `buildHonoRoute` validates requests and never
- * responses, so a row written by an older contract reaches the browser and is
- * refused there, as a broken screen naming a route rather than a row somebody can
- * fix. Parsing also HEALS the ordinary case, because the contracts carry defaults
- * for a field added after the row was written.
- *
- * The declared type stays `jsonb`, so this is a read-time change with no migration
- * behind it.
- */
-function payload<T>(name: string, table: string, schema: v.GenericSchema) {
-  return customType<{ data: T; driverData: unknown }>({
-    dataType: () => 'jsonb',
-    fromDriver: (value) => decodePayload(table, schema, value) as T,
-  })(name)
-}
 
 /**
  * The tenancies. The one table with no `org_id`, because it is the table that
@@ -182,14 +133,23 @@ export const reminders = pgTable(
     reviewId: text('review_id').notNull(),
     status: text('status').notNull(),
     dueAt: epochMs('due_at').notNull(),
+    /**
+     * Nullable: only a nudge a sender has TAKEN has a claim, and a row written
+     * before this column existed has none. See `Reminder.claimedAt`.
+     */
+    claimedAt: epochMs('claimed_at'),
     data: payload<Reminder>('data', 'reminders', reminderSchema).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
     index('reminders_review_idx').on(table.orgId, table.reviewId),
-    // The reminder tick's only read: what is scheduled and already due, in the
+    // The reminder tick's due read: what is scheduled and already due, in the
     // org it is ticking. The tick walks the orgs, so this index is per tenancy.
     index('reminders_due_idx').on(table.orgId, table.status, table.dueAt),
+    // The tick's other read: the claims nobody finished. Same shape, different
+    // timestamp — `status = 'sending'` is a handful of rows in the ordinary
+    // case, and this is what keeps it that way when it is not.
+    index('reminders_claimed_idx').on(table.orgId, table.status, table.claimedAt),
   ],
 )
 

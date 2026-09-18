@@ -48,8 +48,15 @@ export type ReminderChannel = v.InferOutput<typeof reminderChannelSchema>
  * batch — two Node replicas, or a Worker cron firing while the last invocation
  * is still inside `waitUntil` — finds nothing to take and nobody is nudged
  * twice. It is transient by intent: the same delivery writes `sent` or `failed`
- * a moment later, and a row left in it is a process that died mid-send, which
- * the next re-plan of that review's ladder supersedes.
+ * a moment later.
+ *
+ * A row LEFT in it is a process that died mid-send, and it is not left there:
+ * the policy hands out one reminder at a time and only re-plans after a
+ * delivery settles, so a nudge stuck in `sending` is not one lost nudge, it is
+ * the end of that review's ladder. `claimedAt` is what makes the stuck row
+ * findable, and the tick sweeps it to `failed` once the claim is older than a
+ * send could be — which puts the reason on the board and lets the ladder carry
+ * on. See `recoverStalledClaims` in `@sainte-beuve/server`.
  */
 export const reminderStatusSchema = v.picklist([
   'scheduled',
@@ -87,6 +94,17 @@ export const reminderSchema = v.object({
    */
   snoozedUntil: v.optional(v.nullable(v.number()), null),
   status: reminderStatusSchema,
+  /**
+   * When a sender took this row, and null for a nudge nobody has taken.
+   *
+   * The LEASE behind the claim, not a record of it: `sending` is the one status
+   * a crash can strand a row in, and the only way to tell a send in progress
+   * from a send whose process is gone is how long it has been there. Written by
+   * `claim`, read by the tick's recovery sweep, and kept afterwards because a
+   * `sent` row whose claim is minutes older than its `sentAt` is a delivery
+   * worth looking at.
+   */
+  claimedAt: v.optional(v.nullable(v.number()), null),
   sentAt: v.nullable(v.number()),
   /** Delivery failure text, kept so a silent channel misconfiguration is visible. */
   failureReason: v.nullable(v.string()),

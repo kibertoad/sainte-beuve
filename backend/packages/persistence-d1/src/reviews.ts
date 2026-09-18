@@ -113,12 +113,13 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
   }
 }
 
-const REMINDER_UPSERT = `INSERT INTO reminders (org_id, id, review_id, status, due_at, data)
-VALUES (?, ?, ?, ?, ?, ?)
+const REMINDER_UPSERT = `INSERT INTO reminders (org_id, id, review_id, status, due_at, claimed_at, data)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (org_id, id) DO UPDATE SET
   review_id = excluded.review_id,
   status = excluded.status,
   due_at = excluded.due_at,
+  claimed_at = excluded.claimed_at,
   data = excluded.data`
 
 function reminderParams(orgId: string, reminder: Reminder): readonly SqlParam[] {
@@ -128,6 +129,7 @@ function reminderParams(orgId: string, reminder: Reminder): readonly SqlParam[] 
     reminder.reviewId,
     reminder.status,
     reminder.dueAt,
+    reminder.claimedAt,
     encodeData(reminder),
   ]
 }
@@ -165,13 +167,50 @@ export class SqlReminderRepository implements ReminderRepository {
    * place, because the status lives in both and `json_set` is the dialect
    * branch this package exists not to have.
    */
-  async claim(reminder: Reminder): Promise<boolean> {
-    const claimed: Reminder = { ...reminder, status: 'sending' }
+  async claim(reminder: Reminder, claimedAt: EpochMs): Promise<boolean> {
+    const claimed: Reminder = { ...reminder, status: 'sending', claimedAt }
     const row = await this.db.first(
-      `UPDATE reminders SET status = ?, data = ?
+      `UPDATE reminders SET status = ?, claimed_at = ?, data = ?
 WHERE org_id = ? AND id = ? AND status = 'scheduled'
 RETURNING id`,
-      [claimed.status, encodeData(claimed), this.orgId, reminder.id],
+      [claimed.status, claimedAt, encodeData(claimed), this.orgId, reminder.id],
+    )
+    return row !== null
+  }
+
+  /**
+   * The claims nobody finished, oldest first.
+   *
+   * `claimed_at < ?` drops a null for free, which is what a row written before
+   * the column existed carries: a claim with no timestamp cannot be aged, and a
+   * sweep that guessed would give up on a send still in progress. The read is
+   * covered by `reminders_claimed_idx`, and in the ordinary case `status =
+   * 'sending'` is a handful of rows or none at all.
+   */
+  async listStalledClaims(claimedBefore: EpochMs, limit: number): Promise<Reminder[]> {
+    const rows = await this.db.all(
+      `SELECT data FROM reminders
+WHERE org_id = ? AND status = 'sending' AND claimed_at < ?
+ORDER BY claimed_at, id LIMIT ?`,
+      [this.orgId, claimedBefore, limit],
+    )
+    return decodeRows(reminderSchema, 'reminders', rows)
+  }
+
+  /**
+   * ONE conditional statement, exactly as `claim` is: `AND status = 'sending'`
+   * is what makes sure only one pass over a stranded row goes on to re-plan its
+   * review's ladder. `claimed_at` is deliberately left where it is — a failure
+   * whose claim is minutes older than nothing at all is the record of what
+   * happened.
+   */
+  async abandonClaim(reminder: Reminder, failureReason: string): Promise<boolean> {
+    const abandoned: Reminder = { ...reminder, status: 'failed', failureReason }
+    const row = await this.db.first(
+      `UPDATE reminders SET status = ?, data = ?
+WHERE org_id = ? AND id = ? AND status = 'sending'
+RETURNING id`,
+      [abandoned.status, encodeData(abandoned), this.orgId, reminder.id],
     )
     return row !== null
   }

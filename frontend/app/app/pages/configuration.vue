@@ -45,6 +45,12 @@ const { data, pending, error, refresh } = useAsyncData(
     // its way. A visit that arrives before the shell's read lands still makes it,
     // which is the case this has to cover: the admin check below is what decides
     // whether the settings calls are made at all.
+    //
+    // What makes holding the answer safe is that the one thing on this page which
+    // changes it says so: `endSession` calls `auth.invalidate()` before the
+    // refresh it triggers reaches here, so a sign-out reads again and this screen
+    // flips to anonymous. Anything else added here that changes who is calling
+    // owes the same call.
     if (auth.state.value === null) await auth.refresh()
     // NOT ASKED FOR AT ALL unless the caller may have them. Everything below is
     // admin-only since the org boundary landed, and a member reaching this page —
@@ -91,7 +97,20 @@ function revokeKey(keyId: string) {
 }
 
 async function endSession() {
-  await run(() => api.signOut(), 'Could not sign out', 'sign-out')
+  await run(
+    async () => {
+      await api.signOut()
+      // BEFORE the refresh below, which is what `run` does next: the handler
+      // keeps whoever it already read (see the guard in it), so a sign-out that
+      // did not say the held answer is stale would re-run the handler against
+      // the signed-in one — leaving the Access card showing the person as
+      // signed in, and `isAdmin` still true, which sends three admin-only
+      // settings calls the API has just started refusing.
+      auth.invalidate()
+    },
+    'Could not sign out',
+    'sign-out',
+  )
 }
 
 // The credential inputs, so a successful save can clear the one it landed on.

@@ -24,7 +24,8 @@
 // method that reaches outside it. Both run three ways.
 
 import { apiKeyCases, sessionCases } from './auth-cases.js'
-import { aiReviewCases, integrationTokenCases, reminderCases, reviewCases } from './board-cases.js'
+import { aiReviewCases, integrationTokenCases, reviewCases } from './board-cases.js'
+import { reminderCases } from './reminder-cases.js'
 import type { ConformanceCase } from './case.js'
 import { reviewerCases } from './reviewer-cases.js'
 import { type TenancyCase, tenancyConformanceCases as boundaryCases } from './tenancy-cases.js'
@@ -63,6 +64,7 @@ export {
   type StoreHarness,
 } from './stored-row-cases.js'
 export { apiKeyCases, sessionCases } from './auth-cases.js'
-export { aiReviewCases, integrationTokenCases, reminderCases, reviewCases } from './board-cases.js'
+export { aiReviewCases, integrationTokenCases, reviewCases } from './board-cases.js'
+export { reminderCases } from './reminder-cases.js'
 export { reviewerCases } from './reviewer-cases.js'
 export { attentionCases, commitmentCases, identityCases, projectCases } from './workspace-cases.js'

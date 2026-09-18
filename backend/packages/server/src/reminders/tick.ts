@@ -7,6 +7,7 @@ import { type CredentialSource, type Resolved, resolveChat } from '../integratio
 import { SessionService } from '../modules/auth/SessionService.js'
 import { AiReviewService } from '../modules/reviews/AiReviewService.js'
 import { scheduleNextReminder } from './schedule.js'
+import { recoverStalledClaims } from './stalled.js'
 
 /**
  * One pass of the reminder clock: send what is due, record what happened, plan what
@@ -74,6 +75,17 @@ export interface TickResult {
   failed: number
   skipped: number
   /**
+   * Stranded claims given up on before the due read.
+   *
+   * A nudge is claimed before it is posted, and a process that dies in between
+   * leaves the row in `sending` where no later pass can see it — which ends that
+   * review's ladder, because the policy re-plans only after a delivery settles.
+   * Counted rather than merely logged: a deployment where this is not zero is
+   * one whose senders keep dying, and that is a different fault from a reminder
+   * that failed to send. See `recoverStalledClaims`.
+   */
+  recovered: number
+  /**
    * Expired sessions dropped on the way past.
    *
    * It rides the reminder clock rather than having a clock of its own, because
@@ -97,7 +109,7 @@ export interface TickResult {
 }
 
 /** What one org's nudges did. The half of a pass that has a deadline. */
-type Nudges = Pick<TickResult, 'sent' | 'failed' | 'skipped'>
+type Nudges = Pick<TickResult, 'sent' | 'failed' | 'skipped' | 'recovered'>
 
 /** What one delivery did, which is the counter it adds to. */
 type Outcome = keyof Nudges
@@ -118,7 +130,7 @@ export async function runReminderTick(
 ): Promise<TickResult> {
   const passes: OrgPass[] = (await tenancies(container)).map((orgId) => ({
     container: withOrg(container, orgId),
-    nudges: { sent: 0, failed: 0, skipped: 0 },
+    nudges: { sent: 0, failed: 0, skipped: 0, recovered: 0 },
     passengers: { sessionsSwept: 0, aiReviewsPolled: 0 },
   }))
   // FIRST every org's nudges, because they are the half with a deadline.
@@ -133,7 +145,7 @@ export async function runReminderTick(
 }
 
 function empty(): TickResult {
-  return { sent: 0, failed: 0, skipped: 0, sessionsSwept: 0, aiReviewsPolled: 0 }
+  return { sent: 0, failed: 0, skipped: 0, recovered: 0, sessionsSwept: 0, aiReviewsPolled: 0 }
 }
 
 /**
@@ -150,6 +162,7 @@ function added(total: TickResult, pass: OrgPass): TickResult {
     sent: total.sent + result.sent,
     failed: total.failed + result.failed,
     skipped: total.skipped + result.skipped,
+    recovered: total.recovered + result.recovered,
     sessionsSwept: total.sessionsSwept + result.sessionsSwept,
     aiReviewsPolled: total.aiReviewsPolled + result.aiReviewsPolled,
   }
@@ -181,8 +194,12 @@ async function tenancies(container: AppContainer): Promise<string[]> {
 
 /** One org's nudges. `container` is already bound to it. */
 async function sendDue(container: AppContainer, batchSize: number): Promise<Nudges> {
+  // FIRST, because it can put a due nudge back: a claim whose sender died ended
+  // that review's ladder, and giving up on it re-plans a rung whose time has
+  // already passed. Read after this, that rung goes out in THIS pass.
+  const recovered = await recoverStalledClaims(container)
   const due = await container.repositories.reminders.listDue(container.clock.now(), batchSize)
-  const nudges: Nudges = { sent: 0, failed: 0, skipped: 0 }
+  const nudges: Nudges = { sent: 0, failed: 0, skipped: 0, recovered }
   // Resolved ONCE for the batch, and once PER ORG: every reminder in this pass
   // goes out over this tenancy's own credential, and resolving per reminder
   // means re-reading the stored bot token, re-deriving its HKDF key and opening
@@ -279,17 +296,20 @@ async function pollAiReviews(container: AppContainer, batchSize: number): Promis
  * spends one statement rather than three.
  *
  * What it does not buy is exactly-once. A process that dies between the claim
- * and the mark leaves a row in `sending` and that nudge is not re-sent — which
- * is the trade this makes deliberately: a reminder that arrives twice is worse
- * than one that arrives late, and the review's next re-plan puts the ladder back
- * on its feet.
+ * and the mark leaves a row in `sending`, which no later pass reads and no
+ * re-plan clears, so the review's whole ladder stops there. The claim is
+ * therefore a LEASE rather than a permanent take: it is stamped with the time it
+ * was made, and `recoverStalledClaims` gives up on one that outlives any send
+ * before this pass reads what is due.
  */
 async function deliver(
   container: AppContainer,
   reminder: Reminder,
   chat: Resolved<ChatGateway, CredentialSource> | null,
 ): Promise<Outcome> {
-  if (!(await container.repositories.reminders.claim(reminder))) return 'skipped'
+  if (!(await container.repositories.reminders.claim(reminder, container.clock.now()))) {
+    return 'skipped'
+  }
   const review = await container.repositories.reviews.getById(reminder.reviewId)
   if (review === null) {
     // Nothing left to chase, which is what `cancelled` means. Every other way a

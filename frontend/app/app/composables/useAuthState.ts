@@ -16,6 +16,17 @@ import type { AuthState } from '@sainte-beuve/contracts'
 let inFlight: Promise<void> | null = null
 
 /**
+ * Which answer the shared state is currently allowed to hold.
+ *
+ * Bumped by `invalidate()`, and captured by each read: a `GET /auth` that was
+ * issued before a sign-out lands after it, and without this it would write the
+ * signed-in answer it was told back over the anonymous one the sign-out
+ * established. A counter rather than a flag, because two invalidations can
+ * straddle one read.
+ */
+let generation = 0
+
+/**
  * Who this browser is, shared by every screen that asks.
  *
  * `useState` rather than a fetch per component: the shell renders a name, the
@@ -36,11 +47,13 @@ export function useAuthState() {
   const pending = useState<boolean>('auth-state-pending', () => false)
 
   async function read(): Promise<void> {
+    const reading = generation
     pending.value = true
     try {
-      state.value = await api.getAuthState()
+      const answer = await api.getAuthState()
+      if (reading === generation) state.value = answer
     } catch {
-      state.value = null
+      if (reading === generation) state.value = null
     } finally {
       pending.value = false
     }
@@ -80,5 +93,25 @@ export function useAuthState() {
    */
   const isAdmin = computed(() => state.value?.role === 'admin')
 
-  return { state, pending, viewer, org, isAdmin, canSignIn, refresh }
+  /**
+   * Forget who this browser is, so the next `refresh()` really asks.
+   *
+   * What a sign-out calls. The screens that need the answer before they decide
+   * what else to request read it ONCE and keep it (Configuration), which is
+   * what stops a second `GET /auth` landing in front of every page — and which
+   * would, without this, leave a signed-out person looking at their own name
+   * and firing admin-only calls that are now refused. Held state is a cache,
+   * and the event that invalidates it has to say so.
+   *
+   * The in-flight promise goes with it: a read started before the sign-out is
+   * answering the old question, so a caller arriving after must not be handed
+   * it. The generation above is what stops that read writing its answer back.
+   */
+  function invalidate(): void {
+    generation += 1
+    inFlight = null
+    state.value = null
+  }
+
+  return { state, pending, viewer, org, isAdmin, canSignIn, refresh, invalidate }
 }

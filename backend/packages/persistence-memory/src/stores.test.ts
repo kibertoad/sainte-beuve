@@ -34,6 +34,7 @@ function reminder(id: string, overrides: Partial<Reminder> = {}): Reminder {
     reviewerId: null,
     dueAt: 0,
     snoozedUntil: null,
+    claimedAt: null,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,
