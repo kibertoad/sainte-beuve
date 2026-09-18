@@ -33,6 +33,7 @@ function reminder(id: string, overrides: Partial<Reminder> = {}): Reminder {
     channel: 'slack_dm',
     reviewerId: null,
     dueAt: 0,
+    snoozedUntil: null,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,

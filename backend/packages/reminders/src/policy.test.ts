@@ -63,6 +63,7 @@ function sentReminder(overrides: Partial<Reminder> & { kind: Reminder['kind'] })
     channel: 'slack_dm',
     reviewerId: null,
     dueAt: 0,
+    snoozedUntil: null,
     status: 'sent',
     sentAt: 0,
     failureReason: null,
@@ -129,6 +130,7 @@ describe('planNextReminder', () => {
       channel: 'slack_channel',
       reviewerId: null,
       dueAt: 4 * HOUR,
+      snoozedUntil: null,
     })
   })
 
@@ -230,6 +232,7 @@ describe('planNextReminder', () => {
       channel: 'slack_dm',
       reviewerId: 'rvw-1',
       dueAt: HOUR + policy.aiReviewParkedAfterMs,
+      snoozedUntil: null,
     })
   })
 
@@ -295,5 +298,73 @@ describe('planNextReminder', () => {
     )
     expect(planned?.kind).toBe('escalation')
     expect(planned?.dueAt).toBe(5 * DAY)
+  })
+})
+
+/**
+ * A snooze defers the LADDER, not one row.
+ *
+ * Which only shows up here, in the pure suite, because the hazard is a re-plan:
+ * the outstanding schedule is rewritten from scratch whenever anything moves, and
+ * one of those things is a background poll that found a delegated AI review
+ * parked. A pause that lived only in the `dueAt` of the row somebody asked for it
+ * on would be undone by a pass they never saw, at a time that has already gone by.
+ */
+describe('a snoozed review', () => {
+  const policy = DEFAULT_REMINDER_POLICY
+  const PARKED: ReviewSignals = { aiReviewParkedAt: HOUR }
+
+  /** The outstanding row a snooze leaves behind: deferred, and saying so. */
+  function snoozed(until: number): Reminder {
+    return sentReminder({
+      kind: 'pending',
+      status: 'scheduled',
+      sentAt: null,
+      dueAt: until,
+      snoozedUntil: until,
+    })
+  }
+
+  it('carries the pause onto the row the next re-plan writes', () => {
+    const planned = planNextReminder(
+      review({ status: 'assigned', assignedReviewerIds: ['rvw-1'], assignedAt: 0 }),
+      policy,
+      [snoozed(3 * DAY)],
+      NOTHING_PARKED,
+    )
+    // Not `pendingAfterMs` from the assignment, which is what the policy would
+    // have said on its own and is a time three days in the past by now.
+    expect(planned?.dueAt).toBe(3 * DAY)
+    expect(planned?.snoozedUntil).toBe(3 * DAY)
+  })
+
+  it('holds a park found in the background back to the same moment', () => {
+    const planned = planNextReminder(review(), policy, [snoozed(3 * DAY)], PARKED)
+    // The park is still what the review is waiting on, so it is still the rung
+    // that gets planned: somebody asking for quiet is not asking to be told about
+    // the same review on a different rung instead.
+    expect(planned?.kind).toBe('ai_review_parked')
+    expect(planned?.dueAt).toBe(3 * DAY)
+  })
+
+  it('stops carrying a pause the ladder has already moved past', () => {
+    const planned = planNextReminder(review(), policy, [snoozed(HOUR)], NOTHING_PARKED)
+    expect(planned?.dueAt).toBe(4 * HOUR)
+    expect(planned?.snoozedUntil).toBeNull()
+  })
+
+  it('ignores a pause on a nudge that has already gone out', () => {
+    // The snooze held the nudge back and the nudge then happened, which is the end
+    // of what it asked for. Read off a sent row instead, it would defer the whole
+    // ladder for ever.
+    const sent = [sentReminder({ kind: 'unassigned', sentAt: HOUR, snoozedUntil: 3 * DAY })]
+    const planned = planNextReminder(
+      review({ status: 'assigned', assignedReviewerIds: ['rvw-1'], assignedAt: 0 }),
+      policy,
+      sent,
+      NOTHING_PARKED,
+    )
+    expect(planned?.dueAt).toBe(DAY)
+    expect(planned?.snoozedUntil).toBeNull()
   })
 })

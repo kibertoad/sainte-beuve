@@ -185,6 +185,15 @@ would make asking for time cost something. With nothing outstanding to copy it
 targets whatever the policy would have chased next, which for an assigned review
 is the reviewer's DM.
 
+It defers the LADDER, not the row, and that is why the pause is recorded on
+`snoozedUntil` as well as applied to `dueAt`. The outstanding schedule is rewritten
+from scratch every time anything moves the ladder — a status write, a nudge going
+out, a poll that found a delegated review parked — so a pause that lived only in
+one row's `dueAt` would be undone by the next of those, and the replacement would
+come due at a time that has already gone by. `planNextReminder` reads the pause off
+the outstanding row, carries it onto whatever it writes next, and drops it once the
+rung it defers would come due after it anyway.
+
 Everything the bot says back is ephemeral. A slash command's reply is addressed to
 whoever typed it, and a channel does not need to see somebody's typo.
 

@@ -10,6 +10,14 @@ import type { AppContainer } from '../container.js'
  * rather than going through `scheduleNextReminder`: re-planning would compute the
  * same due time the policy computed before and undo the snooze on the spot.
  *
+ * The pause is recorded as well as applied, on `snoozedUntil`. Writing the row
+ * here is only half of holding a snooze: everything else that moves the ladder
+ * re-plans it from scratch, and one of those things is now a POLL that found a
+ * delegated review parked — a background pass nobody asked for and nobody sees.
+ * With the pause on the row, `planNextReminder` reads it off the outstanding
+ * schedule and carries it onto whatever it writes next, so a re-plan defers
+ * instead of firing a nudge at a time that has already gone by.
+ *
  * The scheduled row is replaced rather than edited, because the reminder port has
  * no update-the-due-date method and should not grow one for this: the outstanding
  * schedule for a review is a single row either way, and rewriting it is both
@@ -26,6 +34,7 @@ export async function snoozeReview(
   )
   await repositories.reminders.cancelScheduledForReview(review.id)
   const now = clock.now()
+  const until = now + hours * 60 * 60 * 1000
   return repositories.reminders.create({
     id: ids.next(),
     reviewId: review.id,
@@ -34,7 +43,8 @@ export async function snoozeReview(
     // DM into a channel post would widen the audience as a reward for asking for
     // time.
     ...(outstanding === undefined ? plannedTargetFor(review) : targetOf(outstanding)),
-    dueAt: now + hours * 60 * 60 * 1000,
+    dueAt: until,
+    snoozedUntil: until,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,

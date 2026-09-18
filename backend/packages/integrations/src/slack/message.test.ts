@@ -39,6 +39,7 @@ function reminder(kind: Reminder['kind']): Reminder {
     channel: 'slack_channel',
     reviewerId: null,
     dueAt: 2,
+    snoozedUntil: null,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,

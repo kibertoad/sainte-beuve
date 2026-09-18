@@ -25,7 +25,19 @@ export interface PlannedReminder {
   channel: ReminderChannel
   reviewerId: string | null
   dueAt: EpochMs
+  /** The snooze this nudge is still holding for. See {@link deferred}. */
+  snoozedUntil: EpochMs | null
 }
+
+/**
+ * One rung's answer, before the snooze is applied to it.
+ *
+ * The rungs compete on the time the CADENCE puts them at, and the deferral is
+ * then applied to whichever of them won. A snooze that had moved each candidate
+ * before they were compared would decide the ladder by which rung happened to be
+ * furthest out, which is the opposite of what a pause means.
+ */
+type Candidate = Omit<PlannedReminder, 'snoozedUntil'>
 
 /**
  * What the ladder has to know about a review that is not ON the review.
@@ -127,7 +139,7 @@ function planEscalation(
   review: ReviewRequest,
   policy: ReminderPolicy,
   alreadySent: readonly Reminder[],
-): PlannedReminder | null {
+): Candidate | null {
   if (review.dueAt === null) return null
   if (latestSentAt(alreadySent, 'escalation') !== null) return null
   return {
@@ -149,7 +161,7 @@ function planEscalation(
  * audience as a side effect of pressing a button, and the escalation is the only
  * thing allowed to do that.
  */
-function audienceFor(review: ReviewRequest): Pick<PlannedReminder, 'channel' | 'reviewerId'> {
+function audienceFor(review: ReviewRequest): Pick<Candidate, 'channel' | 'reviewerId'> {
   const [reviewerId] = review.assignedReviewerIds
   return reviewerId === undefined
     ? { channel: 'slack_channel', reviewerId: null }
@@ -164,7 +176,7 @@ function planNudge(
   review: ReviewRequest,
   policy: ReminderPolicy,
   alreadySent: readonly Reminder[],
-): PlannedReminder | null {
+): Candidate | null {
   if (review.assignedReviewerIds.length === 0) {
     if (latestSentAt(alreadySent, 'unassigned') !== null) return null
     return {
@@ -206,7 +218,7 @@ function planAiReviewParked(
   policy: ReminderPolicy,
   alreadySent: readonly Reminder[],
   parkedAt: EpochMs | null,
-): PlannedReminder | null {
+): Candidate | null {
   if (parkedAt === null) return null
   const announced = latestSentAt(alreadySent, 'ai_review_parked')
   if (announced !== null && announced >= parkedAt) return null
@@ -226,8 +238,8 @@ function planAiReviewParked(
  * that a review is still waiting. Whichever loses a tie is re-planned behind the
  * one that won rather than lost, because the tick re-plans after every send.
  */
-function earliest(candidates: readonly (PlannedReminder | null)[]): PlannedReminder | null {
-  let soonest: PlannedReminder | null = null
+function earliest(candidates: readonly (Candidate | null)[]): Candidate | null {
+  let soonest: Candidate | null = null
   for (const candidate of candidates) {
     if (candidate === null) continue
     if (soonest === null || candidate.dueAt < soonest.dueAt) soonest = candidate
@@ -257,9 +269,45 @@ export function planNextReminder(
   signals: ReviewSignals,
 ): PlannedReminder | null {
   if (isResolved(review)) return null
-  return earliest([
+  const planned = earliest([
     planEscalation(review, policy, alreadySent),
     planAiReviewParked(review, policy, alreadySent, signals.aiReviewParkedAt),
     planNudge(review, policy, alreadySent),
   ])
+  return planned === null ? null : deferred(planned, snoozedUntil(alreadySent))
+}
+
+/**
+ * How long a snooze is still holding this review's ladder back, read off the
+ * OUTSTANDING row.
+ *
+ * Off the row rather than passed in, because that is where a snooze already
+ * lives: `snoozeReview` records it on the single scheduled nudge it writes, and
+ * every re-plan reads this list before it cancels that row. A nudge that has been
+ * sent, cancelled or failed carries no deferral — the pause it asked for is over,
+ * because the thing it was holding back has happened.
+ */
+function snoozedUntil(alreadySent: readonly Reminder[]): EpochMs | null {
+  return alreadySent.find((r) => r.status === 'scheduled')?.snoozedUntil ?? null
+}
+
+/**
+ * The winning rung, pushed out by a snooze that is still holding it.
+ *
+ * Deferring the LADDER rather than one row is the only reading that survives what
+ * a re-plan does. The outstanding schedule is rewritten from scratch whenever
+ * anything moves — a status write, a nudge going out, a poll that found a
+ * delegated review parked — so a pause that was only a later `dueAt` on one row
+ * would be undone by the next of those and the nudge would go out at a time that
+ * is already in the past. It also crosses KINDS on purpose: somebody asking for a
+ * few hours' quiet about a review is not asking to be told about it on a
+ * different rung instead.
+ *
+ * It stops travelling the moment the rung would come due after it anyway. At that
+ * point the pause has expired, and a timestamp copied onto every row after it
+ * would outlive the thing it described.
+ */
+function deferred(candidate: Candidate, until: EpochMs | null): PlannedReminder {
+  if (until === null || until <= candidate.dueAt) return { ...candidate, snoozedUntil: null }
+  return { ...candidate, dueAt: until, snoozedUntil: until }
 }

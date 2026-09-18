@@ -240,8 +240,15 @@ export const aiReviewRunSchema = v.object({
    * status, and the ladder asks for one review's runs by `review_id`, both of
    * which are already indexed. A column would be a migration in two dialects
    * bought for a field no `WHERE` clause names.
+   *
+   * Which is also why it carries a DEFAULT rather than only a `v.nullable`. The
+   * payload is parsed through this schema on every read, so a field the older
+   * shape has no key for is a `StoredRowError` on every run written before this
+   * release — and the ladder now reads a review's runs on every status write and
+   * every send, so one such row would 500 the review it is on and silence the
+   * clock that would have healed it. See docs/persistence.md.
    */
-  parkedAt: v.nullable(v.number()),
+  parkedAt: v.optional(v.nullable(v.number()), null),
   completedAt: v.nullable(v.number()),
 })
 export type AiReviewRun = v.InferOutput<typeof aiReviewRunSchema>

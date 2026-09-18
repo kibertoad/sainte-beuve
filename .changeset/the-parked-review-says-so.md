@@ -40,7 +40,26 @@ slice 4 that was left.
   the payload — unlike `status` and `lastPolledAt` — because nothing selects on
   it: the clock reads what is in flight by status and the ladder asks for one
   review's runs by `review_id`, both already indexed, so a column would be a
-  migration in two dialects bought for a field no `WHERE` clause names.
+  migration in two dialects bought for a field no `WHERE` clause names. Which is
+  why it carries a DEFAULT and not only a `v.nullable`: the payload is parsed
+  through its contract on every read, and a field the older shape has no key for
+  is a `StoredRowError` on every run delegated before this release — on a path the
+  ladder now takes on every status write and every send, so one such row would 500
+  the review it is on and silence the clock that would have healed it. Two cases in
+  `persistence-conformance`, against both durable stores.
+- **A re-park is found by `postAttempts`, not by the status.** `resolve` answers
+  202 and cat-factory acts asynchronously, so a post that starts and fails between
+  two polls returns the run to `awaiting_selection` having never shown up on the row
+  as anything else — the exact case the timestamp comparison exists for, and the one
+  a status comparison cannot see. `postAttempts` only ever goes up, which is already
+  how `curationFor` decides which of two pictures of a run is the newer one.
+- **A snooze defers the LADDER, on `snoozedUntil`.** The outstanding schedule is
+  rewritten from scratch every time anything moves the ladder, and one of those
+  things is now a background poll: a pause that lived only in the `dueAt` of the row
+  somebody asked for it on would be undone by a pass they never see, and the
+  replacement would come due at a time that has already gone by. `planNextReminder`
+  reads the pause off the outstanding row, carries it onto what it writes next, and
+  drops it once the rung it defers would come due after it anyway.
 - **The poll re-plans, in both directions.** A poll is the only thing that ever
   learns a review parked, and reminder rows are written ahead of time, so without
   this the nudge would be scheduled whenever something ELSE re-planned the
@@ -49,6 +68,16 @@ slice 4 that was left.
   curated ten minutes after it parked is not announced afterwards. Both halves
   run on the read path as well as the clock's, so whichever poll gets there first
   is the one that schedules.
+- **ONCE per pass, and outside the poll's own try/catch.** `scheduleNextReminder`
+  is a cancel-then-create over a schedule meant to be a single row, so a read that
+  re-planned per run would write two scheduled rows for two runs that parked
+  together — a nudge sent twice, and two rows where a snooze assumes one. And the
+  catch around a poll is for a cat-factory that cannot be reached: a reminder store
+  that refused a write, caught there, would be recorded on the run as "the AI review
+  could not be read from cat-factory" and the park would never be announced, because
+  the stamp is already down and there is no edge left for a later poll to find. So
+  the re-plan sits outside it, and a failure puts the stamp back and lets the next
+  poll try again.
 - **Not gated on the pending budget, and it does not spend it.** A review whose
   reviewer has gone quiet is exactly the one somebody delegated to cat-factory,
   and going silent about the findings because the human ladder is spent would

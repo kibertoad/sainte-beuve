@@ -43,6 +43,12 @@ export async function scheduleNextReminder(
     channel: planned.channel,
     reviewerId: planned.reviewerId,
     dueAt: planned.dueAt,
+    // Carried by the POLICY, not by this. A snooze defers the review's ladder
+    // rather than one row, and the row it was asked on is the row this call is
+    // about to cancel, so the deferral has to travel onto its replacement or a
+    // re-plan would undo it — which, now that a poll re-plans, is a background
+    // pass the person who asked for the quiet never sees.
+    snoozedUntil: planned.snoozedUntil,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,

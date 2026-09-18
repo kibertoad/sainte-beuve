@@ -54,6 +54,24 @@ export const reminderSchema = v.object({
   /** Reviewer the nudge is aimed at. Null for a channel-wide `unassigned` or `escalation`. */
   reviewerId: v.nullable(v.string()),
   dueAt: v.number(),
+  /**
+   * How long a snooze is holding this review's ladder back, and null for a nudge
+   * nobody deferred.
+   *
+   * Beside `dueAt` rather than folded into it, because the two answer different
+   * questions and only one of them survives a re-plan. `dueAt` is what the policy
+   * computed; this is what a PERSON asked for, and the outstanding schedule for a
+   * review is rewritten from scratch every time anything moves the ladder — a
+   * status write, a nudge going out, a poll that found a delegated review parked.
+   * A snooze that lived only in the `dueAt` of the row it was asked for would be
+   * undone by the next one of those, which for a review with an AI review on it is
+   * a background poll the person who snoozed it never sees.
+   *
+   * Carried forward by `planNextReminder` and dropped once the rung it defers
+   * would come due after it anyway: at that point the pause has expired and a
+   * timestamp copied onto every row after it would outlive what it described.
+   */
+  snoozedUntil: v.optional(v.nullable(v.number()), null),
   status: reminderStatusSchema,
   sentAt: v.nullable(v.number()),
   /** Delivery failure text, kept so a silent channel misconfiguration is visible. */
