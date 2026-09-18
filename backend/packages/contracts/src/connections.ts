@@ -105,12 +105,23 @@ export const slackConnectionSchema = v.object({
   /** The channel new review requests are announced in. Null leaves announcements off. */
   announcementChannelId: v.nullable(v.string()),
   /**
-   * Whether the slash command and the message buttons can be verified
-   * (`SLACK_SIGNING_SECRET`). Independent of `ready`: posting out needs a bot
+   * Whether the slash command and the message buttons can be verified: this org
+   * stored a signing secret, or it is the default org and the deployment set
+   * `SLACK_SIGNING_SECRET`. Independent of `ready`: posting out needs a bot
    * token, and trusting what comes back needs the signing secret, and a
    * deployment can easily have one without the other.
    */
   interactivityReady: v.boolean(),
+  /**
+   * Where THIS org's Slack app posts, as a path to hang off the API's own
+   * origin.
+   *
+   * On the response rather than built in the SPA, because it is the one field
+   * here that differs per tenancy: a second org's commands are placed by the
+   * slug in this path, so a screen that assembled the URL from a constant would
+   * hand every org the default org's. See `SLACK_ORG_WEBHOOK_PATH`.
+   */
+  requestPath: v.string(),
 })
 export type SlackConnection = v.InferOutput<typeof slackConnectionSchema>
 

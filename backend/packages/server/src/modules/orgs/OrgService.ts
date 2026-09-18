@@ -1,6 +1,12 @@
 import type { CreateOrgInput, Org, OrgFounder, UpdateOrgInput } from '@sainte-beuve/contracts'
-import { DEFAULT_ORG_ID, defaultOrg, NO_VCS_HANDLES, withHandle } from '@sainte-beuve/contracts'
-import { assertFound, ConflictError } from '@sainte-beuve/kernel'
+import {
+  DEFAULT_ORG_ID,
+  DEFAULT_ORG_SLUG,
+  defaultOrg,
+  NO_VCS_HANDLES,
+  withHandle,
+} from '@sainte-beuve/contracts'
+import { assertFound, ConflictError, NotFoundError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 
 /**
@@ -35,6 +41,58 @@ export class OrgService {
     return this.container.orgId === DEFAULT_ORG_ID
       ? defaultOrg()
       : { ...defaultOrg(), id: this.container.orgId, slug: this.container.orgId }
+  }
+
+  /**
+   * The org a slug names, for the two unauthenticated paths that are allowed to
+   * take one: a sign-in that says which board to establish a session on, and an
+   * inbound Slack delivery that says which board its command acts on.
+   *
+   * A slug nobody has made is a 404 rather than a quiet fall back to the default
+   * org: somebody who typed an org name and was answered by a different board
+   * would have no way to tell, and the two states look identical afterwards.
+   *
+   * The DEFAULT org answers to its slug whether or not its row exists, which is
+   * the ordinary state of a deployment that never made a second one (see
+   * {@link current}). Without this, the one slug every caller can read off their
+   * own auth state — and the only one nobody is allowed to create — is the one
+   * slug these paths refuse.
+   *
+   * One method rather than a rule each caller implements, because the two get to
+   * disagree exactly once: naming an org here is not proof of anything, and what
+   * makes each path safe is what it checks NEXT — a signed state on the sign-in,
+   * the org's own signing secret on the delivery.
+   */
+  async bySlug(slug: string): Promise<Org> {
+    const held = await this.bySlugOrNull(slug)
+    if (held === null) throw new NotFoundError(`No org "${normalised(slug)}" on this deployment.`)
+    return held
+  }
+
+  /**
+   * The same rule, answered as an ABSENCE rather than a refusal, for a caller
+   * that cannot afford to let the two outcomes look different.
+   *
+   * The Slack intake is that caller. A 404 there would tell an anonymous POST
+   * which slugs this deployment holds, one guess at a time, and the signature
+   * check below it is no substitute: it happens after the slug has already been
+   * looked up. So the intake collapses "no such org", "that org has no secret"
+   * and "that signature is wrong" into one refusal, and this is what lets it.
+   *
+   * The sign-in can afford the 404 and keeps it: somebody who typed an org name
+   * has to be told they typed it wrong, and `requireCapability(signIn(provider))`
+   * runs before this does, so a deployment with no OAuth client answers the same
+   * way for every slug.
+   */
+  async bySlugOrNull(slug: string): Promise<Org | null> {
+    const wanted = normalised(slug)
+    if (wanted === DEFAULT_ORG_SLUG) return this.defaultOrgRow()
+    return this.container.stores.orgs.getBySlug(wanted)
+  }
+
+  /** The default org's row, or the value it is synthesised as. See {@link current}. */
+  private async defaultOrgRow(): Promise<Org> {
+    return (await this.container.stores.orgs.getById(DEFAULT_ORG_ID)) ?? defaultOrg()
   }
 
   /**
@@ -121,6 +179,18 @@ export class OrgService {
       createdAt: clock.now(),
     })
   }
+}
+
+/**
+ * What a slug a caller TYPED means to the store.
+ *
+ * Normalised the way `orgSlugSchema` normalises it, because a slug reaches the
+ * two unauthenticated paths from a query string and from a URL somebody pasted
+ * into a Slack app rather than through a contract: one stored lowercase and
+ * written `Acme` is one org to whoever typed it and no org to the store.
+ */
+function normalised(slug: string): string {
+  return slug.trim().toLowerCase()
 }
 
 function slugTaken(slug: string): ConflictError {

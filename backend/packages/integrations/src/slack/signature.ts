@@ -8,16 +8,48 @@
 /** Reject a replayed request older than this. Slack's own guidance is five minutes. */
 const MAX_SKEW_SECONDS = 5 * 60
 
+/** The two headers Slack signs with, once both are there and the timestamp is fresh. */
+export interface SlackSignatureHeaders {
+  timestamp: string
+  signature: string
+}
+
+/**
+ * The half of verification that needs NO SECRET: both headers present, the
+ * timestamp a number, and within the replay window.
+ *
+ * Split out and exported because of what it costs to get the secret on a
+ * multi-tenant deployment. The secret is an org's credential now, so resolving
+ * one is a store read plus an HKDF derivation and an AES-GCM open — on a route
+ * that is unauthenticated by construction, where every byte arrived from a
+ * stranger. A caller that asks this first pays none of that for a POST carrying
+ * no signature at all, or one replayed from last week.
+ *
+ * It is not a defence against a crafted request: a forged signature with a fresh
+ * timestamp still costs one resolution, and it has to, because the secret is what
+ * the forgery is checked against. What it removes is the cheapest flood.
+ */
+export function readSlackSignatureHeaders(
+  headers: { timestamp: string | null; signature: string | null },
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): SlackSignatureHeaders | null {
+  const { timestamp, signature } = headers
+  if (timestamp === null || signature === null) return null
+  const sent = Number.parseInt(timestamp, 10)
+  if (Number.isNaN(sent) || Math.abs(nowSeconds - sent) > MAX_SKEW_SECONDS) return null
+  return { timestamp, signature }
+}
+
 export async function verifySlackSignature(
   signingSecret: string,
   rawBody: string,
   headers: { timestamp: string | null; signature: string | null },
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): Promise<boolean> {
-  const { timestamp, signature } = headers
-  if (timestamp === null || signature === null) return false
-  const sent = Number.parseInt(timestamp, 10)
-  if (Number.isNaN(sent) || Math.abs(nowSeconds - sent) > MAX_SKEW_SECONDS) return false
+  // Re-read rather than trusted from the caller: this stays safe on its own, and
+  // a caller that already checked pays a string compare for the second look.
+  const signed = readSlackSignatureHeaders(headers, nowSeconds)
+  if (signed === null) return false
 
   const key = await crypto.subtle.importKey(
     'raw',
@@ -29,9 +61,9 @@ export async function verifySlackSignature(
   const mac = await crypto.subtle.sign(
     'HMAC',
     key,
-    new TextEncoder().encode(`v0:${timestamp}:${rawBody}`),
+    new TextEncoder().encode(`v0:${signed.timestamp}:${rawBody}`),
   )
-  return constantTimeEquals(`v0=${toHex(new Uint8Array(mac))}`, signature)
+  return constantTimeEquals(`v0=${toHex(new Uint8Array(mac))}`, signed.signature)
 }
 
 function toHex(bytes: Uint8Array): string {

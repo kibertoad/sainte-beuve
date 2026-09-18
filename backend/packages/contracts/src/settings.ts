@@ -26,11 +26,19 @@ import type { VcsProvider } from './vcs.js'
  * "paste a token" field beside a credential nobody can paste. The sign-in
  * credentials are {@link vcsOauthCredentialKey}, reported through
  * {@link vcsConnectionSchema} instead.
+ *
+ * `slack-signing-secret` is on the list although nothing is ever CALLED with it:
+ * it is what an inbound slash command is verified against, and it is here
+ * because it is an ORG's credential rather than the deployment's. One Slack app
+ * serves one tenancy, so the org that connected it is the org whose board its
+ * commands act on — which is the whole of how a Slack command reaches a tenancy
+ * that is not the default one. See `SLACK_ORG_WEBHOOK_PATH`.
  */
 export const integrationIdSchema = v.picklist([
   'github-pat',
   'gitlab-pat',
   'slack-bot-token',
+  'slack-signing-secret',
   'cat-factory',
 ])
 export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
@@ -43,6 +51,7 @@ const INTEGRATION_LABELS: Record<IntegrationId, string> = {
   'github-pat': 'GitHub token',
   'gitlab-pat': 'GitLab token',
   'slack-bot-token': 'Slack bot token',
+  'slack-signing-secret': 'Slack signing secret',
   'cat-factory': 'cat-factory key',
 }
 

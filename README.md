@@ -163,9 +163,17 @@ configures a self-managed install, because GitLab serves its API and its OAuth
 endpoints under the same root.
 
 Slack needs a bot token to post, and separately a signing secret to trust the
-`/review` command and the message buttons coming back. Every URL that has to be
-registered is shown on the Configuration screen with this deployment's own base
-URL filled in. Full setup: [docs/integrations.md](./docs/integrations.md).
+`/review` command and the message buttons coming back. Both belong to an ORG
+rather than to the deployment: one Slack app serves one tenancy, so its Request
+URL carries the org's slug (`/webhooks/slack/<org>`, and the bare
+`/webhooks/slack` for the default one) and a command is trusted only against the
+secret that org stored. `SLACK_SIGNING_SECRET`, `SLACK_BOT_TOKEN` and
+`SLACK_CHANNEL_ID` describe this deployment's own Slack app, so all three stay
+the default org's and none is lent to a named one — a deployment that never made
+a second org changes nothing, and a second org connects its own app. Every URL
+that has to be registered is shown on the Configuration screen with this
+deployment's own base URL filled in. Full setup:
+[docs/integrations.md](./docs/integrations.md).
 
 ## Who is allowed to call it
 

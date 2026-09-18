@@ -5,8 +5,6 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import {
-  DEFAULT_ORG_ID,
-  DEFAULT_ORG_SLUG,
   signInCallbackPath,
   VCS_PROVIDERS,
   vcsDisplayName,
@@ -14,13 +12,14 @@ import {
   vcsPatCredentialKey,
 } from '@sainte-beuve/contracts'
 import type { RoundTripState } from '@sainte-beuve/kernel'
-import { NotFoundError } from '@sainte-beuve/kernel'
 import { type AppContainer, withOrg } from '../../container.js'
 import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
 import { mintNonce } from '../../crypto/tokens.js'
 import { requireCapability } from '../../http/errors.js'
-import { resolveChat, resolveVcs } from '../../integrations/resolve.js'
+import { resolveVcs } from '../../integrations/resolve.js'
+import { OrgService } from '../orgs/OrgService.js'
 import { notOurState, startedByThisBrowser } from './roundTrip.js'
+import { slackConnection } from './slackConnection.js'
 import { establishSession, type IssuedSession, storeCredential } from './signIn.js'
 
 /**
@@ -108,18 +107,13 @@ export class ConnectionsService {
   constructor(private readonly container: AppContainer) {}
 
   async read(): Promise<Connections> {
-    const [vcs, chat] = await Promise.all([
+    const [vcs, slack] = await Promise.all([
       Promise.all(VCS_PROVIDERS.map((provider) => this.connection(provider))),
-      resolveChat(this.container),
+      // Its own module because every field on it is RESOLVED for this org rather
+      // than read off the deployment's wiring. See `slackConnection`.
+      slackConnection(this.container),
     ])
-    return {
-      vcs,
-      slack: {
-        ready: chat !== null,
-        announcementChannelId: this.container.slack.announcementChannelId,
-        interactivityReady: this.container.slack.signingSecret !== null,
-      },
-    }
+    return { vcs, slack }
   }
 
   /**
@@ -228,21 +222,14 @@ export class ConnectionsService {
   /**
    * The org a slug names, or the one this request is already in.
    *
-   * A slug nobody has made is a 404 rather than a quiet fall back to the default
-   * org: somebody who typed an org name and was signed in to a different board
-   * would have no way to tell, and the two states look identical afterwards.
+   * `OrgService.bySlug` decides it, and the Slack intake asks the same method:
+   * the rule for what a slug in an unauthenticated path means — including that
+   * `default` answers whether or not its row exists — is one rule, and two
+   * copies of it are how they come to disagree.
    */
   private async orgIdFor(slug: string | undefined): Promise<string> {
     if (slug === undefined) return this.container.orgId
-    // The DEFAULT org answers to its slug whether or not its row exists, which
-    // is the ordinary state of a deployment that never made a second one (see
-    // `OrgService.current`). Without this, the one slug every caller can read
-    // off their own auth state — and the only one nobody is allowed to create —
-    // is the one slug a sign-in refuses.
-    if (slug === DEFAULT_ORG_SLUG) return DEFAULT_ORG_ID
-    const held = await this.container.stores.orgs.getBySlug(slug)
-    if (held === null) throw new NotFoundError(`No org "${slug}" on this deployment.`)
-    return held.id
+    return (await new OrgService(this.container).bySlug(slug)).id
   }
 
   /**

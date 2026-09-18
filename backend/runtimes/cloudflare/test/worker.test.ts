@@ -172,7 +172,12 @@ describe('sainte-beuve worker', () => {
           labels,
         },
       ],
-      slack: { ready: false, announcementChannelId: null, interactivityReady: false },
+      slack: {
+        ready: false,
+        announcementChannelId: null,
+        interactivityReady: false,
+        requestPath: '/webhooks/slack/default',
+      },
     })
   })
 

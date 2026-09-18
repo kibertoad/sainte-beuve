@@ -1,7 +1,12 @@
 import { Hono } from 'hono'
 import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
-import { resolveAiReview, resolveChat, resolveVcs } from '../../integrations/resolve.js'
+import {
+  resolveAiReview,
+  resolveChat,
+  resolveSlackSigningSecret,
+  resolveVcs,
+} from '../../integrations/resolve.js'
 import { ConnectionsService } from '../connections/ConnectionsService.js'
 
 /**
@@ -27,11 +32,12 @@ export function healthController(): Hono<AppEnv> {
 
   app.get('/health', async (c) => {
     const container = c.get('container')
-    const [chat, github, gitlab, aiReview, persistenceReady] = await Promise.all([
+    const [chat, github, gitlab, aiReview, slackSigning, persistenceReady] = await Promise.all([
       resolveChat(container),
       resolveVcs(container, 'github'),
       resolveVcs(container, 'gitlab'),
       resolveAiReview(container),
+      resolveSlackSigningSecret(container),
       storeAnswers(container),
     ])
     const body = {
@@ -47,7 +53,11 @@ export function healthController(): Hono<AppEnv> {
         aiReview: aiReview !== null,
         secrets: container.secrets !== null,
         githubWebhooks: container.github.webhookSecret !== null,
-        slackInteractivity: container.slack.signingSecret !== null,
+        // For the org this probe is in, which on an unauthenticated `/health` is
+        // the default one. An org that connected its own Slack app turned this
+        // on without a redeploy, and a flag read off the process environment
+        // would report the deployment as it was configured rather than as it is.
+        slackInteractivity: slackSigning !== null,
       },
     }
     return c.json(body, persistenceReady ? 200 : 503)
