@@ -36,7 +36,7 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-baseline justify-between gap-4">
+      <div class="flex items-baseline justify-between gap-3">
         <div>
           <h2 class="font-medium">Asking for attention</h2>
           <p class="text-sm text-muted">
@@ -57,10 +57,10 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
       <div
         v-for="request in requests"
         :key="request.id"
-        class="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
+        class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
       >
         <div class="min-w-0">
-          <ULink :to="request.pullRequest.url" target="_blank" class="font-medium truncate">
+          <ULink :to="request.pullRequest.url" target="_blank" class="font-medium line-clamp-2">
             {{ request.title }}
           </ULink>
           <p class="text-xs text-muted">
@@ -77,7 +77,7 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
             </UBadge>
           </div>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <UButton
             v-if="mine(request)"
             size="sm"

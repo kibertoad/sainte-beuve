@@ -86,13 +86,19 @@ async function requestAiReview(review: ReviewRequest) {
 </script>
 
 <template>
-  <UContainer class="py-8">
-    <div class="flex items-center justify-between mb-6">
+  <UContainer class="py-6 sm:py-8">
+    <div class="flex items-start justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-semibold">Reviews</h1>
         <p class="text-sm text-muted">Everything waiting on a human, and what it is waiting for.</p>
       </div>
-      <UButton icon="i-lucide-refresh-cw" variant="ghost" :loading="pending" @click="refresh()">
+      <UButton
+        icon="i-lucide-refresh-cw"
+        variant="ghost"
+        class="shrink-0"
+        :loading="pending"
+        @click="refresh()"
+      >
         Refresh
       </UButton>
     </div>
@@ -107,15 +113,15 @@ async function requestAiReview(review: ReviewRequest) {
 
     <div v-else class="flex flex-col gap-3">
       <UCard v-for="review in reviews" :key="review.id">
-        <div class="flex items-start justify-between gap-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div class="min-w-0">
             <ULink :to="review.pullRequest.url" target="_blank" class="font-medium">
               {{ review.pullRequest.owner }}/{{ review.pullRequest.repo }}#{{
                 review.pullRequest.number
               }}
             </ULink>
-            <p class="text-sm text-muted truncate">{{ review.title }}</p>
-            <div class="flex gap-1 mt-2">
+            <p class="text-sm text-muted line-clamp-2">{{ review.title }}</p>
+            <div class="flex flex-wrap gap-1 mt-2">
               <UBadge
                 v-for="skill in review.requiredSkills"
                 :key="skill"
@@ -126,7 +132,7 @@ async function requestAiReview(review: ReviewRequest) {
               </UBadge>
             </div>
           </div>
-          <div class="flex items-center gap-2 shrink-0">
+          <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
             <UBadge :color="statusColor[review.status]" variant="subtle">
               {{ review.status }}
             </UBadge>

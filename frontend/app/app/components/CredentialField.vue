@@ -110,9 +110,11 @@ defineExpose({ clearDraft })
 
 <template>
   <div>
-    <div class="flex items-start justify-between gap-4 mb-3">
+    <div
+      class="flex flex-col-reverse gap-2 mb-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+    >
       <p class="text-sm text-muted min-w-0">{{ description }}</p>
-      <div class="text-right shrink-0">
+      <div class="sm:text-right sm:shrink-0">
         <UBadge :color="badge.color" variant="subtle">{{ badge.label }}</UBadge>
         <p v-if="status.subject" class="text-xs text-muted mt-1">{{ status.subject }}</p>
         <p v-else-if="status.hint" class="text-xs text-muted mt-1">ends in {{ status.hint }}</p>
@@ -128,25 +130,35 @@ defineExpose({ clearDraft })
       :description="unreadable.description"
     />
 
-    <div class="flex items-center gap-2">
+    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
       <UInput
         v-model="draft"
-        class="flex-1"
+        class="w-full sm:flex-1"
         type="password"
         autocomplete="off"
         :placeholder="placeholder ?? 'Paste a token'"
         @keyup.enter="save()"
       />
-      <UButton :loading="busy" :disabled="token.length === 0" @click="save()">Save</UButton>
-      <UButton
-        v-if="status.state !== 'absent'"
-        variant="ghost"
-        color="neutral"
-        :loading="busy"
-        @click="emit('clear')"
-      >
-        Clear
-      </UButton>
+      <div class="flex items-center gap-2 sm:shrink-0">
+        <UButton
+          class="grow justify-center sm:grow-0"
+          :loading="busy"
+          :disabled="token.length === 0"
+          @click="save()"
+        >
+          Save
+        </UButton>
+        <UButton
+          v-if="status.state !== 'absent'"
+          variant="ghost"
+          color="neutral"
+          class="grow justify-center sm:grow-0"
+          :loading="busy"
+          @click="emit('clear')"
+        >
+          Clear
+        </UButton>
+      </div>
     </div>
   </div>
 </template>

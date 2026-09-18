@@ -1,78 +1,58 @@
 <script setup lang="ts">
-// The layer's root: a side rail of destinations, and the page beside it. A
-// consuming deployment inherits this unless it ships its own.
+// The layer's root: the destinations, and the page beside them. A consuming
+// deployment inherits this unless it ships its own.
 //
-// The workspace is first and is the landing route, because it is the only
-// screen about the person in front of it: the board, the directory and the
-// configuration are all about the deployment.
-const links = [
-  { label: 'Workspace', to: '/', icon: 'i-lucide-layout-dashboard' },
-  { label: 'Projects', to: '/projects', icon: 'i-lucide-folder-git-2' },
-  { label: 'Board', to: '/board', icon: 'i-lucide-git-pull-request' },
-  { label: 'Reviewers', to: '/reviewers', icon: 'i-lucide-users' },
-  // Kept for EVERYBODY, including a member who can change none of it. It holds
-  // the Access card, which holds the only sign-out button there is, and a rail
-  // that hid it from the people it refuses would leave them signed in with no
-  // way out. What the page itself shows them is its own decision.
-  { label: 'Configuration', to: '/configuration', icon: 'i-lucide-settings' },
-]
-
-// Who the screens are rendering FOR, at the foot of the rail.
+// The shell is the one place the viewport width changes the SHAPE of the screen
+// rather than the size of it. A rail 56 units wide is a third of a phone, so
+// below `lg` it becomes a bar with a button, and the same `AppNavigation` it
+// always was renders inside a slideover instead of beside the page.
 //
-// It belongs in the shell rather than on the workspace, because the answer
-// applies to every screen: the board a person acts on and the inbox they are in
-// are both cut by who is asking. A deployment running open has nobody signed in
-// and says so, which is the honest reading of a workspace that renders for
-// whoever the deployment's credential acts as.
+// Who the screens are rendering for is read ONCE, here, because every screen
+// below is cut by who is asking: the board a person acts on and the inbox they
+// are in both depend on it. A deployment running open has nobody signed in and
+// says so, which is the honest reading of a workspace that renders for whoever
+// the deployment's credential acts as.
 const auth = useAuthState()
 await auth.refresh()
 
-/**
- * The tenancy, above the person. Shown only for a deployment that made a second
- * org: a single-tenant one is entirely in the default org, and a rail that said
- * "default" on every screen would be reporting a fact nobody has to act on.
- */
-const orgName = computed(() => {
-  const org = auth.org.value
-  return org === null || org.slug === 'default' ? null : org.name
-})
-
-/**
- * What the foot of the rail says. Three states, and they are three different
- * instructions: a person, a machine that has no workspace, and nobody. The
- * BUTTONS are on Configuration rather than here, because signing in is a
- * navigation away from whatever screen this is and the deployment's access
- * settings are what somebody wants to see when they get there.
- */
-const whoami = computed(() => {
-  const principal = auth.state.value?.principal
-  if (principal?.kind === 'session') return principal.viewer.reviewer.displayName
-  if (principal?.kind === 'api_key') return `API key: ${principal.label}`
-  return auth.canSignIn.value ? 'Not signed in' : null
-})
+// The overlay rail's open state, and the closes that go with it. A slideover
+// left standing over the page it just navigated to — or over the wide-screen
+// rail it was only ever a stand-in for — is the standard way a phone menu is got
+// wrong, so the closing lives in one composable rather than in this template.
+const { open: navOpen, close: closeNav } = useNavigationOverlay()
 </script>
 
 <template>
   <UApp>
-    <div class="min-h-screen flex">
-      <aside class="w-56 shrink-0 border-r border-default flex flex-col gap-4 p-4">
+    <div class="min-h-screen lg:flex">
+      <!--
+        The narrow shell. Sticky, because the button on it is the only way off
+        the screen and a long board would otherwise scroll it out of reach.
+      -->
+      <header
+        class="lg:hidden sticky top-0 z-10 flex items-center gap-2 border-b border-default bg-default px-2 py-2"
+      >
+        <UButton
+          icon="i-lucide-menu"
+          variant="ghost"
+          color="neutral"
+          aria-label="Open the navigation"
+          @click="navOpen = true"
+        />
+        <span class="font-semibold">sainte-beuve</span>
+      </header>
+
+      <aside class="hidden lg:flex w-56 shrink-0 border-r border-default flex-col gap-4 p-4">
         <span class="font-semibold px-2.5">sainte-beuve</span>
-        <UNavigationMenu orientation="vertical" :items="links" />
-        <div v-if="orgName || whoami" class="mt-auto flex flex-col gap-1">
-          <p v-if="orgName" class="flex items-center gap-2 px-2.5 text-sm text-muted">
-            <UIcon name="i-lucide-building-2" />
-            <span class="truncate">{{ orgName }}</span>
-          </p>
-          <NuxtLink
-            v-if="whoami"
-            to="/configuration"
-            class="flex items-center gap-2 px-2.5 py-2 text-sm text-muted hover:text-default"
-          >
-            <UIcon name="i-lucide-user-round" />
-            <span class="truncate">{{ whoami }}</span>
-          </NuxtLink>
-        </div>
+        <AppNavigation />
       </aside>
+
+      <USlideover v-model:open="navOpen" side="left" title="sainte-beuve">
+        <template #body>
+          <AppNavigation @navigate="closeNav()" />
+        </template>
+      </USlideover>
+
       <main class="flex-1 min-w-0">
         <NuxtPage />
       </main>

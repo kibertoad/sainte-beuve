@@ -32,7 +32,9 @@ const badge = computed(() =>
 
 <template>
   <UCard>
-    <div class="flex items-start justify-between gap-4 mb-4">
+    <div
+      class="flex flex-col-reverse gap-2 mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+    >
       <div class="min-w-0">
         <p class="font-medium">Slack</p>
         <p class="text-sm text-muted">
@@ -40,7 +42,9 @@ const badge = computed(() =>
           <code>/review</code> command.
         </p>
       </div>
-      <UBadge :color="badge.color" variant="subtle" class="shrink-0">{{ badge.label }}</UBadge>
+      <UBadge :color="badge.color" variant="subtle" class="self-start sm:shrink-0">
+        {{ badge.label }}
+      </UBadge>
     </div>
 
     <UAlert
@@ -74,14 +78,16 @@ const badge = computed(() =>
         title="The command and the buttons are refused"
         description="A slash command and a button press can only be trusted once SLACK_SIGNING_SECRET matches the signing secret in the Slack app configuration. Both are answered 503 until then, whether or not a bot token is stored."
       />
-      <dl class="grid grid-cols-[10rem_1fr] gap-x-4 gap-y-1 text-muted">
-        <dt>Request URL</dt>
+      <dl
+        class="grid grid-cols-1 gap-x-4 gap-y-1 text-muted sm:grid-cols-[10rem_1fr] [&_code]:break-all"
+      >
+        <dt class="font-medium text-default sm:font-normal sm:text-muted">Request URL</dt>
         <dd>
           <code>{{ requestUrl }}</code>
         </dd>
-        <dt>Slash command</dt>
+        <dt class="font-medium text-default sm:font-normal sm:text-muted">Slash command</dt>
         <dd><code>/review</code>, pointed at the same URL</dd>
-        <dt>Announcements</dt>
+        <dt class="font-medium text-default sm:font-normal sm:text-muted">Announcements</dt>
         <dd>
           <code v-if="connection.announcementChannelId">
             {{ connection.announcementChannelId }}

@@ -148,9 +148,9 @@ function lineOf(finding: { path: string; line: number | null }): string {
 <template>
   <UCard variant="subtle">
     <template #header>
-      <div class="flex items-start justify-between gap-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div class="min-w-0">
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <UBadge :color="statusColor[run.status]" variant="subtle">
               {{ run.status.replace('_', ' ') }}
             </UBadge>
@@ -173,7 +173,7 @@ function lineOf(finding: { path: string; line: number | null }): string {
           <p v-if="run.summary" class="text-sm mt-2">{{ run.summary }}</p>
           <p v-if="run.failureReason" class="text-sm text-error mt-2">{{ run.failureReason }}</p>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <UButton
             v-if="mayResume"
             size="sm"
@@ -215,7 +215,7 @@ function lineOf(finding: { path: string; line: number | null }): string {
         </p>
         <ul v-if="report.failures.length > 0" class="mt-2 list-disc pl-4">
           <li v-for="failure in report.failures" :key="failure.findingId">
-            <span class="font-mono text-xs">{{ lineOf(failure) }}</span
+            <span class="font-mono text-xs break-all">{{ lineOf(failure) }}</span
             >: {{ failure.reason }}
           </li>
         </ul>
@@ -266,7 +266,7 @@ function lineOf(finding: { path: string; line: number | null }): string {
               posted
             </UBadge>
           </div>
-          <p class="font-mono text-xs text-muted mt-1">{{ lineOf(finding) }}</p>
+          <p class="font-mono text-xs text-muted mt-1 break-all">{{ lineOf(finding) }}</p>
           <p class="text-sm mt-1 whitespace-pre-wrap">{{ finding.detail }}</p>
           <pre
             v-if="finding.suggestedFix"
@@ -278,22 +278,23 @@ function lineOf(finding: { path: string; line: number | null }): string {
           variant="ghost"
           color="neutral"
           icon="i-lucide-x"
+          class="shrink-0"
           :disabled="!awaiting"
           :loading="busy === finding.findingId"
           @click="emit('dismiss', finding.findingId)"
         >
-          Dismiss
+          <span class="sr-only sm:not-sr-only">Dismiss</span>
         </UButton>
       </div>
     </div>
 
     <template v-if="awaiting" #footer>
-      <div class="flex items-center justify-between gap-4 flex-wrap">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <p class="text-sm text-muted">
           {{ selectedIds.length }} of {{ findings.length }} selected. Nothing reaches the pull
           request until you say so.
         </p>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <UButton
             size="sm"
             variant="ghost"

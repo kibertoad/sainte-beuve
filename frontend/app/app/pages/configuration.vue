@@ -205,18 +205,24 @@ onMounted(() => {
 </script>
 
 <template>
-  <UContainer class="py-8">
+  <UContainer class="py-6 sm:py-8">
     <div class="mb-8">
       <h1 class="text-2xl font-semibold">Configuration</h1>
       <p class="text-sm text-muted">How this deployment reaches the systems it depends on.</p>
     </div>
 
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <p class="text-sm text-muted">
         Credentials are encrypted before they are stored, and never shown again. Enter one again to
         replace it.
       </p>
-      <UButton icon="i-lucide-refresh-cw" variant="ghost" :loading="pending" @click="refresh()">
+      <UButton
+        icon="i-lucide-refresh-cw"
+        variant="ghost"
+        class="shrink-0"
+        :loading="pending"
+        @click="refresh()"
+      >
         Refresh
       </UButton>
     </div>
