@@ -79,7 +79,7 @@ function submit() {
   <div class="flex flex-col gap-4">
     <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-end">
       <UFormField label="Name">
-        <UInput v-model="draft.displayName" class="w-full" placeholder="Ada Lovelace" />
+        <UInput v-model="draft.displayName" class="w-full sm:w-auto" placeholder="Ada Lovelace" />
       </UFormField>
       <UFormField
         v-for="host in hosts"
@@ -87,13 +87,13 @@ function submit() {
         :label="host.label"
         description="Optional. Without it, their pull requests on that host are invisible here."
       >
-        <UInput v-model="draft.handles[host.provider]" class="w-full" placeholder="ada" />
+        <UInput v-model="draft.handles[host.provider]" class="w-full sm:w-auto" placeholder="ada" />
       </UFormField>
       <UFormField label="Team" description="Optional. What an ask can be kept inside.">
-        <UInput v-model="draft.team" class="w-full" placeholder="platform" />
+        <UInput v-model="draft.team" class="w-full sm:w-auto" placeholder="platform" />
       </UFormField>
       <UFormField label="Slack user id" description="Optional. Where a reminder is delivered.">
-        <UInput v-model="draft.slackUserId" class="w-full" placeholder="U01ABCDEF" />
+        <UInput v-model="draft.slackUserId" class="w-full sm:w-auto" placeholder="U01ABCDEF" />
       </UFormField>
     </div>
 

@@ -7,6 +7,20 @@
 // The workspace is first and is the landing route, because it is the only
 // screen about the person in front of it: the board, the directory and the
 // configuration are all about the deployment.
+
+// Rendered in two places, and one of them is a modal that has to close when you
+// leave through it. The links are a `UNavigationMenu`, which renders its own
+// anchors and reports no per-item click, so the one place every destination is
+// reachable is the click on its way past this component's root. A click that
+// landed on an anchor is a navigation to ANNOUNCE even when the route will not
+// change: tapping the destination you are already on is how a phone menu is
+// dismissed, and it produces no route change for anything else to notice.
+const emit = defineEmits<{ navigate: [] }>()
+
+function reportNavigation(event: MouseEvent): void {
+  if (event.target instanceof Element && event.target.closest('a')) emit('navigate')
+}
+
 const links = [
   { label: 'Workspace', to: '/', icon: 'i-lucide-layout-dashboard' },
   { label: 'Projects', to: '/projects', icon: 'i-lucide-folder-git-2' },
@@ -49,7 +63,7 @@ const whoami = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4 h-full">
+  <div class="flex flex-col gap-4 h-full" @click="reportNavigation">
     <UNavigationMenu orientation="vertical" :items="links" />
     <div v-if="orgName || whoami" class="mt-auto flex flex-col gap-1">
       <p v-if="orgName" class="flex items-center gap-2 px-2.5 text-sm text-muted">

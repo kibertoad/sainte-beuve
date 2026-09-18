@@ -95,10 +95,10 @@ function remove(project: Project) {
           <USelect v-model="provider" :items="providers" value-key="value" class="w-full sm:w-32" />
         </UFormField>
         <UFormField label="Owner" description="A GitHub org, or a GitLab namespace.">
-          <UInput v-model="owner" class="w-full" placeholder="kibertoad" />
+          <UInput v-model="owner" class="w-full sm:w-auto" placeholder="kibertoad" />
         </UFormField>
         <UFormField label="Repository">
-          <UInput v-model="repo" class="w-full" placeholder="sainte-beuve" />
+          <UInput v-model="repo" class="w-full sm:w-auto" placeholder="sainte-beuve" />
         </UFormField>
         <UFormField
           label="Page"
@@ -106,7 +106,7 @@ function remove(project: Project) {
         >
           <UInput
             v-model="webUrl"
-            class="w-full"
+            class="w-full sm:w-auto"
             placeholder="https://gitlab.example.com/platform/api"
           />
         </UFormField>

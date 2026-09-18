@@ -15,23 +15,11 @@
 const auth = useAuthState()
 await auth.refresh()
 
-/**
- * Whether the overlay rail is open. Only reachable below `lg`, where the button
- * that sets it is the only way to a second screen.
- */
-const navOpen = ref(false)
-
-// Closed by NAVIGATING, not by the link's own click handler: a slideover left
-// open over the page it just navigated to is the standard way a phone menu is
-// got wrong, and the menu's items are a `UNavigationMenu` whose clicks this
-// component never sees.
-const route = useRoute()
-watch(
-  () => route.fullPath,
-  () => {
-    navOpen.value = false
-  },
-)
+// The overlay rail's open state, and the closes that go with it. A slideover
+// left standing over the page it just navigated to — or over the wide-screen
+// rail it was only ever a stand-in for — is the standard way a phone menu is got
+// wrong, so the closing lives in one composable rather than in this template.
+const { open: navOpen, close: closeNav } = useNavigationOverlay()
 </script>
 
 <template>
@@ -61,7 +49,7 @@ watch(
 
       <USlideover v-model:open="navOpen" side="left" title="sainte-beuve">
         <template #body>
-          <AppNavigation />
+          <AppNavigation @navigate="closeNav()" />
         </template>
       </USlideover>
 

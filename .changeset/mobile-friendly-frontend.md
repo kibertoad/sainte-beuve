@@ -19,11 +19,16 @@ when they open the workspace from the phone the Slack nudge arrived on.
   rail nobody had room for. The nav itself is one new `AppNavigation` component
   rendered in both places rather than copied into each: two copies drift the day
   a destination is added, and the drift would only show on a phone.
-- **The slideover closes on NAVIGATION, not on the click.** Its items are a
-  `UNavigationMenu` whose clicks the shell never sees, so a handler on the button
-  would leave the menu open over the screen it just navigated to — which is the
-  standard way a phone menu is got wrong. A watch on the route closes it whatever
-  moved it, the browser's back button included.
+- **The slideover closes on NAVIGATION, and on reaching the width it stands in
+  for.** Its items are a `UNavigationMenu` whose per-item clicks the shell never
+  sees, so the nav reports a click that landed on one of its anchors and a watch
+  on the route catches everything else — a redirect, the back button, a
+  `navigateTo` from a page below. Both are needed: tapping the destination you
+  are already on changes no route, and it is how a phone menu is dismissed. A
+  viewport that grows past `lg` closes it too, because the rail renders beside
+  the page there and a modal copy left on top is the same navigation twice, over
+  a page whose scroll the overlay still holds. The three live in one
+  `useNavigationOverlay`, so the shell's template holds none of it.
 - **Every list row is the same decision, made once per row.** Description above,
   actions below, side by side again at `sm`. That is the workspace's three lists,
   the attention inbox, the board, the reviewer directory, the project registry
@@ -35,6 +40,9 @@ justify-between gap-4` and now have the same stacked form under it.
 - **A fixed width is a wide-screen width**: `w-96`, `w-36`, `w-32` and `w-24` are
   all `w-full sm:w-<n>` now, and the token, key-label and skills inputs fill the
   card on a phone instead of showing six characters of what was pasted into them.
+  An input that carried NO width keeps none above `sm` (`w-full sm:w-auto`): a
+  bare `w-full` would have stretched it to whatever its field is wide, which for
+  a field with a description is the description sentence.
 - **The two "what the host has to be told" lists lose their label column below
   `sm`**, so the term sits above its definition, and the URLs in them break
   anywhere: a webhook URL is one unbroken token and was the single widest thing
