@@ -10,6 +10,7 @@ export {
   getErrorMessage,
   isDomainError,
   NotFoundError,
+  PayloadTooLargeError,
   UnauthenticatedError,
   UnavailableError,
   UpstreamFailedError,

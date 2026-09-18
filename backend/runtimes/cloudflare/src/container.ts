@@ -19,6 +19,7 @@ import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
 import {
   type AppContainer,
   type AuthWiring,
+  authModeFrom,
   createContainer,
   DEFAULT_GITHUB_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
@@ -269,14 +270,21 @@ export function containerFor(env: WorkerEnv): AppContainer {
 /**
  * How much this Worker insists on knowing who is calling.
  *
- * Anything but the literal `required` is `open`, including a typo: a variable
- * nobody can spell must not be the difference between a closed deployment and
- * an open one that thinks it is closed, and `/health` reports what took effect.
+ * The mode comes from `authModeFrom`, which the Node facade reads the same way:
+ * an unrecognised value is a configuration error rather than a quiet `open`, and
+ * `open` beside a public origin is refused rather than served. A Worker builds
+ * its container per request, so the refusal is a 500 on every request with the
+ * reason in the log — which is the loud failure. The quiet one was a Worker
+ * serving `AUTH_MODE=oepn` as a public admin.
  */
 function authFor(env: WorkerEnv): AuthWiring {
   const lifetime = Number.parseInt(env.AUTH_SESSION_LIFETIME_MS ?? '', 10)
   return {
-    mode: env.AUTH_MODE?.trim().toLowerCase() === 'required' ? 'required' : 'open',
+    mode: authModeFrom({
+      value: env.AUTH_MODE,
+      appBaseUrl: env.APP_BASE_URL,
+      corsOrigins: corsOriginsFor(env),
+    }),
     environmentApiKey: env.AUTH_API_KEY || null,
     sessionLifetimeMs:
       Number.isNaN(lifetime) || lifetime <= 0 ? DEFAULT_SESSION_LIFETIME_MS : lifetime,

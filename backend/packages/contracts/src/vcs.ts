@@ -42,17 +42,65 @@ export function vcsDisplayName(provider: VcsProvider): string {
 }
 
 /**
+ * One segment of a repository path, as both hosts spell one.
+ *
+ * The alphabet is the hosts’ own: letters, digits, and `.`, `-`, `_`. What it
+ * EXCLUDES is the point. These two strings are interpolated into an API path,
+ * and `fetch` resolves `..` and truncates at `?` before the request leaves the
+ * process, so a repo named `x/../../../repos/victim/other/issues/1/comments?`
+ * would let whoever typed it choose the path the deployment’s own credential is
+ * spent on. A segment is encoded again at the adapter (see `repoPath` in
+ * @sainte-beuve/integrations); this is the half that refuses the value outright,
+ * so nothing downstream has to be the only thing standing in the way.
+ *
+ * `.` and `..` are refused by name rather than by the alphabet, because a repo
+ * may legitimately begin with a dot (`.github`).
+ */
+const SEGMENT_ALPHABET = /^[A-Za-z0-9._-]+$/
+
+function isPathSegment(value: string): boolean {
+  return SEGMENT_ALPHABET.test(value) && value !== '.' && value !== '..'
+}
+
+const SEGMENT_MESSAGE =
+  'A repository name is letters, digits, dots, dashes and underscores, and is not "." or ".."'
+
+const OWNER_MESSAGE =
+  'An owner is a host login or a nested GitLab namespace: path segments of letters, digits, ' +
+  'dots, dashes and underscores, none of them "." or ".."'
+
+/**
+ * A GitHub org or user, or a GitLab namespace, which may itself be nested
+ * (`platform/backend`). The nesting is why this is not `repoSegmentSchema`: a
+ * slash is a legitimate character HERE and nowhere else in a ref.
+ */
+export const repoOwnerSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(200),
+  v.check((value: string) => value.split('/').every(isPathSegment), OWNER_MESSAGE),
+)
+
+/** The last path segment either way, and never a nested one. */
+export const repoNameSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(200),
+  v.check(isPathSegment, SEGMENT_MESSAGE),
+)
+
+/**
  * A repository, addressed by the two segments both hosts agree on.
  *
- * `owner` is a GitHub org or user, or a GitLab namespace, which may itself be
- * nested (`platform/backend`). `repo` is the last path segment either way, so
  * `${owner}/${repo}` is the full path a GitLab API call URL-encodes and the
  * `owner/repo` GitHub puts in its own paths.
  */
 export const projectRefSchema = v.object({
   provider: vcsProviderSchema,
-  owner: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
-  repo: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  owner: repoOwnerSchema,
+  repo: repoNameSchema,
 })
 export type ProjectRef = v.InferOutput<typeof projectRefSchema>
 
@@ -60,8 +108,8 @@ export type ProjectRef = v.InferOutput<typeof projectRefSchema>
 export const pullRequestRefSchema = v.object({
   provider: vcsProviderSchema,
   /** Repository owner: a GitHub org or user, or a GitLab namespace. */
-  owner: v.pipe(v.string(), v.trim(), v.minLength(1)),
-  repo: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  owner: repoOwnerSchema,
+  repo: repoNameSchema,
   /** The number the host shows on the page: a PR number, or a merge request `iid`. */
   number: v.pipe(v.number(), v.integer(), v.minValue(1)),
   url: v.pipe(v.string(), v.url()),

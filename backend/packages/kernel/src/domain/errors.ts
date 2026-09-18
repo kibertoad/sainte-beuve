@@ -11,6 +11,7 @@ export type DomainErrorCode =
   | 'forbidden'
   | 'unavailable'
   | 'upstream_failed'
+  | 'payload_too_large'
 
 export class DomainError extends Error {
   readonly code: DomainErrorCode
@@ -63,6 +64,20 @@ export class ForbiddenError extends DomainError {
 }
 
 /** A capability the deployment did not wire, e.g. Slack with no bot token. */
+/**
+ * The request body is longer than this deployment will read.
+ *
+ * Its own code rather than a validation failure, because the two are refused at
+ * different moments and an operator has to be able to tell them apart: a
+ * validation error describes a body that was READ, and this one is the body that
+ * was not. See the body limits in `createApp`.
+ */
+export class PayloadTooLargeError extends DomainError {
+  constructor(message: string, details?: unknown) {
+    super('payload_too_large', message, details)
+  }
+}
+
 export class UnavailableError extends DomainError {
   constructor(message: string, details?: unknown) {
     super('unavailable', message, details)

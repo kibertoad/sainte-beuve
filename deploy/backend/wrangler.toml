@@ -63,13 +63,20 @@ GITHUB_APP_SLUG = "REPLACE_WITH_GITHUB_APP_SLUG"
 # form of an App's login works: GitHub writes its comments as
 # `sainte-beuve-bot[bot]` while people type `@sainte-beuve-bot`.
 GITHUB_BOT_LOGIN = "REPLACE_WITH_APP_BOT_LOGIN"
-# Whether this deployment insists on knowing who is calling. `open` is the
-# default and refuses nobody; `required` refuses an anonymous call to everything
-# under /api/v1 but the sign-in routes, and the workspace then renders for
-# whoever is signed in rather than for whoever the deployment's credential acts
-# as. A `required` Worker needs a way in: the App's OAuth client below for a
-# person, AUTH_API_KEY for a machine. /health reports both.
-AUTH_MODE = "open"
+# Whether this deployment insists on knowing who is calling. `required` refuses
+# an anonymous call to everything under /api/v1 but the sign-in routes, and the
+# workspace then renders for whoever is signed in rather than for whoever the
+# deployment's credential acts as. A `required` Worker needs a way in: the App's
+# OAuth client below for a person, AUTH_API_KEY for a machine. /health reports
+# both, so a deployment nobody can enter is visible from outside.
+#
+# `open` is the laptop default and it is NOT a hosted one: an anonymous caller
+# there is an ADMIN of the default org, which can replace this deployment's
+# stored credentials, empty the project registry and spend the cat-factory key.
+# A Worker that sets `open` beside APP_BASE_URL or a non-loopback CORS_ORIGINS
+# refuses to serve rather than serving that, and an unrecognised value is a
+# configuration error rather than a quiet `open`.
+AUTH_MODE = "required"
 # The labels that drive the board. These are the defaults; name your own.
 GITHUB_LABEL_REVIEW = "needs-review"
 GITHUB_LABEL_AI_REVIEW = "ai-review"

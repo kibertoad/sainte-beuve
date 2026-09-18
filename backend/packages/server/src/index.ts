@@ -15,6 +15,7 @@ export {
   type SlackWiring,
   withOrg,
 } from './container.js'
+export { type AuthModeInput, authModeFrom } from './config/authMode.js'
 export type { AppEnv } from './http/env.js'
 export { HmacStateSigner, STATE_LIFETIME_MS } from './crypto/HmacStateSigner.js'
 export {

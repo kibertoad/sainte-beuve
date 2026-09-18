@@ -162,9 +162,25 @@ describe('loadConfig', () => {
 
   it('splits and trims a CORS origin list', () => {
     const origins = loadConfig({
+      AUTH_MODE: 'required',
       CORS_ORIGINS: 'https://a.example, https://b.example ',
     }).corsOrigins
     expect(origins).toStrictEqual(['https://a.example', 'https://b.example'])
+  })
+
+  it('refuses to boot open on a deployment that named a public origin', () => {
+    // `open` means every reachable client is an ADMIN of the default org. It is
+    // the right default for a laptop and it is not one here, and a process that
+    // served it would be a deployment believing it was closed. See
+    // `authModeFrom` in @sainte-beuve/server.
+    expect(() => loadConfig({ APP_BASE_URL: 'https://board.example.com' })).toThrow(
+      /board\.example\.com/,
+    )
+    expect(() => loadConfig({ CORS_ORIGINS: 'https://board.example.com' })).toThrow(/AUTH_MODE/)
+  })
+
+  it('refuses an AUTH_MODE nobody can spell rather than reading it as open', () => {
+    expect(() => loadConfig({ AUTH_MODE: 'requried' })).toThrow(/AUTH_MODE/)
   })
 
   it('names the SPA it was told about, so the wildcard default is not a trap', () => {
@@ -172,13 +188,13 @@ describe('loadConfig', () => {
     // refuses any answer to one carrying `*`, so a hosted deployment left on the
     // default would lose every request rather than only its sign-in. The Worker
     // reads it the same way; see `corsOriginsFor`.
-    expect(loadConfig({ APP_BASE_URL: 'https://board.example.com' }).corsOrigins).toStrictEqual([
-      '*',
-      'https://board.example.com',
-    ])
+    expect(
+      loadConfig({ AUTH_MODE: 'required', APP_BASE_URL: 'https://board.example.com' }).corsOrigins,
+    ).toStrictEqual(['*', 'https://board.example.com'])
     // Already listed, so nothing is added twice.
     expect(
       loadConfig({
+        AUTH_MODE: 'required',
         CORS_ORIGINS: 'https://board.example.com',
         APP_BASE_URL: 'https://board.example.com/configuration',
       }).corsOrigins,

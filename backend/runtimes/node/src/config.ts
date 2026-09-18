@@ -1,5 +1,6 @@
 import type { AuthMode, GitHubLabelRules } from '@sainte-beuve/contracts'
 import {
+  authModeFrom,
   DEFAULT_GITHUB_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
   withAppOrigin,
@@ -160,6 +161,10 @@ function listFrom(value: string | undefined, fallback: string[]): string[] {
 }
 
 export function loadConfig(env: Env = process.env): NodeConfig {
+  // Computed before the rest, because `AUTH_MODE` is read against it: `open` on a
+  // deployment that has NAMED a public origin is refused rather than served. See
+  // `authModeFrom`.
+  const corsOrigins = withAppOrigin(listFrom(env.CORS_ORIGINS, ['*']), env.APP_BASE_URL)
   return {
     port: intFrom(env.PORT, 8788),
     databaseUrl: env.DATABASE_URL || null,
@@ -173,7 +178,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     // `Access-Control-Allow-Origin: *`, so a hosted deployment left on the
     // wildcard default would otherwise lose every request rather than only its
     // sign-in. The Worker reads it the same way. See `withAppOrigin`.
-    corsOrigins: withAppOrigin(listFrom(env.CORS_ORIGINS, ['*']), env.APP_BASE_URL),
+    corsOrigins,
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),
     catFactory: catFactoryFrom(env),
@@ -187,21 +192,21 @@ export function loadConfig(env: Env = process.env): NodeConfig {
       signingSecret: env.SLACK_SIGNING_SECRET || null,
       channelId: env.SLACK_CHANNEL_ID || null,
     },
-    auth: authFrom(env),
+    auth: authFrom(env, corsOrigins),
     appBaseUrl: env.APP_BASE_URL || undefined,
     encryptionKey: env.SETTINGS_ENCRYPTION_KEY || null,
   }
 }
 
 /**
- * Anything but the literal `required` is `open`, including a typo. A variable
- * nobody can spell must not be the difference between a closed deployment and
- * an open one that believes it is closed, and `/health` reports what took
- * effect so the mistake is visible from outside the process.
+ * The mode is read by `authModeFrom`, which both facades share: an unrecognised
+ * value is a configuration error rather than a quiet `open`, and `open` beside a
+ * public origin is refused rather than served. A boot that throws here is the
+ * loud failure; the quiet one was a deployment that believed it was closed.
  */
-function authFrom(env: Env): AuthConfig {
+function authFrom(env: Env, corsOrigins: readonly string[]): AuthConfig {
   return {
-    mode: (env.AUTH_MODE ?? '').trim().toLowerCase() === 'required' ? 'required' : 'open',
+    mode: authModeFrom({ value: env.AUTH_MODE, appBaseUrl: env.APP_BASE_URL, corsOrigins }),
     apiKey: env.AUTH_API_KEY || null,
     // `optionalCountFrom` rather than `intFrom`, and the Worker reads it the
     // same way: zero or less is not a short session, it is every session

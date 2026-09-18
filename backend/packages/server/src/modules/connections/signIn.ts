@@ -6,6 +6,7 @@ import { requireCapability } from '../../http/errors.js'
 import { hintOf } from '../../integrations/credentials.js'
 import { SessionService } from '../auth/SessionService.js'
 import { PeopleService } from '../identity/PeopleService.js'
+import type { SignInPurpose } from './ConnectionsService.js'
 
 /**
  * The two writes a finished sign-in makes.
@@ -54,9 +55,26 @@ export async function storeCredential(
   })
 }
 
+/** What a finished round trip needs in order to seat the person behind it. */
+export interface EstablishSessionInput {
+  provider: VcsProvider
+  account: VcsAccount
+  /**
+   * Which of the callback's two purposes this was, because it decides whether
+   * the org's enrolment is asked at all.
+   *
+   * `connect` is an operator's act on shared state, behind `requireAdmin` (see
+   * `ConnectionsController`), so somebody with authority over the org caused the
+   * account to appear and there is nothing left to authorise. `session` is a
+   * plain sign-in, which authorises NOTHING on its own: any account can
+   * authorise any OAuth app on github.com, and the client id is public.
+   */
+  purpose: SignInPurpose
+}
+
 /**
  * The person behind the account, and a session for them, in the org the state
- * named.
+ * named — where the org admits them.
  *
  * `PeopleService` rather than a row written here: the claim rule that stops a
  * directory forking into two people for one human being has to be the same one
@@ -64,10 +82,14 @@ export async function storeCredential(
  */
 export async function establishSession(
   container: AppContainer,
-  provider: VcsProvider,
-  account: VcsAccount,
+  input: EstablishSessionInput,
 ): Promise<IssuedSession> {
-  const reviewer = await new PeopleService(container).reviewerFor(provider, account)
+  const { provider, account } = input
+  const people = new PeopleService(container)
+  const reviewer =
+    input.purpose === 'connect'
+      ? await people.reviewerFor(provider, account)
+      : await people.enrol(provider, account)
   const { token, session } = await new SessionService(container).issue({
     reviewerId: reviewer.id,
     provider,

@@ -1,5 +1,5 @@
 import { defineApiContract } from '@toad-contracts/valibot'
-import { createOrgInputSchema, orgListSchema, orgSchema } from '../orgs.js'
+import { createOrgInputSchema, orgListSchema, orgSchema, updateOrgInputSchema } from '../orgs.js'
 import { errorResponses } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -36,4 +36,20 @@ export const createOrgContract = defineApiContract({
   pathResolver: () => '/settings/orgs',
   requestBodySchema: createOrgInputSchema,
   responsesByStatusCode: { 201: orgSchema, ...errorResponses },
+})
+
+/**
+ * Change the org this request is IN, and no other.
+ *
+ * `current` rather than an id in the path, because the rule the whole boundary
+ * rests on is that no route takes an org: which one a caller is in was decided
+ * by the credential they arrived on, before any handler ran. What this exists
+ * for is `enrolment` — the decision about who may join, which an admin has to be
+ * able to make and unmake without a redeploy.
+ */
+export const updateOrgContract = defineApiContract({
+  method: 'patch',
+  pathResolver: () => '/settings/orgs/current',
+  requestBodySchema: updateOrgInputSchema,
+  responsesByStatusCode: { 200: orgSchema, ...errorResponses },
 })

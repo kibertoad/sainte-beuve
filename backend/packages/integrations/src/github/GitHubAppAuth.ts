@@ -1,5 +1,5 @@
 import { base64url, base64urlText, type Clock, systemClock } from '@sainte-beuve/kernel'
-import { GitHubApiError, githubRequest } from './client.js'
+import { GitHubApiError, githubRequest, repoPath } from './client.js'
 
 /**
  * GitHub App authentication, on Web Crypto alone so it runs unchanged inside
@@ -126,7 +126,7 @@ export class GitHubAppAuth {
     const known = this.installations.get(key)
     if (known !== undefined) return known
     const installation = await this.request<{ id: number }>({
-      path: `/repos/${owner}/${repo}/installation`,
+      path: repoPath({ owner, repo }, '/installation'),
       subject: key,
     })
     this.installations.set(key, installation.id)

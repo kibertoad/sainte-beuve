@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { identityProviderSchema } from './identity.js'
 
 // ---------------------------------------------------------------------------
 // The tenancy, and what a caller may do inside it.
@@ -33,10 +34,41 @@ export const orgSlugSchema = v.pipe(
 )
 export type OrgSlug = v.InferOutput<typeof orgSlugSchema>
 
+/**
+ * WHO MAY JOIN AN ORG, which before this was nobody's decision.
+ *
+ * `invite` is the default and the honest one: an account may take a directory
+ * row an admin registered for it, and nothing else. Anyone else who completes a
+ * sign-in is refused. `open` is what every org did before the flag existed —
+ * any account a host will authorise becomes a member — and it is a deployment
+ * saying that its OAuth client is scoped to its own people.
+ *
+ * It matters because a sign-in is not an act anybody here approves: on
+ * github.com and gitlab.com any account can authorise any OAuth app, the client
+ * id is public by construction, and `/health` advertises which hosts are
+ * offered. Without a decision in front of it, everything a `member` may do — the
+ * board, the directory of names and Slack ids, review creation, AI-review
+ * dispatch — is available to whoever guesses an org slug.
+ *
+ * The one thing `invite` does NOT gate is the FOUNDING sign-in of an org with an
+ * empty directory: an org whose first member cannot configure it is an org
+ * nobody can use. `createOrg` takes a `founder` precisely so that window can be
+ * closed before anybody is told the slug.
+ */
+export const orgEnrolmentSchema = v.picklist(['invite', 'open'])
+export type OrgEnrolment = v.InferOutput<typeof orgEnrolmentSchema>
+
 export const orgSchema = v.object({
   id: v.string(),
   slug: orgSlugSchema,
   name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /**
+   * OPTIONAL on the way in and always present on the way out, which is what
+   * makes this land without a data migration: a row written before the flag
+   * existed decodes as `invite`, and an org nobody decided about is closed
+   * rather than open. See `orgEnrolmentSchema`.
+   */
+  enrolment: v.optional(orgEnrolmentSchema, 'invite'),
   createdAt: v.number(),
 })
 export type Org = v.InferOutput<typeof orgSchema>
@@ -65,7 +97,16 @@ export const DEFAULT_ORG_SLUG = 'default'
  * renames this one.
  */
 export function defaultOrg(): Org {
-  return { id: DEFAULT_ORG_ID, slug: DEFAULT_ORG_SLUG, name: 'Default', createdAt: 0 }
+  return {
+    id: DEFAULT_ORG_ID,
+    slug: DEFAULT_ORG_SLUG,
+    name: 'Default',
+    // `invite`, like every other org. A fresh deployment still admits its first
+    // sign-in — the directory is empty, and that is the founder — and everybody
+    // after them is somebody an admin registered.
+    enrolment: 'invite',
+    createdAt: 0,
+  }
 }
 
 /**
@@ -81,11 +122,50 @@ export function defaultOrg(): Org {
 export const roleSchema = v.picklist(['admin', 'member'])
 export type Role = v.InferOutput<typeof roleSchema>
 
+/**
+ * The account that founds an org, named by whoever creates it.
+ *
+ * By HANDLE, because that is the only thing an operator can know before the
+ * person has ever signed in: the host's own stable subject appears at the first
+ * sign-in and not a moment earlier. So this is a claim to be taken, not proof —
+ * which is why the row it seats is the only one adoption is ever allowed to hand
+ * `admin` to (see `decideEnrolment` in @sainte-beuve/reviewers), and why naming
+ * one is worth the trouble: it closes the window in which whoever guesses the
+ * slug first becomes the org's administrator.
+ */
+export const orgFounderSchema = v.object({
+  provider: identityProviderSchema,
+  handle: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
+})
+export type OrgFounder = v.InferOutput<typeof orgFounderSchema>
+
 export const createOrgInputSchema = v.object({
   slug: orgSlugSchema,
   name: orgSchema.entries.name,
+  /** Defaults to `invite`: an org nobody decided about is closed. */
+  enrolment: v.optional(orgEnrolmentSchema, 'invite'),
+  /**
+   * The founding admin. Absent leaves the org with an empty directory, and the
+   * first account to complete a sign-in to it becomes its admin — which is a
+   * race with whoever else knows the slug.
+   */
+  founder: v.optional(v.nullable(orgFounderSchema), null),
 })
 export type CreateOrgInput = v.InferOutput<typeof createOrgInputSchema>
+/** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
+export type CreateOrgInputPayload = v.InferInput<typeof createOrgInputSchema>
+
+/**
+ * What an admin may change about their own org afterwards.
+ *
+ * `enrolment` is the reason this route exists: a deployment whose OAuth client
+ * IS scoped to its own people can open the door, and one that finds it open can
+ * close it, without either being a redeploy.
+ */
+export const updateOrgInputSchema = v.partial(
+  v.object({ name: orgSchema.entries.name, enrolment: orgEnrolmentSchema }),
+)
+export type UpdateOrgInput = v.InferOutput<typeof updateOrgInputSchema>
 
 export const orgListSchema = v.object({ orgs: v.array(orgSchema) })
 export type OrgList = v.InferOutput<typeof orgListSchema>

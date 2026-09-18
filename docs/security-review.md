@@ -36,6 +36,26 @@ the raw `Host` header, and `javascript:` URLs accepted where the SPA renders lin
 | Low           | 11    |
 | Informational | 8     |
 
+## Status
+
+All six **High** findings are fixed; the code and line numbers below are as of the
+reviewed commit and no longer describe the tree. What landed, in one line each:
+
+- **H1** — an org carries `enrolment` (`invite` by default), `createOrg` takes a
+  `founder`, and a plain sign-in is refused where the org did not admit the
+  account. See [docs/orgs.md](./orgs.md).
+- **H2** — adoption by handle skips a row some account already proved itself
+  against, and confers `admin` only while no admin of the org has signed in.
+- **H3** — `POST /api/v1/projects` refuses a repository another tenancy claimed.
+- **H4** — `owner` and `repo` are held to the hosts' alphabet in the contracts,
+  and every GitHub path segment is encoded (`repoPath`).
+- **H5** — `hono/body-limit` on the webhook paths and under `/api/v1`, mounted
+  before anything reads a byte.
+- **H6** — an unrecognised `AUTH_MODE` is a configuration error, `open` beside a
+  public origin refuses to start, and both hosted templates ship `required`.
+
+The Medium, Low and Informational findings below are open.
+
 ## Findings
 
 Each finding cites the code it was verified against. Line numbers are as of the
@@ -393,10 +413,10 @@ sound (`permissions: {}`, `persist-credentials: false`, no `pull_request_target`
   Any new consumer of `requestOrigin()` has to keep that property, and M1 shows the
   inverse mistake already exists.
 - **I3. The guard exemption is a bare prefix.** `principal.ts` `OPEN_PREFIX =
-  '/api/v1/auth'` with `startsWith` would also exempt a future `/api/v1/authors`.
+'/api/v1/auth'` with `startsWith` would also exempt a future `/api/v1/authors`.
   Use `'/api/v1/auth/'`.
 - **I4. Session and API-key `create` trust the payload's `orgId`.** D1 `auth.ts:57-77,
-  164-177` and Postgres `auth.ts:169-172, 223-226` insert `session.orgId` /
+164-177` and Postgres `auth.ts:169-172, 223-226` insert `session.orgId` /
   `key.orgId` as passed, unlike every other table which writes `this.orgId`. Both
   callers copy `container.orgId` today, and the conformance suite passes a matching
   value in every fixture, so a divergence would not be caught. Overwrite with
@@ -442,7 +462,7 @@ Checked and found correct; listed so the reader knows they were looked at.
   reads; loopback is echoed only when both ends are loopback; `writeOriginGuard`
   refuses cross-site simple-request writes and `Origin: null`.
 - **Middleware order.** `allowCredentials → cors → container → writeOriginGuard →
-  authentication → routes`, all registered before any `app.route`.
+authentication → routes`, all registered before any `app.route`.
 - **Secrets at rest.** AES-256-GCM with a per-record HKDF-derived key (random
   16-byte salt), random 12-byte IV, versioned envelope with a derived key id,
   context bound as AAD, structure validated before any key is touched, master key

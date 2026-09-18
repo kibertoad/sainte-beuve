@@ -1,6 +1,6 @@
-import type { CreateOrgInput, Org } from '@sainte-beuve/contracts'
-import { DEFAULT_ORG_ID, defaultOrg } from '@sainte-beuve/contracts'
-import { ConflictError } from '@sainte-beuve/kernel'
+import type { CreateOrgInput, Org, OrgFounder, UpdateOrgInput } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID, defaultOrg, NO_VCS_HANDLES, withHandle } from '@sainte-beuve/contracts'
+import { assertFound, ConflictError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 
 /**
@@ -53,10 +53,12 @@ export class OrgService {
    * Make one.
    *
    * The caller does NOT become a member of it, and that is the decision worth
-   * recording: the first person to sign in to an org becomes its admin (see
-   * `PeopleService`), because the alternative is an org whose first member
-   * cannot configure it, and because an operator minting orgs from one tenancy
-   * is not thereby a person in the others.
+   * recording: an operator minting orgs from one tenancy is not thereby a person
+   * in the others. Who the new org's first admin is, is a decision this route
+   * takes rather than a race it starts — name a `founder` and the directory has
+   * an admin row before anybody is told the slug; leave it out and the first
+   * account to complete a sign-in becomes the admin, which is a race with
+   * whoever else knows the slug.
    *
    * The slug is a claim the store settles, so a name somebody else already holds
    * comes back as a conflict rather than as a silent rename of their org.
@@ -67,6 +69,7 @@ export class OrgService {
       id: ids.next(),
       slug: input.slug,
       name: input.name,
+      enrolment: input.enrolment,
       createdAt: clock.now(),
     }
     // The default org has no row until somebody makes one, so a deployment
@@ -75,7 +78,48 @@ export class OrgService {
     if (wanted.slug === defaultOrg().slug) throw slugTaken(wanted.slug)
     const written = await stores.orgs.create(wanted)
     if (written.id !== wanted.id) throw slugTaken(wanted.slug)
+    if (input.founder !== null) await this.seatFounder(written, input.founder)
     return written
+  }
+
+  /**
+   * Change the org this request is in.
+   *
+   * It WRITES the default org's row on first use, which is the one place that
+   * happens: the row is synthesised everywhere else so that the route every page
+   * polls stays a read, and an operator changing a decision is exactly the
+   * moment there is something to record.
+   */
+  async update(patch: UpdateOrgInput): Promise<Org> {
+    const { stores, orgId } = this.container
+    if ((await stores.orgs.getById(orgId)) === null) await stores.orgs.create(await this.current())
+    return assertFound(await stores.orgs.update(orgId, patch), `No org ${orgId}`)
+  }
+
+  /**
+   * The founding admin's directory row, in the new org.
+   *
+   * By HANDLE, because the host's stable subject for an account does not exist
+   * here until that account signs in. The row is therefore a claim to be taken
+   * rather than an identity, and `decideEnrolment` knows it: this is the only
+   * row adoption may ever hand `admin` to, and only while no admin of the org
+   * has signed in.
+   */
+  private async seatFounder(org: Org, founder: OrgFounder): Promise<void> {
+    const { ids, clock, stores } = this.container
+    await stores.forOrg(org.id).reviewers.create({
+      id: ids.next(),
+      displayName: founder.handle,
+      handles: withHandle(NO_VCS_HANDLES, founder.provider, founder.handle),
+      slackUserId: null,
+      team: null,
+      skills: [],
+      availability: 'available',
+      role: 'admin',
+      weight: 1,
+      outstandingReviews: 0,
+      createdAt: clock.now(),
+    })
   }
 }
 

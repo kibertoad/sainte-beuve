@@ -28,6 +28,7 @@ export class ProjectService {
         projectId: existing.id,
       })
     }
+    await this.refuseIfAnotherOrgClaimedIt(input)
     return repositories.projects.create({
       id: ids.next(),
       provider: input.provider,
@@ -39,6 +40,34 @@ export class ProjectService {
       skills: input.skills ?? [...DEFAULT_PROJECT_SKILLS],
       createdAt: clock.now(),
     })
+  }
+
+  /**
+   * A repository is CLAIMED by the org that registered it first, and a second
+   * org may not register it at all.
+   *
+   * The only read in this service that goes outside the bound store, and the
+   * boundary is exactly why it has to: an inbound delivery carries no credential
+   * of ours, so `findOrgIdForProject` places it in the oldest claim across every
+   * tenancy (see `TenancyDirectory`). Without this, an org that registers
+   * `acme/payments` before its real owner does receives every delivery about
+   * that repository — its board gets the pull requests, its reviewers are
+   * requested on them, and its cat-factory key pays for the AI reviews — and the
+   * real owner can never take the claim back, because the conflict above only
+   * sees its own org's rows.
+   *
+   * The refusal names no org. Which tenancy holds a claim is not a member's
+   * business, and answering with it would turn this route into a way to
+   * enumerate the deployment.
+   */
+  private async refuseIfAnotherOrgClaimedIt(input: CreateProject): Promise<void> {
+    const holder = await this.container.stores.tenancy.findOrgIdForProject(input)
+    if (holder === null || holder === this.container.orgId) return
+    throw new ConflictError(
+      `${input.owner}/${input.repo} is registered by another org on this deployment. ` +
+        'A repository belongs to whichever org registered it first, because an inbound ' +
+        'delivery carries nothing else that could place it.',
+    )
   }
 
   async update(projectId: string, patch: UpdateProject): Promise<Project> {

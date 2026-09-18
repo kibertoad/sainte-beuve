@@ -1,5 +1,8 @@
+import { GITHUB_WEBHOOK_PATH, SLACK_WEBHOOK_PATH } from '@sainte-beuve/contracts'
+import { PayloadTooLargeError } from '@sainte-beuve/kernel'
 import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
@@ -75,6 +78,35 @@ const allowCredentials: MiddlewareHandler<AppEnv> = async (c, next) => {
 }
 
 /**
+ * How much body this deployment will read, per kind of route.
+ *
+ * The webhook paths are the ones that need a number at all. They are
+ * UNAUTHENTICATED by construction — a delivery proves itself with a signature
+ * computed over the raw bytes, which means the bytes are buffered and HMACed
+ * before anything can be refused — so without a limit a stranger's POST is a
+ * deployment's memory. Workers are capped by the platform; a Node process is
+ * not, and the same app serves both.
+ *
+ * The JSON routes get the tighter one, because nothing under `/api/v1` has a
+ * large body: the longest field anywhere in the contracts is 2000 characters of
+ * AI-review instructions, and a list of skills or reviewer ids beside it.
+ */
+const WEBHOOK_BODY_LIMIT = 1024 * 1024
+const JSON_BODY_LIMIT = 128 * 1024
+
+/** The refusal, in this app's envelope rather than Hono's plain 413 text. */
+function refuseBody(limit: number): MiddlewareHandler<AppEnv> {
+  return bodyLimit({
+    maxSize: limit,
+    onError: () => {
+      throw new PayloadTooLargeError(
+        `This deployment reads at most ${limit} bytes of request body on this route.`,
+      )
+    },
+  })
+}
+
+/**
  * Everything that runs before a route does, in the order it has to run in.
  *
  * Its own function because the order is the load-bearing part and reads better
@@ -104,6 +136,14 @@ function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
         }),
     }),
   )
+
+  // Before anything READS a byte, and after CORS so the refusal is one a browser
+  // is allowed to read. The webhook services hash the raw body to check a
+  // signature, so a limit applied below them would be a limit applied to a body
+  // already in memory.
+  app.use(GITHUB_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use(SLACK_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use('/api/v1/*', refuseBody(JSON_BODY_LIMIT))
 
   app.use('*', async (c, next) => {
     // Beside the container and for the same reason: everything below this line

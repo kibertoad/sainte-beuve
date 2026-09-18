@@ -238,6 +238,20 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
     assert.strictEqual(await stores.orgs.getById('org-b'), null)
   }),
 
+  // The decision about who may join an org is a FIELD on the org, so it has to
+  // survive the round trip through every store the same way. Both durable
+  // adapters carry it in the payload column, which is what lets it land without
+  // a migration; the one thing that then has to hold is that a row written
+  // before the field existed reads as `invite` rather than as undefined.
+  tenancyCase('an org carries its enrolment decision, and closes without one', async (stores) => {
+    await stores.orgs.create(org('org-a', { slug: 'alpha', enrolment: 'open' }))
+    assert.strictEqual((await stores.orgs.getById('org-a'))?.enrolment, 'open')
+    assert.strictEqual((await stores.orgs.getBySlug('alpha'))?.enrolment, 'open')
+    const closed = await stores.orgs.update('org-a', { enrolment: 'invite' })
+    assert.strictEqual(closed?.enrolment, 'invite')
+    assert.strictEqual((await stores.orgs.getById('org-a'))?.enrolment, 'invite')
+  }),
+
   tenancyCase('renaming an org keeps its id and moves its slug', async (stores) => {
     await stores.orgs.create(org('org-a', { slug: 'alpha' }))
     assert.strictEqual((await stores.orgs.update('org-a', { slug: 'omega' }))?.slug, 'omega')

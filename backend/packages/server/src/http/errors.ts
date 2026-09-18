@@ -29,6 +29,7 @@ const STATUS_BY_CODE: Record<DomainErrorCode, ContentfulStatusCode> = {
   // The dependency answered and the answer was a failure. 502, not 500: the fault
   // is upstream, and an operator reading the logs should not go looking in ours.
   upstream_failed: 502,
+  payload_too_large: 413,
 }
 
 export function errorBody(code: string, message: string, details?: unknown): ErrorResponse {

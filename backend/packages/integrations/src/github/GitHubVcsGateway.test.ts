@@ -86,6 +86,24 @@ describe('GitHubVcsGateway', () => {
     })
   })
 
+  it('encodes the repository segments, so a ref cannot choose the path', async () => {
+    // The contracts refuse this ref (see `repoOwnerSchema`), and the adapter
+    // still encodes: a row written by an older build must not be able to spend
+    // the org's credential on `/repos/victim/other/issues/1/comments`.
+    const urls: string[] = []
+    const fetchImpl = (async (url: string | URL | Request) => {
+      urls.push(String(url))
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof globalThis.fetch
+    const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
+
+    await gateway.comment({ ...PR, repo: 'x/../../../repos/victim/other' }, 'hello')
+    expect(urls[0]).toBe(
+      'https://api.github.com/repos/kibertoad/' +
+        'x%2F..%2F..%2F..%2Frepos%2Fvictim%2Fother/issues/7/comments',
+    )
+  })
+
   it('does not call GitHub when there is nobody to request', async () => {
     const { fetchImpl, calls } = stub()
     const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })

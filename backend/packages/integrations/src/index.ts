@@ -15,6 +15,7 @@ export {
   GitHubApiError,
   githubApiStatusOf,
   githubRequest,
+  repoPath,
 } from './github/client.js'
 export { appTokenSource, type GitHubTokenSource, staticTokenSource } from './github/credentials.js'
 export {

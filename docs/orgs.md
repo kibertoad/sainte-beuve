@@ -86,6 +86,9 @@ slug nobody has made is a 404 rather than a quiet fall back to the default org,
 because somebody who typed an org name and was signed in to a different board
 would have no way to tell afterwards.
 
+Naming an org is not joining one. Whether the account that comes back may become
+a person in it is a separate decision; see below.
+
 ### The one thing `forOrg` could not scope
 
 The attention bus is a single object per PROCESS — it has to be, because a
@@ -144,18 +147,72 @@ would take the Configuration screen away from the laptop the open default exists
 for while changing nothing about who can get at it. Closing the door is
 `AUTH_MODE=required`, and it closes this too.
 
-### The first person in is the admin
+### Joining is a decision somebody makes
+
+A finished OAuth round trip proves that somebody has an account on a host. It
+proves nothing about whether they belong here: on github.com and gitlab.com any
+account can authorise any OAuth app, the client id is public by construction, and
+`/health` advertises which hosts a deployment offers. So membership is a decision,
+carried on the org as `enrolment`:
+
+| `enrolment` | who may join                                                 |
+| ----------- | ------------------------------------------------------------ |
+| `invite`    | an account whose handle an admin registered in the directory |
+| `open`      | any account the host will authorise, as a member             |
+
+**`invite` is the default**, including for the default org and for a row written
+before the field existed: an org nobody decided about is closed. `open` is what
+every org did before the flag, and it is a deployment saying that its OAuth client
+is scoped to its own people. An admin moves their own org either way with
+`PATCH /api/v1/settings/orgs/current`.
+
+Enrolment is asked once, when an account first becomes a person here. An account
+already linked to a directory row keeps signing in after the door closes, because
+closing it is about who may JOIN; taking somebody's access away is
+`availability: paused`, below.
+
+Two paths are deliberately outside it. The **connect** round trip
+(`/api/v1/settings/connections/...`) is admin-only, so somebody with authority
+over the org caused that account to appear. And the `open`-mode viewer, where the
+deployment's own source-control credential acts as a person, is the operator's own
+token. Neither is a stranger arriving with a link.
+
+### The first person in is the admin, and only the first
 
 An org is created by an operator who does not thereby become a person in it, so
-the first sign-in to an org becomes its **admin** and everybody after them a
-member. There is no other honest rule: a first member who could not configure the
-tenancy would leave an org with a board, a directory and a Configuration screen
-nobody on the deployment could open, and no route that could fix it, because
-promoting somebody is itself an admin's act.
+the first sign-in to an org with an EMPTY directory becomes its **admin**. There
+is no other honest rule for an org nobody is in: a first member who could not
+configure the tenancy would leave an org with a board, a directory and a
+Configuration screen nobody on the deployment could open, and no route that could
+fix it, because promoting somebody is itself an admin's act.
 
-It reads the directory rather than a flag on the org, so it stays true of the
-default org: a deployment upgrading into the boundary has reviewers already, the
-migration made them admins, and the next sign-in is correctly a member.
+That founding sign-in is a race with whoever else knows the slug, which is why
+`POST /api/v1/settings/orgs` takes a **founder**:
+
+```json
+{ "slug": "acme", "name": "Acme", "founder": { "provider": "github", "handle": "ada" } }
+```
+
+The org then has an admin row before anybody is told the slug, the directory is
+not empty, and nobody else can found it.
+
+**A registered handle does not confer `admin` twice.** A handle is a string an
+admin typed; a subject is the host's own id for an account. A row registered by
+hand is therefore a claim waiting to be taken, and adoption hands it `admin` only
+while no admin of the org has actually signed in — which is exactly the founder's
+window. After that a pre-registered `admin` row is adopted as a `member`, and an
+admin who can now see WHICH account took it promotes them. Without that, a typo, a
+released-and-re-registered login, or simply the wrong Bob inherits the role
+permanently, because the `(provider, subject)` link is then the wrong subject.
+
+Adoption also skips any row an account has already proved itself against: without
+that, whoever holds the GitHub login `bob` takes the row of the Bob who signed in
+through GitLab a year ago, along with his workspace, his commitments and his role.
+
+The whole decision is one pure function, `decideEnrolment` in
+`@sainte-beuve/reviewers`, over four facts: the org's enrolment, the size of the
+directory, the role on the row the handle matched, and whether any admin has
+signed in. `PeopleService` reads those facts and writes the answer down.
 
 ## Pausing somebody signs them out
 
@@ -213,7 +270,14 @@ removing one is a cascade across the whole store and a question — what happens
 the board, to the sessions, to the sealed credentials — that nobody has asked
 yet. Until they do, an org that is finished with is an org nobody signs in to.
 
-**There is no invite.** Somebody joins an org by signing in to it with a slug,
-and the directory adopts or creates their row the way it always has. A deployment
-that wants to control who may do that runs `AUTH_MODE=required` behind an OAuth
-client scoped to its own people, which is where that control belongs.
+**An invitation is a directory row, not a link.** An admin registers somebody by
+handle and that person takes the row at their first sign-in. There is no
+invitation token, no expiry and no way to invite an account that is not on a host
+this deployment can sign in with. What there IS is the refusal: an account nobody
+registered is answered 403 naming the remedy, rather than becoming a member.
+
+**A repository belongs to whichever org registered it first**, and a second org
+is now refused rather than silently losing the claim. An inbound delivery carries
+no credential of ours, so the registry is the only thing that can place it;
+verifying at registration that the org can actually reach the repository is the
+next step, and needs the org's credential rather than a table lookup.

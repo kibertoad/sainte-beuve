@@ -39,12 +39,29 @@ would put somebody else's work on its screen.
 `AUTH_MODE` decides, and it is a decision somebody types rather than something
 derived from the rest of the configuration:
 
-- **`open`** (the default) refuses nobody. It is what every deployment ran before
-  sessions existed and what local mode still runs: the workspace renders for
-  whoever the deployment's own source-control credential acts as, which is right
-  for one person's laptop and wrong for anything shared.
+- **`open`** (the default with nothing set) refuses nobody. It is what every
+  deployment ran before sessions existed and what local mode still runs: the
+  workspace renders for whoever the deployment's own source-control credential
+  acts as, which is right for one person's laptop and wrong for anything shared.
 - **`required`** refuses an anonymous call to everything under `/api/v1` except
   `/api/v1/auth/*`, and the workspace then renders for whoever is SIGNED IN.
+
+Two things about reading that variable are load-bearing, and both are in
+`authModeFrom` so that all three runtimes read it once:
+
+**An unrecognised value is a configuration error**, not `open`. A variable nobody
+can spell must not be the difference between a closed deployment and an open one
+that believes it is closed: `AUTH_MODE=requried` used to be a public admin, and a
+refusal to start is a typo somebody fixes in a minute.
+
+**`open` beside a public origin refuses to start.** An anonymous caller on an
+`open` deployment is an ADMIN of the default org — it can replace the stored
+GitHub, GitLab, Slack and cat-factory credentials, empty the project registry and
+spend the AI-review key. A deployment that has NAMED a public origin, through
+`APP_BASE_URL` or through a non-loopback `CORS_ORIGINS` entry, has said it is not
+a laptop. The wildcard names no host and is the absence of a statement, so a local
+run is untouched. Both hosted templates (`deploy/backend/wrangler.toml`,
+`deploy/node/.env.example`) ship `required`.
 
 Both derivations of the mode fail in the direction that hurts. Deriving
 `required` from "an OAuth client exists" locks a laptop out of its own board the
@@ -190,10 +207,15 @@ could not have been stored either, so this refuses nothing that would otherwise
 have worked.
 
 The person behind the account is resolved by `PeopleService`, which is the same
-claim rule the viewer read uses: an existing directory row with that handle is
+claim rule the viewer read uses: an unclaimed directory row with that handle is
 ADOPTED rather than forked, and the `(provider, subject)` key decides the winner
 when three page loads race. A second copy of that rule is how a directory comes to
 hold two people for one human being.
+
+Finishing the round trip is not itself permission to be here: whether the account
+may become a person in that org at all is the org's `enrolment`, and the role
+adoption may confer is capped once the org has an admin who has signed in. Both
+are in [docs/orgs.md](./orgs.md).
 
 ## API keys
 
