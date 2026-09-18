@@ -17,8 +17,21 @@ import * as v from 'valibot'
  * reviewer who has not answered; `escalation` widens the audience once a review has
  * gone past its deadline, which is the point where a private nudge has demonstrably
  * not worked.
+ *
+ * `ai_review_parked` is the odd one out, and deliberately so: the other three
+ * chase a PERSON who has not acted, and this one reports that a MACHINE has
+ * stopped and is waiting to be told what to do with what it found. cat-factory
+ * calls nothing back, so the deployment's clock is the only thing that ever
+ * learns a delegated review parked on its findings, and without a nudge that
+ * knowledge stays inside the process: the row says `awaiting_selection` to
+ * whoever opens it, which is exactly the person who would have opened it anyway.
  */
-export const reminderKindSchema = v.picklist(['unassigned', 'pending', 'escalation'])
+export const reminderKindSchema = v.picklist([
+  'unassigned',
+  'pending',
+  'escalation',
+  'ai_review_parked',
+])
 export type ReminderKind = v.InferOutput<typeof reminderKindSchema>
 
 /** Where the nudge is delivered. */
@@ -41,6 +54,24 @@ export const reminderSchema = v.object({
   /** Reviewer the nudge is aimed at. Null for a channel-wide `unassigned` or `escalation`. */
   reviewerId: v.nullable(v.string()),
   dueAt: v.number(),
+  /**
+   * How long a snooze is holding this review's ladder back, and null for a nudge
+   * nobody deferred.
+   *
+   * Beside `dueAt` rather than folded into it, because the two answer different
+   * questions and only one of them survives a re-plan. `dueAt` is what the policy
+   * computed; this is what a PERSON asked for, and the outstanding schedule for a
+   * review is rewritten from scratch every time anything moves the ladder — a
+   * status write, a nudge going out, a poll that found a delegated review parked.
+   * A snooze that lived only in the `dueAt` of the row it was asked for would be
+   * undone by the next one of those, which for a review with an AI review on it is
+   * a background poll the person who snoozed it never sees.
+   *
+   * Carried forward by `planNextReminder` and dropped once the rung it defers
+   * would come due after it anyway: at that point the pause has expired and a
+   * timestamp copied onto every row after it would outlive what it described.
+   */
+  snoozedUntil: v.optional(v.nullable(v.number()), null),
   status: reminderStatusSchema,
   sentAt: v.nullable(v.number()),
   /** Delivery failure text, kept so a silent channel misconfiguration is visible. */
@@ -65,5 +96,17 @@ export const reminderPolicySchema = v.object({
   escalateAfterDueMs: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /** Cap on `pending` nudges per review, so a stalled review cannot become a drumbeat. */
   maxPendingReminders: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * Wait before saying out loud that a delegated review has parked on its
+   * findings.
+   *
+   * Much shorter than the other rungs, and it measures something else. The
+   * others are waiting on a person who may reasonably be busy; this one is
+   * waiting on nobody at all — the work is done and sitting in a queue whose
+   * existence nothing has announced. The wait is not patience, it is a grace
+   * period for the person who pressed the button and is still looking at the
+   * row.
+   */
+  aiReviewParkedAfterMs: v.pipe(v.number(), v.integer(), v.minValue(0)),
 })
 export type ReminderPolicy = v.InferOutput<typeof reminderPolicySchema>

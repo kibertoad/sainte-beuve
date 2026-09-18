@@ -7,6 +7,7 @@ import { requireCapability } from '../../http/errors.js'
 import { type Resolved, resolveAiReview } from '../../integrations/resolve.js'
 import type { CredentialSource } from '../../integrations/resolve.js'
 import { abandonIfOrphaned } from './orphans.js'
+import { NOT_POLLED, type PollOutcome, parkedAtFor, parksIn, replanForPark } from './park.js'
 import { curationFor } from './reconcile.js'
 
 /**
@@ -79,6 +80,7 @@ export class AiReviewService {
       curation: null,
       requestedAt: clock.now(),
       lastPolledAt: null,
+      parkedAt: null,
       completedAt: null,
     })
 
@@ -116,7 +118,17 @@ export class AiReviewService {
    */
   async listByReview(reviewId: string): Promise<AiReviewRun[]> {
     const runs = await this.container.repositories.aiReviewRuns.listByReview(reviewId)
-    return Promise.all(runs.map(async (run) => (await this.refreshed(run)) ?? run))
+    const polled = await Promise.all(
+      runs.map(async (run) => {
+        const outcome = await this.poll(run)
+        return { ...outcome, run: outcome.run ?? run }
+      }),
+    )
+    // ONE re-plan for the review, after every poll has landed, rather than one per
+    // run: two runs on a review can park in the same read, and the ladder is a
+    // single row rewritten by a cancel-then-create. See `replanForPark`.
+    await replanForPark(this.container, parksIn(polled))
+    return polled.map((outcome) => outcome.run)
   }
 
   /** One run, polled. */
@@ -268,20 +280,38 @@ export class AiReviewService {
   }
 
   /**
-   * The run as cat-factory reports it now, or null when there was nothing to ask.
+   * The run as cat-factory reports it now, or null when there was nothing to ask,
+   * with the reminder ladder put back in step if the poll moved the park.
+   *
+   * What every caller but `listByReview` polls through. That one re-plans for
+   * itself, because it polls several runs of ONE review and the ladder is a single
+   * row: see `replanForPark`.
+   */
+  private async refreshed(run: AiReviewRun): Promise<AiReviewRun | null> {
+    const outcome = await this.poll(run)
+    if (outcome.park !== null) await replanForPark(this.container, [outcome.park])
+    return outcome.run
+  }
+
+  /**
+   * The poll itself, without the re-plan that may follow it.
    *
    * A cat-factory that cannot be reached leaves the row's STATUS as it was rather
    * than failing the read: a board showing four reviews must not 502 because the
-   * instance behind one of them is down, and the next poll settles it.
+   * instance behind one of them is down, and the next poll settles it. Which is
+   * also why the catch ENDS here and the re-plan sits outside it: a reminder-store
+   * failure recorded on the run as "the AI review could not be read from
+   * cat-factory" would name the wrong system, and leave the park stamped and
+   * never announced.
    */
-  private async refreshed(run: AiReviewRun): Promise<AiReviewRun | null> {
-    if (run.catFactoryTaskId === null || !IN_FLIGHT.has(run.status)) return null
+  private async poll(run: AiReviewRun): Promise<PollOutcome> {
+    if (run.catFactoryTaskId === null || !IN_FLIGHT.has(run.status)) return NOT_POLLED
     const resolved = await this.resolved()
-    if (resolved === null) return null
+    if (resolved === null) return NOT_POLLED
     try {
       return await this.write(run, await resolved.gateway.getStatus(run.catFactoryTaskId))
     } catch (err) {
-      return this.pollRefused(run, err)
+      return { run: await this.pollRefused(run, err), park: null }
     }
   }
 
@@ -331,22 +361,30 @@ export class AiReviewService {
    * address every curation verb is sent to: a poll that raced a run being rebuilt
    * would otherwise take the loop's only handle away mid-curation.
    */
-  private async write(run: AiReviewRun, reported: AiReviewReport): Promise<AiReviewRun | null> {
+  private async write(run: AiReviewRun, reported: AiReviewReport): Promise<PollOutcome> {
+    const now = this.container.clock.now()
     const current = await this.container.repositories.aiReviewRuns.getById(run.id)
-    if (current === null) return null
+    if (current === null) return NOT_POLLED
     const settled = reported.status !== 'running' && reported.status !== 'awaiting_selection'
-    if (!settled && !IN_FLIGHT.has(current.status)) return current
-    return this.container.repositories.aiReviewRuns.update(run.id, {
+    if (!settled && !IN_FLIGHT.has(current.status)) return { run: current, park: null }
+    const curation = curationFor(reported, current)
+    const written = await this.container.repositories.aiReviewRuns.update(run.id, {
       status: reported.status,
       catFactoryRunId: reported.runId ?? current.catFactoryRunId,
       summary: reported.summary,
       failureReason: reported.failureReason,
-      curation: curationFor(reported, current),
+      curation,
       // Stamped by the POLL and not by the report, so a run the clock has just
       // asked about goes to the back of the rotation whatever came back. See
       // `AiReviewRunRepository.listInFlight`.
-      lastPolledAt: this.container.clock.now(),
-      completedAt: settled ? (current.completedAt ?? this.container.clock.now()) : null,
+      lastPolledAt: now,
+      parkedAt: parkedAtFor(current, { status: reported.status, curation }, now),
+      completedAt: settled ? (current.completedAt ?? now) : null,
     })
+    const moved = written !== null && written.parkedAt !== current.parkedAt
+    return {
+      run: written,
+      park: moved ? { reviewId: run.reviewId, runId: run.id, previous: current.parkedAt } : null,
+    }
   }
 }

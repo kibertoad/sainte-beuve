@@ -8,7 +8,7 @@ import { isStoredRowError } from '@sainte-beuve/kernel'
  *
  * These cases need more than the ports. Every write path typechecks against the
  * current contract, so the only way to produce the row this is about is to go
- * behind it, which is what `writeRawPayload` is for. A store that cannot be written
+ * behind it, which is what the `writeRaw*` hooks are for. A store that cannot be written
  * behind cannot be tested for it either, so this list is separate from
  * `repositoryConformanceCases` and the two durable suites opt into it.
  *
@@ -24,6 +24,12 @@ export interface StoreHarness {
    * store's own write path, the way a deployment on an older contract left it.
    */
   writeRawReviewer(id: string, payload: unknown): Promise<void>
+  /**
+   * Put `payload` in the AI-review-run table's `data` column AS GIVEN, the way a
+   * deployment on an older contract left it. The run is written `awaiting_selection`
+   * and never polled, which is the state the reminder ladder reads.
+   */
+  writeRawAiReviewRun(id: string, reviewId: string, payload: unknown): Promise<void>
 }
 
 export interface StoredRowCase {
@@ -58,6 +64,32 @@ const OLDER_SHAPE = {
   createdAt: 1_000,
 }
 
+/**
+ * An AI-review run payload from before the reminder ladder had a rung for a parked
+ * review: it has no `parkedAt` key at all.
+ *
+ * The field the ladder counts the wait from, and payload-only on purpose, which is
+ * exactly why it needs a default rather than only a `v.nullable`. Every run
+ * delegated before that release is one of these, and the ladder now reads a
+ * review's runs on every status write and every send: one row the schema could not
+ * parse would 500 the review it is on and silence the clock that would have healed
+ * it.
+ */
+const RUN_BEFORE_PARKED_AT = {
+  id: 'run-old',
+  reviewId: 'review-1',
+  status: 'awaiting_selection',
+  catFactoryTaskId: 'cf-task-1',
+  catFactoryRunId: 'cf-run-1',
+  catFactoryUrl: null,
+  summary: null,
+  failureReason: null,
+  curation: null,
+  requestedAt: 1_000,
+  lastPolledAt: null,
+  completedAt: null,
+}
+
 export const storedRowConformanceCases: readonly StoredRowCase[] = [
   storedRowCase('heals a row written before a second host was registered', async (harness) => {
     await harness.writeRawReviewer('r-old', OLDER_SHAPE)
@@ -78,6 +110,28 @@ export const storedRowConformanceCases: readonly StoredRowCase[] = [
     const [read] = await harness.repositories.reviewers.list()
 
     assert.strictEqual(read?.handles.gitlab, null)
+  }),
+
+  storedRowCase('heals a run written before the park was timestamped', async (harness) => {
+    await harness.writeRawAiReviewRun('run-old', 'review-1', RUN_BEFORE_PARKED_AT)
+
+    const read = await harness.repositories.aiReviewRuns.getById('run-old')
+
+    assert.strictEqual(read?.status, 'awaiting_selection')
+    assert.strictEqual(read?.parkedAt, null)
+  }),
+
+  storedRowCase('heals such a run on the reads the reminder ladder makes', async (harness) => {
+    // The two the ladder and the clock go through. A default that only healed a
+    // point read would still 500 the board and stop the sweep, which is the pass
+    // that would have written a `parkedAt` and healed the row for good.
+    await harness.writeRawAiReviewRun('run-old', 'review-1', RUN_BEFORE_PARKED_AT)
+
+    const byReview = await harness.repositories.aiReviewRuns.listByReview('review-1')
+    const inFlight = await harness.repositories.aiReviewRuns.listInFlight(10)
+
+    assert.strictEqual(byReview[0]?.parkedAt, null)
+    assert.strictEqual(inFlight[0]?.parkedAt, null)
   }),
 
   storedRowCase('names the table and the row it cannot read', async (harness) => {

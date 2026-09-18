@@ -85,6 +85,21 @@ describe('D1 repositories', () => {
             .bind(DEFAULT_ORG_ID, id, 0, 1_000, JSON.stringify(payload))
             .run()
         },
+        writeRawAiReviewRun: async (id, reviewId, payload) => {
+          await env.DB.prepare(
+            `INSERT INTO ai_review_runs (org_id, id, review_id, status, requested_at, last_polled_at, data)
+             VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+          )
+            .bind(
+              DEFAULT_ORG_ID,
+              id,
+              reviewId,
+              'awaiting_selection',
+              1_000,
+              JSON.stringify(payload),
+            )
+            .run()
+        },
       })
     })
   }

@@ -2,17 +2,20 @@ import type { Reminder, Reviewer, ReviewRequest } from '@sainte-beuve/contracts'
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type { ChatGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { AiReviewService } from '../src/modules/reviews/AiReviewService.js'
 import { snoozeReview } from '../src/reminders/snooze.js'
-import { withOrg } from '../src/container.js'
+import { type AppContainer, withOrg } from '../src/container.js'
 import { runReminderTick } from '../src/reminders/tick.js'
-import { stubAiReview } from './ai-review-doubles.js'
+import { curation, type StubAiReview, stubAiReview } from './ai-review-doubles.js'
 import {
   type TestHarness,
   addReviewer,
   assignReviewer,
   buildHarness,
+  get,
   openReview,
   patch,
+  post,
   PR,
 } from './helpers.js'
 
@@ -190,6 +193,217 @@ describe('reminder tick', () => {
 })
 
 /**
+ * The nudge that says a delegated review has parked on its findings.
+ *
+ * The half of the loop the clock could see and nobody else could: the sweep
+ * already learnt that a review parked, and until this rung existed that
+ * knowledge stayed inside the process — the row said `awaiting_selection` to
+ * whoever opened it, which is the person who would have opened it anyway.
+ *
+ * Driven through the tick rather than through the policy, because the policy's
+ * own suite has the ladder: what these cases are about is the poll WRITING the
+ * park and the schedule following it, which only exists once a store, a clock
+ * and a cat-factory are in the same pass.
+ */
+describe('a parked AI review', () => {
+  let harness: TestHarness
+  let chat: ReturnType<typeof recordingChat>
+  let catFactory: StubAiReview
+
+  beforeEach(() => {
+    chat = recordingChat()
+    catFactory = stubAiReview()
+    harness = buildHarness({
+      chat,
+      aiReview: catFactory,
+      slack: { signingSecret: null, announcementChannelId: 'C-reviews' },
+    })
+  })
+
+  /** A review handed to cat-factory, with the reviewer parked on its findings. */
+  async function parked(): Promise<ReviewRequest> {
+    const review = await openReview(harness)
+    expect(
+      (await harness.app.fetch(post(`/api/v1/reviews/${review.id}/ai-review`, {}))).status,
+    ).toBe(202)
+    catFactory.report = { ...catFactory.report, status: 'awaiting_selection', curation: curation() }
+    return review
+  }
+
+  /** The nudge the ladder is holding for a review, if it is holding one. */
+  async function outstanding(reviewId: string): Promise<Reminder | undefined> {
+    return scheduled(await remindersFor(harness, reviewId))[0]
+  }
+
+  it('is announced once the clock finds it, on the wait the policy names', async () => {
+    const review = await parked()
+
+    // The tick that discovers the park schedules the nudge; it does not send it
+    // out under the person who pressed the button a moment ago.
+    expect(await runReminderTick(harness.container)).toMatchObject({ aiReviewsPolled: 1, sent: 0 })
+    expect(await outstanding(review.id)).toMatchObject({ kind: 'ai_review_parked' })
+
+    harness.clock.advance(harness.container.reminderPolicy.aiReviewParkedAfterMs)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
+    expect(chat.delivered).toStrictEqual([{ kind: 'ai_review_parked', target: 'C-reviews' }])
+  })
+
+  it('is announced once per park, and again when a post re-parks the review', async () => {
+    const review = await parked()
+    const wait = harness.container.reminderPolicy.aiReviewParkedAfterMs
+    await runReminderTick(harness.container)
+    harness.clock.advance(wait)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
+    // A park is announced ONCE: a second nudge about the same one says nothing
+    // the first did not, and the review may sit parked for days. What the tick
+    // keeps doing is polling it, which is how the re-park below is ever found.
+    harness.clock.advance(wait)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 0, aiReviewsPolled: 1 })
+    expect(chat.delivered).toHaveLength(1)
+
+    // A post that fails re-parks the review, with a receipt on it saying what
+    // did not land. That is a new thing to say rather than a repeat of the first.
+    catFactory.report = { ...catFactory.report, status: 'running', curation: null }
+    await harness.app.fetch(get(`/api/v1/reviews/${review.id}/ai-review`))
+    catFactory.report = { ...catFactory.report, status: 'awaiting_selection', curation: curation() }
+    await runReminderTick(harness.container)
+
+    harness.clock.advance(wait)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
+    expect(chat.delivered).toStrictEqual([
+      { kind: 'ai_review_parked', target: 'C-reviews' },
+      { kind: 'ai_review_parked', target: 'C-reviews' },
+    ])
+  })
+
+  it('announces a re-park no poll ever saw leave', async () => {
+    const review = await parked()
+    const wait = harness.container.reminderPolicy.aiReviewParkedAfterMs
+    await runReminderTick(harness.container)
+    harness.clock.advance(wait)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
+
+    // Somebody read the nudge, posted, and the post failed. `resolve` answers 202
+    // and cat-factory acts asynchronously, so that pass starts and fails between
+    // two polls and never shows up on the row as anything but `awaiting_selection`.
+    // The STATUS therefore cannot tell this park from the one already announced;
+    // `postAttempts` can, because it only ever goes up.
+    harness.clock.advance(wait)
+    catFactory.report = {
+      ...catFactory.report,
+      curation: curation({ postAttempts: 1, postedBody: false }),
+    }
+    await runReminderTick(harness.container)
+    expect(await outstanding(review.id)).toMatchObject({ kind: 'ai_review_parked' })
+
+    harness.clock.advance(wait)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
+    expect(chat.delivered).toStrictEqual([
+      { kind: 'ai_review_parked', target: 'C-reviews' },
+      { kind: 'ai_review_parked', target: 'C-reviews' },
+    ])
+  })
+
+  it('schedules one nudge when two runs on a review park in the same read', async () => {
+    const review = await openReview(harness)
+    for (const _ of [1, 2]) {
+      expect(
+        (await harness.app.fetch(post(`/api/v1/reviews/${review.id}/ai-review`, {}))).status,
+      ).toBe(202)
+    }
+    catFactory.report = { ...catFactory.report, status: 'awaiting_selection', curation: curation() }
+
+    // Both runs park on the one read, and the ladder is a single row rewritten by
+    // a cancel-then-create: re-planned once per run, the two passes cancel the
+    // same nothing and write two scheduled rows, so the nudge goes out twice and
+    // a snooze afterwards would only move one of them.
+    await harness.app.fetch(get(`/api/v1/reviews/${review.id}/ai-review`))
+
+    expect(scheduled(await remindersFor(harness, review.id))).toHaveLength(1)
+    harness.clock.advance(harness.container.reminderPolicy.aiReviewParkedAfterMs)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
+    expect(chat.delivered).toHaveLength(1)
+  })
+
+  it('holds a snooze that the re-plan would otherwise undo', async () => {
+    const review = await parked()
+    // Somebody asked for a few hours' quiet about this review.
+    const snoozed = await snoozeReview(harness.container, review, 3)
+    expect(snoozed.snoozedUntil).toBe(snoozed.dueAt)
+
+    // The clock then finds the park and re-plans the ladder, which is a pass the
+    // person who deferred it never sees. Re-planned from the cadence alone, the
+    // nudge comes due fifteen minutes after the park — hours before the quiet they
+    // asked for is up, and on a row they have no reason to look at again.
+    await runReminderTick(harness.container)
+    expect(await outstanding(review.id)).toMatchObject({
+      kind: 'ai_review_parked',
+      dueAt: snoozed.dueAt,
+      snoozedUntil: snoozed.dueAt,
+    })
+
+    harness.clock.advance(harness.container.reminderPolicy.aiReviewParkedAfterMs)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 0 })
+    expect(chat.delivered).toStrictEqual([])
+
+    // Still chased, later, which is what a snooze means.
+    harness.clock.advance(3 * HOUR)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 1 })
+    expect(chat.delivered).toStrictEqual([{ kind: 'ai_review_parked', target: 'C-reviews' }])
+  })
+
+  it('leaves the park to be found again when the ladder cannot be written', async () => {
+    const review = await parked()
+    const { repositories } = harness.container
+    const brokenLadder: AppContainer = {
+      ...harness.container,
+      repositories: {
+        ...repositories,
+        reminders: {
+          ...repositories.reminders,
+          cancelScheduledForReview: async () => {
+            throw new Error('the reminder store is down')
+          },
+        },
+      },
+    }
+
+    await new AiReviewService(brokenLadder).listByReview(review.id)
+
+    // Not recorded on the run as a cat-factory fault: the re-plan sits outside the
+    // poll's own try/catch, and a receipt naming the wrong system is what sent
+    // somebody to check an instance that was answering fine.
+    const [run] = await repositories.aiReviewRuns.listByReview(review.id)
+    expect(run?.failureReason).toBeNull()
+    // And the stamp is back where it was, because it is the only thing that tells
+    // a later poll the park is news. Left standing, this park would never be
+    // announced at all — there would be no edge left to find.
+    expect(run?.parkedAt).toBeNull()
+    expect(await outstanding(review.id)).toMatchObject({ kind: 'unassigned' })
+
+    // Which the next poll, against a store that can write, duly finds.
+    await runReminderTick(harness.container)
+    expect(await outstanding(review.id)).toMatchObject({ kind: 'ai_review_parked' })
+  })
+
+  it('goes off the schedule when the review is curated before the nudge fires', async () => {
+    const review = await parked()
+    await runReminderTick(harness.container)
+    expect(await outstanding(review.id)).toMatchObject({ kind: 'ai_review_parked' })
+
+    // Somebody opened the row and finished the review. The read that learns it
+    // is the read that takes the nudge off, on the same poll that wrote the park.
+    catFactory.report = { ...catFactory.report, status: 'completed', curation: null }
+    await harness.app.fetch(get(`/api/v1/reviews/${review.id}/ai-review`))
+
+    harness.clock.advance(harness.container.reminderPolicy.aiReviewParkedAfterMs)
+    expect(await runReminderTick(harness.container)).toMatchObject({ sent: 0 })
+    expect(chat.delivered).toStrictEqual([])
+    expect(await outstanding(review.id)).toMatchObject({ kind: 'unassigned' })
+  })
+})
+
+/**
  * The order the two halves of a pass run in, across tenancies.
  *
  * A nudge has a deadline and a passenger does not, and the passengers are the
@@ -226,6 +440,7 @@ describe('a tick across tenancies', () => {
       channel: 'slack_channel',
       reviewerId: null,
       dueAt: clock.now(),
+      snoozedUntil: null,
       status: 'scheduled',
       sentAt: null,
       failureReason: null,
@@ -243,6 +458,7 @@ describe('a tick across tenancies', () => {
       curation: null,
       requestedAt: clock.now(),
       lastPolledAt: null,
+      parkedAt: null,
       completedAt: null,
     })
   }

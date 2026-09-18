@@ -86,6 +86,14 @@ describe('Postgres repositories', () => {
                 VALUES (${DEFAULT_ORG_ID}, ${id}, 0, 1000, ${JSON.stringify(payload)}::jsonb)`,
           )
         },
+        writeRawAiReviewRun: async (id, reviewId, payload) => {
+          await db.execute(
+            sql`INSERT INTO ai_review_runs
+                  (org_id, id, review_id, status, requested_at, last_polled_at, data)
+                VALUES (${DEFAULT_ORG_ID}, ${id}, ${reviewId}, 'awaiting_selection', 1000, NULL,
+                        ${JSON.stringify(payload)}::jsonb)`,
+          )
+        },
       })
     })
   }

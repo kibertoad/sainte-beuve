@@ -87,6 +87,7 @@ export function reminder(id: string, overrides: Partial<Reminder> = {}): Reminde
     channel: 'slack_dm',
     reviewerId: 'reviewer-1',
     dueAt: 1_000,
+    snoozedUntil: null,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,
@@ -138,6 +139,7 @@ export function aiReviewRun(id: string, overrides: Partial<AiReviewRun> = {}): A
     curation: curation(),
     requestedAt: 1_000,
     lastPolledAt: null,
+    parkedAt: null,
     completedAt: null,
     ...overrides,
   }

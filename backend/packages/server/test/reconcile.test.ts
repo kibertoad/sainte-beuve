@@ -26,6 +26,7 @@ function holding(held: AiReviewRun['curation']): AiReviewRun {
     curation: held,
     requestedAt: 1_000,
     lastPolledAt: null,
+    parkedAt: null,
     completedAt: null,
   }
 }

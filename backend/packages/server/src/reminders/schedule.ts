@@ -1,5 +1,5 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
-import { planNextReminder } from '@sainte-beuve/reminders'
+import { parkedSince, planNextReminder } from '@sainte-beuve/reminders'
 import type { AppContainer } from '../container.js'
 
 /**
@@ -13,15 +13,28 @@ import type { AppContainer } from '../container.js'
  *
  * Cancel-then-plan rather than diffing: the outstanding schedule is always a single
  * row, so rewriting it is both simpler and impossible to get out of step.
+ *
+ * It reads the review's AI runs as well as its reminders, because one rung of
+ * the ladder is about them: a delegated review that parks on its findings is
+ * waiting on a person, and the only thing that ever learns it parked is a poll.
+ * A second indexed read by `review_id`, on a path that already does one and
+ * already writes.
  */
 export async function scheduleNextReminder(
   container: AppContainer,
   review: ReviewRequest,
 ): Promise<Reminder | null> {
   const { repositories, reminderPolicy, clock, ids } = container
-  const sent = await repositories.reminders.listByReview(review.id)
+  // Together, because neither read depends on the other and this runs on a
+  // runtime billed by wall-clock time on every status write and every send.
+  const [sent, runs] = await Promise.all([
+    repositories.reminders.listByReview(review.id),
+    repositories.aiReviewRuns.listByReview(review.id),
+  ])
   await repositories.reminders.cancelScheduledForReview(review.id)
-  const planned = planNextReminder(review, reminderPolicy, sent)
+  const planned = planNextReminder(review, reminderPolicy, sent, {
+    aiReviewParkedAt: parkedSince(runs),
+  })
   if (planned === null) return null
   return repositories.reminders.create({
     id: ids.next(),
@@ -30,6 +43,12 @@ export async function scheduleNextReminder(
     channel: planned.channel,
     reviewerId: planned.reviewerId,
     dueAt: planned.dueAt,
+    // Carried by the POLICY, not by this. A snooze defers the review's ladder
+    // rather than one row, and the row it was asked on is the row this call is
+    // about to cancel, so the deferral has to travel onto its replacement or a
+    // re-plan would undo it — which, now that a poll re-plans, is a background
+    // pass the person who asked for the quiet never sees.
+    snoozedUntil: planned.snoozedUntil,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,

@@ -39,6 +39,7 @@ function reminder(kind: Reminder['kind']): Reminder {
     channel: 'slack_channel',
     reviewerId: null,
     dueAt: 2,
+    snoozedUntil: null,
     status: 'scheduled',
     sentAt: null,
     failureReason: null,
@@ -91,6 +92,20 @@ describe('reminderMessage', () => {
     expect(reminderMessage(reminder('escalation'), review(), undefined).text).toContain(
       'past its review deadline',
     )
+  })
+
+  it('sends a parked AI review to the board, where its findings are', () => {
+    const text = reminderMessage(
+      reminder('ai_review_parked'),
+      review(),
+      'https://board.example',
+    ).text
+    expect(text).toContain('waiting on somebody to say which findings are worth posting')
+    // The pull request is named, but the board is where the answer is: nothing
+    // has been posted on the pull request yet, and nothing will be until
+    // somebody curates.
+    expect(text).toContain(`<${PR_URL}|kibertoad/sainte-beuve#7>`)
+    expect(text).toContain('https://board.example/reviews/rev-1')
   })
 })
 

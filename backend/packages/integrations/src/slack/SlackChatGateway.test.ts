@@ -30,6 +30,7 @@ const reminder: Reminder = {
   channel: 'slack_dm',
   reviewerId: 'rvw-1',
   dueAt: 0,
+  snoozedUntil: null,
   status: 'scheduled',
   sentAt: null,
   failureReason: null,
