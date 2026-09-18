@@ -35,9 +35,18 @@ in, because closing the door is about who may JOIN.
 admin typed and a subject is the host's own id, so a pre-registered row is a claim
 waiting to be taken: adoption confers its role only while no admin of the org has
 signed in — the founder's window — and caps it at `member` after that. Adoption
-also skips a row some account has already proved itself against, so whoever holds
-the GitHub login `bob` can no longer take the row of the Bob who signed in through
-GitLab.
+also skips a row an account has already proved itself against, so whoever holds
+the GitHub login `bob` can no longer take the row of the Bob whose GitHub account
+is linked to it.
+
+A claim is spent PER HOST, because `handles` has a slot per host and an admin
+registers each separately: a row's GitLab slot is untouched by whoever proved
+themselves against its GitHub one. That is also the only way a second account is
+ever linked — a refresh re-records the handle of a host already linked and nothing
+else — so a person who signed in with GitHub can still add their GitLab account,
+onto the same directory row rather than a second one. The `admin` cap does not
+apply there: it protects an unclaimed registration, and somebody adopting their
+own row already holds the role.
 
 **A repository belongs to whichever org registered it first (H3).** `POST
 /api/v1/projects` now refuses a ref another tenancy has claimed, rather than
@@ -63,6 +72,14 @@ quiet `open`, and `open` beside a public origin — `APP_BASE_URL`, or a
 non-loopback `CORS_ORIGINS` entry — refuses to start, because an anonymous caller
 there is an admin of the default org. The wildcard names no host and leaves a
 local run alone. Both hosted templates ship `AUTH_MODE=required`.
+
+The refusal is a `ConfigurationError` — a new `misconfigured` domain code, 503 —
+because the two runtimes can only ask at different moments. Node reads its
+environment once and the throw is a process that will not start. A Worker is
+handed its bindings with the request and has no boot to fail in, so the same throw
+arrives per request; as a domain error it is answered 503 with the sentence Node
+prints on stderr, on every path including `/health`, rather than an anonymous 500
+legible only in `wrangler tail`.
 
 Breaking, in the honest direction:
 

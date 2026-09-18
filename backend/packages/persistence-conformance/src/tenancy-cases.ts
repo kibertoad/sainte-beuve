@@ -239,11 +239,17 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
   }),
 
   // The decision about who may join an org is a FIELD on the org, so it has to
-  // survive the round trip through every store the same way. Both durable
+  // survive the round trip through every store the same way: both durable
   // adapters carry it in the payload column, which is what lets it land without
-  // a migration; the one thing that then has to hold is that a row written
-  // before the field existed reads as `invite` rather than as undefined.
-  tenancyCase('an org carries its enrolment decision, and closes without one', async (stores) => {
+  // a migration. That is all this case asserts — a written value comes back, and
+  // an update moves it.
+  //
+  // The OTHER half of the no-migration claim, that a row written before the
+  // field existed reads as `invite` rather than as undefined, cannot be asserted
+  // from here: every write path this port offers typechecks against the current
+  // contract, so producing such a row means going behind the store. It lives in
+  // `storedRowConformanceCases`, against the two stores that can be.
+  tenancyCase('an org carries the enrolment decision it was written with', async (stores) => {
     await stores.orgs.create(org('org-a', { slug: 'alpha', enrolment: 'open' }))
     assert.strictEqual((await stores.orgs.getById('org-a'))?.enrolment, 'open')
     assert.strictEqual((await stores.orgs.getBySlug('alpha'))?.enrolment, 'open')

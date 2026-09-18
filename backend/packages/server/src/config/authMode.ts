@@ -1,4 +1,5 @@
 import type { AuthMode } from '@sainte-beuve/contracts'
+import { ConfigurationError } from '@sainte-beuve/kernel'
 
 /**
  * Which `AUTH_MODE` a deployment actually asked for.
@@ -22,6 +23,15 @@ import type { AuthMode } from '@sainte-beuve/contracts'
  *
  * The wildcard is not a named origin: it is the absence of a statement, and it
  * is what every facade ships, so it leaves a local run alone.
+ *
+ * The refusal is a `ConfigurationError` rather than a bare one, because the two
+ * runtimes can only ASK this at different moments. Node reads its environment
+ * once at boot and the throw is a process that will not start, with the reason
+ * on stderr. A Worker is handed its bindings with the request, so the same throw
+ * arrives per request, and it has to be legible to whoever curls the deployment
+ * rather than only to whoever is running `wrangler tail`: as a domain error it
+ * becomes a 503 carrying this message in the ordinary envelope. See
+ * `ConfigurationError` and `STATUS_BY_CODE`.
  */
 export interface AuthModeInput {
   /** The raw `AUTH_MODE`, exactly as the environment spelled it. */
@@ -82,9 +92,9 @@ export function authModeFrom(input: AuthModeInput): AuthMode {
   // local mode both run on the absence of the variable, and turning a missing
   // value into a boot failure would close a door nobody opened.
   if (typed !== '' && typed !== 'open') {
-    throw new Error(`${MODES}, and this deployment was given "${input.value ?? ''}".`)
+    throw new ConfigurationError(`${MODES}, and this deployment was given "${input.value ?? ''}".`)
   }
   const reachable = publicOrigin(input)
-  if (reachable !== null) throw new Error(PUBLIC_OPEN.replace('%s', reachable))
+  if (reachable !== null) throw new ConfigurationError(PUBLIC_OPEN.replace('%s', reachable))
   return 'open'
 }

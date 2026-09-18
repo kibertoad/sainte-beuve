@@ -78,6 +78,7 @@ describe('D1 repositories', () => {
     it(testCase.name, async () => {
       await testCase.run({
         repositories: createD1Store(env.DB).forOrg(DEFAULT_ORG_ID),
+        orgs: createD1Store(env.DB).orgs,
         writeRawReviewer: async (id, payload) => {
           await env.DB.prepare(
             'INSERT INTO reviewers (org_id, id, outstanding_reviews, created_at, data) VALUES (?, ?, ?, ?, ?)',
@@ -98,6 +99,11 @@ describe('D1 repositories', () => {
               1_000,
               JSON.stringify(payload),
             )
+            .run()
+        },
+        writeRawOrg: async (id, slug, payload) => {
+          await env.DB.prepare('INSERT INTO orgs (id, slug, created_at, data) VALUES (?, ?, ?, ?)')
+            .bind(id, slug, 1_000, JSON.stringify(payload))
             .run()
         },
       })

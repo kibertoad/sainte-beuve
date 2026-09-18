@@ -35,14 +35,29 @@ import type { OrgEnrolment, Role } from '@sainte-beuve/contracts'
  * the wrong subject. The founding row is the exception the ordering makes
  * possible — while no admin has proved themselves, there is no established
  * administrator to steal.
+ *
+ * THE CAP IS ABOUT UNCLAIMED ROWS, and `adoptedEstablished` is what says a row is
+ * not one. A person already signed in on one host who signs in on a second is
+ * adopting their OWN row — the caller only ever offers a row unclaimed on the
+ * host in front of it — and there is no role to steal, because they already hold
+ * it. Capping there would demote an administrator for connecting their GitLab
+ * account, which is not a security decision but an outage.
  */
 export interface EnrolmentInput {
   /** The org's own decision about who may join. */
   enrolment: OrgEnrolment
   /** How many people the directory holds. Zero is the founding sign-in. */
   directorySize: number
-  /** The role on the unclaimed row this account's handle matches, if any. */
+  /** The role on the row this account's handle matches, if any. */
   adoptedRole: Role | null
+  /**
+   * Whether that row is one somebody has ALREADY proved themselves against, on
+   * some OTHER host. The row is a person this org admitted once, signing in with
+   * a second account, rather than a stranger taking an unclaimed registration —
+   * which is the difference the `admin` cap turns on. False when there is no
+   * matched row at all.
+   */
+  adoptedEstablished: boolean
   /** Whether an admin of this org has ever signed in. */
   hasLinkedAdmin: boolean
 }
@@ -61,5 +76,7 @@ export function decideEnrolment(input: EnrolmentInput): EnrolmentDecision {
 /** The pre-registered role, capped at `member` once the org has a real admin. */
 function adoptedRole(input: EnrolmentInput): Role {
   if (input.adoptedRole !== 'admin') return 'member'
+  // Their own row, on a second host. See the note on the cap above.
+  if (input.adoptedEstablished) return 'admin'
   return input.hasLinkedAdmin ? 'member' : 'admin'
 }

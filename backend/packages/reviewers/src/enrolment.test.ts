@@ -5,6 +5,7 @@ const ESTABLISHED: EnrolmentInput = {
   enrolment: 'invite',
   directorySize: 3,
   adoptedRole: null,
+  adoptedEstablished: false,
   hasLinkedAdmin: true,
 }
 
@@ -57,6 +58,24 @@ describe('decideEnrolment', () => {
   it('caps an adopted row at member wherever the row said nothing stronger', () => {
     expect(
       decideEnrolment({ ...ESTABLISHED, enrolment: 'open', adoptedRole: 'member' }),
+    ).toStrictEqual({ admitted: true, role: 'member' })
+  })
+
+  it('leaves an admin their role when they sign in on a second host', () => {
+    // Their OWN row, already linked elsewhere: the cap is about an unclaimed
+    // registration, and applying it here would demote an administrator for
+    // connecting a GitLab account.
+    expect(
+      decideEnrolment({ ...ESTABLISHED, adoptedRole: 'admin', adoptedEstablished: true }),
+    ).toStrictEqual({ admitted: true, role: 'admin' })
+  })
+
+  it('admits their second account by invitation, with no registration of its own', () => {
+    // `invite` closes the door on who may JOIN. Somebody already inside is not
+    // joining, and the only thing that reaches this branch is a row an admin
+    // registered their handle on.
+    expect(
+      decideEnrolment({ ...ESTABLISHED, adoptedRole: 'member', adoptedEstablished: true }),
     ).toStrictEqual({ admitted: true, role: 'member' })
   })
 })

@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { identityProviderSchema } from './identity.js'
+import { vcsProviderSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // The tenancy, and what a caller may do inside it.
@@ -132,9 +132,19 @@ export type Role = v.InferOutput<typeof roleSchema>
  * `admin` to (see `decideEnrolment` in @sainte-beuve/reviewers), and why naming
  * one is worth the trouble: it closes the window in which whoever guesses the
  * slug first becomes the org's administrator.
+ *
+ * The provider is the SOURCE-CONTROL host rather than `identityProviderSchema`,
+ * on both counts that matter. It is what the field means: the handle is written
+ * into the founding row's `VcsHandles`, which is keyed by `VcsProvider`, and the
+ * day `identity.ts` grows an `oidc` member the two must not silently coincide.
+ * It is also what keeps this module a LEAF: `identity.ts` reads `reviewers.ts`,
+ * which reads `roleSchema` from here, so importing it back would close a cycle
+ * whose every member initialises a `const` at module scope — which under ESM is
+ * a `ReferenceError` on import, in every entry order, taking the whole contracts
+ * package and therefore every runtime with it. `vcs.ts` imports nothing local.
  */
 export const orgFounderSchema = v.object({
-  provider: identityProviderSchema,
+  provider: vcsProviderSchema,
   handle: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
 })
 export type OrgFounder = v.InferOutput<typeof orgFounderSchema>

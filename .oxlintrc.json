@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc"],
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
   "categories": {
     "correctness": "error"
   },
@@ -12,6 +12,13 @@
   // diff; the point of setting them now is that the tree never grows past them
   // quietly.
   "rules": {
+    // A cycle between two modules is not a style question here. Every contract,
+    // port and pure decision in this tree is an `export const` or an `export
+    // class` read at module scope, and under ESM a cycle through those is a TDZ
+    // `ReferenceError` on import — in EVERY entry order, so the package simply
+    // stops loading and takes the runtimes that import it with it. Nothing in a
+    // typecheck or a bundle says so; this rule does.
+    "import/no-cycle": "error",
     "complexity": ["error", { "max": 12 }],
     "max-depth": ["error", { "max": 4 }],
     "max-nested-callbacks": ["error", { "max": 3 }],

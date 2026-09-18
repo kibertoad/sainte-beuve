@@ -3,6 +3,7 @@
 
 export {
   assertFound,
+  ConfigurationError,
   ConflictError,
   DomainError,
   type DomainErrorCode,

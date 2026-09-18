@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import type { Repositories } from '@sainte-beuve/kernel'
+import type { OrgRepository, Repositories } from '@sainte-beuve/kernel'
 import { isStoredRowError } from '@sainte-beuve/kernel'
 
 /**
@@ -20,6 +20,13 @@ import { isStoredRowError } from '@sainte-beuve/kernel'
 export interface StoreHarness {
   readonly repositories: Repositories
   /**
+   * The tenancy table, which is not inside an org and so is not on
+   * `Repositories`. Here because the org row is where the newest payload-only
+   * field landed, and a field that lands without a migration is one whose
+   * healing has to be asserted.
+   */
+  readonly orgs: OrgRepository
+  /**
    * Put `payload` in the reviewer table's `data` column AS GIVEN, behind the
    * store's own write path, the way a deployment on an older contract left it.
    */
@@ -30,6 +37,12 @@ export interface StoreHarness {
    * and never polled, which is the state the reminder ladder reads.
    */
   writeRawAiReviewRun(id: string, reviewId: string, payload: unknown): Promise<void>
+  /**
+   * Put `payload` in the org table's `data` column AS GIVEN, the way a
+   * deployment on an older contract left it. The slug is a column of its own and
+   * is UNIQUE, so it is passed rather than read off the payload.
+   */
+  writeRawOrg(id: string, slug: string, payload: unknown): Promise<void>
 }
 
 export interface StoredRowCase {
@@ -90,6 +103,24 @@ const RUN_BEFORE_PARKED_AT = {
   completedAt: null,
 }
 
+/**
+ * An org payload from before anybody decided who may join it: no `enrolment` key
+ * at all.
+ *
+ * Every org row written before that field existed is one of these, and the field
+ * shipped WITHOUT a migration on the strength of the contract's default. So the
+ * default is the whole migration, and what it has to produce is `invite`: an org
+ * nobody decided about is closed. Reading `undefined` back instead would hand
+ * `PeopleService` a value that is neither of the two the decision switches on,
+ * and the branch it falls to is the open one.
+ */
+const ORG_BEFORE_ENROLMENT = {
+  id: 'org-old',
+  slug: 'alpha',
+  name: 'Alpha',
+  createdAt: 1_000,
+}
+
 export const storedRowConformanceCases: readonly StoredRowCase[] = [
   storedRowCase('heals a row written before a second host was registered', async (harness) => {
     await harness.writeRawReviewer('r-old', OLDER_SHAPE)
@@ -132,6 +163,34 @@ export const storedRowConformanceCases: readonly StoredRowCase[] = [
 
     assert.strictEqual(byReview[0]?.parkedAt, null)
     assert.strictEqual(inFlight[0]?.parkedAt, null)
+  }),
+
+  storedRowCase('heals an org written before anybody decided who may join', async (harness) => {
+    await harness.writeRawOrg('org-old', 'alpha', ORG_BEFORE_ENROLMENT)
+
+    // All three reads, because they are three different statements and a sign-in
+    // arrives through `getBySlug` while `PeopleService` asks `getById`: a default
+    // applied on one of them is a deployment whose door is open on one path.
+    const byId = await harness.orgs.getById('org-old')
+    const bySlug = await harness.orgs.getBySlug('alpha')
+    const [listed] = await harness.orgs.list()
+
+    assert.strictEqual(byId?.enrolment, 'invite')
+    assert.strictEqual(bySlug?.enrolment, 'invite')
+    assert.strictEqual(listed?.enrolment, 'invite')
+    assert.strictEqual(byId?.name, 'Alpha')
+  }),
+
+  storedRowCase('keeps a healed org closed when something else is patched', async (harness) => {
+    // `update` reads, merges and writes the whole payload back, so a patch that
+    // named only the name would persist whatever the read produced. The row is
+    // healed on the way through rather than written back as undefined.
+    await harness.writeRawOrg('org-old', 'alpha', ORG_BEFORE_ENROLMENT)
+
+    const renamed = await harness.orgs.update('org-old', { name: 'Renamed' })
+
+    assert.strictEqual(renamed?.enrolment, 'invite')
+    assert.strictEqual((await harness.orgs.getById('org-old'))?.enrolment, 'invite')
   }),
 
   storedRowCase('names the table and the row it cannot read', async (harness) => {

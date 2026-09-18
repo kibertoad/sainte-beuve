@@ -30,6 +30,11 @@ const STATUS_BY_CODE: Record<DomainErrorCode, ContentfulStatusCode> = {
   // is upstream, and an operator reading the logs should not go looking in ours.
   upstream_failed: 502,
   payload_too_large: 413,
+  // The deployment is misconfigured and cannot serve anything correctly. 503
+  // beside `unavailable`, because both mean "not from here, not now" to a
+  // client; what separates them is the message, which names the variable. See
+  // `ConfigurationError`.
+  misconfigured: 503,
 }
 
 export function errorBody(code: string, message: string, details?: unknown): ErrorResponse {

@@ -272,10 +272,20 @@ export function containerFor(env: WorkerEnv): AppContainer {
  *
  * The mode comes from `authModeFrom`, which the Node facade reads the same way:
  * an unrecognised value is a configuration error rather than a quiet `open`, and
- * `open` beside a public origin is refused rather than served. A Worker builds
- * its container per request, so the refusal is a 500 on every request with the
- * reason in the log — which is the loud failure. The quiet one was a Worker
- * serving `AUTH_MODE=oepn` as a public admin.
+ * `open` beside a public origin is refused rather than served. The quiet failure
+ * this replaces was a Worker serving `AUTH_MODE=oepn` as a public admin.
+ *
+ * WHERE THE TWO RUNTIMES CANNOT BE SYMMETRIC, and how close they get. Node reads
+ * its environment once and refuses to start, so a bad value is caught by
+ * whoever ran the deploy. A Worker is handed its bindings with the request and
+ * has no boot to fail in, so `wrangler deploy` accepts the misconfiguration and
+ * the refusal can only happen per request. What it must NOT be is an anonymous
+ * 500 legible only in `wrangler tail`: `authModeFrom` throws a
+ * `ConfigurationError`, so every request — `/health` included — is answered 503
+ * with the same sentence Node prints on stderr, naming the variable and the
+ * origin. An operator who curls the deployment learns what an operator reading
+ * Node's stderr learns, which is as far as the asymmetry can be closed from
+ * here.
  */
 function authFor(env: WorkerEnv): AuthWiring {
   const lifetime = Number.parseInt(env.AUTH_SESSION_LIFETIME_MS ?? '', 10)

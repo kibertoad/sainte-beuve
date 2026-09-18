@@ -54,6 +54,22 @@ interface Newcomer {
   role: Role
 }
 
+/**
+ * A directory row this account may take, and what kind of taking it is.
+ *
+ * The two travel together because one store read answers both, and asking twice
+ * would be a `listForReviewer` per candidate per sign-in.
+ */
+interface Adoptable {
+  reviewer: Reviewer
+  /**
+   * The row is already linked on ANOTHER host: this is a second account of
+   * somebody this org admitted, not a stranger taking an unclaimed registration.
+   * See `decideEnrolment`.
+   */
+  established: boolean
+}
+
 export class PeopleService {
   constructor(private readonly container: AppContainer) {}
 
@@ -119,7 +135,7 @@ export class PeopleService {
     const adopted = await this.adoptable(directory, provider, account)
     const decision = await this.admit(directory, adopted, gate)
     if (!decision.admitted) throw new ForbiddenError(NOT_ENROLLED)
-    const claimedId = adopted?.id ?? ids.next()
+    const claimedId = adopted?.reviewer.id ?? ids.next()
     const ownerId = await repositories.identities.link(
       claimedId,
       this.identityOf(provider, account),
@@ -127,7 +143,7 @@ export class PeopleService {
     if (ownerId !== claimedId) {
       return this.claimedElsewhere(ownerId, { provider, account, role: decision.role })
     }
-    if (adopted !== null) return this.adopt(adopted, decision.role)
+    if (adopted !== null) return this.adopt(adopted.reviewer, decision.role)
     return this.create(claimedId, { provider, account, role: decision.role })
   }
 
@@ -135,20 +151,32 @@ export class PeopleService {
    * The directory row this account may take, or null.
    *
    * Matched on the handle, which is all an admin can know before somebody has
-   * ever signed in — and refused for a row some account has ALREADY proved
-   * itself against. That second half is the difference between a hint and an
-   * identity: without it, whoever holds the GitHub login `bob` takes the row of
-   * the Bob who signed in through GitLab a year ago, along with their workspace,
-   * their commitments and their role.
+   * ever signed in — and refused for a row an account has ALREADY proved itself
+   * against ON THIS HOST. That second half is the difference between a hint and
+   * an identity: without it, whoever holds the GitHub login `bob` takes the row
+   * of the Bob whose GitHub account is already linked to it, along with their
+   * workspace, their commitments and their role.
+   *
+   * PER HOST, because a claim is spent per host. `handles` is a map with a slot
+   * per provider, an admin registers each slot separately, and the row's GitLab
+   * slot is untouched by whoever proved themselves against its GitHub one. Made
+   * unconditional, this is the only way to link a second account — `refresh`
+   * only ever re-records the handle of a provider already linked — so a person
+   * who signed in with GitHub could never add their GitLab account: 403 forever
+   * under `invite`, and a second directory row under `open`, which is the fork
+   * `claim` exists to prevent.
    */
   private async adoptable(
     directory: readonly Reviewer[],
     provider: VcsProvider,
     account: VcsAccount,
-  ): Promise<Reviewer | null> {
+  ): Promise<Adoptable | null> {
+    const { identities } = this.container.repositories
     for (const reviewer of directory) {
       if (!isSameHandle(reviewer.handles[provider], account.username)) continue
-      if (!(await this.isLinked(reviewer))) return reviewer
+      const linked = await identities.listForReviewer(reviewer.id)
+      if (linked.some((identity) => identity.provider === provider)) continue
+      return { reviewer, established: linked.length > 0 }
     }
     return null
   }
@@ -156,7 +184,7 @@ export class PeopleService {
   /** Whether this org admits the account, and as what. */
   private async admit(
     directory: readonly Reviewer[],
-    adopted: Reviewer | null,
+    adopted: Adoptable | null,
     gate: EnrolmentGate,
   ): Promise<EnrolmentDecision> {
     return decideEnrolment({
@@ -165,10 +193,12 @@ export class PeopleService {
       // decision — the founder, the adoption, the cap on `admin` — still holds.
       enrolment: gate === 'trusted' ? 'open' : await this.enrolment(),
       directorySize: directory.length,
-      adoptedRole: adopted?.role ?? null,
+      adoptedRole: adopted?.reviewer.role ?? null,
+      adoptedEstablished: adopted?.established ?? false,
       // Only asked where it can change the answer, because it costs a read per
       // admin row.
-      hasLinkedAdmin: adopted?.role === 'admin' ? await this.hasLinkedAdmin(directory) : false,
+      hasLinkedAdmin:
+        adopted?.reviewer.role === 'admin' ? await this.hasLinkedAdmin(directory) : false,
     })
   }
 

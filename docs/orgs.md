@@ -205,14 +205,31 @@ admin who can now see WHICH account took it promotes them. Without that, a typo,
 released-and-re-registered login, or simply the wrong Bob inherits the role
 permanently, because the `(provider, subject)` link is then the wrong subject.
 
-Adoption also skips any row an account has already proved itself against: without
-that, whoever holds the GitHub login `bob` takes the row of the Bob who signed in
-through GitLab a year ago, along with his workspace, his commitments and his role.
+Adoption also skips a row an account has already proved itself against, **on the
+host the sign-in is arriving from**: without that, whoever holds the GitHub login
+`bob` takes the row of the Bob whose GitHub account is linked to it, along with
+his workspace, his commitments and his role.
+
+Per host, because that is the size of the claim. `handles` is a map with a slot
+per host, an admin registers each slot separately, and a row's GitLab slot says
+nothing about whoever proved themselves against its GitHub one. The wider rule
+would also close the only door there is: adoption is the one thing that ever links
+a second account — the refresh on a returning sign-in re-records the handle of a
+host already linked and nothing else — so a person who signed in with GitHub could
+never add their GitLab account. Under `invite` they would be refused for good;
+under `open` they would get a SECOND directory row, which is the fork adoption
+exists to prevent.
+
+Adopting a row that is already linked elsewhere is somebody adding their own
+second account rather than a stranger taking an unclaimed registration, so the
+`admin` cap does not apply to it — capping there would take an org's administrator
+away for connecting a GitLab account.
 
 The whole decision is one pure function, `decideEnrolment` in
-`@sainte-beuve/reviewers`, over four facts: the org's enrolment, the size of the
-directory, the role on the row the handle matched, and whether any admin has
-signed in. `PeopleService` reads those facts and writes the answer down.
+`@sainte-beuve/reviewers`, over five facts: the org's enrolment, the size of the
+directory, the role on the row the handle matched, whether that row is one
+somebody already holds on another host, and whether any admin has signed in.
+`PeopleService` reads those facts and writes the answer down.
 
 ## Pausing somebody signs them out
 
