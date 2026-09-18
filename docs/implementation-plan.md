@@ -156,12 +156,12 @@ provider)` from that host's own credential. Above the adapter there is no
 
 ## What is a placeholder, and why it is still here
 
-| Placeholder                             | Why it exists now                                                                                                                                                                  |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                            |
-| One announcement channel per deployment | `SLACK_CHANNEL_ID` is deployment wiring, so a second org that connects its own Slack app announces into the deployment's channel. The bot token it posts with is already its own.  |
-| A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                             |
-| No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason. |
+| Placeholder                             | Why it exists now                                                                                                                                                                                                                                              |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                                                        |
+| No announcement channel per org         | `SLACK_CHANNEL_ID` names a channel in the deployment's own workspace, so it is the default org's and is not lent across the boundary. A named org posts and nudges over its own bot token and has nowhere to announce until it can store a channel of its own. |
+| A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                                                         |
+| No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                                             |
 
 ## Slices, in order
 
@@ -673,28 +673,43 @@ command acted on the default org. What this slice decided:
   so connecting a workspace is not a redeploy. `/health` and the connections read
   resolve it instead of reading the environment, because a flag read off the
   process reports the deployment as it was configured rather than as it is.
-- **The deployment's own secret is NOT lent to a named org**, and that
-  restriction is the whole security property. `SLACK_SIGNING_SECRET` belongs to
-  the deployment's Slack app; if a named org fell back to it, anybody who could
-  sign for that app could act on every tenancy by writing a slug in a URL — which
-  is exactly the cost placing by URL would otherwise have. A named org with
-  nothing stored is refused, naming the credential to store. It survives as the
-  DEFAULT org's fallback, which is what keeps every deployment that predates this
-  working with no change in Slack: such a deployment is entirely inside the
-  default org, so the deployment's secret is its org's secret.
-- **One slug rule, not two.** `OrgService.bySlug` decides what a slug in an
-  unauthenticated path means — including that `default` answers whether or not
-  its row exists — and both the sign-in and the intake ask it. Two copies of that
-  rule is how they come to disagree about which board somebody landed on.
+- **The deployment's own Slack app is NOT lent to a named org — none of its
+  three parts.** `SLACK_SIGNING_SECRET`, `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID`
+  describe one app in one workspace, so all three are the default org's and one
+  predicate in `integrations/resolve.ts` decides them together. The secret is the
+  loudest: anybody who could sign for that app could act on every tenancy by
+  writing a slug in a URL, which is exactly the cost placing by URL would
+  otherwise have. The other two leak the other way — a named org's review titles,
+  URLs and reviewer names posted by the deployment's bot into the deployment's
+  channel. A named org connects its own Slack app or has no Slack at all. All
+  three survive as the DEFAULT org's, which is what keeps every deployment that
+  predates this working with no change in Slack: such a deployment is entirely
+  inside the default org.
+- **One slug rule, not two — and one refusal, not three.**
+  `OrgService.bySlug` decides what a slug in an unauthenticated path means,
+  including that `default` answers whether or not its row exists, and both the
+  sign-in and the intake ask it. Two copies of that rule is how they come to
+  disagree about which board somebody landed on. Where they part is what a
+  REFUSAL may say: the sign-in 404s a slug nobody typed correctly, because a
+  capability check runs before it and a person is owed the fact; the intake
+  collapses an unknown slug, an org with no secret and a signature that does not
+  match into one 403, because an anonymous POST that could tell them apart would
+  read the tenancy list out one guess at a time.
+- **The cheap half of verification runs first.** Both headers present and the
+  timestamp inside the replay window is a string compare; placing the delivery is
+  a store read and opening the org's secret is another plus an HKDF derivation
+  and an AES-GCM open. On a route that is unauthenticated by construction, the
+  order is what stops an unsigned POST buying a stranger two queries and a
+  decrypt.
 
 ### Slice 11: what is next
 
 The placeholders above are the list. The loudest is now that a stored credential
 is never re-checked, so one revoked after it was entered reads as connected until
-a call fails; a probe would fix it. Beside it, the announcement channel is still
-one per deployment, so a second org that connected its own Slack app posts its
-announcements into the deployment's channel; and cat-factory is still one service
-id for every repository.
+a call fails; a probe would fix it. Beside it, a named org has no announcement
+channel it can store, so a second org that connected its own Slack app nudges by
+DM and announces nowhere; and cat-factory is still one service id for every
+repository.
 
 ## Decisions worth recording
 

@@ -3,7 +3,12 @@ import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import { type ChatGateway, getErrorMessage } from '@sainte-beuve/kernel'
 import { mapWithConcurrency } from '../concurrency.js'
 import { type AppContainer, withOrg } from '../container.js'
-import { type CredentialSource, type Resolved, resolveChat } from '../integrations/resolve.js'
+import {
+  announcementChannel,
+  type CredentialSource,
+  type Resolved,
+  resolveChat,
+} from '../integrations/resolve.js'
 import { SessionService } from '../modules/auth/SessionService.js'
 import { AiReviewService } from '../modules/reviews/AiReviewService.js'
 import { scheduleNextReminder } from './schedule.js'
@@ -337,7 +342,7 @@ async function deliver(
 function unresolvedTargetReason(reminder: Reminder): string {
   return reminder.channel === 'slack_dm'
     ? 'the assigned reviewer has no Slack user id'
-    : 'no announcement channel is configured (SLACK_CHANNEL_ID)'
+    : 'this org has no announcement channel (SLACK_CHANNEL_ID names the default org\u2019s)'
 }
 
 async function fail(
@@ -371,7 +376,7 @@ async function markSent(
 
 /** A DM goes to the reviewer's Slack id; anything else goes to the announcement channel. */
 async function resolveTarget(container: AppContainer, reminder: Reminder): Promise<string | null> {
-  if (reminder.channel !== 'slack_dm') return container.slack.announcementChannelId
+  if (reminder.channel !== 'slack_dm') return announcementChannel(container)
   if (reminder.reviewerId === null) return null
   const reviewer = await container.repositories.reviewers.getById(reminder.reviewerId)
   return reviewer?.slackUserId ?? null

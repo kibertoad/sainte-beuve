@@ -1,6 +1,11 @@
-import { ACTIVE_REVIEW_STATUSES, DEFAULT_ORG_ID, type ReviewRequest } from '@sainte-beuve/contracts'
-import { ForbiddenError, formatPullRequest, getErrorMessage } from '@sainte-beuve/kernel'
-import type { SlackIntent, SlackRequest } from '@sainte-beuve/integrations'
+import { ACTIVE_REVIEW_STATUSES, type ReviewRequest } from '@sainte-beuve/contracts'
+import {
+  ForbiddenError,
+  formatPullRequest,
+  getErrorMessage,
+  UnavailableError,
+} from '@sainte-beuve/kernel'
+import type { SlackIntent, SlackRequest, SlackSignatureHeaders } from '@sainte-beuve/integrations'
 import {
   parseSlackRequest,
   postSlackResponse,
@@ -8,7 +13,6 @@ import {
   verifySlackSignature,
 } from '@sainte-beuve/integrations'
 import type { AppContainer } from '../../container.js'
-import { requireCapability } from '../../http/errors.js'
 import { resolveSlackSigningSecret } from '../../integrations/resolve.js'
 import { snoozeReview } from '../../reminders/snooze.js'
 import { AiReviewService } from '../reviews/AiReviewService.js'
@@ -57,16 +61,36 @@ const NO_SECRET =
   'from the Slack app configuration, or store it on the Configuration screen'
 
 /**
- * The same refusal for a NAMED org, which the deployment's own secret
- * deliberately does not answer for: one Slack app serves one tenancy, so an org
- * that has not connected its own has nothing here to verify against. See
- * `resolveSlackSigningSecret`.
+ * The ONE refusal a delivery gets when it has not been verified, whatever
+ * stopped it.
+ *
+ * Shared with `WebhookController` rather than written twice, because its value
+ * is entirely in the two being identical: on the URL that names an org, a
+ * signature that does not match, an org with no secret stored and a slug nobody
+ * has made must be one answer, or an anonymous POST can read this deployment's
+ * tenancy list off the status code. Whichever it was is logged where an operator
+ * can see it and a stranger cannot.
  */
-function noSecretForOrg(slug: string): string {
-  return (
-    `The org "${slug}" has not connected a Slack app: store its signing secret on the ` +
-    'Configuration screen, under Slack, and its commands can be trusted'
-  )
+export function unverifiedSlackRequest(): ForbiddenError {
+  return new ForbiddenError('The Slack request signature did not match')
+}
+
+/** Which URL a delivery arrived on, and therefore what a refusal is allowed to say. */
+export interface SlackIntake {
+  /** The org it was placed in. For the log, and for a refusal that may name it. */
+  orgSlug: string
+  /**
+   * Whether the CALLER named that org, which is the whole of what decides
+   * whether "no signing secret here" may be said out loud.
+   *
+   * On the bare path nobody named anything: the org is the default one by
+   * construction, its secret is a deployment variable, and the operator reading
+   * the 503 is the only person who can act on it. On the org path the same
+   * sentence is an oracle, so it becomes {@link unverifiedSlackRequest} and the
+   * org's own Configuration screen — which is authenticated — is where that org
+   * finds out it has nothing stored.
+   */
+  namedInUrl: boolean
 }
 
 const HELP =
@@ -85,13 +109,14 @@ const LIST_LIMIT = 10
 
 export class SlackWebhookService {
   /**
-   * The container is ALREADY BOUND to the org this delivery named, and the slug
-   * rides along only so a refusal can say which org has nothing stored. Both
-   * come from `WebhookController`, which is the one place the path is read.
+   * The container is ALREADY BOUND to the org this delivery named, and the
+   * intake says how it got there. Both come from `WebhookController`, which is
+   * the one place the path is read — and which has already established that the
+   * request carries a signature worth spending a credential on.
    */
   constructor(
     private readonly container: AppContainer,
-    private readonly orgSlug: string,
+    private readonly intake: SlackIntake,
   ) {}
 
   /** This org's secret, or the deployment's when this org is the default one. */
@@ -100,30 +125,33 @@ export class SlackWebhookService {
   }
 
   /**
-   * Which refusal to give, which is a different sentence per org because the
-   * remedy is: the default org's is a deployment variable an operator can set,
-   * and a named org's is a credential somebody stores on its own Configuration
-   * screen.
+   * Nothing to verify against. Which sentence that is, is the intake's decision
+   * rather than this one's: see {@link SlackIntake.namedInUrl}.
    */
-  private noSecretMessage(): string {
-    return this.container.orgId === DEFAULT_ORG_ID ? NO_SECRET : noSecretForOrg(this.orgSlug)
+  private cannotVerify(): Error {
+    if (!this.intake.namedInUrl) return new UnavailableError(NO_SECRET)
+    this.container.logger.warn(
+      { org: this.intake.orgSlug },
+      'a Slack delivery named an org with no signing secret stored, and was refused',
+    )
+    return unverifiedSlackRequest()
   }
 
   async handle(input: {
     rawBody: string
-    timestamp: string | null
-    signature: string | null
+    signed: SlackSignatureHeaders
   }): Promise<SlackReply | null> {
-    const secret = requireCapability(await this.signingSecret(), this.noSecretMessage())
+    const secret = await this.signingSecret()
+    if (secret === null) throw this.cannotVerify()
     const verified = await verifySlackSignature(
       secret,
       input.rawBody,
-      { timestamp: input.timestamp, signature: input.signature },
+      input.signed,
       // The container's clock, not `Date.now()`: the replay window is behaviour,
       // so a suite has to be able to drive it rather than sign against real time.
       Math.floor(this.container.clock.now() / 1000),
     )
-    if (!verified) throw new ForbiddenError('The Slack request signature did not match')
+    if (!verified) throw unverifiedSlackRequest()
 
     const request = parseSlackRequest(new URLSearchParams(input.rawBody))
     // Slack posts other things to the same URL (its own URL verification, event

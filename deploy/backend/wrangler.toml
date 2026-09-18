@@ -85,7 +85,9 @@ APP_BASE_URL = "https://sainte-beuve.example.com"
 # local cat-factory (http://localhost:8787) or at the org's centralized one.
 CAT_FACTORY_BASE_URL = "https://cat-factory.example.com"
 CAT_FACTORY_SERVICE_ID = "REPLACE_WITH_CAT_FACTORY_SERVICE_ID"
-# Slack channel new reviews are announced in.
+# Slack channel new reviews are announced in, in this deployment's own workspace
+# — so it is the DEFAULT org's, like the two Slack secrets below. A second org
+# has no announcement channel of its own yet.
 SLACK_CHANNEL_ID = "REPLACE_WITH_SLACK_CHANNEL_ID"
 # The GitHub App, by the two names it has. GITHUB_APP_ID signs the JWT and
 # GITHUB_APP_SLUG addresses the public install page; both are needed before the
@@ -130,11 +132,12 @@ GITHUB_LABEL_SKILL_PREFIX = "skill:"
 #   GITLAB_TOKEN               a personal or group access token, for GitLab projects
 #   GITLAB_OAUTH_CLIENT_ID     the OAuth application behind "Sign in with GitLab"
 #   GITLAB_OAUTH_CLIENT_SECRET
-#   SLACK_BOT_TOKEN            xoxb-… for the Slack bot
-#   SLACK_SIGNING_SECRET       the secret Slack signs its requests with, for the
-#                              DEFAULT org (a second org stores its own on the
-#                              Configuration screen and is posted to at
-#                              /webhooks/slack/<its-slug>)
+#   SLACK_BOT_TOKEN            xoxb-… for the Slack bot, for the DEFAULT org
+#   SLACK_SIGNING_SECRET       the secret Slack signs its requests with, also for
+#                              the DEFAULT org. Both describe this deployment's
+#                              own Slack app and neither is lent to a named org:
+#                              a second org stores its own on the Configuration
+#                              screen and is posted to at /webhooks/slack/<slug>
 #   AUTH_API_KEY               this deployment's own API key, for CI and for the
 #                              first call into a `required` deployment that has
 #                              no sessions yet (`Authorization: Bearer <key>`)

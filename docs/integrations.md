@@ -172,9 +172,19 @@ slash command and the buttons POST to the same URL.
 The slug in that URL is what places a command on one board rather than another's,
 and the org's own secret is what makes naming it safe: a stranger can write any
 slug and cannot produce a signature that verifies against the secret that slug
-selects. The deployment's own `SLACK_SIGNING_SECRET` is deliberately not lent to a
-named org — it belongs to the deployment's Slack app, and lending it would make
-anybody who can sign for that app able to act on every tenancy.
+selects. Every refusal before a verified signature is the same 403, so a slug
+nobody has made and a signature that does not match are one answer rather than a
+way to enumerate this deployment's orgs.
+
+**The deployment's own Slack app is the default org's, all three parts of it.**
+`SLACK_SIGNING_SECRET`, `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID` describe one
+Slack app in one workspace, and none of them is lent to a named org: lending the
+secret would let anybody who can sign for that app act on every tenancy, and
+lending the other two would post one org's review titles, URLs and reviewer names
+into another's channel. A named org connects its own Slack app — a bot token and
+a signing secret on its own Configuration screen — or has no Slack at all. It has
+no announcement channel of its own yet, so its reminder DMs go out and its
+announcements do not.
 
 The Configuration screen shows the URL for the org you are signed in to, with this
 deployment's base URL filled in, so the value to paste into Slack is never
@@ -286,7 +296,9 @@ the failure everybody meets first.
    screen, beside the bot token. The default org may set `SLACK_SIGNING_SECRET`
    on the deployment instead; a second org has to store it, because the
    deployment's own secret is not lent across the boundary.
-6. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in.
+6. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
+   **default org's** channel, like the two credentials above it; a second org has
+   no announcement channel yet.
 
 ### Locally
 

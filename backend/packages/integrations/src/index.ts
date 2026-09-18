@@ -67,4 +67,8 @@ export {
 } from './slack/message.js'
 export { postSlackResponse, type SlackResponseMessage } from './slack/respond.js'
 export { SlackChatGateway, type SlackGatewayOptions } from './slack/SlackChatGateway.js'
-export { verifySlackSignature } from './slack/signature.js'
+export {
+  readSlackSignatureHeaders,
+  type SlackSignatureHeaders,
+  verifySlackSignature,
+} from './slack/signature.js'

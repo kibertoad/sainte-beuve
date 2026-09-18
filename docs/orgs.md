@@ -312,10 +312,44 @@ fourth read across the boundary and a workspace-to-org table, and it would still
 have to be TRUSTED before a signature had been checked against anything.
 `TenancyDirectory` stays at three methods.
 
-What this does not close is the announcement channel: `SLACK_CHANNEL_ID` is still
-one channel per deployment, so a second org that connects its own Slack app posts
-its announcements into the deployment's channel. The bot token it posts WITH is
-already the org's own.
+The same rule covers the rest of the deployment's Slack app, and it has to: the
+bot token and the announcement channel `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID`
+describe belong to that same app, which is the default org's. Lending the secret
+would be an escalation; lending those two is a LEAK in the quieter direction — a
+named org's review titles, URLs and reviewer names posted by the deployment's bot
+into the deployment's channel, where the default org reads them. So a named org
+that has connected nothing has no Slack at all, its Configuration screen says
+"Not configured" rather than "Delivering", and one predicate in
+`integrations/resolve.ts` decides all three together.
+
+What this does not close is that a named org has nowhere to announce. It posts
+and nudges over its own bot token once it stores one, but there is no per-org
+announcement channel yet, so its announcements stay off while its reminder DMs go
+out. Recorded as a placeholder in the plan; the Configuration screen says which
+half is off.
+
+### What a refusal may say
+
+Every refusal on `POST /webhooks/slack/<slug>` before a verified signature is the
+SAME refusal — one 403, one body — whether the slug names nothing, names an org
+with no secret stored, or names one whose secret does not match. Anything else is
+an oracle: an anonymous POST costs nothing, so a 404 for one slug and a 503 for
+another reads this deployment's tenancy list out one guess at a time. Which of
+the three it was goes to the log, and the org's own Configuration screen — which
+is authenticated — is where it finds out it has stored nothing.
+
+The bare `POST /webhooks/slack` keeps its 503 naming `SLACK_SIGNING_SECRET`,
+because nobody named a tenancy there: the org is the default one by construction,
+and the operator reading that message is the only person who can act on it.
+
+This is where the intake and the sign-in stop sharing a rule. `signInUrl` runs
+`requireCapability(signIn(provider))` BEFORE it resolves the slug, so a
+deployment with no OAuth client answers identically for every slug and one with
+an OAuth client owes the person who typed a name the fact that they typed it
+wrong. The intake owes an anonymous POST nothing, so `OrgService.bySlugOrNull`
+answers it as an absence instead. What is not equalised is timing — an unknown
+slug is one store read and a verified one is two plus a decrypt — and closing
+that would mean opening a credential for an org that does not exist.
 
 ## What this does not do yet
 

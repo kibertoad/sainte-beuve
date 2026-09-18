@@ -1,5 +1,5 @@
 import type { Reminder, Reviewer, ReviewRequest } from '@sainte-beuve/contracts'
-import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID, NO_VCS_HANDLES } from '@sainte-beuve/contracts'
 import type { ChatGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { AiReviewService } from '../src/modules/reviews/AiReviewService.js'
@@ -18,6 +18,7 @@ import {
   patch,
   post,
   PR,
+  stubGateways,
 } from './helpers.js'
 
 const HOUR = 60 * 60 * 1000
@@ -515,9 +516,29 @@ describe('a parked AI review', () => {
 describe('a tick across tenancies', () => {
   const OTHER_ORG = 'org-second'
 
-  /** One org with a nudge due and one AI review in flight. */
+  /**
+   * One org with a nudge due and one AI review in flight.
+   *
+   * The nudge is a DM rather than a channel post, because the announcement
+   * channel is the deployment's own and therefore the default org's: a second
+   * org has none until it names one, so a `slack_channel` rung here would fail
+   * for reasons that have nothing to do with the order this case is about.
+   */
   async function seed(harness: TestHarness, orgId: string, n: number): Promise<void> {
     const { repositories, clock } = withOrg(harness.container, orgId)
+    const reviewer = await repositories.reviewers.create({
+      id: `reviewer-${orgId}`,
+      displayName: 'Peer',
+      handles: NO_VCS_HANDLES,
+      slackUserId: `U-${orgId}`,
+      team: null,
+      skills: [],
+      availability: 'available',
+      role: 'member',
+      weight: 1,
+      outstandingReviews: 0,
+      createdAt: clock.now(),
+    })
     const review = await repositories.reviews.create({
       id: `review-${orgId}`,
       pullRequest: { ...PR, number: n, url: `https://example.com/pull/${n}` },
@@ -536,8 +557,8 @@ describe('a tick across tenancies', () => {
       id: `reminder-${orgId}`,
       reviewId: review.id,
       kind: 'unassigned',
-      channel: 'slack_channel',
-      reviewerId: null,
+      channel: 'slack_dm',
+      reviewerId: reviewer.id,
       dueAt: clock.now(),
       snoozedUntil: null,
       claimedAt: null,
@@ -563,22 +584,40 @@ describe('a tick across tenancies', () => {
     })
   }
 
+  /** One org's own Slack bot token, sealed under the deployment's cipher. */
+  async function storeBotToken(harness: TestHarness, orgId: string): Promise<void> {
+    const cipher = harness.container.secrets
+    if (cipher === null) throw new Error('this case needs the harness cipher')
+    await harness.container.stores.forOrg(orgId).integrationTokens.put({
+      integrationId: 'slack-bot-token',
+      sealed: await cipher.encrypt('xoxb-second', 'slack-bot-token'),
+      hint: 'cond',
+      subject: null,
+      updatedAt: harness.clock.now(),
+    })
+  }
+
   it('sends every org its nudges before any org polls cat-factory', async () => {
     const order: string[] = []
     const catFactory = stubAiReview()
     catFactory.onPoll = async () => {
       order.push('poll')
     }
-    const harness = buildHarness({
-      aiReview: catFactory,
-      chat: {
-        announceReview: async () => ({ messageId: 'm-1' }),
-        sendReminder: async () => {
-          order.push('nudge')
-        },
+    const nudging: ChatGateway = {
+      announceReview: async () => ({ messageId: 'm-1' }),
+      sendReminder: async () => {
+        order.push('nudge')
       },
-      slack: { signingSecret: null, announcementChannelId: 'C-reviews' },
-    })
+    }
+    const harness = buildHarness(
+      {
+        aiReview: catFactory,
+        chat: nudging,
+        gateways: stubGateways({ chat: () => nudging }),
+        slack: { signingSecret: null, announcementChannelId: 'C-reviews' },
+      },
+      { encryptionKey: btoa('0123456789abcdef0123456789abcdef') },
+    )
     await harness.container.stores.orgs.create({
       id: OTHER_ORG,
       slug: 'second',
@@ -586,6 +625,11 @@ describe('a tick across tenancies', () => {
       enrolment: 'invite',
       createdAt: harness.clock.now(),
     })
+    // The second org posts over its OWN bot token: the deployment's belongs to
+    // its own Slack app, which is the default org's, and is not lent across the
+    // boundary. Without this its rung would fail rather than be sent late, and
+    // the order this case is about could not be read off the result.
+    await storeBotToken(harness, OTHER_ORG)
     await seed(harness, DEFAULT_ORG_ID, 11)
     await seed(harness, OTHER_ORG, 12)
 

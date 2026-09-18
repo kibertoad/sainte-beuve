@@ -72,7 +72,7 @@ const badge = computed(() =>
       color="info"
       variant="subtle"
       title="Reminders go out, announcements do not"
-      description="A new review is announced in one channel, and this deployment has not named one. Set SLACK_CHANNEL_ID to turn announcements on."
+      description="A new review is announced in one channel, and this org has no channel. SLACK_CHANNEL_ID names the default org's, so an org with its own Slack app announces nowhere until it has one of its own — its reminder DMs still go out."
     />
 
     <CredentialField
@@ -107,7 +107,7 @@ const badge = computed(() =>
         color="warning"
         variant="subtle"
         title="The command and the buttons are refused"
-        description="A slash command and a button press can only be trusted once the signing secret from the Slack app configuration is stored above — or, for the default org alone, set as SLACK_SIGNING_SECRET on the deployment. Both are answered 503 until then, whether or not a bot token is stored."
+        description="A slash command and a button press can only be trusted once the signing secret from the Slack app configuration is stored above — or, for the default org alone, set as SLACK_SIGNING_SECRET on the deployment. Both are refused until then, whether or not a bot token is stored."
       />
       <dl
         class="grid grid-cols-1 gap-x-4 gap-y-1 text-muted sm:grid-cols-[10rem_1fr] [&_code]:break-all"

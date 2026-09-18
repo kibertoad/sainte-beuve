@@ -1,6 +1,6 @@
 import type { ReviewRequest } from '@sainte-beuve/contracts'
 import type { AppContainer } from '../../container.js'
-import { resolveChat } from '../../integrations/resolve.js'
+import { announcementChannel, resolveChat } from '../../integrations/resolve.js'
 
 /**
  * Tell the team a review is waiting.
@@ -19,7 +19,9 @@ export async function announceReview(
   container: AppContainer,
   review: ReviewRequest,
 ): Promise<void> {
-  const channelId = container.slack.announcementChannelId
+  // This ORG's channel, which a named org does not have one of: `SLACK_CHANNEL_ID`
+  // is a channel in the deployment's own workspace. See `announcementChannel`.
+  const channelId = announcementChannel(container)
   const chat = await resolveChat(container)
   if (chat === null || channelId === null) {
     container.logger.debug(

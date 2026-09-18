@@ -64,15 +64,30 @@ export class OrgService {
    * the org's own signing secret on the delivery.
    */
   async bySlug(slug: string): Promise<Org> {
-    // Normalised the way `orgSlugSchema` normalises what a caller types, because
-    // this arrives from a query string and from a URL somebody pasted into a
-    // Slack app rather than through a contract: a slug stored lowercase and
-    // written `Acme` is one org to whoever typed it and no org to the store.
-    const wanted = slug.trim().toLowerCase()
-    if (wanted === DEFAULT_ORG_SLUG) return this.defaultOrgRow()
-    const held = await this.container.stores.orgs.getBySlug(wanted)
-    if (held === null) throw new NotFoundError(`No org "${wanted}" on this deployment.`)
+    const held = await this.bySlugOrNull(slug)
+    if (held === null) throw new NotFoundError(`No org "${normalised(slug)}" on this deployment.`)
     return held
+  }
+
+  /**
+   * The same rule, answered as an ABSENCE rather than a refusal, for a caller
+   * that cannot afford to let the two outcomes look different.
+   *
+   * The Slack intake is that caller. A 404 there would tell an anonymous POST
+   * which slugs this deployment holds, one guess at a time, and the signature
+   * check below it is no substitute: it happens after the slug has already been
+   * looked up. So the intake collapses "no such org", "that org has no secret"
+   * and "that signature is wrong" into one refusal, and this is what lets it.
+   *
+   * The sign-in can afford the 404 and keeps it: somebody who typed an org name
+   * has to be told they typed it wrong, and `requireCapability(signIn(provider))`
+   * runs before this does, so a deployment with no OAuth client answers the same
+   * way for every slug.
+   */
+  async bySlugOrNull(slug: string): Promise<Org | null> {
+    const wanted = normalised(slug)
+    if (wanted === DEFAULT_ORG_SLUG) return this.defaultOrgRow()
+    return this.container.stores.orgs.getBySlug(wanted)
   }
 
   /** The default org's row, or the value it is synthesised as. See {@link current}. */
@@ -164,6 +179,18 @@ export class OrgService {
       createdAt: clock.now(),
     })
   }
+}
+
+/**
+ * What a slug a caller TYPED means to the store.
+ *
+ * Normalised the way `orgSlugSchema` normalises it, because a slug reaches the
+ * two unauthenticated paths from a query string and from a URL somebody pasted
+ * into a Slack app rather than through a contract: one stored lowercase and
+ * written `Acme` is one org to whoever typed it and no org to the store.
+ */
+function normalised(slug: string): string {
+  return slug.trim().toLowerCase()
 }
 
 function slugTaken(slug: string): ConflictError {

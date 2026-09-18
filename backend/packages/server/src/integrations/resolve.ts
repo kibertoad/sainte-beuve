@@ -139,7 +139,36 @@ async function gatewayFromStored(
   return container.gateways?.vcsFromToken(provider, token) ?? null
 }
 
-/** The Slack bot token in force: a stored one, else the deployment's own. */
+/**
+ * Whether the DEPLOYMENT'S OWN Slack app is this container's to use.
+ *
+ * One Slack app serves one tenancy, and the app `SLACK_BOT_TOKEN`,
+ * `SLACK_SIGNING_SECRET` and `SLACK_CHANNEL_ID` describe is the deployment's —
+ * which is to say the default org's. Every one of the three is therefore
+ * withheld from a named org, and the rule lives here once rather than three
+ * times, because the three of them only make sense together: a named org that
+ * could borrow the bot token but not the secret would still announce its
+ * reviews through a workspace it does not own.
+ *
+ * What lending any of them would cost is a tenancy boundary. The secret is the
+ * loudest — anybody who could sign for the deployment's Slack app could act on
+ * every org by writing a slug in a URL — and the other two leak in the quieter
+ * direction: a named org's review titles, URLs and reviewer names posted by the
+ * deployment's bot, into the deployment's channel, where the default org reads
+ * them. A named org connects its own Slack app or has no Slack at all.
+ *
+ * It is also what keeps every deployment that predates the boundary working
+ * unchanged: such a deployment is entirely inside the default org, so the
+ * deployment's Slack app is its org's Slack app.
+ */
+function deploymentSlackIsOurs(container: AppContainer): boolean {
+  return container.orgId === DEFAULT_ORG_ID
+}
+
+/**
+ * The Slack bot token in force: this org's stored one, else the deployment's own
+ * where that is this org's to use. See {@link deploymentSlackIsOurs}.
+ */
 export async function resolveChat(
   container: AppContainer,
 ): Promise<Resolved<ChatGateway, CredentialSource> | null> {
@@ -147,7 +176,23 @@ export async function resolveChat(
   if (stored !== null && container.gateways !== null) {
     return { gateway: container.gateways.chat(stored), source: 'stored' }
   }
+  if (!deploymentSlackIsOurs(container)) return null
   return container.chat === null ? null : { gateway: container.chat, source: 'environment' }
+}
+
+/**
+ * The channel this org announces new reviews in, which a named org does not have
+ * one of yet.
+ *
+ * `SLACK_CHANNEL_ID` is a channel in the deployment's own workspace, so it is
+ * the default org's channel and nobody else's — see {@link deploymentSlackIsOurs}.
+ * A named org with its own Slack app therefore announces nowhere until it has a
+ * channel of its own, which is a placeholder in the plan rather than a silence
+ * that can be mistaken for one: the DMs its reminders send still go out over its
+ * own bot, and the Configuration screen says which half is off.
+ */
+export function announcementChannel(container: AppContainer): string | null {
+  return deploymentSlackIsOurs(container) ? container.slack.announcementChannelId : null
 }
 
 /** A resolved secret and where it came from. Beside {@link Resolved}, for a credential nothing is called with. */
@@ -165,23 +210,19 @@ export interface ResolvedSecret {
  * the secret it signs with is what proves a delivery belongs there.
  *
  * The deployment's `SLACK_SIGNING_SECRET` is the fallback FOR THE DEFAULT ORG
- * ALONE, and the restriction is the security property rather than tidiness.
- * That secret belongs to the deployment's own Slack app; letting a named org
- * fall back to it would mean anybody who can post a signed command to this
- * deployment could act on any org's board by naming its slug in the URL, which
- * is exactly what placing the delivery by URL would otherwise cost. A named org
- * with nothing stored is refused, naming the credential to store.
- *
- * It is also what keeps every deployment that predates this working unchanged:
- * such a deployment is entirely inside the default org, so the environment's
- * secret is its org's secret.
+ * ALONE, by the rule {@link deploymentSlackIsOurs} states for all three halves
+ * of the deployment's Slack app. Of the three this is the one where lending
+ * would be an escalation rather than a leak: anybody who can post a signed
+ * command to this deployment could act on any org's board by naming its slug in
+ * the URL, which is exactly what placing the delivery by URL would otherwise
+ * cost. A named org with nothing stored is refused.
  */
 export async function resolveSlackSigningSecret(
   container: AppContainer,
 ): Promise<ResolvedSecret | null> {
   const stored = await openCredential(container, 'slack-signing-secret')
   if (stored !== null) return { secret: stored, source: 'stored' }
-  if (container.orgId !== DEFAULT_ORG_ID) return null
+  if (!deploymentSlackIsOurs(container)) return null
   const fromEnvironment = container.slack.signingSecret
   return fromEnvironment === null ? null : { secret: fromEnvironment, source: 'environment' }
 }

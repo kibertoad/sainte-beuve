@@ -6,7 +6,6 @@ import type {
 } from '@sainte-beuve/contracts'
 import {
   signInCallbackPath,
-  slackWebhookPath,
   VCS_PROVIDERS,
   vcsDisplayName,
   vcsOauthCredentialKey,
@@ -17,9 +16,10 @@ import { type AppContainer, withOrg } from '../../container.js'
 import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
 import { mintNonce } from '../../crypto/tokens.js'
 import { requireCapability } from '../../http/errors.js'
-import { resolveChat, resolveSlackSigningSecret, resolveVcs } from '../../integrations/resolve.js'
+import { resolveVcs } from '../../integrations/resolve.js'
 import { OrgService } from '../orgs/OrgService.js'
 import { notOurState, startedByThisBrowser } from './roundTrip.js'
+import { slackConnection } from './slackConnection.js'
 import { establishSession, type IssuedSession, storeCredential } from './signIn.js'
 
 /**
@@ -107,24 +107,13 @@ export class ConnectionsService {
   constructor(private readonly container: AppContainer) {}
 
   async read(): Promise<Connections> {
-    const [vcs, chat, signing, org] = await Promise.all([
+    const [vcs, slack] = await Promise.all([
       Promise.all(VCS_PROVIDERS.map((provider) => this.connection(provider))),
-      resolveChat(this.container),
-      // RESOLVED rather than read off the wiring: an org connects its own Slack
-      // app on the screen this answers, and the environment's secret is not a
-      // secret a second org is allowed to use.
-      resolveSlackSigningSecret(this.container),
-      new OrgService(this.container).current(),
+      // Its own module because every field on it is RESOLVED for this org rather
+      // than read off the deployment's wiring. See `slackConnection`.
+      slackConnection(this.container),
     ])
-    return {
-      vcs,
-      slack: {
-        ready: chat !== null,
-        announcementChannelId: this.container.slack.announcementChannelId,
-        interactivityReady: signing !== null,
-        requestPath: slackWebhookPath(org.slug),
-      },
-    }
+    return { vcs, slack }
   }
 
   /**
