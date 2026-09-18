@@ -10,6 +10,7 @@ import type {
   AiReviewRunRepository,
   EpochMs,
   ReminderRepository,
+  ReviewListOrder,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
 import { and, asc, desc, eq, inArray, lt, lte, sql } from 'drizzle-orm'
@@ -34,12 +35,20 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
     private readonly orgId: string,
   ) {}
 
-  async list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]> {
+  async list(filter?: {
+    status?: ReviewStatus[]
+    limit?: number
+    order?: ReviewListOrder
+  }): Promise<ReviewRequest[]> {
     const wanted = filter?.status
     // A filter naming no status matches nothing. `inArray` with an empty list
     // renders as a false constant, which is right, but the read is free to
     // skip.
     if (wanted !== undefined && wanted.length === 0) return []
+    // Both terms move together, so the read stays total either way: an id
+    // tie-break running against the timestamp would reorder rows sharing a
+    // millisecond between two reads.
+    const direction = filter?.order === 'oldest' ? asc : desc
     const query = this.db
       .select()
       .from(reviewRequests)
@@ -51,7 +60,7 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
       )
       // Ordered and capped in SQL, so `review_requests_created_idx` answers the
       // board with a top-N scan instead of sorting the org's whole history.
-      .orderBy(desc(reviewRequests.createdAt), desc(reviewRequests.id))
+      .orderBy(direction(reviewRequests.createdAt), direction(reviewRequests.id))
     const rows = await (filter?.limit === undefined ? query : query.limit(filter.limit))
     return rows.map((row) => row.data)
   }

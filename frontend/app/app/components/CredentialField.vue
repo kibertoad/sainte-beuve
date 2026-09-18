@@ -148,10 +148,15 @@ defineExpose({ clearDraft })
         >
           Save
         </UButton>
+        <!--
+          `error`, like Remove and Revoke. It destroys a credential nothing on
+          this screen can read back, so it reads as what it is rather than as the
+          neutral twin of Save it sits beside. The page asks before it runs.
+        -->
         <UButton
           v-if="status.state !== 'absent'"
           variant="ghost"
-          color="neutral"
+          color="error"
           class="grow justify-center sm:grow-0"
           :loading="busy"
           @click="emit('clear')"

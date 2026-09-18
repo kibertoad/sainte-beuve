@@ -21,27 +21,7 @@ import { ReviewService } from './ReviewService.js'
 export function reviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  /**
-   * The board, and two defaults that are the difference between a screen and a
-   * table dump.
-   *
-   * A caller that names no status gets the ACTIVE reviews: terminal ones are
-   * never archived, so the unfiltered read grew with everything the deployment
-   * had ever tracked and re-decoded a payload per row for rows nobody looks at.
-   * History is still readable — `?status=closed` asks for it — but somebody has
-   * to ask.
-   *
-   * The cap applies either way, asked for or not, because the point is that the
-   * answer stops growing with the table.
-   */
-  buildHonoRoute(app, listReviewsContract, async (c) => {
-    const { status, limit } = c.req.valid('query')
-    const reviews = await c.get('container').repositories.reviews.list({
-      status: status ?? [...ACTIVE_REVIEW_STATUSES],
-      limit: limit ?? REVIEW_PAGE_LIMIT,
-    })
-    return c.json({ reviews }, 200)
-  })
+  mountBoardRead(app)
 
   buildHonoRoute(app, createReviewContract, async (c) => {
     const service = new ReviewService(c.get('container'))
@@ -71,4 +51,33 @@ export function reviewController(): Hono<AppEnv> {
   })
 
   return app
+}
+
+/**
+ * The board read, and two defaults that are the difference between a screen and
+ * a table dump.
+ *
+ * A caller that names no status gets the ACTIVE reviews: terminal ones are never
+ * archived, so the unfiltered read grew with everything the deployment had ever
+ * tracked and re-decoded a payload per row for rows nobody looks at. History is
+ * still readable — `?status=closed` asks for it — but somebody has to ask.
+ *
+ * The cap applies either way, asked for or not, because the point is that the
+ * answer stops growing with the table.
+ *
+ * What comes back is the BOARD rather than the stored rows: the people on each
+ * review named, most urgent first. Both of those are `buildBoard` in
+ * `@sainte-beuve/reviewers`, so the order is a decision with a suite rather than
+ * whatever order the store happened to answer in.
+ */
+function mountBoardRead(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, listReviewsContract, async (c) => {
+    const { status, limit } = c.req.valid('query')
+    const service = new ReviewService(c.get('container'))
+    const reviews = await service.board({
+      status: status ?? [...ACTIVE_REVIEW_STATUSES],
+      limit: limit ?? REVIEW_PAGE_LIMIT,
+    })
+    return c.json({ reviews }, 200)
+  })
 }

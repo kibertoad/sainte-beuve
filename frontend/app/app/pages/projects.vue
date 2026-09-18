@@ -23,6 +23,7 @@ const { data, pending, error, refresh } = useAsyncData('projects', () => api.lis
 
 const projects = computed<Project[]>(() => data.value?.projects ?? [])
 const { busy, run } = useApiAction({ refresh })
+const { confirm } = useConfirm()
 
 const provider = ref<VcsProvider>('github')
 const owner = ref('')
@@ -68,8 +69,30 @@ async function saveSkills(project: Project) {
   if (saved) delete drafts.value[project.id]
 }
 
-function remove(project: Project) {
-  return run(() => api.removeProject(project.id), 'Could not remove the project', project.id)
+/**
+ * Unregister a project, once somebody has said so twice.
+ *
+ * It sat in the same row as Save, on one click, and took the skill vocabulary
+ * and the workspace sweep with it. There is no undo and nothing on the host
+ * changes, so the only place to catch a misclick is before it.
+ *
+ * Keyed `<id>:remove` rather than on the id, so pressing Remove does not put a
+ * spinner on Save as well.
+ */
+async function remove(project: Project) {
+  const confirmed = await confirm({
+    title: `Stop watching ${project.owner}/${project.repo}?`,
+    description:
+      'Its skills are forgotten, it leaves the workspace sweep, and attention requests can no ' +
+      'longer be raised on it. Nothing changes on the host, and you can register it again.',
+    confirmLabel: 'Remove the project',
+  })
+  if (!confirmed) return
+  await run(
+    () => api.removeProject(project.id),
+    'Could not remove the project',
+    `${project.id}:remove`,
+  )
 }
 </script>
 
@@ -182,7 +205,7 @@ function remove(project: Project) {
             color="error"
             icon="i-lucide-trash-2"
             class="self-start sm:shrink-0"
-            :loading="busy === project.id"
+            :loading="busy === `${project.id}:remove`"
             @click="remove(project)"
           >
             Remove

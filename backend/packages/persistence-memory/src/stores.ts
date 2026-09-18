@@ -14,6 +14,7 @@ import type {
   ReminderRepository,
   Repositories,
   ReviewerRepository,
+  ReviewListOrder,
   ReviewRequestRepository,
   StoredIntegrationToken,
 } from '@sainte-beuve/kernel'
@@ -97,14 +98,19 @@ export class InMemoryReviewerRepository implements ReviewerRepository {
 export class InMemoryReviewRequestRepository implements ReviewRequestRepository {
   private readonly rows = new Map<string, ReviewRequest>()
 
-  async list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]> {
+  async list(filter?: {
+    status?: ReviewStatus[]
+    limit?: number
+    order?: ReviewListOrder
+  }): Promise<ReviewRequest[]> {
     const wanted = filter?.status
+    const by = filter?.order === 'oldest' ? oldestFirst : newestFirst
     const matched = [...this.rows.values()]
       .filter((row) => wanted === undefined || wanted.includes(row.status))
-      .sort(newestFirst((row) => row.createdAt))
+      .sort(by((row) => row.createdAt))
     // Sliced AFTER the sort, which is what the two durable stores do with their
-    // `LIMIT` on an ordered read: the cap takes the newest rows, not an
-    // arbitrary handful.
+    // `LIMIT` on an ordered read: the cap takes the end of the order the caller
+    // asked for, not an arbitrary handful.
     return (filter?.limit === undefined ? matched : matched.slice(0, filter.limit)).map(clone)
   }
 

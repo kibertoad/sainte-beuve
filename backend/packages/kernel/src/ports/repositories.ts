@@ -42,17 +42,37 @@ export interface ReviewerRepository {
   adjustOutstanding(reviewerId: string, delta: number): Promise<void>
 }
 
+/**
+ * Which end of the table a capped read keeps, ties broken on the id the same way.
+ *
+ * It exists because the cap and the order are the same decision: a `limit` takes
+ * the rows the ORDER put first, so a read ordered the wrong way drops exactly
+ * the rows the caller was asking for. History wants `newest` — the review that
+ * just settled is the interesting one. A QUEUE wants `oldest`, because the board
+ * promises the ones waiting longest and those are the first a newest-first cap
+ * throws away.
+ */
+export type ReviewListOrder = 'newest' | 'oldest'
+
 export interface ReviewRequestRepository {
   /**
-   * The board, newest first, ties broken on the id.
+   * The board, newest first unless asked otherwise, ties broken on the id.
    *
    * `limit` is not a nicety: terminal reviews are never archived, so an
    * unbounded read grows with everything the deployment has ever tracked and
    * the JSON it decodes grows with it. Every caller that wants the BOARD passes
    * one; the ones that want a set they have already narrowed (a status filter
    * over the active three) may leave it off.
+   *
+   * `order` is what makes that cap answer the right question — see
+   * `ReviewListOrder`. It moves the id tie-break with it, so a read stays TOTAL
+   * either way and two rows sharing a millisecond cannot swap between reads.
    */
-  list(filter?: { status?: ReviewStatus[]; limit?: number }): Promise<ReviewRequest[]>
+  list(filter?: {
+    status?: ReviewStatus[]
+    limit?: number
+    order?: ReviewListOrder
+  }): Promise<ReviewRequest[]>
   getById(reviewId: string): Promise<ReviewRequest | null>
   /** Look up by pull request so a webhook replay updates the row instead of duplicating it. */
   getByPullRequest(ref: {

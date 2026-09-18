@@ -95,42 +95,6 @@ describe('review board API', () => {
     expect(body.reviews.map((r) => r.id)).toStrictEqual([review.id])
   })
 
-  it('answers the board with the ACTIVE reviews unless asked otherwise', async () => {
-    // Terminal reviews are never archived, so an unfiltered read grew with
-    // everything the deployment had ever tracked and re-decoded a payload per
-    // row nobody looks at. History is still readable — somebody has to ask.
-    const review = await openReview(harness)
-    await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'closed' }))
-
-    expect(await listedIds(harness)).toStrictEqual([])
-    expect(await listedIds(harness, '?status=closed')).toStrictEqual([review.id])
-    // Both shapes a query string carries a list in: the comma form somebody
-    // writing the URL reaches for, and the repeated form the typed client
-    // produces. A single repeated value is indistinguishable from a scalar once
-    // it is parsed, which is why the contract takes both.
-    expect(await listedIds(harness, '?status=open,closed')).toStrictEqual([review.id])
-    expect(await listedIds(harness, '?status=open&status=closed')).toStrictEqual([review.id])
-  })
-
-  it('caps the board, newest first, and refuses a cap it cannot serve', async () => {
-    const first = await openReview(harness)
-    harness.clock.advance(1_000)
-    const second = await openReview(harness, {
-      pullRequest: { ...PR, number: 8, url: `${PR.url}8` },
-    })
-
-    expect(await listedIds(harness)).toStrictEqual([second.id, first.id])
-    expect(await listedIds(harness, '?limit=1')).toStrictEqual([second.id])
-
-    // Refused rather than clamped: a caller asking for a thousand rows has
-    // written something this API will not do, and answering two hundred without
-    // saying so reads as a board that lost the rest.
-    const tooMany = await harness.app.fetch(
-      new Request('http://localhost/api/v1/reviews?limit=1000'),
-    )
-    expect(tooMany.status).toBe(400)
-  })
-
   it('refuses a status no review can be in', async () => {
     // A filter that silently matched nothing would read as an empty board,
     // which is the one answer somebody working from the wrong vocabulary would
@@ -448,3 +412,105 @@ async function outstanding(harness: TestHarness, reviewerId: string): Promise<nu
   const reviewer = await harness.container.repositories.reviewers.getById(reviewerId)
   return reviewer?.outstandingReviews ?? -1
 }
+
+/**
+ * What the board IS, as opposed to what the store holds: which rows it answers
+ * with, in what order, and with whose names on them. Its own suite because it is
+ * its own question — `buildBoard` in @sainte-beuve/reviewers decides all three,
+ * and these are the cases that prove the route reads it.
+ */
+describe('the board read', () => {
+  let harness: TestHarness
+
+  beforeEach(() => {
+    harness = buildHarness()
+  })
+
+  it('caps the QUEUE on the oldest, which is what it is ordered by', async () => {
+    const first = await openReview(harness)
+    harness.clock.advance(1_000)
+    const second = await openReview(harness, {
+      pullRequest: { ...PR, number: 8, url: `${PR.url}8` },
+    })
+
+    // The cap and the order are one decision. The board answers whatever has
+    // waited longest first (`buildBoard` in @sainte-beuve/reviewers), so a cap
+    // taken off the newest end would drop exactly the rows the top of the board
+    // is for — and nothing here paginates to them.
+    expect(await listedIds(harness)).toStrictEqual([first.id, second.id])
+    expect(await listedIds(harness, '?limit=1')).toStrictEqual([first.id])
+
+    // Refused rather than clamped: a caller asking for a thousand rows has
+    // written something this API will not do, and answering two hundred without
+    // saying so reads as a board that lost the rest.
+    const tooMany = await harness.app.fetch(
+      new Request('http://localhost/api/v1/reviews?limit=1000'),
+    )
+    expect(tooMany.status).toBe(400)
+  })
+
+  it('answers the board with the ACTIVE reviews unless asked otherwise', async () => {
+    // Terminal reviews are never archived, so an unfiltered read grew with
+    // everything the deployment had ever tracked and re-decoded a payload per
+    // row nobody looks at. History is still readable — somebody has to ask.
+    const review = await openReview(harness)
+    await harness.app.fetch(patch(`/api/v1/reviews/${review.id}/status`, { status: 'closed' }))
+
+    expect(await listedIds(harness)).toStrictEqual([])
+    expect(await listedIds(harness, '?status=closed')).toStrictEqual([review.id])
+    // Both shapes a query string carries a list in: the comma form somebody
+    // writing the URL reaches for, and the repeated form the typed client
+    // produces. A single repeated value is indistinguishable from a scalar once
+    // it is parsed, which is why the contract takes both.
+    expect(await listedIds(harness, '?status=open,closed')).toStrictEqual([review.id])
+    expect(await listedIds(harness, '?status=open&status=closed')).toStrictEqual([review.id])
+  })
+
+  it('caps the HISTORY on the newest, and spends the budget on the queue', async () => {
+    // The other half of the same decision, and the opposite answer: a settled
+    // row is only on the screen because somebody asked for history, and the
+    // interesting one there is the review that just settled.
+    const settledFirst = await openReview(harness)
+    await harness.app.fetch(
+      patch(`/api/v1/reviews/${settledFirst.id}/status`, { status: 'approved' }),
+    )
+    harness.clock.advance(1_000)
+    const settledLast = await openReview(harness, {
+      pullRequest: { ...PR, number: 8, url: `${PR.url}8` },
+    })
+    await harness.app.fetch(patch(`/api/v1/reviews/${settledLast.id}/status`, { status: 'closed' }))
+
+    const history = '?status=approved&status=closed'
+    expect(await listedIds(harness, `${history}&limit=1`)).toStrictEqual([settledLast.id])
+
+    // And with both halves asked for, the one cap goes to the rows somebody can
+    // still act on: settled rows sort last, so they are what a full board drops.
+    harness.clock.advance(1_000)
+    const waiting = await openReview(harness, {
+      pullRequest: { ...PR, number: 9, url: `${PR.url}9` },
+    })
+    const everything = '?status=open&status=assigned&status=in_review&status=approved&status=closed'
+    expect(await listedIds(harness, `${everything}&limit=1`)).toStrictEqual([waiting.id])
+  })
+
+  it('names the people on a board row, because an id is not an answer', async () => {
+    // The row's whole purpose is "who has this". It carries reviewer IDS, so a
+    // board that handed them straight to the screen answered the question with
+    // `rvw-3`.
+    const peer = await addReviewer(harness, {
+      displayName: 'Ada Lovelace',
+      handles: { github: 'peer' },
+      skills: ['typescript'],
+    })
+    const review = await openReview(harness, { requiredSkills: ['typescript'] })
+    await assignReviewer(harness, review.id)
+
+    const res = await harness.app.fetch(new Request('http://localhost/api/v1/reviews'))
+    const body = (await res.json()) as {
+      reviews: { assignedReviewers: { reviewerId: string; displayName: string }[] }[]
+    }
+    expect(body.reviews[0]?.assignedReviewers).toStrictEqual([
+      { reviewerId: peer.id, displayName: 'Ada Lovelace' },
+    ])
+  })
+})

@@ -1,4 +1,5 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
+import { boardReviewUrl } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { SlackChatGateway } from './SlackChatGateway.js'
 
@@ -77,7 +78,9 @@ describe('SlackChatGateway', () => {
 
     await gateway.sendReminder(reminder, review, 'U123')
 
-    expect(calls[0]?.payload.text).toContain('https://sainte-beuve.example.com/reviews/rev-1')
+    expect(calls[0]?.payload.text).toContain(
+      boardReviewUrl('https://sainte-beuve.example.com', 'rev-1'),
+    )
   })
 
   it('treats an ok:false 200 as a failure, carrying the slug an operator can act on', async () => {

@@ -27,6 +27,19 @@ const { data, pending, error, refresh } = useAsyncData(
 
 const attention = useAttentionStream()
 
+/**
+ * Both reads, as one button.
+ *
+ * The inbox is its OWN read — a REST fetch plus a stream, held in
+ * `useAttentionStream` rather than in this page's `useAsyncData` — so the
+ * Refresh beside it did not touch it. The badge in that card says "refresh to
+ * update" whenever the stream is down, which made the one instruction on the
+ * screen point at the one button that could not carry it out.
+ */
+async function refreshAll(): Promise<void> {
+  await Promise.all([refresh(), attention.refresh()])
+}
+
 const workspace = computed(() => data.value?.workspace ?? null)
 const unreadable = computed(() => workspace.value?.sources.filter((source) => !source.ok) ?? [])
 
@@ -103,7 +116,7 @@ async function release(commitmentId: string) {
         variant="ghost"
         class="shrink-0"
         :loading="pending"
-        @click="refresh()"
+        @click="refreshAll()"
       >
         Refresh
       </UButton>
@@ -131,6 +144,7 @@ async function release(commitmentId: string) {
         :requests="attention.requests.value"
         :viewer-id="workspace.viewer.reviewer.id"
         :live="attention.live.value"
+        :error="attention.error.value"
         :busy="askBusy"
         @commit="commit"
         @cancel="withdraw"

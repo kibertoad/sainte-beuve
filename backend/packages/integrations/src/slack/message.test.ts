@@ -1,4 +1,5 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
+import { boardReviewUrl } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { announcementMessage, escapeSlackText, reminderMessage, slackLink } from './message.js'
 
@@ -87,8 +88,11 @@ describe('reminderMessage', () => {
     expect(reminderMessage(reminder('unassigned'), review(), undefined).text).toBe(
       `<${PR_URL}|kibertoad/sainte-beuve#7> is still waiting for a reviewer.`,
     )
+    // The path is ASKED FOR rather than restated. Two tests spelled out
+    // `/reviews/<id>`, a route the SPA has never had, so the assertion agreed
+    // with the bug instead of catching it.
     expect(reminderMessage(reminder('pending'), review(), 'https://board.example').text).toContain(
-      'https://board.example/reviews/rev-1',
+      boardReviewUrl('https://board.example', 'rev-1'),
     )
     expect(reminderMessage(reminder('escalation'), review(), undefined).text).toContain(
       'past its review deadline',
@@ -106,7 +110,7 @@ describe('reminderMessage', () => {
     // has been posted on the pull request yet, and nothing will be until
     // somebody curates.
     expect(text).toContain(`<${PR_URL}|kibertoad/sainte-beuve#7>`)
-    expect(text).toContain('https://board.example/reviews/rev-1')
+    expect(text).toContain(boardReviewUrl('https://board.example', 'rev-1'))
   })
 })
 

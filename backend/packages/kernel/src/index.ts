@@ -51,6 +51,7 @@ export type {
   Repositories,
   ReviewCommitmentRepository,
   ReviewerRepository,
+  ReviewListOrder,
   ReviewRequestRepository,
   SessionRepository,
   StoredApiKey,
