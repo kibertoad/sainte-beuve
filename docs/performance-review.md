@@ -30,7 +30,7 @@ per dialect, and the runtimes stay symmetric.
 ## What has since been fixed
 
 Findings 1, 2, 3, 4 and 5 — every High and the Medium-High — have landed, along
-with 14 and 17, which pair with them. The findings below are kept as written:
+with 14 and 17, which pair with them, and 7. The findings below are kept as written:
 they are the reasoning the fixes were made from, and the line numbers in them
 are against the tree at the time of the review.
 
@@ -41,6 +41,7 @@ are against the tree at the time of the review.
 | 3   | `GET /reviews` answers the active statuses, newest first, capped at 200, and takes `?status=` and `?limit=`; `list` grew a `limit` in all three stores   |
 | 4   | The shell no longer suspends on `GET /auth`, the pages read lazily behind a skeleton, the auth read de-duplicates, and the API origin is preconnected    |
 | 5   | `withDeadline` moved into the kernel and now wraps GitHub, GitLab and both Slack posters as well as cat-factory                                          |
+| 7   | A labelled `opened` plans its reminder once: `ReviewService.trackAndAssign` skips the create-time plan and plans itself only when nobody took the review |
 | 14  | Both wrangler configs run the clock every five minutes rather than hourly                                                                                |
 | 17  | `review_requests_created_idx`, and the status index rebuilt `DESC` with the id tie-break, in both dialects                                               |
 
