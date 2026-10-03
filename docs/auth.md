@@ -251,6 +251,21 @@ whatever value an operator's secret manager produced rather than something they
 had to spell a particular way. It cannot be revoked through the API, and the
 refusal says to clear the variable rather than answering "no such key".
 
+Because it is an admin credential somebody TYPED, two things keep it from being
+guessed. It has to be at least 32 characters, or the deployment refuses to
+start — a Worker, which has no boot, answers every request with the same
+sentence as a 503 (`environmentApiKeyFrom`, read by every runtime). And a client
+that presents 20 bearer values matching nothing within ten minutes is answered
+429 with `Retry-After` until that window runs out, before its next value is
+compared (`CredentialThrottle`). Only a presented bearer that failed is counted:
+a request with no credential and a session cookie that no longer resolves are
+not guesses, and a session that does resolve is answered before the throttle is
+asked, so a browser behind the same address as a guesser keeps working. The
+client is the socket's peer on Node and `CF-Connecting-IP` on a Worker; the
+count lives in the process on Node and in the isolate on a Worker, which makes
+it a floor there rather than a hard ceiling, and an edge rate-limiting rule is
+the complement.
+
 ## The org boundary
 
 A session says WHO is calling. What they may reach, and what they may change, is

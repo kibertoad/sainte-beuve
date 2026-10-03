@@ -1,0 +1,12 @@
+# Cloudflare Pages response headers for every file of the SPA. The
+# Content-Security-Policy that governs scripts is written into each page at
+# generate time, with the hash of every inline script it carries (see
+# frontend/app/build/csp.ts); a <meta> policy cannot say who may frame the page,
+# so that part is here. Pages applies both, and a browser enforces each.
+/*
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains

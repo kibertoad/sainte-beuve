@@ -1,6 +1,7 @@
 import type { AuthMode, GitHubLabelRules } from '@sainte-beuve/contracts'
 import {
   authModeFrom,
+  environmentApiKeyFrom,
   DEFAULT_GITHUB_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
   withAppOrigin,
@@ -207,7 +208,8 @@ export function loadConfig(env: Env = process.env): NodeConfig {
 function authFrom(env: Env, corsOrigins: readonly string[]): AuthConfig {
   return {
     mode: authModeFrom({ value: env.AUTH_MODE, appBaseUrl: env.APP_BASE_URL, corsOrigins }),
-    apiKey: env.AUTH_API_KEY || null,
+    // Shared with the Worker: a key short enough to guess refuses to boot.
+    apiKey: environmentApiKeyFrom(env.AUTH_API_KEY),
     // `optionalCountFrom` rather than `intFrom`, and the Worker reads it the
     // same way: zero or less is not a short session, it is every session
     // expiring on the millisecond it is issued, so a sign-in completes and

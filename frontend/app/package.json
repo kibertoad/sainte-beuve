@@ -9,6 +9,7 @@
   },
   "files": [
     "app",
+    "build",
     "nuxt.config.ts"
   ],
   "type": "module",

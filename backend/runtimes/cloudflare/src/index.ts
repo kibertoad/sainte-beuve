@@ -27,6 +27,9 @@ const app = createApp({
   // cancels unawaited I/O the moment the response is returned.
   resolveContainer: (scope) => containerFor(scope.env as WorkerEnv, scope.waitUntil),
   corsOrigins: (scope) => corsOriginsFor(scope.env as WorkerEnv),
+  // Set by Cloudflare's edge and not by the caller: a client cannot forge it on
+  // a request that reached a Worker. It keys the throttle on failed API keys.
+  clientAddress: (scope) => scope.req.headers.get('cf-connecting-ip'),
 })
 
 export default {

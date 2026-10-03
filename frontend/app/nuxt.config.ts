@@ -1,5 +1,6 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withContentSecurityPolicy } from './build/csp'
 
 // This is a Nuxt LAYER: a consuming app `extends` it (see deploy/frontend). Config
 // file paths must resolve against THIS layer's directory, not the consumer's:
@@ -60,6 +61,20 @@ export default defineNuxtConfig({
         API_ORIGIN === null
           ? []
           : [{ rel: 'preconnect', href: API_ORIGIN, crossorigin: 'use-credentials' }],
+    },
+  },
+
+  hooks: {
+    // Every page `nuxt generate` writes gets its Content-Security-Policy, with
+    // the hash of each inline script it was generated with. After rendering,
+    // because the runtime config script carries the build id and only the page
+    // as written can be hashed. `nuxt dev` serves no generated page and so
+    // carries no policy. See `build/csp.ts`.
+    'nitro:init'(nitro) {
+      nitro.hooks.hook('prerender:generate', (route) => {
+        if (typeof route.contents !== 'string' || !route.fileName?.endsWith('.html')) return
+        route.contents = withContentSecurityPolicy(route.contents, { apiOrigin: API_ORIGIN })
+      })
     },
   },
 

@@ -1,5 +1,5 @@
 import { once } from 'node:events'
-import { serve } from '@hono/node-server'
+import { type HttpBindings, serve } from '@hono/node-server'
 import type { Logger } from '@sainte-beuve/kernel'
 import { createApp } from '@sainte-beuve/server'
 import { pino } from 'pino'
@@ -49,6 +49,11 @@ async function listen(
   const app = createApp({
     resolveContainer: () => container,
     corsOrigins: config.corsOrigins,
+    // The socket's peer. Behind a reverse proxy that is the proxy, so every
+    // machine caller shares one bucket in the throttle on failed API keys; a
+    // browser on a session never reaches it. See `CredentialThrottle`.
+    clientAddress: (scope) =>
+      (scope.env as HttpBindings | undefined)?.incoming?.socket.remoteAddress ?? null,
   })
 
   const server = serve({ fetch: app.fetch, port: config.port })
