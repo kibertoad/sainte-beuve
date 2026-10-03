@@ -140,9 +140,9 @@ export class ReviewService {
    * the first plan; `handOver` writes nothing when nobody could take it, so that
    * case plans here instead, or the review would wait with no ladder at all.
    *
-   * An existing review's shortfall plans too: a delivery that failed between
-   * the insert and the assignment left it with no ladder, and only a
-   * redelivery comes back for it. Otherwise the re-plan writes the same row.
+   * A failure after the insert plans from the row as it now stands before it
+   * rethrows: nothing else comes back for a review the plan was skipped on, and
+   * a redelivery of one somebody already holds returns before it gets here.
    */
   async trackAndAssign(
     input: CreateReviewRequest,
@@ -153,10 +153,15 @@ export class ReviewService {
       return { review: existing, created: false, result: null }
     }
     const review = existing ?? (await this.insert(input))
-    if (existing === null) await announceReview(this.container, review)
-    const result = await this.handOver(review, { count, exclude: [] })
-    if (result.assigned.length === 0) await scheduleNextReminder(this.container, review)
-    return { review: result.review, created: existing === null, result }
+    try {
+      if (existing === null) await announceReview(this.container, review)
+      const result = await this.handOver(review, { count, exclude: [] })
+      if (result.assigned.length === 0) await scheduleNextReminder(this.container, review)
+      return { review: result.review, created: existing === null, result }
+    } catch (err) {
+      await scheduleNextReminder(this.container, await this.require(review.id))
+      throw err
+    }
   }
 
   /**

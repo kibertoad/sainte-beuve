@@ -1,5 +1,6 @@
 import type { ReviewRequest } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
+import type { AppContainer } from '../src/container.js'
 import { ReviewService } from '../src/modules/reviews/ReviewService.js'
 import { stubAiReview } from './ai-review-doubles.js'
 import {
@@ -8,6 +9,7 @@ import {
   environmentVcs,
   everyHost,
   openReview,
+  PR,
   recordingVcs,
   stubGateways,
   type TestHarness,
@@ -363,5 +365,43 @@ describe('GitHub label on a review already tracked', () => {
     const live = reminders.filter((r) => r.status === 'scheduled')
     expect(live).toHaveLength(1)
     expect(live[0]?.reviewerId).toBe(review?.assignedReviewerIds[0])
+  })
+
+  it('still plans a ladder when the hand-over fails after the insert', async () => {
+    const harness = buildHarness()
+    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' } })
+    const { repositories } = harness.container
+    // The assignment lands and the counter write after it fails: the plan
+    // `recordAssignment` ends on never runs, and the skipped create-time plan
+    // is not there to fall back on.
+    const brokenCounter: AppContainer = {
+      ...harness.container,
+      repositories: {
+        ...repositories,
+        // Over the real store rather than a spread of it: its methods live on
+        // the prototype, which a spread leaves behind.
+        reviewers: Object.assign(Object.create(repositories.reviewers), {
+          adjustOutstanding: async () => {
+            throw new Error('the reviewer store is down')
+          },
+        }),
+      },
+    }
+    const input = {
+      pullRequest: PR,
+      title: 'Add a health check',
+      authorLogin: 'author',
+      requiredSkills: [],
+      priority: 'normal' as const,
+      dueAt: null,
+    }
+
+    await expect(new ReviewService(brokenCounter).trackAndAssign(input, 1)).rejects.toThrow(
+      'the reviewer store is down',
+    )
+
+    const [review] = await tracked(harness)
+    const reminders = await repositories.reminders.listByReview(review!.id)
+    expect(reminders.filter((r) => r.status === 'scheduled')).toHaveLength(1)
   })
 })
