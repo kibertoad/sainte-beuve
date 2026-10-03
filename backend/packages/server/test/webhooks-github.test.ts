@@ -333,3 +333,35 @@ describe('GitHub webhook intake', () => {
     expect(asApp.requested).toStrictEqual([['peer']])
   })
 })
+
+// Its own block because the intake suite above is at the test function budget.
+describe('GitHub label on a review already tracked', () => {
+  it('routes it once, and a redelivered label puts nobody else on it', async () => {
+    const harness = buildHarness({
+      vcs: environmentVcs(recordingVcs()),
+      github: {
+        appSlug: null,
+        webhookSecret: SECRET,
+        botLogin: 'sainte-beuve-bot',
+        labels: { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' },
+      },
+    })
+    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' } })
+    await addReviewer(harness, { displayName: 'Other', handles: { github: 'other' } })
+    await deliver(harness, 'pull_request', pullRequestPayload('opened'))
+    const labelled = pullRequestPayload('labeled', { label: { name: 'needs-review' } })
+
+    const res = await deliver(harness, 'pull_request', labelled)
+    expect(await res.json()).toMatchObject({ action: 'assigned' })
+    // A redelivered label must not put a second person on a review somebody holds.
+    const again = await deliver(harness, 'pull_request', labelled)
+    expect(await again.json()).toMatchObject({ action: 'already_tracked' })
+
+    const [review] = await tracked(harness)
+    expect(review?.assignedReviewerIds).toHaveLength(1)
+    const reminders = await harness.container.repositories.reminders.listByReview(review!.id)
+    const live = reminders.filter((r) => r.status === 'scheduled')
+    expect(live).toHaveLength(1)
+    expect(live[0]?.reviewerId).toBe(review?.assignedReviewerIds[0])
+  })
+})
