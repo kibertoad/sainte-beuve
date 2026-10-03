@@ -172,6 +172,11 @@ describe('GitHub webhook intake', () => {
     const [review] = await tracked(harness)
     expect(review).toMatchObject({ status: 'assigned', requiredSkills: ['payments'] })
     expect(vcs.requested).toStrictEqual([['peer']])
+    // Planned once, after the assignment: a cancelled row beside the live one
+    // would mean `create` planned a ladder the assignment then threw away.
+    const reminders = await harness.container.repositories.reminders.listByReview(review!.id)
+    expect(reminders.map((r) => r.status)).toStrictEqual(['scheduled'])
+    expect(reminders[0]?.reviewerId).not.toBeNull()
   })
 
   it('says so rather than failing when the pool holds nobody with the skill', async () => {
@@ -193,6 +198,10 @@ describe('GitHub webhook intake', () => {
     )
     expect(res.status).toBe(202)
     expect(await res.json()).toMatchObject({ action: 'no_reviewer_available' })
+    // Nobody took it, so nothing re-planned: the ladder still has to start.
+    const [review] = await tracked(harness)
+    const reminders = await harness.container.repositories.reminders.listByReview(review!.id)
+    expect(reminders.map((r) => r.status)).toStrictEqual(['scheduled'])
   })
 
   it('resolves the review when a review is submitted', async () => {
