@@ -64,8 +64,9 @@ APP_BASE_URL=http://localhost:3000
 # dev`, not a deployed Worker.
 # ---------------------------------------------------------------------------
 AUTH_MODE=open
-# Presented as `Authorization: Bearer <key>`. Matched before the store, so it
-# still works while the database is being restored. Keys minted on the
+# Presented as `Authorization: Bearer <key>`. At least 32 characters, or every
+# request is answered 503 naming it (`openssl rand -hex 32`). Matched before the
+# store, so it still works while the database is being restored. Keys minted on the
 # Configuration screen live in the store as digests and are shown once.
 AUTH_API_KEY=
 # How long a session lasts, in ms. Defaults to 30 days.

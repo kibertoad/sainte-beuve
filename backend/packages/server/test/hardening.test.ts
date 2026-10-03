@@ -2,7 +2,7 @@ import { isDomainError } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.js'
 import { environmentApiKeyFrom } from '../src/config/apiKey.js'
-import { CredentialThrottle } from '../src/http/throttle.js'
+import { bucketOf, CredentialThrottle } from '../src/http/throttle.js'
 import { buildHarness, type TestHarness } from './helpers.js'
 
 /**
@@ -75,6 +75,28 @@ describe('failed API keys', () => {
     expect((await app.fetch(bearer(OPERATOR_KEY))).status).toBe(200)
   })
 
+  it('holds the ceiling for a burst of guesses sent at once', async () => {
+    const { app } = guarded()
+    // Prefixed, so each is digested and looked up: an `await` between being
+    // asked about and being counted, which is where a burst would slip through.
+    const statuses = await Promise.all(
+      Array.from(
+        { length: 25 },
+        async (_, n) => (await app.fetch(bearer(`sbk_guess-${n}`))).status,
+      ),
+    )
+    expect(statuses.filter((status) => status === 401)).toHaveLength(20)
+    expect(statuses.filter((status) => status === 429)).toHaveLength(5)
+  })
+
+  it('does not count a key that matched', async () => {
+    const { app } = guarded()
+    for (let attempt = 0; attempt < 19; attempt++) await app.fetch(bearer(`guess-${attempt}`))
+    for (let attempt = 0; attempt < 5; attempt++) {
+      expect((await app.fetch(bearer(OPERATOR_KEY))).status).toBe(200)
+    }
+  })
+
   it('does not count a request that presented nothing', async () => {
     const { app } = guarded()
     for (let attempt = 0; attempt < 25; attempt++) {
@@ -99,6 +121,21 @@ describe('CredentialThrottle', () => {
     throttle.failed('b', 1)
     throttle.failed('c', 2)
     expect(throttle.refusal('a', 3)).toBeNull()
+  })
+})
+
+describe('bucketOf', () => {
+  it('counts an IPv6 client by its /64, however it is spelled', () => {
+    expect(bucketOf('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64')
+    expect(bucketOf('2001:0DB8:0001:0002:ffff:0:0:9')).toBe('2001:db8:1:2::/64')
+    expect(bucketOf('2001:db8::1')).toBe('2001:db8:0:0::/64')
+  })
+
+  it('counts IPv4, a mapped address and anything unparsed as itself', () => {
+    expect(bucketOf('203.0.113.7')).toBe('203.0.113.7')
+    expect(bucketOf('::ffff:203.0.113.7')).toBe('203.0.113.7')
+    expect(bucketOf('unknown')).toBe('unknown')
+    expect(bucketOf('1::2::3')).toBe('1::2::3')
   })
 })
 

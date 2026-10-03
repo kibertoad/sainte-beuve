@@ -44,4 +44,19 @@ describe('withContentSecurityPolicy', () => {
     expect(meta).toBeGreaterThan(html.indexOf('<head>'))
     expect(meta).toBeLessThan(html.indexOf('<script'))
   })
+
+  it('leaves the charset declaration ahead of it, in the bytes a browser sniffs', () => {
+    const html = withContentSecurityPolicy(PAGE, { apiOrigin: null })
+    expect(html.indexOf('<meta charset="utf-8">')).toBeLessThan(
+      html.indexOf('http-equiv="Content-Security-Policy"'),
+    )
+  })
+})
+
+describe('inline script detection', () => {
+  it('reads the type attribute itself, not a data attribute that ends in one', () => {
+    const body = 'window.colourMode=1'
+    const page = `<html><head><SCRIPT data-type="application/json">${body}</SCRIPT></head></html>`
+    expect(contentSecurityPolicy(page, { apiOrigin: null })).toContain(hashOf(body))
+  })
 })

@@ -60,13 +60,20 @@ export class CredentialThrottle {
    * would refuse nothing: the guess that matched would already have matched.
    */
   refusal(client: string, now: EpochMs): number | null {
-    const window = this.current(client, now)
+    const window = this.current(bucketOf(client), now)
     if (window === null || window.failures < this.limits.maxFailures) return null
     return Math.max(1, Math.ceil((window.startedAt + this.limits.windowMs - now) / 1000))
   }
 
-  /** Count one bearer that matched nobody. */
-  failed(client: string, now: EpochMs): void {
+  /**
+   * Count one bearer that matched nobody — or one about to be compared, which
+   * the caller takes back with `forgive` if it matches. Counting BEFORE the
+   * comparison, in the same synchronous step as `refusal`, is what makes the
+   * ceiling hold for a burst: asked and counted across an `await`, every guess
+   * sent at once would be asked before the first of them had been counted.
+   */
+  failed(address: string, now: EpochMs): void {
+    const client = bucketOf(address)
     const window = this.current(client, now)
     if (window !== null) {
       window.failures += 1
@@ -81,6 +88,15 @@ export class CredentialThrottle {
     this.windows.set(client, { startedAt: now, failures: 1 })
   }
 
+  /** Take back one count `failed` made for a bearer that went on to match. */
+  forgive(address: string, now: EpochMs): void {
+    const client = bucketOf(address)
+    const window = this.current(client, now)
+    if (window === null) return
+    window.failures -= 1
+    if (window.failures <= 0) this.windows.delete(client)
+  }
+
   /** The client's open window, dropping one that has run out. */
   private current(client: string, now: EpochMs): Window | null {
     const window = this.windows.get(client)
@@ -89,4 +105,41 @@ export class CredentialThrottle {
     this.windows.delete(client)
     return null
   }
+}
+
+/**
+ * The bucket an address counts against.
+ *
+ * An IPv6 client is handed a /64 at the least, so keying on the full address
+ * would give one guesser 2^64 buckets of `maxFailures` each — and enough of them
+ * to push every other client out of `maxClients`. Its /64 is the client. IPv4,
+ * an IPv4-mapped address and anything that does not parse as IPv6 count as
+ * themselves.
+ */
+export function bucketOf(address: string): string {
+  const bare = (address.split('%')[0] ?? address).toLowerCase()
+  if (!bare.includes(':')) return bare
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(bare)?.[1]
+  if (mapped !== undefined) return mapped
+  const groups = ipv6Groups(bare)
+  return groups === null ? bare : `${groups.slice(0, 4).join(':')}::/64`
+}
+
+const HEXTET = /^[0-9a-f]{1,4}$/
+
+/** The eight groups of an IPv6 address with `::` expanded, or null when it is not one. */
+function ipv6Groups(address: string): string[] | null {
+  const halves = address.split('::')
+  if (halves.length > 2) return null
+  const left = halves[0] === '' ? [] : (halves[0]?.split(':') ?? [])
+  const right = halves[1] === undefined || halves[1] === '' ? [] : halves[1].split(':')
+  const elided = 8 - left.length - right.length
+  if (halves.length === 1 ? elided !== 0 : elided < 1) return null
+  const groups = [
+    ...left,
+    ...Array.from({ length: halves.length === 1 ? 0 : elided }, () => '0'),
+    ...right,
+  ]
+  if (!groups.every((group) => HEXTET.test(group))) return null
+  return groups.map((group) => Number.parseInt(group, 16).toString(16))
 }

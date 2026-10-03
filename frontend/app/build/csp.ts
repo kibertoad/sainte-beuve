@@ -39,11 +39,12 @@ const ICON_ORIGINS = [
 /** Script types a browser executes, and so the ones `script-src` governs. */
 const EXECUTED = new Set(['', 'module', 'text/javascript', 'application/javascript', 'importmap'])
 
-const INLINE_SCRIPT = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/g
+const INLINE_SCRIPT = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi
 
 /** The `type` of a script tag's attributes, lower-cased, or '' when it has none. */
 function typeOf(attributes: string): string {
-  const match = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(attributes)
+  // `(?:^|\s)` rather than `\b`, which would read `data-type=` as the type.
+  const match = /(?:^|\s)type\s*=\s*["']?([^"'\s>]+)/i.exec(attributes)
   return (match?.[1] ?? '').toLowerCase()
 }
 
@@ -74,12 +75,25 @@ export function contentSecurityPolicy(html: string, input: PolicyInput): string 
   ].join('; ')
 }
 
+const HEAD = /<head(\s[^>]*)?>/i
+const CHARSET = /<meta\s[^>]*\bcharset\s*=[^>]*>/i
+const FIRST_SCRIPT = /<script[\s>]/i
+
 /**
- * The page with its policy in place: first in `<head>`, because a `<meta>`
- * policy governs only what the parser meets after it.
+ * The page with its policy in place, ahead of every script, because a `<meta>`
+ * policy governs only what the parser meets after it: right after the charset
+ * declaration when that comes first, and otherwise first in `<head>`. Not ahead
+ * of the charset, which a browser looks for in the first 1024 bytes only, and a
+ * policy with a hash per script is a fair share of those.
  */
 export function withContentSecurityPolicy(html: string, input: PolicyInput): string {
   const policy = contentSecurityPolicy(html, input).replaceAll('"', '&quot;')
   const meta = `<meta http-equiv="Content-Security-Policy" content="${policy}">`
-  return html.replace(/<head(\s[^>]*)?>/i, (head) => `${head}${meta}`)
+  const charset = CHARSET.exec(html)
+  const firstScript = html.search(FIRST_SCRIPT)
+  if (charset !== null && (firstScript === -1 || charset.index < firstScript)) {
+    const end = charset.index + charset[0].length
+    return `${html.slice(0, end)}${meta}${html.slice(end)}`
+  }
+  return html.replace(HEAD, (head) => `${head}${meta}`)
 }

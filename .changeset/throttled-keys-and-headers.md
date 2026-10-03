@@ -15,7 +15,8 @@ Close L4 and L10 of the security review.
   that presents 20 bearer values matching nothing within ten minutes is answered
   429 (`rate_limited`, with `Retry-After`) before its next one is compared.
   `createApp` takes a `clientAddress` callback to key that count: the socket's
-  peer on Node, `CF-Connecting-IP` on a Worker.
+  peer on Node, `CF-Connecting-IP` on a Worker. An IPv6 client is counted by its
+  /64, and a burst sent at once is held to the same ceiling as a sequence.
 - L10: every API response carries `secureHeaders()` with a
   `default-src 'none'; frame-ancestors 'none'` policy, `X-Frame-Options: DENY`
   and `Referrer-Policy: no-referrer`, and `/api/v1` answers `Cache-Control:

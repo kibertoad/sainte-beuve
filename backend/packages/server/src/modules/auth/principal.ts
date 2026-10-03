@@ -113,13 +113,22 @@ async function resolve(
   if (session !== null) return { kind: 'session', session }
   const token = bearerToken(c)
   if (token === null) return ANONYMOUS
+  const { throttle } = options
   const client = options.clientOf(c) ?? UNKNOWN_CLIENT
-  const wait = options.throttle.refusal(client, container.clock.now())
+  const wait = throttle.refusal(client, container.clock.now())
   if (wait !== null) throw new RateLimitedError(TOO_MANY_FAILURES, wait)
-  const key = await new ApiKeyService(container).verify(token)
-  if (key !== null) return { kind: 'api_key', ...key }
-  options.throttle.failed(client, container.clock.now())
-  return ANONYMOUS
+  // Counted as a failure BEFORE the comparison and taken back if it matches:
+  // the question and the count share one synchronous step, so a burst of
+  // guesses sent at once cannot all be asked before any of them is counted.
+  throttle.failed(client, container.clock.now())
+  const key = await new ApiKeyService(container).verify(token).catch((err: unknown) => {
+    // A store that failed to answer is not a guess.
+    throttle.forgive(client, container.clock.now())
+    throw err
+  })
+  if (key === null) return ANONYMOUS
+  throttle.forgive(client, container.clock.now())
+  return { kind: 'api_key', ...key }
 }
 
 /**

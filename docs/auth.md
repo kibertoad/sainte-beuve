@@ -261,7 +261,8 @@ compared (`CredentialThrottle`). Only a presented bearer that failed is counted:
 a request with no credential and a session cookie that no longer resolves are
 not guesses, and a session that does resolve is answered before the throttle is
 asked, so a browser behind the same address as a guesser keeps working. The
-client is the socket's peer on Node and `CF-Connecting-IP` on a Worker; the
+client is the socket's peer on Node and `CF-Connecting-IP` on a Worker, an IPv6
+client counted by its /64; the
 count lives in the process on Node and in the isolate on a Worker, which makes
 it a floor there rather than a hard ceiling, and an edge rate-limiting rule is
 the complement.
