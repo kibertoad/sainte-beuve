@@ -438,6 +438,32 @@ describe('pausing somebody', () => {
     expect(again.headers.get('set-cookie') ?? '').not.toContain('sb_session=')
   })
 
+  it('stores nothing from a connect a paused account finishes', async () => {
+    // The connect is an admin's (the bootstrap key's), and the account that
+    // authorises it at the host is a paused row. The refusal has to come before
+    // the org's credential is replaced with that account's token, not after.
+    const cookie = await signIn(harness)
+    const state = await authState(harness, cookie)
+    const reviewerId = state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
+    await harness.container.repositories.reviewers.update(reviewerId, { availability: 'paused' })
+
+    const jar = cookieJar()
+    const start = await harness.app.fetch(
+      get('/api/v1/settings/connections/github/sign-in', asBootstrap()),
+    )
+    expect(start.status).toBe(200)
+    jar.keep(start)
+    const flow = new URL(((await start.json()) as { url: string }).url).searchParams.get('state')
+    const callback = await harness.app.fetch(
+      get(
+        `/connect/github/callback?code=abc&state=${encodeURIComponent(flow ?? '')}`,
+        jar.headers(),
+      ),
+    )
+    expect(callback.status).toBe(403)
+    expect(await harness.container.repositories.integrationTokens.list()).toStrictEqual([])
+  })
+
   it('treats a session that raced the pause as nobody with authority', async () => {
     const cookie = await signIn(harness)
     const state = await authState(harness, cookie)

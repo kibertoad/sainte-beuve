@@ -214,17 +214,14 @@ export class ConnectionsService {
     // the default org, and the signed state is the only thing that knows which
     // tenancy the browser set out to join.
     const inOrg = withOrg(this.container, claims.orgId)
+    // BOTH purposes establish a session, because both of them proved the same
+    // thing: an operator who just connected this deployment's credential has
+    // demonstrated exactly what a sign-in demonstrates. The session comes FIRST
+    // because it is where a paused account is refused, and a refused connect
+    // must not have already replaced the org's credential with that account's.
+    const session = await establishSession(inOrg, { provider, account, purpose })
     if (purpose === 'connect') await storeCredential(inOrg, provider, token, account)
-    return {
-      login: account.username,
-      returnTo: claims.returnTo,
-      // BOTH purposes establish a session, because both of them proved the same
-      // thing. An operator who just connected this deployment's credential has
-      // demonstrated exactly what a sign-in demonstrates, and making them click
-      // a second button to be recognised would be a round trip for nothing.
-      session: await establishSession(inOrg, { provider, account, purpose }),
-      purpose,
-    }
+    return { login: account.username, returnTo: claims.returnTo, session, purpose }
   }
 
   /**

@@ -39,6 +39,14 @@ function configuredOrigin(value: string): string {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new ConfigurationError(`API_BASE_URL is an http or https URL, not "${value}".`)
   }
+  // An origin and nothing else. The callback is `<origin>/connect/<host>/callback`,
+  // so a path here would be dropped without a word, and the redirect URI the host
+  // is sent would not be the one the operator registered.
+  if (url.pathname !== '/' || url.search !== '' || url.hash !== '') {
+    throw new ConfigurationError(
+      `API_BASE_URL is an origin with no path, such as https://api.example.com, not "${value}".`,
+    )
+  }
   return url.origin
 }
 

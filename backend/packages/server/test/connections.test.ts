@@ -337,6 +337,24 @@ describe('the callback a sign-in names', () => {
     expect(identity.redirects).toStrictEqual(['https://api.example.com/connect/github/callback'])
   })
 
+  it('refuses an API_BASE_URL with a path rather than dropping the path', async () => {
+    // The callback is `<origin>/connect/<host>/callback`, so a path would be lost
+    // without a word and the redirect would not be the one the operator registered.
+    const identity = stubSignIn()
+    const signing = keyed({
+      apiBaseUrl: 'https://example.com/api',
+      gateways: stubGateways({ signIn: everyHost(identity) }),
+    })
+    const res = await signing.app.fetch(
+      new Request(`https://example.com${CONNECTIONS}/github/sign-in`),
+    )
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({
+      error: { code: 'misconfigured', message: expect.stringContaining('API_BASE_URL') },
+    })
+    expect(identity.redirects).toStrictEqual([])
+  })
+
   it('refuses to start a sign-in on a public host it was not told the origin of', async () => {
     const identity = stubSignIn()
     const signing = keyed({ gateways: stubGateways({ signIn: everyHost(identity) }) })

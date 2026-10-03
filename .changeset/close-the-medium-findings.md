@@ -16,7 +16,8 @@ Close the seven medium findings of [docs/security-review.md](../docs/security-re
   templates, reported as `auth.apiBaseUrl` on `/health`), never on the request's
   `Host`. Without it a sign-in starts only on a loopback host. The callback
   derives its redirect URI only after the state verifies, so a forged callback
-  learns nothing about the configuration.
+  learns nothing about the configuration. An `API_BASE_URL` with a path is
+  refused rather than silently cut back to its origin.
 - M2: `webUrlSchema` holds `pullRequest.url`, a project's `webUrl` and a run's
   `catFactoryUrl` to `http` or `https`, and the SPA renders every stored link
   through `safeHref` (`isWebUrl`), so a row written before the rule is still not
@@ -27,8 +28,9 @@ Close the seven medium findings of [docs/security-review.md](../docs/security-re
   run in flight per review, at most three filed an hour.
 - M4: a GitHub delivery for a repository no org registered is acked as
   `ignored:unregistered` and dropped, the default org included.
-- M5: a paused directory row is refused at the end of every sign-in, and
-  `roleOf` reads one as no admin.
+- M5: a paused directory row is refused at the end of every sign-in, before a
+  connect stores the account's token as the org's credential, and `roleOf`
+  reads one as no admin.
 - M6: every Slack command that writes needs a directory row for the Slack user,
   refuses a paused one, and a reroll comes only from whoever holds the review or
   an admin (`decideChatCommand`).
