@@ -186,8 +186,8 @@ function lineOf(finding: { path: string; line: number | null }): string {
             Resume
           </UButton>
           <UButton
-            v-if="run.catFactoryUrl"
-            :to="run.catFactoryUrl"
+            v-if="safeHref(run.catFactoryUrl)"
+            :to="safeHref(run.catFactoryUrl)"
             target="_blank"
             size="sm"
             variant="ghost"

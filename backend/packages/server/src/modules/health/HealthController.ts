@@ -97,6 +97,10 @@ function shape(container: AppContainer) {
        */
       signInProviders: new ConnectionsService(container).signInProviders(),
       environmentApiKey: container.auth.environmentApiKey !== null,
+      // Whether a sign-in can be started anywhere but on loopback. A provider
+      // in the list above with this false is a sign-in that answers 503 on a
+      // hosted origin; see `callbackOrigin`.
+      apiBaseUrl: container.apiBaseUrl !== null,
     },
   }
 }

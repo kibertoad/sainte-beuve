@@ -310,27 +310,6 @@ describe('the org boundary', () => {
     })
   })
 
-  describe('pausing somebody', () => {
-    it('signs them out', async () => {
-      // `deleteForReviewer` existed from the day sessions did and nothing called
-      // it: what pausing meant for ACCESS was the question this slice answers.
-      const cookie = await signIn(harness)
-      const state = await authState(harness, cookie)
-      const reviewerId =
-        state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
-      const paused = await harness.app.fetch(
-        new Request(`http://localhost${REVIEWERS}/${reviewerId}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json', cookie },
-          body: JSON.stringify({ availability: 'paused' }),
-        }),
-      )
-      expect(paused.status).toBe(200)
-      // The same cookie, now resolving to nobody, on a deployment that refuses one.
-      expect((await harness.app.fetch(get('/api/v1/reviews', { cookie }))).status).toBe(401)
-    })
-  })
-
   describe('making one', () => {
     it('refuses a slug another org already holds', async () => {
       await makeOrg(harness, 'acme')
@@ -412,6 +391,64 @@ describe('the org boundary', () => {
 // trip WAS the authorisation. Any GitHub or GitLab account could sign in to any
 // org whose slug it knew, and a pre-registered row handed its role — `admin`
 // included — to whoever held the username.
+describe('pausing somebody', () => {
+  let harness: TestHarness
+
+  beforeEach(() => {
+    harness = closedHarness()
+  })
+
+  it('signs them out', async () => {
+    // `deleteForReviewer` existed from the day sessions did and nothing called
+    // it: what pausing meant for ACCESS was the question this slice answers.
+    const cookie = await signIn(harness)
+    const state = await authState(harness, cookie)
+    const reviewerId = state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
+    const paused = await harness.app.fetch(
+      new Request(`http://localhost${REVIEWERS}/${reviewerId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ availability: 'paused' }),
+      }),
+    )
+    expect(paused.status).toBe(200)
+    // The same cookie, now resolving to nobody, on a deployment that refuses one.
+    expect((await harness.app.fetch(get('/api/v1/reviews', { cookie }))).status).toBe(401)
+  })
+
+  it('refuses their next sign-in, so a paused admin cannot un-pause themselves', async () => {
+    // The identity link survives the pause, and every lookup the sign-in makes
+    // finds the row. Without a check on `availability` the person clicks "Sign
+    // in" and is back with the same role.
+    const cookie = await signIn(harness)
+    const state = await authState(harness, cookie)
+    const reviewerId = state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
+    const paused = await harness.app.fetch(
+      new Request(`http://localhost${REVIEWERS}/${reviewerId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', ...asBootstrap() },
+        body: JSON.stringify({ availability: 'paused' }),
+      }),
+    )
+    expect(paused.status).toBe(200)
+
+    const again = await attemptSignIn(harness)
+    expect(again.status).toBe(403)
+    expect(await again.text()).toContain('paused')
+    expect(again.headers.get('set-cookie') ?? '').not.toContain('sb_session=')
+  })
+
+  it('treats a session that raced the pause as nobody with authority', async () => {
+    const cookie = await signIn(harness)
+    const state = await authState(harness, cookie)
+    const reviewerId = state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
+    // Behind the service, which would have revoked the session: this is the
+    // request that was already in flight when the pause landed.
+    await harness.container.repositories.reviewers.update(reviewerId, { availability: 'paused' })
+    expect((await harness.app.fetch(get(ORGS, { cookie }))).status).toBe(403)
+  })
+})
+
 describe('who may join', () => {
   let harness: TestHarness
 

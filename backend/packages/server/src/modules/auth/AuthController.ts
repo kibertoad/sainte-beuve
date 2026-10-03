@@ -36,12 +36,11 @@ export function authController(): Hono<AppEnv> {
 
   buildHonoRoute(app, startSessionSignInContract, async (c) => {
     const container = c.get('container')
-    // The API's own origin, from the request rather than from configuration: the
-    // redirect URI the host matches has to name the origin that will receive the
-    // callback, and that is the one this request arrived on.
+    // The URL this arrived on, which the service does NOT build the callback
+    // on: its host is whatever the caller wrote. See `callbackOrigin`.
     const { url, nonce } = await new ConnectionsService(container).signInUrl(
       c.req.valid('param').provider,
-      new URL(c.req.url).origin,
+      c.req.url,
       'session',
       // The one place an org is chosen by something a caller sent, and the
       // choice goes into the SIGNED state rather than riding the query string

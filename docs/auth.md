@@ -188,6 +188,37 @@ connect flow is under `/api/v1/settings` and is therefore behind the guard, whil
 connects the deployment's credential afterwards — or reaches the settings routes
 with `AUTH_API_KEY` if there is no OAuth client to sign in with at all.
 
+### The callback is built on configuration, not on the request
+
+The `redirect_uri` a flow names — the URL the host sends the browser back to with
+a code, and the one the code is exchanged under — is built on `API_BASE_URL`, the
+API's public origin. It used to be the origin the request arrived on, and on Node
+that is the `Host` header, which the caller writes. GitHub matches a redirect URI
+on the registered host including its subdomains, so a caller who controlled any
+subdomain of the API's host, or reached a Node process whose proxy forwards any
+`Host`, could start a flow whose callback landed on their own server, hand the
+authorize URL to a victim and finish the round trip with the victim's code. On the
+`connect` flow that code becomes the org's stored credential, and the nonce below
+does not help, because the attacker started the flow.
+
+With `API_BASE_URL` unset, the request's own origin is still accepted on a
+LOOPBACK host, which keeps a laptop and `wrangler dev` working with nothing set; a
+forged `Host: localhost` sends the code to the victim's own machine, which nobody
+else can read. Anywhere else a sign-in refuses to start with a 503 naming the
+variable. The callback asks the same question only AFTER its state verifies, so a
+forged callback learns nothing about how the deployment is configured.
+`GET /health` reports `auth.apiBaseUrl` beside `signInProviders` for that reason.
+Behind a TLS terminator this is also what keeps the callback on `https`.
+
+### A paused person cannot sign back in
+
+Pausing somebody revokes their sessions (see [docs/orgs.md](./orgs.md)), but the
+link between their host account and their row survives, so a finished round trip
+would otherwise seat them again with the same role — and a paused admin could
+un-pause themselves. Both flows refuse a paused row with a 403 before a session is
+issued, and `roleOf` reads a paused row as no admin, for the one request that was
+already in flight when the pause landed.
+
 ### The state is bound to the browser that started the flow
 
 Signed and recent is not enough on its own. Anybody may start a flow here and be

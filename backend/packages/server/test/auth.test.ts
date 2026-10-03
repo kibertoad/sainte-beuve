@@ -453,7 +453,12 @@ describe('a round trip', () => {
     // than the host the browser addressed reads that as a split-host
     // deployment and answers `SameSite=None` — which works, and throws away the
     // browser's own cross-site protection on the deployment that had it.
-    const harness = signable({ appBaseUrl: 'https://board.example.com' })
+    // Which is also why it names its API origin: behind a proxy, the host this
+    // process sees is not one a callback could be built on.
+    const harness = signable({
+      appBaseUrl: 'https://board.example.com',
+      apiBaseUrl: 'https://board.example.com',
+    })
     const start = await harness.app.fetch(
       new Request('http://internal-8788/api/v1/auth/sign-in/github', {
         headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'board.example.com' },

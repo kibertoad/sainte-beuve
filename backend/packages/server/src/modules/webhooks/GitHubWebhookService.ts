@@ -4,6 +4,7 @@ import {
   formatPullRequest,
   getErrorMessage,
   isDomainError,
+  upstreamOf,
 } from '@sainte-beuve/kernel'
 import type { GitHubDelivery, GitHubIntent } from '@sainte-beuve/integrations'
 import { interpretGitHubDelivery, verifyGitHubSignature } from '@sainte-beuve/integrations'
@@ -24,10 +25,13 @@ import { botReply } from './githubReplies.js'
  * WHICH ORG a delivery lands in comes from the PROJECT REGISTRY, because a
  * delivery carries no credential of ours and therefore nothing that could place
  * it: registering a repository is a tenancy claiming responsibility for it, and
- * that claim is exactly what an intake needs. A repository nobody registered
- * falls to the default org, which is where a single-tenant deployment's
- * everything already is, so nothing changes for one — and for a deployment with
- * a second tenancy, registering the repository is the answer.
+ * that claim is exactly what an intake needs. A repository NOBODY registered is
+ * ignored, the default org included: a GitHub App can be installed by anybody
+ * who can find it, and falling back to the default org would hand whoever
+ * installed it on their own repository that org's reviewers, its installation
+ * tokens and its cat-factory budget. A single-tenant deployment registers its
+ * repositories on the Projects screen, which is the same act a second tenancy
+ * already had to perform.
  *
  * Deliveries are handled INLINE rather than queued. GitHub's own guidance is to
  * ack fast and work asynchronously, and it earns its keep when the work is a
@@ -54,6 +58,16 @@ const UPSTREAM_REFUSED =
   'GitHub refused the request. Whoever operates sainte-beuve can see the refusal in its logs'
 const UNEXPECTED =
   'something went wrong here. Whoever operates sainte-beuve can see what it was in the logs'
+const UPSTREAM_DECLINED =
+  'cat-factory declined the request. Whoever operates sainte-beuve can see why in its logs'
+const NOT_ALLOWED = 'that is not something this pull request can ask for here'
+
+/**
+ * The codes whose message is about the BOARD and may be repeated in public, when
+ * this deployment wrote it. An allow-list rather than the faults to hide,
+ * because a code added later is then withheld until somebody decides otherwise.
+ */
+const BOARD_ANSWERS = new Set(['not_found', 'validation', 'conflict'])
 
 /** What the delivery caused, for the ack body and the log line. */
 export interface GitHubWebhookOutcome {
@@ -63,6 +77,7 @@ export interface GitHubWebhookOutcome {
 }
 
 const IGNORED: GitHubWebhookOutcome = { action: 'ignored', reviewId: null }
+const UNREGISTERED: GitHubWebhookOutcome = { action: 'ignored:unregistered', reviewId: null }
 
 export class GitHubWebhookService {
   constructor(private readonly container: AppContainer) {}
@@ -89,14 +104,28 @@ export class GitHubWebhookService {
     // than threading a container through the eight methods below: `perform` and
     // everything under it reads `this.container`, so binding it once here is the
     // whole of it and there is no call site that can use the wrong one.
-    return new GitHubWebhookService(await this.containerFor(intent)).perform(intent)
+    const placed = await this.containerFor(intent)
+    if (placed === null) return UNREGISTERED
+    return new GitHubWebhookService(placed).perform(intent)
   }
 
-  /** The org that registered the repository this delivery is about. See above. */
-  private async containerFor(intent: GitHubIntent): Promise<AppContainer> {
+  /**
+   * The org that registered the repository this delivery is about, or null when
+   * none did. See above: null is acked and dropped, never defaulted.
+   */
+  private async containerFor(intent: GitHubIntent): Promise<AppContainer | null> {
     const ref = intent.kind === 'track' ? intent.review.pullRequest : intent.pullRequest
     const orgId = await this.container.stores.tenancy.findOrgIdForProject(ref)
-    return orgId === null ? this.container : withOrg(this.container, orgId)
+    if (orgId === null) {
+      // Info rather than warn: an App installed on more repositories than an org
+      // registered sends these all day, and that is the installation's business.
+      this.container.logger.info(
+        { owner: ref.owner, repo: ref.repo, intent: intent.kind },
+        'a GitHub delivery for a repository no org registered was ignored',
+      )
+      return null
+    }
+    return withOrg(this.container, orgId)
   }
 
   private parse(event: string, rawBody: string): GitHubDelivery | null {
@@ -218,21 +247,26 @@ export class GitHubWebhookService {
    * and the refusals reaching here are written for an operator: a
    * `requireCapability` message names GITHUB_WEBHOOK_SECRET,
    * SETTINGS_ENCRYPTION_KEY or which half of cat-factory's configuration is
-   * missing, and an upstream failure carries GitHub's own words back. So the
-   * comment gets the SHAPE of the fault and the operator's copy stays in the
-   * log, which is where somebody who can act on it is looking.
+   * missing, and a cat-factory refusal embeds cat-factory's own response text
+   * and what this deployment's key lacks. So the comment gets the SHAPE of the
+   * fault and the operator's copy stays in the log, which is where somebody who
+   * can act on it is looking.
    *
-   * A `not_found` or a `validation` message is about the BOARD ("no reviewer
-   * rev-3"), which is the answer the person who asked actually needs, so it goes
-   * through unchanged.
+   * What does go through unchanged is the board's own answer — "no reviewer
+   * rev-3", "a run is already in flight" — because that is what the person who
+   * asked actually needs. The same codes from cat-factory are NOT the board's,
+   * and `upstreamOf` is how the two are told apart.
    */
   private publicReason(err: unknown): string {
     const code = isDomainError(err) ? err.code : 'internal'
     this.container.logger.warn({ err, code }, 'a bot command was refused')
-    if (code === 'unavailable') return NOT_CONFIGURED
+    // Before the codes, because cat-factory's refusals reuse them: its rate limit
+    // is `unavailable`, which is not this deployment missing configuration.
+    if (upstreamOf(err) !== null) return UPSTREAM_DECLINED
+    if (code === 'unavailable' || code === 'misconfigured') return NOT_CONFIGURED
     if (code === 'upstream_failed') return UPSTREAM_REFUSED
-    if (code === 'internal') return UNEXPECTED
-    return getErrorMessage(err)
+    if (code === 'forbidden') return NOT_ALLOWED
+    return BOARD_ANSWERS.has(code) ? getErrorMessage(err) : UNEXPECTED
   }
 
   private async status(pullRequest: PullRequestRef): Promise<{

@@ -55,6 +55,10 @@ like any other — the assigned reviewer's DM, or the channel while nobody owns
 it — said once per park, and again if a post fails and re-parks it. A pull
 request that has already been approved or closed is left alone.
 
+Each run is a billed cat-factory job, so every way to ask for one — the button,
+the label, `@bot ai`, `/review ai` — meets the same limit: one run in flight per
+review, and no more than three filed on it in an hour.
+
 ## Asking for attention
 
 A pull request that nobody has picked up is the thing the workspace exists to
@@ -191,7 +195,9 @@ not a person: it can drive the board and it has no workspace of its own.
 `GET /health` reports the mode beside the hosts a sign-in could actually use, so
 a deployment nobody can enter is visible from outside the process. One thing to
 know before turning it on: a browser sends its session only to an origin the API
-NAMES, so a hosted SPA has to be listed in `CORS_ORIGINS`. Full design:
+NAMES, so a hosted SPA has to be listed in `CORS_ORIGINS`; and a sign-in builds
+its OAuth callback on `API_BASE_URL`, the API's own public origin, which a hosted
+deployment sets (a laptop on loopback need not). Full design:
 [docs/auth.md](./docs/auth.md).
 
 ### And what they may reach

@@ -108,6 +108,8 @@ export interface NodeConfig {
   slack: { botToken: string | null; signingSecret: string | null; channelId: string | null }
   auth: AuthConfig
   appBaseUrl: string | undefined
+  /** Where this API is served from, which the OAuth callback is built on. See `callbackOrigin`. */
+  apiBaseUrl: string | null
   /**
    * Master key for the credentials entered on the Configuration screen, base64,
    * 32 bytes or more (`openssl rand -base64 32`). Null leaves the capability off.
@@ -194,6 +196,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     },
     auth: authFrom(env, corsOrigins),
     appBaseUrl: env.APP_BASE_URL || undefined,
+    apiBaseUrl: env.API_BASE_URL || null,
     encryptionKey: env.SETTINGS_ENCRYPTION_KEY || null,
   }
 }

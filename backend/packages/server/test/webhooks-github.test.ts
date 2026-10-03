@@ -1,4 +1,5 @@
 import type { ReviewRequest } from '@sainte-beuve/contracts'
+import { ForbiddenError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ReviewService } from '../src/modules/reviews/ReviewService.js'
 import { stubAiReview } from './ai-review-doubles.js'
@@ -8,6 +9,7 @@ import {
   environmentVcs,
   everyHost,
   openReview,
+  post,
   recordingVcs,
   stubGateways,
   type TestHarness,
@@ -71,7 +73,20 @@ function pullRequestPayload(action: string, extra: Record<string, unknown> = {})
   }
 }
 
-function commentPayload(body: string): unknown {
+/**
+ * Register the repository every payload here is about. A delivery for one no
+ * org registered is ignored, the default org included, so every harness that
+ * expects a delivery to DO something has to have claimed it first.
+ */
+async function registered(harness: TestHarness): Promise<TestHarness> {
+  const res = await harness.app.fetch(
+    post('/api/v1/projects', { provider: 'github', owner: 'kibertoad', repo: 'sainte-beuve' }),
+  )
+  expect(res.status).toBe(201)
+  return harness
+}
+
+function commentPayload(body: string, association = 'COLLABORATOR'): unknown {
   return {
     action: 'created',
     repository: REPOSITORY,
@@ -83,7 +98,7 @@ function commentPayload(body: string): unknown {
       labels: [],
       pull_request: { html_url: PR_URL },
     },
-    comment: { body, user: { login: 'reviewer' } },
+    comment: { body, user: { login: 'reviewer' }, author_association: association },
   }
 }
 
@@ -91,21 +106,20 @@ async function tracked(harness: TestHarness): Promise<ReviewRequest[]> {
   return harness.container.repositories.reviews.list()
 }
 
+const GITHUB = {
+  appSlug: null,
+  webhookSecret: SECRET,
+  botLogin: 'sainte-beuve-bot',
+  labels: { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' },
+}
+
 describe('GitHub webhook intake', () => {
   let harness: TestHarness
   let vcs: ReturnType<typeof recordingVcs>
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vcs = recordingVcs()
-    harness = buildHarness({
-      vcs: environmentVcs(vcs),
-      github: {
-        appSlug: null,
-        webhookSecret: SECRET,
-        botLogin: 'sainte-beuve-bot',
-        labels: { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' },
-      },
-    })
+    harness = await registered(buildHarness({ vcs: environmentVcs(vcs), github: GITHUB }))
   })
 
   it('refuses a delivery this deployment cannot verify', async () => {
@@ -200,7 +214,9 @@ describe('GitHub webhook intake', () => {
     const res = await deliver(
       harness,
       'pull_request_review',
-      pullRequestPayload('submitted', { review: { state: 'approved' } }),
+      pullRequestPayload('submitted', {
+        review: { state: 'approved', author_association: 'MEMBER' },
+      }),
     )
 
     expect(await res.json()).toMatchObject({ action: 'approved' })
@@ -222,10 +238,9 @@ describe('GitHub webhook intake', () => {
   })
 
   it('delegates to cat-factory when the AI-review label lands on an untracked PR', async () => {
-    const delegating = buildHarness({
-      aiReview: stubAiReview(),
-      github: harness.container.github,
-    })
+    const delegating = await registered(
+      buildHarness({ aiReview: stubAiReview(), github: harness.container.github }),
+    )
 
     const res = await deliver(
       delegating,
@@ -314,13 +329,112 @@ describe('GitHub webhook intake', () => {
     // The reply goes out through whichever credential wins, which here is the
     // App: the point is that a bot answer is not tied to the environment token.
     const asApp = recordingVcs()
-    const appWired = buildHarness({
-      github: harness.container.github,
-      gateways: stubGateways({ vcsAsApp: everyHost(asApp) }),
-    })
+    const appWired = await registered(
+      buildHarness({
+        github: harness.container.github,
+        gateways: stubGateways({ vcsAsApp: everyHost(asApp) }),
+      }),
+    )
     await addReviewer(appWired, { displayName: 'Peer', handles: { github: 'peer' } })
     await deliver(appWired, 'issue_comment', commentPayload('@sainte-beuve-bot review'))
     expect(asApp.comments).toHaveLength(1)
     expect(asApp.requested).toStrictEqual([['peer']])
+  })
+})
+
+describe('GitHub webhook intake, by who is asking', () => {
+  let harness: TestHarness
+  let vcs: ReturnType<typeof recordingVcs>
+
+  beforeEach(async () => {
+    vcs = recordingVcs()
+    harness = await registered(buildHarness({ vcs: environmentVcs(vcs), github: GITHUB }))
+  })
+
+  it('ignores a delivery for a repository no org registered, the default org included', async () => {
+    // A GitHub App can be installed by anybody who finds it. Falling back to the
+    // default org would hand them its reviewers, its tokens and its AI budget.
+    const stranger = buildHarness({ vcs: environmentVcs(vcs), github: harness.container.github })
+    await addReviewer(stranger, { displayName: 'Peer', handles: { github: 'peer' } })
+
+    const opened = await deliver(stranger, 'pull_request', pullRequestPayload('opened'))
+    expect(opened.status).toBe(202)
+    expect(await opened.json()).toStrictEqual({ action: 'ignored:unregistered', reviewId: null })
+    await deliver(stranger, 'issue_comment', commentPayload('@sainte-beuve-bot review'))
+
+    expect(await tracked(stranger)).toStrictEqual([])
+    expect(vcs.requested).toStrictEqual([])
+    expect(vcs.comments).toStrictEqual([])
+  })
+
+  it('acts on nothing a stranger to the repository says, and answers them nothing', async () => {
+    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' } })
+    await openReview(harness)
+
+    const mention = await deliver(
+      harness,
+      'issue_comment',
+      commentPayload('@sainte-beuve-bot reroll', 'NONE'),
+    )
+    expect(await mention.json()).toMatchObject({ action: 'ignored' })
+    const approval = await deliver(
+      harness,
+      'pull_request_review',
+      pullRequestPayload('submitted', {
+        review: { state: 'approved', author_association: 'NONE' },
+      }),
+    )
+    expect(await approval.json()).toMatchObject({ action: 'ignored' })
+
+    expect((await tracked(harness))[0]).toMatchObject({ status: 'open' })
+    expect(vcs.comments).toStrictEqual([])
+  })
+
+  it('files one AI review at a time, and says so on the pull request', async () => {
+    const catFactory = stubAiReview()
+    const delegating = await registered(
+      buildHarness({
+        aiReview: catFactory,
+        vcs: environmentVcs(vcs),
+        github: harness.container.github,
+      }),
+    )
+
+    await deliver(delegating, 'issue_comment', commentPayload('@sainte-beuve-bot ai'))
+    const handed = vcs.comments.at(-1)?.body ?? ''
+    expect(handed).toContain('Handed this to cat-factory')
+    // Where cat-factory lives is this deployment's business, not the business of
+    // everybody who can read a public pull request.
+    expect(handed).not.toContain('cat-factory.example.com')
+    expect(handed).not.toContain('cf-task-1')
+
+    await deliver(delegating, 'issue_comment', commentPayload('@sainte-beuve-bot ai'))
+    expect(vcs.comments.at(-1)?.body).toContain('already in flight')
+    expect(catFactory.requested).toHaveLength(1)
+  })
+
+  it("does not read cat-factory's own refusal out on the pull request", async () => {
+    const catFactory = stubAiReview()
+    catFactory.requestReview = async () => {
+      // Shaped the way `refusalFor` shapes one: the operator's sentence, with
+      // the upstream's words and a configuration hint in it.
+      throw new ForbiddenError(
+        "cat-factory rejected this deployment's API key: 401 key sk-live revoked",
+        { upstream: 'cat-factory' },
+      )
+    }
+    const delegating = await registered(
+      buildHarness({
+        aiReview: catFactory,
+        vcs: environmentVcs(vcs),
+        github: harness.container.github,
+      }),
+    )
+
+    await deliver(delegating, 'issue_comment', commentPayload('@sainte-beuve-bot ai'))
+    const refusal = vcs.comments.at(-1)?.body ?? ''
+    expect(refusal).toContain('cat-factory declined the request')
+    expect(refusal).not.toContain('API key')
+    expect(refusal).not.toContain('sk-live')
   })
 })

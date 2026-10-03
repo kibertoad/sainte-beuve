@@ -40,7 +40,11 @@ defineProps<{
       >
         <div class="min-w-0">
           <div class="flex items-center gap-2 min-w-0">
-            <ULink :to="pr.pullRequest.url" target="_blank" class="font-medium line-clamp-2">
+            <ULink
+              :to="safeHref(pr.pullRequest.url)"
+              target="_blank"
+              class="font-medium line-clamp-2"
+            >
               {{ pr.title }}
             </ULink>
             <UBadge v-if="pr.draft" size="sm" variant="subtle" color="neutral" class="shrink-0">
@@ -54,7 +58,7 @@ defineProps<{
         <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <slot name="actions" :pull-request="pr" />
           <UButton
-            :to="pr.pullRequest.url"
+            :to="safeHref(pr.pullRequest.url)"
             target="_blank"
             size="sm"
             variant="ghost"

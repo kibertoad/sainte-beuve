@@ -209,7 +209,12 @@ export async function roleOf(container: AppContainer, principal: RequestPrincipa
   // The directory has no delete, so this is a state no route here produces; it
   // fails closed rather than asserting, because a permission check is the last
   // place to answer a surprise with a 404.
-  return reviewer?.role ?? 'member'
+  //
+  // A PAUSED row is not an admin either. Pausing revokes the row's sessions and
+  // the sign-in refuses it, so a live session on one is a request that raced the
+  // pause — and the one thing it must not be able to do is un-pause itself.
+  if (reviewer === null || reviewer.availability === 'paused') return 'member'
+  return reviewer.role
 }
 
 /**

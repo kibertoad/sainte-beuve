@@ -95,7 +95,11 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
         class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
       >
         <div class="min-w-0">
-          <ULink :to="request.pullRequest.url" target="_blank" class="font-medium line-clamp-2">
+          <ULink
+            :to="safeHref(request.pullRequest.url)"
+            target="_blank"
+            class="font-medium line-clamp-2"
+          >
             {{ request.title }}
           </ULink>
           <p class="text-xs text-muted">
@@ -133,7 +137,7 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
             I will review it
           </UButton>
           <UButton
-            :to="request.pullRequest.url"
+            :to="safeHref(request.pullRequest.url)"
             target="_blank"
             size="sm"
             variant="ghost"

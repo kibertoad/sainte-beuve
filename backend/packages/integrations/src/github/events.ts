@@ -53,15 +53,30 @@ export interface GitHubIssuePayload {
   pull_request?: { html_url?: string } | null
 }
 
+/**
+ * How the author of a comment or a review relates to the repository, as GitHub
+ * itself reports it on the payload: `OWNER`, `MEMBER`, `COLLABORATOR`,
+ * `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `FIRST_TIMER`, `MANNEQUIN` or `NONE`.
+ */
+type AuthorAssociation = string
+
 export interface GitHubEventPayload {
   action?: string
   repository?: GitHubRepositoryPayload
   pull_request?: GitHubPullRequestPayload
   issue?: GitHubIssuePayload
-  review?: { state?: string; user?: GitHubActor | null }
+  review?: {
+    state?: string
+    user?: GitHubActor | null
+    author_association?: AuthorAssociation
+  }
   /** The label that was just added, on a `labeled` action. */
   label?: GitHubLabel
-  comment?: { body?: string; user?: GitHubActor | null }
+  comment?: {
+    body?: string
+    user?: GitHubActor | null
+    author_association?: AuthorAssociation
+  }
   sender?: GitHubActor
 }
 
@@ -99,6 +114,30 @@ export interface GitHubIntentContext {
    * deployment configured must not decide whether mentions work.
    */
   botLogin: string | null
+}
+
+/**
+ * The associations whose comments and reviews this deployment acts on: somebody
+ * who owns the repository, belongs to the org that does, or was added to it.
+ *
+ * Everybody else is a stranger, and on a public repository a stranger can
+ * comment and submit a review on any pull request. Acting on them would let any
+ * GitHub account spend the org's cat-factory budget with `@bot ai` in a loop,
+ * pull reviews off people with `@bot reroll`, or settle a tracked review with a
+ * drive-by approval. `CONTRIBUTOR` is not on the list: it means somebody had a
+ * commit merged once, which is not the same as being trusted with the board.
+ *
+ * LABELS need no such check, because GitHub already makes it: adding one takes
+ * triage access to the repository, which is a decision the repository's owner
+ * made. Opening a pull request is open to anybody and stays so, because it only
+ * puts the pull request on the board unassigned — nobody is asked and nothing is
+ * spent until somebody trusted does something about it.
+ */
+const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
+
+/** Whether GitHub says this author is one of the repository's own. Absent is a no. */
+export function isTrustedAssociation(association: AuthorAssociation | undefined): boolean {
+  return association !== undefined && TRUSTED_ASSOCIATIONS.has(association.toUpperCase())
 }
 
 /** The actions that mean "this pull request is ready to be looked at". */
@@ -198,6 +237,8 @@ function fromReview(payload: GitHubEventPayload): GitHubIntent | null {
   const pr = payload.pull_request
   const ref = pullRequestRef(payload, pr?.number, pr?.html_url)
   if (payload.action !== 'submitted' || ref === null) return null
+  // A stranger's approval settles nothing. See `TRUSTED_ASSOCIATIONS`.
+  if (!isTrustedAssociation(payload.review?.author_association)) return null
   const state = payload.review?.state?.toLowerCase()
   // `commented` is a review too, and it deliberately resolves nothing: a comment
   // that stops the reminder clock is how a review goes quiet without an answer.
@@ -252,8 +293,9 @@ export function botMentionLogin(configured: string | null): string | null {
 }
 
 /**
- * Who wrote the comment, when it is somebody we would answer. Null covers two
- * cases that both mean "not for us": a comment with no author, and the bot
+ * Who wrote the comment, when it is somebody we would answer. Null covers three
+ * cases that all mean "not for us": a comment with no author, one from a
+ * stranger to the repository (see `TRUSTED_ASSOCIATIONS`), and the bot
  * ITSELF, because a deployment whose bot is also a reviewer would otherwise be
  * one comment away from a loop. Both forms of the bot's own login are caught,
  * since the comment carries the `[bot]` one whatever was configured.
@@ -261,6 +303,10 @@ export function botMentionLogin(configured: string | null): string | null {
 function commentAuthor(payload: GitHubEventPayload, bot: string): string | null {
   const requester = payload.comment?.user?.login
   if (requester === undefined) return null
+  // A stranger to the repository is not somebody we answer, and it is SILENCE
+  // rather than a refusal on the pull request: answering every stranger's
+  // mention would hand them a way to make the bot comment at will.
+  if (!isTrustedAssociation(payload.comment?.author_association)) return null
   const lowered = requester.toLowerCase()
   const bare = bot.toLowerCase()
   return lowered === bare || lowered === `${bare}${BOT_SUFFIX}` ? null : requester

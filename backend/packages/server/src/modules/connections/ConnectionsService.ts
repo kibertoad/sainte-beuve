@@ -15,6 +15,7 @@ import type { RoundTripState } from '@sainte-beuve/kernel'
 import { type AppContainer, withOrg } from '../../container.js'
 import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
 import { mintNonce } from '../../crypto/tokens.js'
+import { callbackOrigin } from '../../http/callbackOrigin.js'
 import { requireCapability } from '../../http/errors.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 import { OrgService } from '../orgs/OrgService.js'
@@ -129,15 +130,14 @@ export class ConnectionsService {
   }
 
   /**
-   * Where to sign in. `origin` is the API's OWN origin, taken from the incoming
-   * request rather than from configuration: the host matches the redirect URI
-   * against what the OAuth app registered, and deriving it from the request is
-   * what lets one build serve `http://localhost:8788` and a hosted origin without
-   * a second variable to keep in step.
+   * Where to sign in. `requestUrl` is the URL this request arrived on, and the
+   * callback is NOT simply built on it: `callbackOrigin` decides, after the
+   * capability is known to be there, so a deployment with no OAuth client says
+   * that first.
    */
   async signInUrl(
     provider: VcsProvider,
-    origin: string,
+    requestUrl: string,
     purpose: SignInPurpose = 'connect',
     /**
      * Which tenancy to sign in to, by slug. Omitted means the org this request
@@ -160,7 +160,10 @@ export class ConnectionsService {
       await this.orgIdFor(orgSlug),
     )
     return {
-      url: identity.authorizeUrl({ redirectUri: callbackUrl(provider, origin), state }),
+      url: identity.authorizeUrl({
+        redirectUri: callbackUrl(provider, callbackOrigin(this.container, requestUrl)),
+        state,
+      }),
       nonce,
     }
   }
@@ -187,7 +190,12 @@ export class ConnectionsService {
     provider: VcsProvider
     code: string
     state: string | null
-    origin: string
+    /**
+     * The URL the callback arrived on. The redirect URI is derived from it only
+     * AFTER the state verifies, for the reason above: `callbackOrigin` can
+     * refuse, and its refusal describes this deployment's configuration.
+     */
+    requestUrl: string
     /** What the browser carried back in its flow cookie. See `RoundTripState`. */
     nonce: string | null
   }): Promise<CompletedSignIn> {
@@ -199,7 +207,7 @@ export class ConnectionsService {
     )
     const { token, account } = await identity.exchangeCode({
       code: input.code,
-      redirectUri: callbackUrl(provider, input.origin),
+      redirectUri: callbackUrl(provider, callbackOrigin(this.container, input.requestUrl)),
     })
     // EVERY WRITE BELOW GOES INTO THE ORG THE STATE NAMED, not the one this
     // callback arrived in: the callback carries no session, so the request is in

@@ -92,6 +92,39 @@ export const repoNameSchema = v.pipe(
 )
 
 /**
+ * The two schemes a link this deployment stores may carry. `v.url()` has
+ * already established the rest parses, so the scheme is all this has to read.
+ */
+const WEB_SCHEME = /^https?:\/\//i
+
+/**
+ * A link a person will click: an absolute URL whose scheme is `http` or `https`.
+ *
+ * `v.url()` alone is `new URL()`, which parses `javascript:alert(1)` and
+ * `data:text/html,...` happily, and every URL on this wire is rendered as an
+ * `href` on the board, the workspace and the projects screen, and wrapped in a
+ * bot-vouched Slack link. A member who can create a review would otherwise be
+ * one click away from running script in an admin's tab. The scheme is the whole
+ * of the rule, because a self-hosted GitLab has no host anything here could
+ * guess.
+ */
+export const webUrlSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.url(),
+  v.regex(WEB_SCHEME, 'A link is an absolute http or https URL'),
+)
+
+/**
+ * Whether a string is a link {@link webUrlSchema} would accept. For the SPA,
+ * which renders stored links as `href`s and should not trust a row written
+ * before the schema held the line.
+ */
+export function isWebUrl(value: string): boolean {
+  return v.is(webUrlSchema, value)
+}
+
+/**
  * A repository, addressed by the two segments both hosts agree on.
  *
  * `${owner}/${repo}` is the full path a GitLab API call URL-encodes and the
@@ -112,7 +145,7 @@ export const pullRequestRefSchema = v.object({
   repo: repoNameSchema,
   /** The number the host shows on the page: a PR number, or a merge request `iid`. */
   number: v.pipe(v.number(), v.integer(), v.minValue(1)),
-  url: v.pipe(v.string(), v.url()),
+  url: webUrlSchema,
 })
 export type PullRequestRef = v.InferOutput<typeof pullRequestRefSchema>
 

@@ -4,6 +4,7 @@ import {
   type GitHubEventPayload,
   type GitHubIntentContext,
   interpretGitHubDelivery,
+  isTrustedAssociation,
   parseBotCommand,
 } from './events.js'
 
@@ -164,7 +165,10 @@ describe('interpretGitHubDelivery: reviews', () => {
   it('resolves a review on an approval and on a change request', () => {
     const submitted = (state: string) => ({
       event: 'pull_request_review',
-      payload: pullRequest({ action: 'submitted', review: { state } }),
+      payload: pullRequest({
+        action: 'submitted',
+        review: { author_association: 'COLLABORATOR', state },
+      }),
     })
     expect(interpretGitHubDelivery(submitted('approved'), CONTEXT)).toStrictEqual({
       kind: 'resolve',
@@ -179,7 +183,10 @@ describe('interpretGitHubDelivery: reviews', () => {
   it('leaves a commented review outstanding', () => {
     // A comment that stopped the reminder clock is how a review goes quiet
     // without ever having produced an answer.
-    const commented = pullRequest({ action: 'submitted', review: { state: 'commented' } })
+    const commented = pullRequest({
+      action: 'submitted',
+      review: { author_association: 'COLLABORATOR', state: 'commented' },
+    })
     expect(
       interpretGitHubDelivery({ event: 'pull_request_review', payload: commented }, CONTEXT),
     ).toBeNull()
@@ -191,7 +198,10 @@ describe('interpretGitHubDelivery: bot mentions', () => {
     interpretGitHubDelivery(
       {
         event: 'issue_comment',
-        payload: issue({ action: 'created', comment: { body, user: { login } } }),
+        payload: issue({
+          action: 'created',
+          comment: { author_association: 'MEMBER', body, user: { login } },
+        }),
       },
       CONTEXT,
     )
@@ -226,7 +236,11 @@ describe('interpretGitHubDelivery: bot mentions', () => {
           event: 'issue_comment',
           payload: issue({
             action: 'created',
-            comment: { body: '@sainte-beuve-bot review', user: { login: 'reviewer' } },
+            comment: {
+              author_association: 'MEMBER',
+              body: '@sainte-beuve-bot review',
+              user: { login: 'reviewer' },
+            },
           }),
         },
         { labels: LABELS, botLogin: null },
@@ -242,7 +256,10 @@ describe('interpretGitHubDelivery: bot mentions', () => {
       interpretGitHubDelivery(
         {
           event: 'issue_comment',
-          payload: issue({ action: 'created', comment: { body, user: { login: 'reviewer' } } }),
+          payload: issue({
+            action: 'created',
+            comment: { author_association: 'MEMBER', body, user: { login: 'reviewer' } },
+          }),
         },
         { labels: LABELS, botLogin: '' },
       )
@@ -261,7 +278,11 @@ describe('interpretGitHubDelivery: bot mentions', () => {
           event: 'issue_comment',
           payload: issue({
             action: 'created',
-            comment: { body: '@sainte-beuve-bot status', user: { login } },
+            comment: {
+              author_association: 'MEMBER',
+              body: '@sainte-beuve-bot status',
+              user: { login },
+            },
           }),
         },
         context,
@@ -270,6 +291,39 @@ describe('interpretGitHubDelivery: bot mentions', () => {
     expect(from('sainte-beuve-bot[bot]', suffixed)).toBeNull()
     // Configured WITHOUT the suffix, against the comment GitHub actually writes.
     expect(from('sainte-beuve-bot[bot]', CONTEXT)).toBeNull()
+  })
+})
+
+describe('interpretGitHubDelivery: strangers', () => {
+  // On a public repository anybody can comment and submit a review. What they
+  // must not be able to do is spend the org's cat-factory budget, pull reviews
+  // off people, or settle a review with a drive-by approval.
+  const STRANGERS = ['NONE', 'CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR', 'FIRST_TIMER', 'MANNEQUIN']
+
+  for (const association of [...STRANGERS, undefined]) {
+    it(`ignores a mention from an author whose association is ${String(association)}`, () => {
+      const payload = issue({
+        action: 'created',
+        comment: {
+          body: '@sainte-beuve-bot ai',
+          user: { login: 'drive-by' },
+          author_association: association,
+        },
+      })
+      expect(interpretGitHubDelivery({ event: 'issue_comment', payload }, CONTEXT)).toBeNull()
+    })
+
+    it(`ignores an approval from an author whose association is ${String(association)}`, () => {
+      const payload = pullRequest({
+        action: 'submitted',
+        review: { state: 'approved', author_association: association },
+      })
+      expect(interpretGitHubDelivery({ event: 'pull_request_review', payload }, CONTEXT)).toBeNull()
+    })
+  }
+
+  it("acts for the repository's own people, however GitHub cases the value", () => {
+    expect(['OWNER', 'MEMBER', 'COLLABORATOR', 'member'].every(isTrustedAssociation)).toBe(true)
   })
 })
 

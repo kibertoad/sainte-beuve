@@ -1,4 +1,4 @@
-import { ACTIVE_REVIEW_STATUSES, type ReviewRequest } from '@sainte-beuve/contracts'
+import { ACTIVE_REVIEW_STATUSES, type Reviewer, type ReviewRequest } from '@sainte-beuve/contracts'
 import {
   ForbiddenError,
   formatPullRequest,
@@ -12,6 +12,7 @@ import {
   slackLink,
   verifySlackSignature,
 } from '@sainte-beuve/integrations'
+import { type ChatCommandDecision, decideChatCommand } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveSlackSigningSecret } from '../../integrations/resolve.js'
 import { snoozeReview } from '../../reminders/snooze.js'
@@ -201,7 +202,12 @@ export class SlackWebhookService {
     if (intent.kind === 'help') return HELP
     if (intent.kind === 'list') return this.list()
     const review = await this.require(intent.reviewId)
-    if (intent.kind === 'claim') return this.claim(review, slackUserId)
+    // Every verb past here WRITES, so it is asked who typed it before anything
+    // else. See `decideChatCommand` in @sainte-beuve/reviewers.
+    const actor = await this.actorFor(slackUserId)
+    const decision = decideChatCommand({ verb: intent.kind, actor, review })
+    if (!decision.allowed) return refusalFor(decision.reason, slackUserId)
+    if (intent.kind === 'claim') return this.claim(review, decision.actor)
     if (intent.kind === 'snooze') return this.snooze(review, intent.hours)
     if (intent.kind === 'ai_review') {
       const run = await new AiReviewService(this.container).request(review.id, null)
@@ -214,6 +220,12 @@ export class SlackWebhookService {
     return names.length === 0
       ? `Nobody else is available for ${describe(review)}, so it stays where it is.`
       : `${describe(review)} now goes to ${names}.`
+  }
+
+  /** The directory row a Slack user maps to, or null when none does. */
+  private async actorFor(slackUserId: string): Promise<Reviewer | null> {
+    const reviewers = await this.container.repositories.reviewers.list()
+    return reviewers.find((candidate) => candidate.slackUserId === slackUserId) ?? null
   }
 
   /**
@@ -238,20 +250,8 @@ export class SlackWebhookService {
     return `${lines.join('\n')}${more}`
   }
 
-  /**
-   * "I will take it". The Slack user id is mapped to a reviewer row, and a
-   * mapping that is missing is the answer rather than a failure: it is the state
-   * every fresh deployment is in, and it names the field to fill in.
-   */
-  private async claim(review: ReviewRequest, slackUserId: string): Promise<string> {
-    const reviewers = await this.container.repositories.reviewers.list()
-    const reviewer = reviewers.find((candidate) => candidate.slackUserId === slackUserId)
-    if (reviewer === undefined) {
-      return (
-        'You are not in the reviewer pool under this Slack id yet. Add your Slack user id ' +
-        `(\`${slackUserId}\`) to your reviewer entry, and I can put you on reviews from here.`
-      )
-    }
+  /** "I will take it", by the row the Slack user maps to. */
+  private async claim(review: ReviewRequest, reviewer: Reviewer): Promise<string> {
     await new ReviewService(this.container).claim(review.id, reviewer.id)
     return `${describe(review)} is yours.`
   }
@@ -273,6 +273,30 @@ export class SlackWebhookService {
     }
     return review
   }
+}
+
+/**
+ * What a refused command says. A missing mapping is the ANSWER rather than a
+ * failure: it is the state every fresh deployment is in, and it names the field
+ * to fill in.
+ */
+function refusalFor(
+  reason: Extract<ChatCommandDecision, { allowed: false }>['reason'],
+  slackUserId: string,
+): string {
+  if (reason === 'paused') {
+    return 'You are paused in the reviewer directory, so you cannot change reviews from here.'
+  }
+  if (reason === 'not_the_holder') {
+    return (
+      'Only whoever has this review, or an admin, can hand it to somebody else. Try ' +
+      '`/review take <id>` if you want it yourself.'
+    )
+  }
+  return (
+    'You are not in the reviewer pool under this Slack id yet. Add your Slack user id ' +
+    `(\`${slackUserId}\`) to your reviewer entry, and I can act for you from here.`
+  )
 }
 
 function ephemeral(text: string): SlackReply {

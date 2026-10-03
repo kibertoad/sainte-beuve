@@ -90,6 +90,26 @@ Opening a pull request tracks it and leaves it unassigned on purpose: opening on
 is not the same gesture as asking for a reviewer, and `open` is the state the
 reminder ladder exists to shorten. The **label** is how a team asks for one now.
 
+**Only a repository an org registered is acted on.** A delivery is placed by the
+project registry, and one for a repository nobody registered is acked and
+dropped (`ignored:unregistered`) — the default org included. A GitHub App can be
+installed by anybody who finds it, and falling back to the default org would hand
+whoever installed it on their own repository that org's reviewers, its
+installation tokens and its cat-factory budget. Register each repository on the
+Projects screen; a single-tenant deployment does this too.
+
+**Only the repository's own people are listened to.** A comment command and a
+submitted review count only when GitHub reports the author's
+`author_association` as `OWNER`, `MEMBER` or `COLLABORATOR`. On a public
+repository anybody can comment and review, and without this any GitHub account
+could spend the org's cat-factory budget with `@bot ai` in a loop, pull reviews
+off people with `@bot reroll`, or settle a tracked review with a drive-by
+approval. A stranger's mention gets SILENCE rather than a refusal, because an
+answer would be a way to make the bot comment at will. Labels need no such check
+— adding one takes triage access, which the repository's owner granted — and an
+opened pull request is tracked from anybody, because that asks nobody and spends
+nothing.
+
 ### Labels
 
 Three rules, named by `GITHUB_LABEL_REVIEW`, `GITHUB_LABEL_AI_REVIEW` and
@@ -122,6 +142,8 @@ pull-request comment:
 @sainte-beuve-bot status     who is on it, and what it needs
 ```
 
+It acts only for the repository's own people; see above.
+
 The mention is the way in rather than a bare command word, because
 `issue_comment` fires on every comment in every watched repository: a bot that
 acted on "reroll" appearing in prose would act on a conversation about itself. It
@@ -138,7 +160,15 @@ indistinguishable from a webhook that never arrived, and the person who typed it
 has no other way to tell. What it says about a refusal is narrower than what an
 operator gets: a pull request is public, and the message that names
 `SETTINGS_ENCRYPTION_KEY` or which half of cat-factory's configuration is missing
-belongs in the deployment's logs.
+belongs in the deployment's logs. The same goes for a refusal cat-factory itself
+wrote, which carries its own response text and what this deployment's key lacks:
+the comment says cat-factory declined, and the log says why. Only the board's own
+answers — "no reviewer rev-3", "already in flight" — are repeated as they are.
+
+Nor does it link to cat-factory. Where this deployment's instance lives (often an
+internal host, `http://localhost:8787` in local mode) and the task id it handed
+out are not the business of everybody who can read a public pull request; the
+board carries the link, behind a sign-in.
 
 A **label** it cannot honour is a different case, and is acked rather than
 refused. A 5xx makes GitHub redeliver, and tracking a pull request is idempotent
@@ -199,9 +229,15 @@ the default one, and everything above it is the behaviour it already had.
 /review ai <id>              hand it to cat-factory
 ```
 
-`take` maps the Slack user id to a reviewer row by its `slackUserId`. When there
-is no such row it says so and quotes the id to paste, because that is the state
-every fresh deployment is in.
+Every command that changes something — `take`, `reroll`, `snooze`, `ai` — maps
+the Slack user id to a reviewer row by its `slackUserId` first, and does nothing
+for somebody the directory does not hold. A Slack signature proves Slack sent the
+request, not who typed it, and any member of the workspace (a guest included,
+where the command is enabled) can type `/review`. When there is no such row the
+reply says so and quotes the id to paste, because that is the state every fresh
+deployment is in. A paused row changes nothing either, and a **reroll** — which
+takes the review off whoever has it — comes only from the person who has it or an
+admin. Listing what is waiting asks nobody: it writes nothing.
 
 `/review` on its own lists what is waiting, the reviews nobody is on first and
 the longest-waiting before the rest, capped at ten. The order is what makes the
