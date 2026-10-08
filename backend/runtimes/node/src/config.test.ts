@@ -89,6 +89,12 @@ describe('loadConfig', () => {
       CAT_FACTORY_API_KEY: 'cf_live_x.y',
     })
     expect(config.catFactorySuggestion).toBeNull()
+    expect(config.retiredVariables).toStrictEqual([
+      'CAT_FACTORY_BASE_URL',
+      'CAT_FACTORY_SERVICE_ID',
+      'CAT_FACTORY_API_KEY',
+    ])
+    expect(loadConfig({ CAT_FACTORY_API_KEY: '' }).retiredVariables).toStrictEqual([])
   })
 
   it('offers whichever GitHub credentials are configured, and no others', () => {

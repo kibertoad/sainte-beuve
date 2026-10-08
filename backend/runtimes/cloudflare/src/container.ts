@@ -29,6 +29,8 @@ import {
   DEFAULT_SESSION_LIFETIME_MS,
   type EnvironmentVcsGateways,
   InMemoryAttentionBus,
+  RETIRED_VARIABLES_MESSAGE,
+  retiredVariablesIn,
   type SecretsWiring,
   secretsFrom,
   withAppOrigin,
@@ -127,6 +129,15 @@ function busFor(env: WorkerEnv, waitUntil: Deferral): { bus: AttentionBus; kind:
  * on a warm isolate still takes effect.
  */
 let cachedSecrets: { key: string | undefined; wiring: SecretsWiring } | null = null
+let retiredVariablesChecked = false
+
+/** Once per isolate, where Node warns once per boot: per request would flood Workers Logs. */
+function warnRetiredVariables(env: WorkerEnv): void {
+  if (retiredVariablesChecked) return
+  retiredVariablesChecked = true
+  const variables = retiredVariablesIn(env)
+  if (variables.length > 0) workerLogger.warn({ variables }, RETIRED_VARIABLES_MESSAGE)
+}
 let cachedGateways: { key: string; factory: GatewayFactory } | null = null
 
 function secretsFor(env: WorkerEnv): SecretsWiring {
@@ -249,6 +260,7 @@ export function containerFor(
     void work.catch(() => {})
   },
 ): AppContainer {
+  warnRetiredVariables(env)
   const store = storeFor(env)
   const fanout = busFor(env, waitUntil)
   return createContainer({

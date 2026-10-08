@@ -243,7 +243,8 @@ export interface CatFactoryAccess {
 
 /** What filing an AI review needs on top of access: the service, and optionally a pipeline. */
 export interface CatFactoryReviewTarget extends CatFactoryAccess {
-  serviceId: string
+  /** Null for a gateway that only polls and curates runs already filed. Filing refuses without one. */
+  serviceId: string | null
   /** Null runs the review task's own pinned pipeline. */
   pipelineId: string | null
 }

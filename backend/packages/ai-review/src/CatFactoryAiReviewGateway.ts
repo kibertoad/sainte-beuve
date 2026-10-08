@@ -4,6 +4,7 @@ import {
   type AiReviewGateway,
   type AiReviewHandle,
   type AiReviewReport,
+  UnavailableError,
   formatPullRequest,
   withDeadline,
 } from '@sainte-beuve/kernel'
@@ -39,8 +40,9 @@ export interface CatFactoryOptions {
    * service per repository is cat-factory's own model, so a deployment reviewing
    * several repos configures a mapping; the single-service default is the
    * starting point, not the end state (docs/implementation-plan.md, slice 4).
+   * Null for a gateway that only polls and curates runs already filed.
    */
-  serviceId: string
+  serviceId: string | null
   /** Pin the pipeline the review runs on. Omitted, the task's own pinned pipeline runs. */
   pipelineId?: string
   /** Swap the HTTP implementation. The SDK's own seam, so a suite needs no live instance. */
@@ -148,11 +150,15 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     instructions: string | null
   }) {
     const ref = formatPullRequest(input.pullRequest)
+    const { serviceId } = this.options
+    if (serviceId === null) {
+      throw new UnavailableError(`Cannot file a review task for ${ref}: no service id is set`)
+    }
     const brief = [`Review ${ref}: ${input.pullRequest.url}`, input.instructions]
       .filter((line): line is string => line !== null && line.length > 0)
       .join('\n\n')
     try {
-      return await this.client.tasks.create(this.options.serviceId, {
+      return await this.client.tasks.create(serviceId, {
         title: `Review ${ref}: ${input.title}`.slice(0, 200),
         description: brief.slice(0, 2000),
         taskType: 'review',

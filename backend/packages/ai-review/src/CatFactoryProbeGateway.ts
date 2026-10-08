@@ -1,14 +1,16 @@
 import {
   CatFactoryApiError,
   CatFactoryClient,
+  CatFactoryConnectionError,
+  CatFactoryDecodeError,
   CatFactoryNotFoundError,
+  CatFactoryTimeoutError,
   CatFactoryUnauthorizedError,
 } from '@cat-factory/sdk'
 import {
   type CatFactoryAccess,
   type CatFactoryProbe,
   type CatFactoryProbeReport,
-  getErrorMessage,
   withDeadline,
 } from '@sainte-beuve/kernel'
 
@@ -69,5 +71,23 @@ const FAILURES: readonly [new (...args: never[]) => Error, CatFactoryProbeReport
 
 function failureOf(err: unknown): Pick<CatFactoryProbeReport, 'outcome' | 'detail'> {
   const match = FAILURES.find(([type]) => err instanceof type)
-  return { outcome: match?.[1] ?? 'unreachable', detail: getErrorMessage(err) }
+  return { outcome: match?.[1] ?? 'unreachable', detail: detailOf(err) }
+}
+
+/** A machine code as cat-factory spells one, and nothing that could carry a response body. */
+const ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/
+
+/**
+ * What kind of failure it was, never the text of the answer. The URL is the
+ * admin's to choose, so whatever answers there may not be cat-factory, and its
+ * error text would otherwise come back to the screen verbatim.
+ */
+function detailOf(err: unknown): string {
+  if (err instanceof CatFactoryApiError) {
+    return ERROR_CODE.test(err.code) ? `HTTP ${err.status} (${err.code})` : `HTTP ${err.status}`
+  }
+  if (err instanceof CatFactoryTimeoutError) return 'no answer before the deadline'
+  if (err instanceof CatFactoryConnectionError) return 'no connection could be made'
+  if (err instanceof CatFactoryDecodeError) return 'the answer was not a cat-factory API response'
+  return 'the request failed'
 }

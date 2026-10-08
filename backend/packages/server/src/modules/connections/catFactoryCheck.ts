@@ -5,8 +5,12 @@ import type {
 } from '@sainte-beuve/contracts'
 import type { CatFactoryProbeReport } from '@sainte-beuve/kernel'
 
-/** Where the key a check ran with came from, or null when there was none. */
-export type CheckedKey = 'entered' | 'stored' | null
+/**
+ * Where the key a check ran with came from, or null when there was none.
+ * `elsewhere` is a stored key that was not used, because the URL checked is not
+ * the stored one.
+ */
+export type CheckedKey = 'entered' | 'stored' | 'elsewhere' | null
 
 type Verdict = Pick<CatFactoryCheckStep, 'outcome' | 'message'>
 
@@ -72,17 +76,21 @@ function listed(spec: ListedId): StepDefinition['judge'] {
   }
 }
 
+const KEY_VERDICTS: Record<NonNullable<CheckedKey> | 'none', Verdict> = {
+  entered: passed('Checking the key entered above.'),
+  stored: passed('Checking the stored key.'),
+  elsewhere: failed(
+    'The stored key is only sent to the saved base URL. Paste the key for this one above to check it.',
+  ),
+  none: failed('There is no key to check with: paste one, or store one first.'),
+}
+
 /** The steps, in the order they run and are shown. */
 const STEPS: readonly StepDefinition[] = [
   {
     step: 'key',
     gates: true,
-    judge: ({ key }) =>
-      key === null
-        ? failed('There is no key to check with: paste one, or store one first.')
-        : passed(
-            key === 'entered' ? 'Checking the key entered above.' : 'Checking the stored key.',
-          ),
+    judge: ({ key }) => KEY_VERDICTS[key ?? 'none'],
   },
   {
     step: 'reachable',

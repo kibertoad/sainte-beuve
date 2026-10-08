@@ -5,6 +5,7 @@ import {
   environmentApiKeyFrom,
   DEFAULT_GITHUB_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
+  retiredVariablesIn,
   withAppOrigin,
 } from '@sainte-beuve/server'
 import { clientAddressHeaderFrom } from './clientAddress.js'
@@ -130,6 +131,8 @@ export interface NodeConfig {
    * 32 bytes or more (`openssl rand -base64 32`). Null leaves the capability off.
    */
   encryptionKey: string | null
+  /** Variables this environment sets that no release reads any more. Warned about at boot. */
+  retiredVariables: string[]
 }
 
 type Env = Record<string, string | undefined>
@@ -213,6 +216,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     appBaseUrl: env.APP_BASE_URL || undefined,
     apiBaseUrl: env.API_BASE_URL || null,
     encryptionKey: env.SETTINGS_ENCRYPTION_KEY || null,
+    retiredVariables: retiredVariablesIn(env),
   }
 }
 

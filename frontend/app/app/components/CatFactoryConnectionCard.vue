@@ -250,7 +250,7 @@ const STEP_ICON = {
       :status="keyStatus"
       :busy="busy"
       placeholder="cf_live_…"
-      description="The API key, minted in cat-factory under its API access tokens. AI review needs the decide scope, because a review stops on its findings and waits for an answer; guided review works with write. Sealed before it is stored and never shown again. Test connection uses a key typed here before the stored one."
+      description="The API key, minted in cat-factory under its API access tokens. AI review needs the decide scope, because a review stops on its findings and waits for an answer; guided review works with write. Sealed before it is stored and never shown again, and sent only to the saved base URL: changing the URL removes it. Test connection uses a key typed here before the stored one."
       @save="emit('saveKey', $event)"
       @clear="emit('clearKey')"
     />

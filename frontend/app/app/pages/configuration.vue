@@ -241,7 +241,27 @@ async function refreshCapabilitiesFor(integrationId: IntegrationId) {
   if (integrationCapabilities(integrationId).length > 0) await capabilities.refresh()
 }
 
+/** Whether saving this config moves the connection to another instance, which drops the stored key. */
+function dropsCatFactoryKey(config: CatFactoryConfig): boolean {
+  const stored = data.value?.connections.catFactory.config ?? null
+  return (
+    stored !== null &&
+    stored.baseUrl !== config.baseUrl.replace(/\/+$/, '') &&
+    statusOf('cat-factory').state !== 'absent'
+  )
+}
+
 async function saveCatFactory(config: CatFactoryConfig) {
+  const confirmed =
+    !dropsCatFactoryKey(config) ||
+    (await confirm({
+      title: 'Move to another cat-factory instance?',
+      description:
+        'A key works only on the instance that minted it, so the stored key is removed. AI ' +
+        'reviews already running on the old instance can no longer be followed.',
+      confirmLabel: 'Change the base URL',
+    }))
+  if (!confirmed) return
   await run(
     () => api.saveCatFactoryConfig(config),
     'Could not save the cat-factory settings',
@@ -250,13 +270,13 @@ async function saveCatFactory(config: CatFactoryConfig) {
   await capabilities.refresh()
 }
 
-/** Forget this org's cat-factory settings. The key stays until it is cleared on its own. */
+/** Forget this org's cat-factory connection, key included. */
 async function clearCatFactory() {
   const confirmed = await confirm({
     title: 'Clear the cat-factory settings?',
     description:
-      'AI review and guided review stop working for this org until a base URL is saved again. ' +
-      'The stored key is kept.',
+      'The settings and the stored key are both removed. AI review and guided review stop ' +
+      'working for this org until they are entered again.',
     confirmLabel: 'Clear the settings',
   })
   if (!confirmed) return

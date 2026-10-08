@@ -58,8 +58,8 @@ export type CatFactoryConnection = v.InferOutput<typeof catFactoryConnectionSche
 
 /**
  * A configuration to try before (or after) saving it. The key is optional: left
- * out, the org's stored key is used, so an admin can re-test without pasting it
- * again.
+ * out, the org's stored key is used if the base URL is the stored one, so an
+ * admin can re-test without pasting it again. Any other URL needs a key pasted.
  */
 export const checkCatFactorySchema = v.object({
   ...catFactoryConfigSchema.entries,

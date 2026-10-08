@@ -18,6 +18,7 @@ export {
 export { environmentApiKeyFrom } from './config/apiKey.js'
 export { type AuthModeInput, authModeFrom } from './config/authMode.js'
 export { devModeFrom } from './config/devMode.js'
+export { RETIRED_VARIABLES_MESSAGE, retiredVariablesIn } from './config/retired.js'
 export type { AppEnv } from './http/env.js'
 export { HmacStateSigner, STATE_LIFETIME_MS } from './crypto/HmacStateSigner.js'
 export {

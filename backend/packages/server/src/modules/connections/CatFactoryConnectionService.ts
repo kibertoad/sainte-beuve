@@ -14,7 +14,7 @@ import {
 } from '../../integrations/catFactoryConfig.js'
 import { resolveCapabilities } from '../../integrations/capabilities.js'
 import { openCredential } from '../../integrations/resolve.js'
-import { catFactoryCheck } from './catFactoryCheck.js'
+import { type CheckedKey, catFactoryCheck } from './catFactoryCheck.js'
 
 const NO_ADAPTERS = 'This deployment wired no gateway factory, so it cannot reach cat-factory'
 
@@ -39,30 +39,55 @@ export class CatFactoryConnectionService {
     }
   }
 
+  /**
+   * A key is valid only on the instance that minted it, so a new base URL drops
+   * the stored key rather than sending it there. Dropped first: a failed write
+   * then leaves no key rather than a key bound to the wrong instance.
+   */
   async save(config: CatFactoryConfig): Promise<CatFactoryConnection> {
+    const stored = await readCatFactoryConfig(this.container)
+    if (stored !== null && stored.baseUrl !== originOf(config.baseUrl)) await this.dropKey()
     await writeCatFactoryConfig(this.container, config)
     return this.read()
   }
 
+  /** The key goes with the settings, so a later save cannot bind it to another instance. */
   async clear(): Promise<CatFactoryConnection> {
+    await this.dropKey()
     await clearCatFactoryConfig(this.container)
     return this.read()
   }
 
   /**
-   * Try a configuration without storing it. The key entered with it wins over
-   * the stored one, so a replacement can be tried before it replaces anything.
+   * Try a configuration without storing it. A key entered with it wins, so a
+   * replacement can be tried before it replaces anything. The stored key is
+   * used only against the stored base URL: sent anywhere else it would be
+   * readable by whoever answers there.
    */
   async check(input: CheckCatFactory): Promise<CatFactoryCheck> {
     const { apiKey: entered, ...config } = input
-    const apiKey = entered ?? (await openCredential(this.container, 'cat-factory'))
-    if (apiKey === null) return catFactoryCheck(config, null, null)
+    const { apiKey, key } =
+      entered === undefined
+        ? await this.storedKeyFor(config.baseUrl)
+        : { apiKey: entered, key: 'entered' as const }
+    if (apiKey === null) return catFactoryCheck(config, key, null)
     const factory = requireCapability(this.container.gateways, NO_ADAPTERS)
     const probe = factory.catFactoryProbe({ baseUrl: originOf(config.baseUrl), apiKey })
-    return catFactoryCheck(
-      config,
-      entered === undefined ? 'stored' : 'entered',
-      await probe.probe(),
-    )
+    return catFactoryCheck(config, key, await probe.probe())
+  }
+
+  /** Opened only when the URL is the stored one, so a check elsewhere holds no plaintext. */
+  private async storedKeyFor(baseUrl: string): Promise<{ apiKey: string | null; key: CheckedKey }> {
+    const stored = await readCatFactoryConfig(this.container)
+    if (stored?.baseUrl === originOf(baseUrl)) {
+      const apiKey = await openCredential(this.container, 'cat-factory')
+      return { apiKey, key: apiKey === null ? null : 'stored' }
+    }
+    const held = await this.container.repositories.integrationTokens.get('cat-factory')
+    return { apiKey: null, key: held === null ? null : 'elsewhere' }
+  }
+
+  private async dropKey(): Promise<void> {
+    await this.container.repositories.integrationTokens.delete('cat-factory')
   }
 }

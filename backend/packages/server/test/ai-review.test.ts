@@ -2,6 +2,7 @@ import type { AiReviewRun, ReviewRequest } from '@sainte-beuve/contracts'
 import type { AiReviewReport } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { aiFinding, curation, type StubAiReview, stubAiReview } from './ai-review-doubles.js'
+import { writeCatFactoryConfig } from '../src/integrations/catFactoryConfig.js'
 import { runReminderTick } from '../src/reminders/tick.js'
 import { buildHarness, get, openReview, PR, post, type TestHarness } from './helpers.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
@@ -140,6 +141,23 @@ describe('curating a delegated AI review', () => {
     expect(run.status).toBe('awaiting_selection')
     expect(run.curation?.findings).toStrictEqual([])
     expect(loop.catFactory.polls).toBe(polls)
+  })
+
+  it('keeps following a parked run after the service id is cleared, and files no new one', async () => {
+    const parked = await parkedRun(loop)
+    await writeCatFactoryConfig(loop.harness.container, {
+      baseUrl: 'https://cat-factory.example.com',
+      serviceId: null,
+      pipelineId: null,
+    })
+    const resumed = await loop.harness.app.fetch(
+      post(`/api/v1/ai-review/runs/${parked.id}/resume`, {}),
+    )
+    expect(resumed.status).toBe(202)
+    const filed = await loop.harness.app.fetch(
+      post(`/api/v1/reviews/${parked.reviewId}/ai-review`, {}),
+    )
+    expect(filed.status).toBe(503)
   })
 
   it('resumes a stalled review without being told which slices to redo', async () => {

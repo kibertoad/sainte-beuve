@@ -14,6 +14,9 @@ import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
 const CONFIG_PATH = '/api/v1/settings/connections/cat-factory'
 const CHECK_PATH = `${CONFIG_PATH}/check`
 
+/** The base URL `connectCatFactory` stores. */
+const STORED_URL = 'https://cat-factory.example.com'
+
 const LOCAL = { baseUrl: 'http://localhost:8787', serviceId: 'blk_api', pipelineId: 'pl_review' }
 
 const ACCEPTED: CatFactoryProbeReport = {
@@ -54,6 +57,21 @@ function outcomes(result: CatFactoryCheck): Record<string, string> {
 }
 
 describe('configuring cat-factory', () => {
+  it('drops the stored key when the base URL moves to another instance, and only then', async () => {
+    const harness = await connectCatFactory(buildHarness(catFactoryWired({})))
+    const tokens = harness.container.repositories.integrationTokens
+    await harness.app.fetch(put(CONFIG_PATH, { ...LOCAL, baseUrl: `${STORED_URL}/` }))
+    expect(await tokens.get('cat-factory')).not.toBeNull()
+    await harness.app.fetch(put(CONFIG_PATH, LOCAL))
+    expect(await tokens.get('cat-factory')).toBeNull()
+  })
+
+  it('drops the stored key with the settings', async () => {
+    const harness = await connectCatFactory(buildHarness(catFactoryWired({})))
+    await harness.app.fetch(del(CONFIG_PATH))
+    expect(await harness.container.repositories.integrationTokens.get('cat-factory')).toBeNull()
+  })
+
   it('stores the settings for the org that saved them, and clears them', async () => {
     const harness = buildHarness()
     const saved = await harness.app.fetch(put(CONFIG_PATH, LOCAL))
@@ -112,11 +130,19 @@ describe('checking a cat-factory configuration', () => {
     expect(asked).toStrictEqual([{ baseUrl: LOCAL.baseUrl, apiKey: 'cf_live_entered.secret' }])
   })
 
-  it('falls back to the stored key when none is entered', async () => {
+  it('falls back to the stored key when none is entered and the URL is the stored one', async () => {
     const { harness, asked } = probing(ACCEPTED)
     await connectCatFactory(harness)
-    await check(harness, LOCAL)
+    await check(harness, { ...LOCAL, baseUrl: `${STORED_URL}/` })
     expect(asked[0]?.apiKey).toBe('cf_live_test.secret')
+  })
+
+  it('never sends the stored key to a URL other than the stored one', async () => {
+    const { harness, asked } = probing(ACCEPTED)
+    await connectCatFactory(harness)
+    const result = await check(harness, { ...LOCAL, baseUrl: 'https://elsewhere.example.com' })
+    expect(outcomes(result)).toMatchObject({ key: 'failed', reachable: 'skipped' })
+    expect(asked).toStrictEqual([])
   })
 
   it('points at the URL when nothing answers there', async () => {

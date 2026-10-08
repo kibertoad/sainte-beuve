@@ -1,7 +1,7 @@
 import { once } from 'node:events'
 import { serve } from '@hono/node-server'
 import type { Logger } from '@sainte-beuve/kernel'
-import { createApp } from '@sainte-beuve/server'
+import { RETIRED_VARIABLES_MESSAGE, createApp } from '@sainte-beuve/server'
 import { pino } from 'pino'
 import { clientAddressOf } from './clientAddress.js'
 import { startReminderClock } from './clock.js'
@@ -78,6 +78,9 @@ async function listen(
     },
     'sainte-beuve server listening',
   )
+  if (config.retiredVariables.length > 0) {
+    container.logger.warn({ variables: config.retiredVariables }, RETIRED_VARIABLES_MESSAGE)
+  }
   return {
     port: config.port,
     close: async () => {

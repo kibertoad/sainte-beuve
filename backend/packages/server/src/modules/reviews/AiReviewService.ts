@@ -4,7 +4,7 @@ import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
 import { ConflictError, ValidationError, assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
-import { type Resolved, resolveAiReview } from '../../integrations/resolve.js'
+import { type Resolved, resolveAiReview, resolveAiReviewRuns } from '../../integrations/resolve.js'
 import type { CredentialSource } from '../../integrations/resolve.js'
 import { admitAiReview, confirmAiReviewAdmission } from './admission.js'
 import { abandonIfOrphaned } from './orphans.js'
@@ -38,24 +38,26 @@ import { curationFor } from './reconcile.js'
  * no way of knowing it is waiting on them.
  */
 
-/** The message a route answers with when cat-factory is not configured at all. */
-const NOT_CONFIGURED =
-  'cat-factory is not configured for this org: an admin sets its base URL, a service id and an ' +
-  'API key with the `decide` scope on the Configuration screen'
+/** What a route answers when cat-factory is not configured. Only filing needs a service id. */
+const notConfigured = (needs: string) =>
+  `cat-factory is not configured for this org: an admin sets its ${needs} and an API key with the \`decide\` scope on the Configuration screen`
+const NOT_CONFIGURED = notConfigured('base URL, a service id')
+const NO_ACCESS = notConfigured('base URL')
 
 /** The states a poll can still learn something from. Anything else is settled. */
 const IN_FLIGHT = new Set<AiReviewRun['status']>(AI_REVIEW_IN_FLIGHT_STATUSES)
 
 export class AiReviewService {
   /**
-   * The cat-factory resolution for THIS request, made at most once.
+   * The cat-factory resolution for THIS request's run verbs, made at most once.
+   * Filing resolves on its own, because it is the one verb that needs a service.
    *
    * One service instance answers one route, or one org's pass of the clock,
    * which is the lifetime this may be cached for and no longer: a key entered on
    * the Configuration screen has to take effect without a redeploy. Within that
    * pass it is worth caching, because every resolution is a credential read plus
-   * an HKDF derivation plus an AES-GCM open, and a review with four runs on it —
-   * or a tenancy with forty in flight — would otherwise pay for every one.
+   * an HKDF derivation plus an AES-GCM open, and a review with four runs on it,
+   * or a tenancy with forty in flight, would otherwise pay for every one.
    * `VcsResolutions` does the same job for source control.
    */
   private resolution: Promise<Resolved<AiReviewGateway, CredentialSource> | null> | null = null
@@ -64,7 +66,7 @@ export class AiReviewService {
 
   async request(reviewId: string, instructions: string | null): Promise<AiReviewRun> {
     const { repositories, clock, ids } = this.container
-    const resolved = await this.gateway()
+    const resolved = requireCapability(await resolveAiReview(this.container), NOT_CONFIGURED)
     const review = assertFound(
       await repositories.reviews.getById(reviewId),
       `No review request ${reviewId}`,
@@ -269,12 +271,12 @@ export class AiReviewService {
   }
 
   private async gateway(): Promise<Resolved<AiReviewGateway, CredentialSource>> {
-    return requireCapability(await this.resolved(), NOT_CONFIGURED)
+    return requireCapability(await this.resolved(), NO_ACCESS)
   }
 
   /** The resolution this request is working with. See {@link resolution}. */
   private async resolved(): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
-    this.resolution ??= resolveAiReview(this.container)
+    this.resolution ??= resolveAiReviewRuns(this.container)
     return this.resolution
   }
 

@@ -231,10 +231,10 @@ export async function resolveSlackSigningSecret(
 }
 
 /**
- * The AI reviewer for this org: its stored key, on its stored instance, filing
- * under its stored service. Null until all three are on the Configuration
- * screen. There is no environment fallback (see `catFactoryConfig.ts`), so the
- * source is always `stored`.
+ * The AI reviewer for this org, able to file: its stored key, on its stored
+ * instance, under its stored service. Null until all three are on the
+ * Configuration screen. There is no environment fallback (see
+ * `catFactoryConfig.ts`), so the source is always `stored`.
  */
 export async function resolveAiReview(
   container: AppContainer,
@@ -242,11 +242,31 @@ export async function resolveAiReview(
 ): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
   const access = await pending
   if (access === null || access.config.serviceId === null) return null
+  return aiReviewOver(container, access)
+}
+
+/**
+ * The AI reviewer for runs already filed. Polling and curating a run never name
+ * a service, so clearing the service id stops new reviews without stranding the
+ * ones in flight. Its `requestReview` refuses when there is no service id.
+ */
+export async function resolveAiReviewRuns(
+  container: AppContainer,
+  pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
+): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
+  const access = await pending
+  return access === null ? null : aiReviewOver(container, access)
+}
+
+function aiReviewOver(
+  container: AppContainer,
+  { config, apiKey }: CatFactoryOrgAccess,
+): Resolved<AiReviewGateway, CredentialSource> | null {
   const gateway = container.gateways?.aiReview({
-    baseUrl: access.config.baseUrl,
-    apiKey: access.apiKey,
-    serviceId: access.config.serviceId,
-    pipelineId: access.config.pipelineId,
+    baseUrl: config.baseUrl,
+    apiKey,
+    serviceId: config.serviceId,
+    pipelineId: config.pipelineId,
   })
   return gateway === undefined ? null : { gateway, source: 'stored' }
 }
