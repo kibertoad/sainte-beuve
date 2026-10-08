@@ -190,6 +190,18 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ AUTH_MODE: 'requried' })).toThrow(/AUTH_MODE/)
   })
 
+  it('reads DEV_MODE, and refuses it on a deployment that named a public origin', () => {
+    expect(loadConfig({}).auth.devMode).toBe(false)
+    expect(loadConfig({ DEV_MODE: 'true' }).auth.devMode).toBe(true)
+    expect(() =>
+      loadConfig({
+        AUTH_MODE: 'required',
+        DEV_MODE: 'true',
+        APP_BASE_URL: 'https://board.example.com',
+      }),
+    ).toThrow(/DEV_MODE/)
+  })
+
   it('refuses to boot on an AUTH_API_KEY short enough to guess', () => {
     expect(() => loadConfig({ AUTH_API_KEY: 'changeme' })).toThrow(/AUTH_API_KEY/)
     expect(loadConfig({ AUTH_API_KEY: '' }).auth.apiKey).toBeNull()

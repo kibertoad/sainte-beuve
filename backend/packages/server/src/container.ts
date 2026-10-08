@@ -105,6 +105,11 @@ export interface AuthWiring {
    * have to be able to walk past an expiry without waiting a month.
    */
   sessionLifetimeMs: number
+  /**
+   * Whether a caller may switch to any person in their org's directory. Off by
+   * default and refused beside a public origin; see `devModeFrom`.
+   */
+  devMode: boolean
 }
 
 /** Slack deployment configuration, beside the bot token that is a credential. */
@@ -307,6 +312,7 @@ function authWiring(options: Partial<AuthWiring> | undefined): AuthWiring {
     mode: options?.mode ?? 'open',
     environmentApiKey: configured(options?.environmentApiKey),
     sessionLifetimeMs: options?.sessionLifetimeMs ?? DEFAULT_SESSION_LIFETIME_MS,
+    devMode: options?.devMode ?? false,
   }
 }
 

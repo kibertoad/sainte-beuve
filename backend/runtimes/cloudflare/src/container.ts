@@ -23,6 +23,7 @@ import {
   type AppContainer,
   type AuthWiring,
   authModeFrom,
+  devModeFrom,
   environmentApiKeyFrom,
   createContainer,
   DEFAULT_GITHUB_LABELS,
@@ -342,6 +343,11 @@ function authFor(env: WorkerEnv): AuthWiring {
     environmentApiKey: environmentApiKeyFrom(env.AUTH_API_KEY),
     sessionLifetimeMs:
       Number.isNaN(lifetime) || lifetime <= 0 ? DEFAULT_SESSION_LIFETIME_MS : lifetime,
+    devMode: devModeFrom({
+      value: env.DEV_MODE,
+      appBaseUrl: env.APP_BASE_URL,
+      corsOrigins: corsOriginsFor(env),
+    }),
   }
 }
 

@@ -101,6 +101,8 @@ function shape(container: AppContainer) {
       // in the list above with this false is a sign-in that answers 503 on a
       // hosted origin; see `callbackOrigin`.
       apiBaseUrl: container.apiBaseUrl !== null,
+      // Any caller may act as any person while this is on.
+      devMode: container.auth.devMode,
     },
   }
 }

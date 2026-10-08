@@ -117,6 +117,11 @@ export const authStateSchema = v.object({
    * button.
    */
   signInProviders: v.array(identityProviderSchema),
+  /**
+   * Whether this deployment lets a caller act as any person in the directory
+   * (`DEV_MODE`). Only ever true on a loopback deployment.
+   */
+  devMode: v.boolean(),
 })
 export type AuthState = v.InferOutput<typeof authStateSchema>
 
@@ -169,6 +174,12 @@ export const issuedApiKeySchema = v.object({
   token: v.string(),
 })
 export type IssuedApiKey = v.InferOutput<typeof issuedApiKeySchema>
+
+/** Which directory row a developer wants the next requests to be made as. */
+export const actAsInputSchema = v.object({
+  reviewerId: v.pipe(v.string(), v.minLength(1)),
+})
+export type ActAsInput = v.InferOutput<typeof actAsInputSchema>
 
 /** The keys a deployment holds, newest first. */
 export const apiKeyListSchema = v.object({ apiKeys: v.array(apiKeySchema) })

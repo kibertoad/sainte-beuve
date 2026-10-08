@@ -120,6 +120,11 @@ export interface WorkerEnv {
   AUTH_API_KEY?: string
   /** How long a session lasts, in ms. Defaults to 30 days. */
   AUTH_SESSION_LIFETIME_MS?: string
+  /**
+   * `true` lets any caller act as any person in the directory, for testing
+   * multi-user flows locally. Refused beside a public origin.
+   */
+  DEV_MODE?: string
 
   /**
    * Base URL of the sainte-beuve SPA, so a chat message can link back to a

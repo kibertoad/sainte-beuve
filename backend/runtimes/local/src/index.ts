@@ -37,6 +37,8 @@ import { type NodeConfig, type RunningServer, loadConfig, start } from '@sainte-
  *     hosted deployment runs; it needs an OAuth client, because there is then no
  *     other way in. Either way loopback is answered by NAME rather than with the
  *     wildcard, which is what lets the local SPA send its session cookie at all.
+ *   - `DEV_MODE=true` is opt-in and adds a persona switch, so one GitHub token can
+ *     play a PR author and a reviewer in turn. See `devModeFrom`.
  *
  * Everything a hosted deployment configures is still configurable here, and nothing
  * is required. That is the property that matters: a local run exercises the same

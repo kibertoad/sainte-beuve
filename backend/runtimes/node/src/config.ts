@@ -1,6 +1,7 @@
 import type { AuthMode, GitHubLabelRules } from '@sainte-beuve/contracts'
 import {
   authModeFrom,
+  devModeFrom,
   environmentApiKeyFrom,
   DEFAULT_GITHUB_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
@@ -79,6 +80,8 @@ interface AuthConfig {
    */
   apiKey: string | null
   sessionLifetimeMs: number
+  /** Persona switching, `DEV_MODE`. See `devModeFrom` in @sainte-beuve/server. */
+  devMode: boolean
 }
 
 export interface NodeConfig {
@@ -228,6 +231,7 @@ function authFrom(env: Env, corsOrigins: readonly string[]): AuthConfig {
     // never sticks with nothing anywhere saying why.
     sessionLifetimeMs:
       optionalCountFrom(env.AUTH_SESSION_LIFETIME_MS) ?? DEFAULT_SESSION_LIFETIME_MS,
+    devMode: devModeFrom({ value: env.DEV_MODE, appBaseUrl: env.APP_BASE_URL, corsOrigins }),
   }
 }
 

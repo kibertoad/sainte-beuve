@@ -79,6 +79,37 @@ and the script writes nothing. A `GH_TOKEN` or `GITHUB_TOKEN` variable in your
 shell takes precedence over gh's stored login, so check those first when the
 prefix surprises you.
 
+## Testing multi-user flows
+
+Set `DEV_MODE=true` in `deploy/local/.env` and restart. The navigation rail then
+shows who the screens render for, with a switch to anybody else in the
+directory.
+
+A persona is an ordinary row on the **Reviewers** screen. Type a name into the
+switch to add one and act as it straight away, or add it on that screen and
+give it skills, a team or a Slack id first. Switching issues a session for the
+row, so the workspace, the attention inbox and the commitments are that
+person's. Every call to GitHub still goes through the one `GITHUB_TOKEN`, so you
+need a single GitHub account for the whole cast. **Your token's account** drops
+the persona and renders for whoever the token acts as again.
+
+To play an author and a reviewer on one pull request: open it on GitHub as
+yourself, ask for attention on it as your token's account, then switch to a
+persona that holds the skills you asked for and answer the ask from its inbox.
+
+What the personas share or not is decided by their GitHub handle:
+
+- **No handle** (the default) keeps a persona off GitHub entirely. It can be
+  assigned to your pull requests, because nothing marks it as the author, and an
+  assignment is not mirrored onto the pull request. Its **Authored** and
+  **Review requested** lists stay empty, because GitHub knows nothing about it.
+- **Your own handle** shows the persona your GitHub lists, and makes it the
+  author of every pull request you open, so it is never picked to review them.
+
+`DEV_MODE` is refused when the deployment names a public origin, because anybody
+who can reach it can then act as an admin. `/health` reports it under
+`auth.devMode`.
+
 ## Inbound deliveries
 
 Both OUTBOUND halves work with nothing but a credential. The inbound halves (GitHub

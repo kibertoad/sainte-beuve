@@ -67,7 +67,7 @@ export function isLoopback(hostname: string): boolean {
 }
 
 /** The first configured origin that is somewhere other than this machine. */
-function publicOrigin(input: AuthModeInput): string | null {
+export function publicOrigin(input: AuthModeInput): string | null {
   const named = [...input.corsOrigins, input.appBaseUrl ?? '']
   for (const entry of named) {
     if (entry.length === 0 || entry === '*') continue

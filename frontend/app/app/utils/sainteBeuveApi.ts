@@ -11,6 +11,7 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import {
+  actAsContract,
   addProjectContract,
   assignReviewersContract,
   cancelAttentionContract,
@@ -260,6 +261,8 @@ export function createSainteBeuveApi(apiBase: string) {
     // signed in has nowhere to start.
     getAuthState: () => call(getAuthStateContract, {}),
     signOut: () => call(signOutContract, { body: {} }),
+    /** Development mode only: the next requests are made as this directory row. */
+    actAs: (reviewerId: string) => call(actAsContract, { body: { reviewerId } }),
     /**
      * Where to send the browser to sign IN, as opposed to connecting a credential.
      *

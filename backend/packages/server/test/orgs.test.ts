@@ -64,6 +64,7 @@ function closedHarness(account = { username: 'ada', subject: '1' }): TestHarness
         mode: 'required',
         environmentApiKey: BOOTSTRAP,
         sessionLifetimeMs: 30 * 24 * 60 * 60 * 1000,
+        devMode: false,
       },
     },
     { encryptionKey: KEY },

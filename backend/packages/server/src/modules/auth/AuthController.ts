@@ -1,4 +1,5 @@
 import {
+  actAsContract,
   createApiKeyContract,
   getAuthStateContract,
   listApiKeysContract,
@@ -14,7 +15,8 @@ import type { AppEnv } from '../../http/env.js'
 import { ConnectionsService } from '../connections/ConnectionsService.js'
 import { ApiKeyService } from './ApiKeyService.js'
 import { AuthService } from './AuthService.js'
-import { clearSessionCookie, writeFlowCookie } from './cookies.js'
+import { clearSessionCookie, writeFlowCookie, writeSessionCookie } from './cookies.js'
+import { PersonaService } from './PersonaService.js'
 import { principalOf, refuseIfAnonymous, requireAdmin, type RequestPrincipal } from './principal.js'
 import { SessionService } from './SessionService.js'
 
@@ -64,6 +66,15 @@ export function authController(): Hono<AppEnv> {
     // request carries a value that resolves to nobody.
     clearSessionCookie(c, container)
     return c.json(await new AuthService(container).state({ kind: 'anonymous' }, c.req.url), 200)
+  })
+
+  buildHonoRoute(app, actAsContract, async (c) => {
+    const container = c.get('container')
+    const { reviewerId } = c.req.valid('json')
+    const issued = await new PersonaService(container, principalOf(c)).actAs(reviewerId)
+    writeSessionCookie(c, container, { token: issued.token, expiresAt: issued.session.expiresAt })
+    const principal: RequestPrincipal = { kind: 'session', session: issued.session }
+    return c.json(await new AuthService(container).state(principal, c.req.url), 200)
   })
 
   apiKeyRoutes(app)
