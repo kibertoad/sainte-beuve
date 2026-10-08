@@ -12,6 +12,7 @@ export {
   isDomainError,
   NotFoundError,
   PayloadTooLargeError,
+  RateLimitedError,
   UnauthenticatedError,
   UnavailableError,
   type UpstreamDetails,

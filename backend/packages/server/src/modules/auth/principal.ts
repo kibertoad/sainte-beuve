@@ -1,11 +1,12 @@
 import type { Role } from '@sainte-beuve/contracts'
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
-import type { StoredSession } from '@sainte-beuve/kernel'
-import { ForbiddenError, UnauthenticatedError } from '@sainte-beuve/kernel'
+import type { EpochMs, StoredSession } from '@sainte-beuve/kernel'
+import { ForbiddenError, RateLimitedError, UnauthenticatedError } from '@sainte-beuve/kernel'
 import type { Context, Input, MiddlewareHandler } from 'hono'
 import { type AppContainer, withOrg } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
-import { ApiKeyService, type ApiKeyPrincipal } from './ApiKeyService.js'
+import type { CredentialThrottle } from '../../http/throttle.js'
+import { ApiKeyService, type ApiKeyPrincipal, isMintedKey } from './ApiKeyService.js'
 import { readSessionCookie } from './cookies.js'
 import { SessionService } from './SessionService.js'
 
@@ -74,6 +75,27 @@ function bearerToken<E extends AppEnv, P extends string, I extends Input>(
   return value.length === 0 ? null : value
 }
 
+const TOO_MANY_FAILURES =
+  'This client has presented too many values for the deployment API key that are not it, and ' +
+  'is refused until the window it failed in runs out. Check the key, then retry after the time ' +
+  '`Retry-After` names.'
+
+/**
+ * What the authentication middleware needs from the app around it: the
+ * throttle the app owns, and who the client is as the facade sees it.
+ */
+export interface AuthenticationOptions {
+  throttle: CredentialThrottle
+  /**
+   * The client's address, or null where the facade cannot tell. Null is ONE
+   * shared bucket rather than no throttle, so a facade that forgets to say is
+   * stricter than it needs to be rather than open.
+   */
+  clientOf: (c: Context<AppEnv>) => string | null
+}
+
+const UNKNOWN_CLIENT = 'unknown'
+
 /**
  * Resolve the caller.
  *
@@ -81,14 +103,42 @@ function bearerToken<E extends AppEnv, P extends string, I extends Input>(
  * a header, which is a script running inside somebody's page; the session is the
  * narrower authority of the two and is the one to act on.
  */
-async function resolve<E extends AppEnv, P extends string, I extends Input>(
+async function resolve(
   container: AppContainer,
-  c: Ctx<E, P, I>,
+  c: Context<AppEnv>,
+  options: AuthenticationOptions,
 ): Promise<RequestPrincipal> {
   const session = await new SessionService(container).resolve(readSessionCookie(c))
   if (session !== null) return { kind: 'session', session }
-  const key = await new ApiKeyService(container).verify(bearerToken(c))
+  const token = bearerToken(c)
+  if (token === null) return ANONYMOUS
+  const keys = new ApiKeyService(container)
+  const key = isMintedKey(token)
+    ? await keys.verifyMinted(token)
+    : environmentKey(keys, token, {
+        throttle: options.throttle,
+        client: options.clientOf(c) ?? UNKNOWN_CLIENT,
+        now: container.clock.now(),
+      })
   return key === null ? ANONYMOUS : { kind: 'api_key', ...key }
+}
+
+/**
+ * A bearer that is not a minted key, compared against `AUTH_API_KEY` under the
+ * throttle. A deployment that holds no such key has nothing to guess, so a
+ * proxy's own bearer, say, is anonymous and counts against nobody.
+ */
+function environmentKey(
+  keys: ApiKeyService,
+  token: string,
+  { throttle, client, now }: { throttle: CredentialThrottle; client: string; now: EpochMs },
+): ApiKeyPrincipal | null {
+  if (!keys.holdsEnvironmentKey()) return null
+  const attempt = throttle.attempt(client, now, () => keys.matchEnvironmentKey(token))
+  if (attempt.kind === 'refused') {
+    throw new RateLimitedError(TOO_MANY_FAILURES, attempt.retryAfterSeconds)
+  }
+  return attempt.match
 }
 
 /**
@@ -122,10 +172,10 @@ function orgOf(principal: RequestPrincipal): string {
  * to guard: the list of routes grows every slice and the list of exemptions
  * above does not.
  */
-export function authentication(): MiddlewareHandler<AppEnv> {
+export function authentication(options: AuthenticationOptions): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const container = c.get('container')
-    const principal = await resolve(container, c)
+    const principal = await resolve(container, c, options)
     c.set('principal', principal)
     c.set('container', withOrg(container, orgOf(principal)))
     if (

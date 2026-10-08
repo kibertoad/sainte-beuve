@@ -283,6 +283,30 @@ whatever value an operator's secret manager produced rather than something they
 had to spell a particular way. It cannot be revoked through the API, and the
 refusal says to clear the variable rather than answering "no such key".
 
+Because it is an admin credential somebody TYPED, two things keep it from being
+guessed. It has to be at least 32 characters and must not start with `sbk_`, or
+the deployment refuses to start. A Worker, which has no boot, answers every
+request with the same sentence as a 503 (`environmentApiKeyFrom`, read by every
+runtime).
+
+And a client that presents 20 wrong values for it within ten minutes is
+answered 429 with `Retry-After` until that window runs out, before its next
+value is compared (`CredentialThrottle`). The `sbk_` prefix is what makes that
+count exact: a bearer with it is a minted key, looked up in the store and never
+compared against `AUTH_API_KEY`, and a bearer without it can only be
+`AUTH_API_KEY`, compared synchronously under the throttle. So only a wrong
+value for the deployment key counts. A request with no credential, a session
+cookie that no longer resolves, a minted key (right or wrong) and any bearer on
+a deployment with no `AUTH_API_KEY` do not, and a browser on a session or a job
+on a minted key keeps working behind the same address as a guesser.
+
+The client is `CF-Connecting-IP` on a Worker. On Node it is the socket's peer,
+or, behind a reverse proxy, the last entry of the header `CLIENT_ADDRESS_HEADER`
+names (the entry the proxy appended). An IPv6 client is counted by its /48. The
+count lives in the process on Node and in the isolate on a Worker, which makes
+it a floor there rather than a hard ceiling, and an edge rate-limiting rule is
+the complement.
+
 ## The org boundary
 
 A session says WHO is calling. What they may reach, and what they may change, is

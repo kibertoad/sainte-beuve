@@ -13,6 +13,7 @@ export type DomainErrorCode =
   | 'upstream_failed'
   | 'payload_too_large'
   | 'misconfigured'
+  | 'rate_limited'
 
 export class DomainError extends Error {
   readonly code: DomainErrorCode
@@ -106,6 +107,23 @@ export class UnavailableError extends DomainError {
 export class ConfigurationError extends DomainError {
   constructor(message: string, details?: unknown) {
     super('misconfigured', message, details)
+  }
+}
+
+/**
+ * This caller has failed too often, recently, to be answered at all.
+ *
+ * Its own code rather than `unauthenticated`, because the two send a caller
+ * different places: that one says present a credential, and this one says
+ * stop presenting them for a while. `retryAfterSeconds` is how long, and the
+ * error handler repeats it as `Retry-After`.
+ */
+export class RateLimitedError extends DomainError {
+  readonly retryAfterSeconds: number
+
+  constructor(message: string, retryAfterSeconds: number) {
+    super('rate_limited', message, { retryAfterSeconds })
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 

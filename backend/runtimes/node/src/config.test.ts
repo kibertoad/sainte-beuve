@@ -190,6 +190,11 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ AUTH_MODE: 'requried' })).toThrow(/AUTH_MODE/)
   })
 
+  it('refuses to boot on an AUTH_API_KEY short enough to guess', () => {
+    expect(() => loadConfig({ AUTH_API_KEY: 'changeme' })).toThrow(/AUTH_API_KEY/)
+    expect(loadConfig({ AUTH_API_KEY: '' }).auth.apiKey).toBeNull()
+  })
+
   it('names the SPA it was told about, so the wildcard default is not a trap', () => {
     // The client sends `credentials: 'include'` on every call and a browser
     // refuses any answer to one carrying `*`, so a hosted deployment left on the

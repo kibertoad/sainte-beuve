@@ -23,6 +23,7 @@ import {
   type AppContainer,
   type AuthWiring,
   authModeFrom,
+  environmentApiKeyFrom,
   createContainer,
   DEFAULT_GITHUB_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
@@ -337,7 +338,8 @@ function authFor(env: WorkerEnv): AuthWiring {
       appBaseUrl: env.APP_BASE_URL,
       corsOrigins: corsOriginsFor(env),
     }),
-    environmentApiKey: env.AUTH_API_KEY || null,
+    // Shared with Node, and refused the same way `AUTH_MODE` is: see above.
+    environmentApiKey: environmentApiKeyFrom(env.AUTH_API_KEY),
     sessionLifetimeMs:
       Number.isNaN(lifetime) || lifetime <= 0 ? DEFAULT_SESSION_LIFETIME_MS : lifetime,
   }

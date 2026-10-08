@@ -22,7 +22,16 @@ pnpm --filter @sainte-beuve/deploy-frontend deploy
 ```
 
 The API base is baked in at build time (`ssr: false`), so it is a build variable,
-not a runtime one.
+not a runtime one. It is also written into each page's Content-Security-Policy as
+the one origin the SPA may call besides the icon API, so a board built against
+one API cannot be pointed at another without a rebuild.
+
+`public/_headers` is copied into the output and carries the headers Pages
+answers with: who may frame the board (nobody), the referrer policy and
+`nosniff`. The script policy is in the pages themselves, with a hash per inline
+script, because it changes with every build. A copy of this package hosted
+somewhere other than Pages needs the `_headers` equivalent in that host's
+configuration.
 
 The backend has to name this deployment's own origin in `CORS_ORIGINS`. A board
 served from an origin the API does not list still loads and reaches nothing, and the

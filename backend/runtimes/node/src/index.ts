@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server'
 import type { Logger } from '@sainte-beuve/kernel'
 import { createApp } from '@sainte-beuve/server'
 import { pino } from 'pino'
+import { clientAddressOf } from './clientAddress.js'
 import { startReminderClock } from './clock.js'
 import { type NodeConfig, loadConfig } from './config.js'
 import { buildContainer } from './container.js'
@@ -49,6 +50,7 @@ async function listen(
   const app = createApp({
     resolveContainer: () => container,
     corsOrigins: config.corsOrigins,
+    clientAddress: clientAddressOf(config.clientAddressHeader),
   })
 
   const server = serve({ fetch: app.fetch, port: config.port })

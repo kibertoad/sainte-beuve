@@ -145,7 +145,8 @@ GITHUB_LABEL_SKILL_PREFIX = "skill:"
 #                              screen and is posted to at /webhooks/slack/<slug>
 #   AUTH_API_KEY               this deployment's own API key, for CI and for the
 #                              first call into a `required` deployment that has
-#                              no sessions yet (`Authorization: Bearer <key>`)
+#                              no sessions yet (`Authorization: Bearer <key>`);
+#                              at least 32 characters (`openssl rand -hex 32`)
 #   SETTINGS_ENCRYPTION_KEY    seals the credentials entered on the Configuration
 #                              screen and signs the connect round trips
 #                              (`openssl rand -base64 32`)

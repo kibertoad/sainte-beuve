@@ -3,6 +3,7 @@ import { issuePath } from '@sainte-beuve/contracts'
 import {
   type DomainErrorCode,
   type Logger,
+  RateLimitedError,
   UnavailableError,
   isDomainError,
 } from '@sainte-beuve/kernel'
@@ -35,6 +36,8 @@ const STATUS_BY_CODE: Record<DomainErrorCode, ContentfulStatusCode> = {
   // client; what separates them is the message, which names the variable. See
   // `ConfigurationError`.
   misconfigured: 503,
+  // Too many failed credentials from one client. See `CredentialThrottle`.
+  rate_limited: 429,
 }
 
 export function errorBody(code: string, message: string, details?: unknown): ErrorResponse {
@@ -69,6 +72,9 @@ export function handleError(err: unknown, c: Context<AppEnv>): Response {
   if (isDomainError(err)) {
     const status = STATUS_BY_CODE[err.code]
     if (status >= 500) loggerFor(c).error({ err, code: err.code }, err.message)
+    if (err instanceof RateLimitedError) {
+      c.header('retry-after', String(Math.ceil(err.retryAfterSeconds)))
+    }
     return c.json(errorBody(err.code, err.message, err.details), status)
   }
   loggerFor(c).error({ err }, 'unhandled error')

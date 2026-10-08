@@ -9,11 +9,13 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
+import { secureHeaders } from 'hono/secure-headers'
 import type { AppContainer } from './container.js'
 import type { AppEnv } from './http/env.js'
 import { errorBody, handleError } from './http/errors.js'
 import { requestOrigin } from './http/forwarded.js'
 import { allowedOrigin, intendedMethod, WILDCARD, writeOriginGuard } from './http/origins.js'
+import { CredentialThrottle } from './http/throttle.js'
 import { attentionController } from './modules/attention/AttentionController.js'
 import { authController } from './modules/auth/AuthController.js'
 import { authentication } from './modules/auth/principal.js'
@@ -68,6 +70,13 @@ export interface AppOptions {
    * every facade ships and what local mode runs on.
    */
   corsOrigins?: string[] | ((scope: RequestScope) => string[])
+  /**
+   * The address the request came from, as the runtime knows it: the socket's
+   * peer or a trusted proxy's header on Node, `CF-Connecting-IP` on a Worker. It keys the throttle on
+   * failed API keys (see `CredentialThrottle`); a facade that leaves it out has
+   * every caller in one bucket, which is strict rather than open.
+   */
+  clientAddress?: (scope: RequestScope) => string | null
 }
 
 /**
@@ -176,6 +185,35 @@ function refuseBody(limit: number): MiddlewareHandler<AppEnv> {
 }
 
 /**
+ * The headers every response carries, whichever route or refusal produced it.
+ *
+ * The API serves JSON, a redirect and an event stream, and never a document, so
+ * the policy it can afford is the strictest one there is: nothing may load from
+ * a response of this origin and nothing may frame it. `Referrer-Policy` is
+ * `no-referrer` because nothing here reads one, and the connect redirect is the
+ * one response that would otherwise hand GitHub a URL of ours.
+ *
+ * Cross-origin reads are untouched: `Cross-Origin-Resource-Policy` governs
+ * `no-cors` loads, and every call the SPA makes is a CORS request.
+ */
+const SECURITY_HEADERS = secureHeaders({
+  contentSecurityPolicy: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+  xFrameOptions: 'DENY',
+  referrerPolicy: 'no-referrer',
+})
+
+/**
+ * Nothing an authenticated route answers belongs in a cache: it is somebody's
+ * board, somebody's keys, an org's configuration. A response that already said
+ * otherwise keeps what it said: the event stream sets its own, for the proxy
+ * between it and the browser.
+ */
+const noStore: MiddlewareHandler<AppEnv> = async (c, next) => {
+  await next()
+  if (!c.res.headers.has('cache-control')) c.res.headers.set('cache-control', 'no-store')
+}
+
+/**
  * Everything that runs before a route does, in the order it has to run in.
  *
  * Its own function because the order is the load-bearing part and reads better
@@ -204,6 +242,10 @@ function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
   const originsFor =
     typeof corsOrigins === 'function' ? corsOrigins : () => corsOrigins ?? [WILDCARD]
 
+  // Outermost, so a refusal from anything below (a 413, a 401, a 503 for a
+  // misconfigured Worker) carries them too.
+  app.use('*', SECURITY_HEADERS)
+  app.use('/api/v1/*', noStore)
   app.use('*', allowCredentials)
 
   app.use(
@@ -233,6 +275,19 @@ function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
     await next()
   })
 
+  mountCallerChecks(app, options, originsFor)
+}
+
+/**
+ * Who may run what, once the container is on the context: the origin guard,
+ * then the caller. Its own function for the size budget, and because the two
+ * read as one decision.
+ */
+function mountCallerChecks(
+  app: Hono<AppEnv>,
+  options: AppOptions,
+  originsFor: (scope: RequestScope) => string[],
+): void {
   // Before the caller is resolved, because refusing this costs nothing and
   // resolving a session for a request that is about to be refused costs a store
   // read: a cross-site request carries the session cookie whether or not CORS
@@ -251,7 +306,13 @@ function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
   // outside `/api/v1`, are authenticated by their own signatures, and place
   // themselves in an org from what the delivery is about (see
   // `WebhookController`).
-  app.use('/api/v1/*', authentication())
+  //
+  // ONE throttle per app, which is one per Node process and one per Worker
+  // isolate: the container is rebuilt per request on a Worker and could not
+  // remember a failure.
+  const throttle = new CredentialThrottle()
+  const clientOf = (c: Context<AppEnv>) => options.clientAddress?.(scopeOf(c)) ?? null
+  app.use('/api/v1/*', authentication({ throttle, clientOf }))
 }
 
 export function createApp(options: AppOptions): Hono<AppEnv> {

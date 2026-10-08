@@ -1,10 +1,12 @@
 import type { AuthMode, GitHubLabelRules } from '@sainte-beuve/contracts'
 import {
   authModeFrom,
+  environmentApiKeyFrom,
   DEFAULT_GITHUB_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
   withAppOrigin,
 } from '@sainte-beuve/server'
+import { clientAddressHeaderFrom } from './clientAddress.js'
 
 /**
  * The Node facade's configuration, read from the process environment.
@@ -97,6 +99,13 @@ export interface NodeConfig {
    */
   databaseMigrate: boolean
   corsOrigins: string[]
+  /**
+   * The header a reverse proxy in front of this process writes the client's
+   * address into, which keys the throttle on failed API keys. Null keys it on
+   * the socket's peer. Node only: a Worker reads `CF-Connecting-IP`, which the
+   * edge sets.
+   */
+  clientAddressHeader: string | null
   logLevel: string
   /** How often the reminder clock runs, in ms. */
   reminderIntervalMs: number
@@ -181,6 +190,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     // wildcard default would otherwise lose every request rather than only its
     // sign-in. The Worker reads it the same way. See `withAppOrigin`.
     corsOrigins,
+    clientAddressHeader: clientAddressHeaderFrom(env.CLIENT_ADDRESS_HEADER),
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),
     catFactory: catFactoryFrom(env),
@@ -210,7 +220,8 @@ export function loadConfig(env: Env = process.env): NodeConfig {
 function authFrom(env: Env, corsOrigins: readonly string[]): AuthConfig {
   return {
     mode: authModeFrom({ value: env.AUTH_MODE, appBaseUrl: env.APP_BASE_URL, corsOrigins }),
-    apiKey: env.AUTH_API_KEY || null,
+    // Shared with the Worker: a key short enough to guess refuses to boot.
+    apiKey: environmentApiKeyFrom(env.AUTH_API_KEY),
     // `optionalCountFrom` rather than `intFrom`, and the Worker reads it the
     // same way: zero or less is not a short session, it is every session
     // expiring on the millisecond it is issued, so a sign-in completes and

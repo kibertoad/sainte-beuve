@@ -78,7 +78,21 @@ All seven **Medium** findings are fixed too:
 - **M7**: the bot's PR comment carries no cat-factory link, and a refusal
   cat-factory wrote (marked by `upstreamOf`) becomes one fixed sentence.
 
-The Low and Informational findings below are open.
+Two of the Low findings are fixed as well:
+
+- **L4**: `AUTH_API_KEY` shorter than 32 characters is a configuration error on
+  every runtime (`environmentApiKeyFrom`), and a client presenting 20 wrong
+  values for it in ten minutes is answered 429 before its next one is compared
+  (`CredentialThrottle`), keyed behind a Node proxy by `CLIENT_ADDRESS_HEADER`. See [docs/auth.md](./auth.md).
+- **L10**: the API sends `secureHeaders()` on every response (a
+  `default-src 'none'; frame-ancestors 'none'` CSP, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`, `nosniff`) and `Cache-Control: no-store`
+  under `/api/v1`. Every page `nuxt generate` writes carries a CSP that allows
+  its inline scripts by hash and no other inline script, which is M2's backstop
+  against a `javascript:` link; the Pages template adds the framing, referrer
+  and content-type headers a `<meta>` policy cannot carry, in `_headers`.
+
+The remaining Low and Informational findings below are open.
 
 ## Findings
 
