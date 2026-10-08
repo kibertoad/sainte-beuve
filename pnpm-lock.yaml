@@ -63,11 +63,11 @@ importers:
         specifier: ^0.362.0
         version: 0.362.0(typescript@7.0.2)
       '@toad-contracts/core':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 1.0.0
+        version: 1.0.0
       '@toad-contracts/valibot':
-        specifier: 0.5.0
-        version: 0.5.0(valibot@1.5.0(typescript@7.0.2))
+        specifier: 1.0.0
+        version: 1.0.0(valibot@1.5.0(typescript@7.0.2))
       valibot:
         specifier: ^1.5.0
         version: 1.5.0(typescript@7.0.2)
@@ -273,11 +273,11 @@ importers:
         specifier: workspace:*
         version: link:../reviewers
       '@toad-contracts/core':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 1.0.0
+        version: 1.0.0
       '@toad-contracts/hono':
-        specifier: 0.3.2
-        version: 0.3.2(hono@4.13.7)
+        specifier: 1.0.0
+        version: 1.0.0(hono@4.13.7)
       hono:
         specifier: ^4.13.7
         version: 4.13.7
@@ -470,11 +470,11 @@ importers:
         specifier: workspace:*
         version: link:../../backend/packages/contracts
       '@toad-contracts/core':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 1.0.0
+        version: 1.0.0
       '@toad-contracts/frontend-http-client':
-        specifier: 0.3.2
-        version: 0.3.2(wretch@3.0.9)
+        specifier: 1.0.1
+        version: 1.0.1(wretch@3.0.9)
       valibot:
         specifier: ^1.5.0
         version: 1.5.0(typescript@6.0.3)
@@ -3045,26 +3045,18 @@ packages:
       y-protocols: ^1.0.1
       yjs: ^13.5.38
 
-  '@toad-contracts/core@0.4.0':
-    resolution: {integrity: sha512-5wyHoGMPN/X/J1woRk279jFoup2B+kmbyW1MF+BbdqD5aEQJtqWI9WWyoZLYIczhi02c4Yap1unonfcQz7GAyw==}
-
   '@toad-contracts/core@1.0.0':
     resolution: {integrity: sha512-x+nETb0h1brV9DZqOrVcxw9Eo8+p0mHaM8ri2ziMZqCF0lG3qr+RjPdK72yF1zullcLEjxy1EaLz7HObfJNFuQ==}
 
-  '@toad-contracts/frontend-http-client@0.3.2':
-    resolution: {integrity: sha512-jCE1EJa1ks0Y4EzoPfuJPRZgCz0QN6hI6gZzpjKT/qje2SAlOpI9pYasl4NKaYbSozXzUGdhu+bCyiVcbbCxcA==}
+  '@toad-contracts/frontend-http-client@1.0.1':
+    resolution: {integrity: sha512-DaDB49PjwlU5MZA+ZlTWyAktJAnlXaqPDBTO7CQMmiD/8cCF4cR6hfOEfRicrukSLilkwJlyV6fkzG0g4Eo9EQ==}
     peerDependencies:
       wretch: ^3.0.0
 
-  '@toad-contracts/hono@0.3.2':
-    resolution: {integrity: sha512-rARlCsEHaCkRXOXZ0NYgqLONwACu3x9MTQYzbeSIEe4kkxP+U92UitoOlIho1YzP0pEG5y/bBcEQytD+cwWyfg==}
+  '@toad-contracts/hono@1.0.0':
+    resolution: {integrity: sha512-Mp/+Rv2moIwcfx3lGipTtVrfdHDHMvcEFKO0xzzSGAfWLTJWRoJ8zE41MnLRGQbDZqDPLJCoyrxgef+x3rEIMw==}
     peerDependencies:
       hono: '>=4.0.0'
-
-  '@toad-contracts/valibot@0.5.0':
-    resolution: {integrity: sha512-Zi9+YlyPzUz9Vcf/NLtQTkenR16YnD4ipl3Uwr+/den6wYnfrJ+V8Pxdcwe/3akpIdZuP7cz/5R7E0/Khaz1/Q==}
-    peerDependencies:
-      valibot: '>=1.0.0'
 
   '@toad-contracts/valibot@1.0.0':
     resolution: {integrity: sha512-fqpbBzeroyjH5y3pxD9jhuZxMr2pVx0mdPtp1HhAdJ4xPfHEkuLjTYpI6AX0fTEDaTXoS9sd1WnbU00luTRo7g==}
@@ -9034,32 +9026,23 @@ snapshots:
       y-protocols: 1.0.7(yjs@13.6.32)
       yjs: 13.6.32
 
-  '@toad-contracts/core@0.4.0':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-
   '@toad-contracts/core@1.0.0':
     dependencies:
       '@standard-schema/spec': 1.1.0
 
-  '@toad-contracts/frontend-http-client@0.3.2(wretch@3.0.9)':
+  '@toad-contracts/frontend-http-client@1.0.1(wretch@3.0.9)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      '@toad-contracts/core': 0.4.0
+      '@toad-contracts/core': 1.0.0
       fast-querystring: 1.1.2
       parse-sse: 0.1.0
       wretch: 3.0.9
 
-  '@toad-contracts/hono@0.3.2(hono@4.13.7)':
+  '@toad-contracts/hono@1.0.0(hono@4.13.7)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      '@toad-contracts/core': 0.4.0
+      '@toad-contracts/core': 1.0.0
       hono: 4.13.7
-
-  '@toad-contracts/valibot@0.5.0(valibot@1.5.0(typescript@7.0.2))':
-    dependencies:
-      '@toad-contracts/core': 0.4.0
-      valibot: 1.5.0(typescript@7.0.2)
 
   '@toad-contracts/valibot@1.0.0(valibot@1.5.0(typescript@7.0.2))':
     dependencies:

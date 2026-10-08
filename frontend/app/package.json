@@ -26,8 +26,8 @@
   "dependencies": {
     "@nuxt/ui": "^4.11.1",
     "@sainte-beuve/contracts": "workspace:*",
-    "@toad-contracts/core": "0.4.0",
-    "@toad-contracts/frontend-http-client": "0.3.2",
+    "@toad-contracts/core": "1.0.0",
+    "@toad-contracts/frontend-http-client": "1.0.1",
     "valibot": "^1.5.0",
     "vue": "3.5.42",
     "wretch": "^3.0.9"

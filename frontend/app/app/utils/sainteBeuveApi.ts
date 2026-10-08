@@ -241,9 +241,10 @@ export function createSainteBeuveApi(apiBase: string) {
     // claim about the wire. `sendByApiContract` has already narrowed its result
     // to the contract's success responses; with the contract still generic here,
     // TypeScript cannot see that its narrowing and `SuccessBody` describe the
-    // same set. Every method below calls this with a CONCRETE contract, which is
-    // where the response type each screen sees is checked.
-    return outcome.result.body as SuccessBody<TContract>
+    // same set, nor that every member of it carries a `body`. Every method below
+    // calls this with a CONCRETE contract, which is where the response type each
+    // screen sees is checked.
+    return (outcome.result as { body?: unknown }).body as SuccessBody<TContract>
   }
 
   return {

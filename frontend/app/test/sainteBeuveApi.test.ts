@@ -79,6 +79,21 @@ describe('createSainteBeuveApi', () => {
     ])
   })
 
+  it('leaves an unset My PRs filter out of the query rather than sending it empty', async () => {
+    const empty = { pullRequests: [], complete: true, sources: [] }
+    const calls = stubFetch(jsonResponse(empty))
+
+    await createSainteBeuveApi(API_BASE).listMyPullRequests({
+      status: 'awaiting',
+      owner: undefined,
+      projectId: undefined,
+    })
+
+    expect(calls.map((call) => call.url)).toEqual([
+      `${API_BASE}/api/v1/my-pull-requests?status=awaiting`,
+    ])
+  })
+
   it('sends the method and path the contract declares, under the API version', async () => {
     const calls = stubFetch(jsonResponse({ reviewers: [reviewer] }))
 

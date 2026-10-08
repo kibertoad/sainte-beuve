@@ -36,8 +36,8 @@
     "@sainte-beuve/kernel": "workspace:*",
     "@sainte-beuve/reminders": "workspace:*",
     "@sainte-beuve/reviewers": "workspace:*",
-    "@toad-contracts/core": "0.4.0",
-    "@toad-contracts/hono": "0.3.2",
+    "@toad-contracts/core": "1.0.0",
+    "@toad-contracts/hono": "1.0.0",
     "hono": "^4.13.7"
   },
   "devDependencies": {
