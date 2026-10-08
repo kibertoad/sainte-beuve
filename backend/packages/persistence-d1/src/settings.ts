@@ -1,6 +1,12 @@
-import type { IntegrationTokenRepository, StoredIntegrationToken } from '@sainte-beuve/kernel'
+import type {
+  IntegrationConfigRepository,
+  IntegrationTokenRepository,
+  StoredIntegrationConfig,
+  StoredIntegrationToken,
+} from '@sainte-beuve/kernel'
+import * as v from 'valibot'
 import type { SqlDriver, SqlRow } from './driver.js'
-import { decodeCount } from './rows.js'
+import { decodeCount, decodeData, encodeData } from './rows.js'
 
 /**
  * The sealed integration credentials.
@@ -75,5 +81,54 @@ export class SqlIntegrationTokenRepository implements IntegrationTokenRepository
       this.orgId,
       integrationId,
     ])
+  }
+}
+
+/**
+ * The non-secret half of an integration, per org: a base URL, a service id.
+ * The fields are one JSON object rather than columns, because each integration
+ * has its own and none of them is queried.
+ */
+export class SqlIntegrationConfigRepository implements IntegrationConfigRepository {
+  constructor(
+    private readonly db: SqlDriver,
+    private readonly orgId: string,
+  ) {}
+
+  async get(integrationId: string): Promise<StoredIntegrationConfig | null> {
+    const row = await this.db.first(
+      'SELECT integration_id, data, updated_at FROM integration_configs WHERE org_id = ? AND integration_id = ?',
+      [this.orgId, integrationId],
+    )
+    return row === null ? null : toConfig(row)
+  }
+
+  async put(config: StoredIntegrationConfig): Promise<StoredIntegrationConfig> {
+    await this.db.run(
+      `INSERT INTO integration_configs (org_id, integration_id, data, updated_at)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (org_id, integration_id) DO UPDATE SET
+  data = excluded.data,
+  updated_at = excluded.updated_at`,
+      [this.orgId, config.integrationId, encodeData(config.values), config.updatedAt],
+    )
+    return config
+  }
+
+  async delete(integrationId: string): Promise<void> {
+    await this.db.run('DELETE FROM integration_configs WHERE org_id = ? AND integration_id = ?', [
+      this.orgId,
+      integrationId,
+    ])
+  }
+}
+
+const CONFIG_VALUES = v.record(v.string(), v.string())
+
+function toConfig(row: SqlRow): StoredIntegrationConfig {
+  return {
+    integrationId: String(row.integration_id),
+    values: decodeData(CONFIG_VALUES, 'integration_configs', row.data),
+    updatedAt: decodeCount(row.updated_at),
   }
 }

@@ -20,6 +20,7 @@ import {
   PR,
   stubGateways,
 } from './helpers.js'
+import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
 
 const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
@@ -310,14 +311,16 @@ describe('a parked AI review', () => {
   let chat: ReturnType<typeof recordingChat>
   let catFactory: StubAiReview
 
-  beforeEach(() => {
+  beforeEach(async () => {
     chat = recordingChat()
     catFactory = stubAiReview()
-    harness = buildHarness({
-      chat,
-      aiReview: catFactory,
-      slack: { signingSecret: null, announcementChannelId: 'C-reviews' },
-    })
+    harness = await connectCatFactory(
+      buildHarness({
+        ...catFactoryWired({ aiReview: catFactory }),
+        chat,
+        slack: { signingSecret: null, announcementChannelId: 'C-reviews' },
+      }),
+    )
   })
 
   /** A review handed to cat-factory, with the reviewer parked on its findings. */
@@ -619,9 +622,8 @@ describe('a tick across tenancies', () => {
     }
     const harness = buildHarness(
       {
-        aiReview: catFactory,
         chat: nudging,
-        gateways: stubGateways({ chat: () => nudging }),
+        gateways: stubGateways({ chat: () => nudging, aiReview: () => catFactory }),
         slack: { signingSecret: null, announcementChannelId: 'C-reviews' },
       },
       { encryptionKey: btoa('0123456789abcdef0123456789abcdef') },
@@ -638,6 +640,9 @@ describe('a tick across tenancies', () => {
     // boundary. Without this its rung would fail rather than be sent late, and
     // the order this case is about could not be read off the result.
     await storeBotToken(harness, OTHER_ORG)
+    // And its own cat-factory, for the same reason: nothing is lent to it.
+    await connectCatFactory(harness)
+    await connectCatFactory({ container: withOrg(harness.container, OTHER_ORG) })
     await seed(harness, DEFAULT_ORG_ID, 11)
     await seed(harness, OTHER_ORG, 12)
 

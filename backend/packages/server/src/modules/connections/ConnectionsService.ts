@@ -19,6 +19,7 @@ import { callbackOrigin } from '../../http/callbackOrigin.js'
 import { requireCapability } from '../../http/errors.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 import { OrgService } from '../orgs/OrgService.js'
+import { CatFactoryConnectionService } from './CatFactoryConnectionService.js'
 import { notOurState, startedByThisBrowser } from './roundTrip.js'
 import { slackConnection } from './slackConnection.js'
 import { establishSession, type IssuedSession, storeCredential } from './signIn.js'
@@ -108,13 +109,14 @@ export class ConnectionsService {
   constructor(private readonly container: AppContainer) {}
 
   async read(): Promise<Connections> {
-    const [vcs, slack] = await Promise.all([
+    const [vcs, slack, catFactory] = await Promise.all([
       Promise.all(VCS_PROVIDERS.map((provider) => this.connection(provider))),
       // Its own module because every field on it is RESOLVED for this org rather
       // than read off the deployment's wiring. See `slackConnection`.
       slackConnection(this.container),
+      new CatFactoryConnectionService(this.container).read(),
     ])
-    return { vcs, slack }
+    return { vcs, slack, catFactory }
   }
 
   /**

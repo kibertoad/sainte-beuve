@@ -86,10 +86,6 @@ APP_BASE_URL = "https://sainte-beuve.example.com"
 # refuses to start on a public host without it. The callback URLs registered in
 # the GitHub and GitLab OAuth apps are `<this>/connect/<host>/callback`.
 API_BASE_URL = "https://api.sainte-beuve.example.com"
-# The cat-factory instance AI reviews are delegated to. Point this at your own
-# local cat-factory (http://localhost:8787) or at the org's centralized one.
-CAT_FACTORY_BASE_URL = "https://cat-factory.example.com"
-CAT_FACTORY_SERVICE_ID = "REPLACE_WITH_CAT_FACTORY_SERVICE_ID"
 # Slack channel new reviews are announced in, in this deployment's own workspace
 # — so it is the DEFAULT org's, like the two Slack secrets below. A second org
 # has no announcement channel of its own yet.
@@ -123,10 +119,6 @@ GITHUB_LABEL_AI_REVIEW = "ai-review"
 GITHUB_LABEL_SKILL_PREFIX = "skill:"
 
 # SECRETS, set with `wrangler secret put <NAME>`, never in this file:
-#   CAT_FACTORY_API_KEY        a cat-factory public-API key (cf_live_<keyId>.<secret>),
-#                              with the `decide` scope: a review parks on its
-#                              findings, and cat-factory will not start a run
-#                              through a key that could not then answer it
 #   GITHUB_APP_PRIVATE_KEY     the App's private key, PKCS#8 PEM. GitHub issues
 #                              PKCS#1; convert it once with
 #                              `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pk8.pem`

@@ -324,8 +324,8 @@ What is left:
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
-- Per-repository cat-factory service mapping, replacing the single
-  `CAT_FACTORY_SERVICE_ID`.
+- Per-repository cat-factory service mapping, replacing the one service id an
+  org sets on the Configuration screen.
 - Challenging a finding (cat-factory dispatches an investigator that upholds or
   retracts it). It is a fourth verb on the same surface; the loop is usable
   without it and the screen has nowhere to put the verdict yet.

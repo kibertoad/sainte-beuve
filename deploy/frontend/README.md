@@ -9,7 +9,7 @@ the layer and sets the backend URL; there is no application code here on purpose
 pnpm dev:frontend
 ```
 
-Serves on `http://localhost:3000` against `http://localhost:8788` (the Node or
+Serves on `http://localhost:3088` against `http://localhost:8788` (the Node or
 local-mode backend). Start one of those first, or the board shows the
 "could not reach the API" state.
 

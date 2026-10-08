@@ -14,6 +14,7 @@ import {
   stubGateways,
   type TestHarness,
 } from './helpers.js'
+import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
 
 // GitHub deliveries through the app: the signature gate, the intent, and the
 // writes, together. What each payload MEANS is tested against fixtures in
@@ -248,7 +249,12 @@ describe('GitHub webhook intake', () => {
 
   it('delegates to cat-factory when the AI-review label lands on an untracked PR', async () => {
     const delegating = await registered(
-      buildHarness({ aiReview: stubAiReview(), github: harness.container.github }),
+      await connectCatFactory(
+        buildHarness({
+          ...catFactoryWired({ aiReview: stubAiReview() }),
+          github: harness.container.github,
+        }),
+      ),
     )
 
     const res = await deliver(
@@ -402,11 +408,13 @@ describe('GitHub webhook intake, by who is asking', () => {
   it('files one AI review at a time, and says so on the pull request', async () => {
     const catFactory = stubAiReview()
     const delegating = await registered(
-      buildHarness({
-        aiReview: catFactory,
-        vcs: environmentVcs(vcs),
-        github: harness.container.github,
-      }),
+      await connectCatFactory(
+        buildHarness({
+          ...catFactoryWired({ aiReview: catFactory }),
+          vcs: environmentVcs(vcs),
+          github: harness.container.github,
+        }),
+      ),
     )
 
     await deliver(delegating, 'issue_comment', commentPayload('@sainte-beuve-bot ai'))
@@ -433,11 +441,13 @@ describe('GitHub webhook intake, by who is asking', () => {
       )
     }
     const delegating = await registered(
-      buildHarness({
-        aiReview: catFactory,
-        vcs: environmentVcs(vcs),
-        github: harness.container.github,
-      }),
+      await connectCatFactory(
+        buildHarness({
+          ...catFactoryWired({ aiReview: catFactory }),
+          vcs: environmentVcs(vcs),
+          github: harness.container.github,
+        }),
+      ),
     )
 
     await deliver(delegating, 'issue_comment', commentPayload('@sainte-beuve-bot ai'))

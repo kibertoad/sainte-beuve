@@ -26,8 +26,8 @@ export interface GuidedReviewWatch {
 }
 
 const NOT_CONFIGURED =
-  'cat-factory is not configured for this deployment: a guided review needs a base URL and an ' +
-  'API key with the `write` scope (the key can be entered on the Configuration screen)'
+  'cat-factory is not configured for this org: a guided review needs its base URL and an API ' +
+  'key with the `write` scope, which an admin sets on the Configuration screen'
 
 /**
  * cat-factory's guided review, relayed for one org.

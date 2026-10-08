@@ -14,6 +14,7 @@ import type {
   Role,
 } from '@sainte-beuve/contracts'
 import type { EpochMs } from '../domain/types.js'
+import type { IntegrationConfigRepository } from './integration-config.js'
 
 /**
  * Persistence ports. There are three implementations (in-memory in
@@ -382,6 +383,7 @@ export interface Repositories {
   reminders: ReminderRepository
   aiReviewRuns: AiReviewRunRepository
   integrationTokens: IntegrationTokenRepository
+  integrationConfigs: IntegrationConfigRepository
   projects: ProjectRepository
   identities: IdentityRepository
   attention: AttentionRepository

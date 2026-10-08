@@ -131,8 +131,15 @@ export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFa
       throw new Error('this case wired no VCS gateway')
     },
     vcsAsApp: () => null,
-    aiReview: () => null,
-    guidedReview: () => null,
+    aiReview: () => {
+      throw new Error('this case wired no AI reviewer')
+    },
+    guidedReview: () => {
+      throw new Error('this case wired no guided reviewer')
+    },
+    catFactoryProbe: () => {
+      throw new Error('this case wired no cat-factory probe')
+    },
     signIn: () => null,
     ...overrides,
   }

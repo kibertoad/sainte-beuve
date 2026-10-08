@@ -1,4 +1,5 @@
 import type {
+  CatFactoryConfig,
   IntegrationId,
   VcsAuthMethod,
   VcsOauthCredentialKey,
@@ -14,6 +15,7 @@ import {
   type VcsGateway,
 } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../container.js'
+import { readCatFactoryConfig } from './catFactoryConfig.js'
 
 /**
  * Which credential each integration is authenticating with RIGHT NOW.
@@ -229,33 +231,78 @@ export async function resolveSlackSigningSecret(
 }
 
 /**
- * The cat-factory key in force. A stored key can still resolve to nothing: the
- * gateway also needs a base URL and a service id, which are deployment
- * configuration rather than credentials, and the factory answers null without
- * them.
+ * The AI reviewer for this org, able to file: its stored key, on its stored
+ * instance, under its stored service. Null until all three are on the
+ * Configuration screen. There is no environment fallback (see
+ * `catFactoryConfig.ts`), so the source is always `stored`.
  */
 export async function resolveAiReview(
   container: AppContainer,
+  pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
 ): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
-  const stored = await openCredential(container, 'cat-factory')
-  const fromStored = stored === null ? null : (container.gateways?.aiReview(stored) ?? null)
-  if (fromStored !== null) return { gateway: fromStored, source: 'stored' }
-  return container.aiReview === null ? null : { gateway: container.aiReview, source: 'environment' }
+  const access = await pending
+  if (access === null || access.config.serviceId === null) return null
+  return aiReviewOver(container, access)
 }
 
 /**
- * The guided reviewer in force, from the same stored cat-factory key as the AI
- * reviewer and with the same fallback to the environment's.
+ * The AI reviewer for runs already filed. Polling and curating a run never name
+ * a service, so clearing the service id stops new reviews without stranding the
+ * ones in flight. Its `requestReview` refuses when there is no service id.
  */
+export async function resolveAiReviewRuns(
+  container: AppContainer,
+  pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
+): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
+  const access = await pending
+  return access === null ? null : aiReviewOver(container, access)
+}
+
+function aiReviewOver(
+  container: AppContainer,
+  { config, apiKey }: CatFactoryOrgAccess,
+): Resolved<AiReviewGateway, CredentialSource> | null {
+  const gateway = container.gateways?.aiReview({
+    baseUrl: config.baseUrl,
+    apiKey,
+    serviceId: config.serviceId,
+    pipelineId: config.pipelineId,
+  })
+  return gateway === undefined ? null : { gateway, source: 'stored' }
+}
+
+/** The guided reviewer for this org: the same key and instance, and no service. */
 export async function resolveGuidedReview(
   container: AppContainer,
+  pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
 ): Promise<Resolved<GuidedReviewGateway, CredentialSource> | null> {
-  const stored = await openCredential(container, 'cat-factory')
-  const fromStored = stored === null ? null : (container.gateways?.guidedReview(stored) ?? null)
-  if (fromStored !== null) return { gateway: fromStored, source: 'stored' }
-  return container.guidedReview === null
-    ? null
-    : { gateway: container.guidedReview, source: 'environment' }
+  const access = await pending
+  if (access === null) return null
+  const gateway = container.gateways?.guidedReview({
+    baseUrl: access.config.baseUrl,
+    apiKey: access.apiKey,
+  })
+  return gateway === undefined ? null : { gateway, source: 'stored' }
+}
+
+/** An org's stored cat-factory settings with its opened key. */
+export interface CatFactoryOrgAccess {
+  config: CatFactoryConfig
+  apiKey: string
+}
+
+/**
+ * Read once and hand to both resolvers when a caller needs the AI and the guided
+ * reviewer together, so the key is opened once rather than per resolver.
+ */
+export async function catFactoryAccess(
+  container: AppContainer,
+): Promise<CatFactoryOrgAccess | null> {
+  const [config, apiKey] = await Promise.all([
+    readCatFactoryConfig(container),
+    openCredential(container, 'cat-factory'),
+  ])
+  return config === null || apiKey === null ? null : { config, apiKey }
 }
 
 /**

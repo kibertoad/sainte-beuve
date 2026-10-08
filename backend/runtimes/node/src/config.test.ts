@@ -7,8 +7,7 @@ describe('loadConfig', () => {
     const config = loadConfig({})
     expect(config.port).toBe(8788)
     expect(config.corsOrigins).toStrictEqual(['*'])
-    expect(config.catFactory).toBeNull()
-    expect(config.catFactoryApiKey).toBeNull()
+    expect(config.catFactorySuggestion).toBeNull()
     expect(config.slack).toStrictEqual({
       botToken: null,
       signingSecret: null,
@@ -82,26 +81,20 @@ describe('loadConfig', () => {
     )
   })
 
-  it('treats a partly configured cat-factory as not configured', () => {
-    // A base URL with no service id names no service, so a gateway built from it
-    // would fail on the first delegation instead of on `/health`.
-    expect(loadConfig({ CAT_FACTORY_BASE_URL: 'http://localhost:8787' }).catFactory).toBeNull()
-  })
-
-  it('keeps the cat-factory API key apart from the rest of its configuration', () => {
-    // The key can also arrive from the Configuration screen, so it is not part of
-    // "is cat-factory configured?": a deployment that sets the base URL and the
-    // service id here can be finished from the SPA.
+  it('reads no cat-factory configuration from the environment', () => {
+    // Every part of it is an org's, set on the Configuration screen.
     const config = loadConfig({
       CAT_FACTORY_BASE_URL: 'http://localhost:8787',
       CAT_FACTORY_SERVICE_ID: 'svc-1',
+      CAT_FACTORY_API_KEY: 'cf_live_x.y',
     })
-    expect(config.catFactory).toStrictEqual({
-      baseUrl: 'http://localhost:8787',
-      serviceId: 'svc-1',
-      pipelineId: undefined,
-    })
-    expect(config.catFactoryApiKey).toBeNull()
+    expect(config.catFactorySuggestion).toBeNull()
+    expect(config.retiredVariables).toStrictEqual([
+      'CAT_FACTORY_BASE_URL',
+      'CAT_FACTORY_SERVICE_ID',
+      'CAT_FACTORY_API_KEY',
+    ])
+    expect(loadConfig({ CAT_FACTORY_API_KEY: '' }).retiredVariables).toStrictEqual([])
   })
 
   it('offers whichever GitHub credentials are configured, and no others', () => {

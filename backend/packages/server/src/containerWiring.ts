@@ -82,12 +82,6 @@ export function slackWiring(options: Partial<SlackWiring> | undefined): SlackWir
 }
 
 /** The outbound gateways, with one a facade left unwired as absent. */
-export function outboundGateways(
-  options: ContainerOptions,
-): Pick<AppContainer, 'chat' | 'aiReview' | 'guidedReview'> {
-  return {
-    chat: options.chat ?? null,
-    aiReview: options.aiReview ?? null,
-    guidedReview: options.guidedReview ?? null,
-  }
+export function outboundGateways(options: ContainerOptions): Pick<AppContainer, 'chat'> {
+  return { chat: options.chat ?? null }
 }

@@ -1,13 +1,8 @@
 import { Hono } from 'hono'
 import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
-import {
-  resolveAiReview,
-  resolveGuidedReview,
-  resolveChat,
-  resolveSlackSigningSecret,
-  resolveVcs,
-} from '../../integrations/resolve.js'
+import { resolveCapabilities } from '../../integrations/capabilities.js'
+import { resolveChat, resolveSlackSigningSecret, resolveVcs } from '../../integrations/resolve.js'
 import { ConnectionsService } from '../connections/ConnectionsService.js'
 
 /**
@@ -33,16 +28,14 @@ export function healthController(): Hono<AppEnv> {
 
   app.get('/health', async (c) => {
     const container = c.get('container')
-    const [chat, github, gitlab, aiReview, guidedReview, slackSigning, persistenceReady] =
-      await Promise.all([
-        resolveChat(container),
-        resolveVcs(container, 'github'),
-        resolveVcs(container, 'gitlab'),
-        resolveAiReview(container),
-        resolveGuidedReview(container),
-        resolveSlackSigningSecret(container),
-        storeAnswers(container),
-      ])
+    const [chat, github, gitlab, catFactory, slackSigning, persistenceReady] = await Promise.all([
+      resolveChat(container),
+      resolveVcs(container, 'github'),
+      resolveVcs(container, 'gitlab'),
+      resolveCapabilities(container),
+      resolveSlackSigningSecret(container),
+      storeAnswers(container),
+    ])
     const body = {
       status: persistenceReady ? 'ok' : 'degraded',
       ...shape(container),
@@ -53,8 +46,8 @@ export function healthController(): Hono<AppEnv> {
         // GitLab is exactly as healthy as its GitLab projects are unreadable,
         // and one boolean would report that as either fine or broken.
         vcs: { github: github !== null, gitlab: gitlab !== null },
-        aiReview: aiReview !== null,
-        guidedReview: guidedReview !== null,
+        aiReview: catFactory.aiReview,
+        guidedReview: catFactory.guidedReview,
         secrets: container.secrets !== null,
         githubWebhooks: container.github.webhookSecret !== null,
         // For the org this probe is in, which on an unauthenticated `/health` is

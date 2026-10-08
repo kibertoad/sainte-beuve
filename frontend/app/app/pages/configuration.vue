@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type {
+  CatFactoryConfig,
   IntegrationId,
   IntegrationTokenStatus,
   Role,
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import {
+  integrationCapabilities,
   integrationLabel,
   isVcsProvider,
   vcsDisplayName,
@@ -79,6 +81,7 @@ const { data, pending, error, refresh } = useAsyncData(
 
 const { busy, run } = useApiAction({ refresh })
 const { confirm } = useConfirm()
+const capabilities = useCapabilities()
 
 /** The one time a minted key is readable. See AccessCard. */
 const issuedKey = ref<string | null>(null)
@@ -152,7 +155,8 @@ interface DraftHolder {
  * pasted beside it.
  */
 const slack = ref<{ token: DraftHolder; signingSecret: DraftHolder } | null>(null)
-const catFactory = ref<DraftHolder | null>(null)
+/** The cat-factory card holds one credential beside its settings. See CatFactoryConnectionCard. */
+const catFactory = ref<{ key: DraftHolder } | null>(null)
 
 /**
  * The host cards, keyed by HOST rather than by position in the loop.
@@ -204,6 +208,7 @@ async function save(integrationId: IntegrationId, token: string, field: DraftHol
   // Only on success. Clearing the input after a refusal (503 with no encryption
   // key, or a token GitHub rejected) throws away what the operator pasted.
   if (stored) field?.clearDraft()
+  await refreshCapabilitiesFor(integrationId)
 }
 
 /**
@@ -228,6 +233,59 @@ async function clear(integrationId: IntegrationId) {
     'Could not clear the credential',
     integrationId,
   )
+  await refreshCapabilitiesFor(integrationId)
+}
+
+/** Re-read what this org can do when a credential that gates something changed. */
+async function refreshCapabilitiesFor(integrationId: IntegrationId) {
+  if (integrationCapabilities(integrationId).length > 0) await capabilities.refresh()
+}
+
+/** Whether saving this config moves the connection to another instance, which drops the stored key. */
+function dropsCatFactoryKey(config: CatFactoryConfig): boolean {
+  const stored = data.value?.connections.catFactory.config ?? null
+  return (
+    stored !== null &&
+    stored.baseUrl !== config.baseUrl.replace(/\/+$/, '') &&
+    statusOf('cat-factory').state !== 'absent'
+  )
+}
+
+async function saveCatFactory(config: CatFactoryConfig) {
+  const confirmed =
+    !dropsCatFactoryKey(config) ||
+    (await confirm({
+      title: 'Move to another cat-factory instance?',
+      description:
+        'A key works only on the instance that minted it, so the stored key is removed. AI ' +
+        'reviews already running on the old instance can no longer be followed.',
+      confirmLabel: 'Change the base URL',
+    }))
+  if (!confirmed) return
+  await run(
+    () => api.saveCatFactoryConfig(config),
+    'Could not save the cat-factory settings',
+    'cat-factory-config',
+  )
+  await capabilities.refresh()
+}
+
+/** Forget this org's cat-factory connection, key included. */
+async function clearCatFactory() {
+  const confirmed = await confirm({
+    title: 'Clear the cat-factory settings?',
+    description:
+      'The settings and the stored key are both removed. AI review and guided review stop ' +
+      'working for this org until they are entered again.',
+    confirmLabel: 'Clear the settings',
+  })
+  if (!confirmed) return
+  await run(
+    () => api.clearCatFactoryConfig(),
+    'Could not clear the cat-factory settings',
+    'cat-factory-config',
+  )
+  await capabilities.refresh()
 }
 
 /**
@@ -382,20 +440,16 @@ onMounted(() => {
         @clear-signing-secret="clear('slack-signing-secret')"
       />
 
-      <UCard>
-        <div class="mb-4">
-          <p class="font-medium">cat-factory</p>
-        </div>
-        <CredentialField
-          ref="catFactory"
-          :status="statusOf('cat-factory')"
-          :busy="busy === 'cat-factory'"
-          placeholder="cf_live_…"
-          description="The instance AI reviews are delegated to. The key needs cat-factory's decide scope rather than just write: a review parks on its findings, so a key that could not answer one is refused when the review is filed. The key alone is not enough either, since the deployment also needs a base URL and a service id, and until it has both this credential is stored and unused."
-          @save="save('cat-factory', $event, catFactory)"
-          @clear="clear('cat-factory')"
-        />
-      </UCard>
+      <CatFactoryConnectionCard
+        ref="catFactory"
+        :connection="data.connections.catFactory"
+        :key-status="statusOf('cat-factory')"
+        :busy="busy !== null"
+        @save="saveCatFactory($event)"
+        @clear="clearCatFactory()"
+        @save-key="save('cat-factory', $event, catFactory?.key ?? null)"
+        @clear-key="clear('cat-factory')"
+      />
     </div>
   </UContainer>
 </template>

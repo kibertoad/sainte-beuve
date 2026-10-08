@@ -1,8 +1,13 @@
-import type { IntegrationTokenRepository, StoredIntegrationToken } from '@sainte-beuve/kernel'
+import type {
+  IntegrationConfigRepository,
+  IntegrationTokenRepository,
+  StoredIntegrationConfig,
+  StoredIntegrationToken,
+} from '@sainte-beuve/kernel'
 import { and, asc, eq } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr } from './rows.js'
-import { integrationTokens } from './schema.js'
+import { integrationConfigs, integrationTokens } from './schema.js'
 
 /**
  * The sealed integration credentials.
@@ -72,5 +77,48 @@ export class PostgresIntegrationTokenRepository implements IntegrationTokenRepos
           eq(integrationTokens.integrationId, integrationId),
         ),
       )
+  }
+}
+
+/** The non-secret half of an integration, per org. See `integrationConfigs` in the schema. */
+export class PostgresIntegrationConfigRepository implements IntegrationConfigRepository {
+  constructor(
+    private readonly db: PostgresDatabase,
+    private readonly orgId: string,
+  ) {}
+
+  async get(integrationId: string): Promise<StoredIntegrationConfig | null> {
+    const rows = await this.db
+      .select({
+        integrationId: integrationConfigs.integrationId,
+        values: integrationConfigs.data,
+        updatedAt: integrationConfigs.updatedAt,
+      })
+      .from(integrationConfigs)
+      .where(this.matching(integrationId))
+    return firstOr(rows)
+  }
+
+  async put(config: StoredIntegrationConfig): Promise<StoredIntegrationConfig> {
+    const row = { data: config.values, updatedAt: config.updatedAt }
+    await this.db
+      .insert(integrationConfigs)
+      .values({ ...row, orgId: this.orgId, integrationId: config.integrationId })
+      .onConflictDoUpdate({
+        target: [integrationConfigs.orgId, integrationConfigs.integrationId],
+        set: row,
+      })
+    return config
+  }
+
+  async delete(integrationId: string): Promise<void> {
+    await this.db.delete(integrationConfigs).where(this.matching(integrationId))
+  }
+
+  private matching(integrationId: string) {
+    return and(
+      eq(integrationConfigs.orgId, this.orgId),
+      eq(integrationConfigs.integrationId, integrationId),
+    )
   }
 }

@@ -18,6 +18,7 @@ import { allowedOrigin, intendedMethod, WILDCARD, writeOriginGuard } from './htt
 import { CredentialThrottle } from './http/throttle.js'
 import { attentionController } from './modules/attention/AttentionController.js'
 import { authController } from './modules/auth/AuthController.js'
+import { capabilitiesController } from './modules/capabilities/CapabilitiesController.js'
 import { authentication } from './modules/auth/principal.js'
 import { connectController } from './modules/connections/ConnectController.js'
 import { connectionsController } from './modules/connections/ConnectionsController.js'
@@ -327,6 +328,7 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/api/v1', projectController())
   app.route('/api/v1', attentionController())
   app.route('/api/v1', authController())
+  app.route('/api/v1', capabilitiesController())
   app.route('/api/v1', reviewerController())
   app.route('/api/v1', reviewController())
   app.route('/api/v1', aiReviewController())

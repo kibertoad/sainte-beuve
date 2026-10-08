@@ -17,6 +17,7 @@ import {
   recordingVcs,
   type TestHarness,
 } from './helpers.js'
+import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
 
 // The `/review` slash command and the announcement message's buttons, through
 // the app: the signature gate, the intent, and what Slack renders back.
@@ -249,7 +250,12 @@ describe('Slack interactivity', () => {
   })
 
   it('delegates to cat-factory when it is configured', async () => {
-    const wired = buildHarness({ aiReview: stubAiReview(), slack: harness.container.slack })
+    const wired = await connectCatFactory(
+      buildHarness({
+        ...catFactoryWired({ aiReview: stubAiReview() }),
+        slack: harness.container.slack,
+      }),
+    )
     await addReviewer(wired, { displayName: 'Peer', slackUserId: 'U-peer' })
     const review = await openReview(wired)
     expect((await signed(wired, command(`ai ${review.id}`))).text).toContain('cat-factory')
@@ -304,7 +310,12 @@ describe('Slack commands, by who typed them', () => {
     // workspace, a guest included, can loop `/review ai` on the org's budget or
     // `/review reroll` to pull reviews off people.
     const catFactory = stubAiReview()
-    const wired = buildHarness({ aiReview: catFactory, slack: harness.container.slack })
+    const wired = await connectCatFactory(
+      buildHarness({
+        ...catFactoryWired({ aiReview: catFactory }),
+        slack: harness.container.slack,
+      }),
+    )
     await addReviewer(wired, { displayName: 'Peer', handles: { github: 'peer' } })
     const review = await openReview(wired)
     await assignReviewer(wired, review.id)

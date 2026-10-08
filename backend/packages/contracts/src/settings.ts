@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { CapabilityName } from './capabilities.js'
 import type { VcsProvider } from './vcs.js'
 
 // ---------------------------------------------------------------------------
@@ -43,25 +44,47 @@ export const integrationIdSchema = v.picklist([
 ])
 export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
 
-// What each integration is CALLED, so a screen asking about one names a product
-// rather than a store key: "the GitHub token" reads like a thing an operator
-// has, where `github-pat` reads like a bug report. Private table and exported
-// reader, the shape `vcsDisplayName` already uses.
-const INTEGRATION_LABELS: Record<IntegrationId, string> = {
-  'github-pat': 'GitHub token',
-  'gitlab-pat': 'GitLab token',
-  'slack-bot-token': 'Slack bot token',
-  'slack-signing-secret': 'Slack signing secret',
-  'cat-factory': 'cat-factory key',
+/**
+ * What is known about each pasteable integration, keyed by its id, so a caller
+ * reads a trait instead of comparing ids. A new id fails the build until it has
+ * a row.
+ */
+interface IntegrationTraits {
+  /**
+   * What it is called, so a screen names a product rather than a store key:
+   * "the GitHub token" reads like a thing an operator has, where `github-pat`
+   * reads like a bug report.
+   */
+  label: string
+  /** The capabilities that stop or start working when this credential changes. */
+  capabilities: readonly CapabilityName[]
+}
+
+const INTEGRATION_TRAITS: Record<IntegrationId, IntegrationTraits> = {
+  'github-pat': { label: 'GitHub token', capabilities: [] },
+  'gitlab-pat': { label: 'GitLab token', capabilities: [] },
+  'slack-bot-token': { label: 'Slack bot token', capabilities: [] },
+  'slack-signing-secret': { label: 'Slack signing secret', capabilities: [] },
+  'cat-factory': { label: 'cat-factory key', capabilities: ['aiReview', 'guidedReview'] },
 }
 
 /**
- * The integration as a person reads it. Falls back to the id, because the API is
- * versioned separately from the SPA and a deployment can serve a credential this
- * build has never heard of.
+ * The traits of an integration this build knows, or null for one it does not:
+ * the API is versioned separately from the SPA, so a deployment can serve a
+ * credential this build has never heard of.
  */
+function traitsOf(integrationId: string): IntegrationTraits | null {
+  return INTEGRATION_TRAITS[integrationId as IntegrationId] ?? null
+}
+
+/** The integration as a person reads it. Falls back to the id for one this build does not know. */
 export function integrationLabel(integrationId: string): string {
-  return INTEGRATION_LABELS[integrationId as IntegrationId] ?? integrationId
+  return traitsOf(integrationId)?.label ?? integrationId
+}
+
+/** The capabilities a change to this integration's credential can turn on or off. */
+export function integrationCapabilities(integrationId: string): readonly CapabilityName[] {
+  return traitsOf(integrationId)?.capabilities ?? []
 }
 
 /** The store keys a sign-in credential is held under, one per source-control host. */

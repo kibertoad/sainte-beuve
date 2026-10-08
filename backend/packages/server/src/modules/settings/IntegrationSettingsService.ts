@@ -12,8 +12,8 @@ import { requireCapability } from '../../http/errors.js'
 import { hintOf } from '../../integrations/credentials.js'
 import {
   type CredentialSource,
-  resolveAiReview,
   resolveChat,
+  resolveGuidedReview,
   resolveSlackSigningSecret,
   resolveVcs,
 } from '../../integrations/resolve.js'
@@ -44,7 +44,7 @@ interface ActiveCredentials {
   vcs: Record<VcsProvider, VcsAuthMethod | null>
   chat: CredentialSource | null
   slackSigning: CredentialSource | null
-  aiReview: CredentialSource | null
+  catFactory: boolean
 }
 
 export class IntegrationSettingsService {
@@ -119,18 +119,18 @@ export class IntegrationSettingsService {
   }
 
   private async activeCredentials(): Promise<ActiveCredentials> {
-    const [github, gitlab, chat, slackSigning, aiReview] = await Promise.all([
+    const [github, gitlab, chat, slackSigning, catFactory] = await Promise.all([
       resolveVcs(this.container, 'github'),
       resolveVcs(this.container, 'gitlab'),
       resolveChat(this.container),
       resolveSlackSigningSecret(this.container),
-      resolveAiReview(this.container),
+      resolveGuidedReview(this.container),
     ])
     return {
       vcs: { github: github?.source ?? null, gitlab: gitlab?.source ?? null },
       chat: chat?.source ?? null,
       slackSigning: slackSigning?.source ?? null,
-      aiReview: aiReview?.source ?? null,
+      catFactory: catFactory !== null,
     }
   }
 
@@ -208,7 +208,9 @@ function inUse(integrationId: IntegrationId, active: ActiveCredentials): boolean
     // whole answer — but only in the default org does the other source exist at
     // all, which is why this is a resolution rather than a row read.
     'slack-signing-secret': active.slackSigning === 'stored',
-    'cat-factory': active.aiReview === 'stored',
+    // There is no other source, so the stored key is in use once its instance
+    // is configured too.
+    'cat-factory': active.catFactory,
   }
   return ANSWERS[integrationId]
 }

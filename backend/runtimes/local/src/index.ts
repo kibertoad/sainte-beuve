@@ -12,9 +12,11 @@ import { type NodeConfig, type RunningServer, loadConfig, start } from '@sainte-
  * Slack workspace, no GitHub App and no cat-factory account:
  *
  *   - CORS opens to `*`, because the SPA is on a different localhost port.
- *   - cat-factory defaults to `http://localhost:8787`, which is where a local
- *     cat-factory serves. Point `CAT_FACTORY_BASE_URL` at the centralized instance
- *     to use that one instead; the rest of the wiring is identical either way.
+ *   - The Configuration screen proposes a local cat-factory's defaults
+ *     (`http://localhost:8787`, the built-in `pl_review` pipeline) for an org that
+ *     has not configured one. They are only suggestions: cat-factory is set per
+ *     org on that screen, with a key minted in cat-factory, and never from the
+ *     environment.
  *   - The reminder clock still runs, just faster, so a developer can watch a nudge
  *     fire in a minute rather than in four hours.
  *   - The store is in memory, so a restart empties the board and nothing has to
@@ -49,17 +51,25 @@ export interface LocalOptions {
   env?: Record<string, string | undefined>
 }
 
-const LOCAL_CAT_FACTORY_BASE_URL = 'http://localhost:8787'
+/**
+ * What a local cat-factory serves with: its default port, and the built-in
+ * review pipeline every workspace carries. Service ids are per board, so there
+ * is none to suggest; the screen's check lists the ones a key can see.
+ */
+const LOCAL_CAT_FACTORY: NonNullable<NodeConfig['catFactorySuggestion']> = {
+  baseUrl: 'http://localhost:8787',
+  serviceId: null,
+  pipelineId: 'pl_review',
+}
 const ENCRYPTION_KEY_BYTES = 32
 
 export function localConfig(env: Record<string, string | undefined> = process.env): NodeConfig {
-  return loadConfig({
+  const config = loadConfig({
     PORT: '8788',
     CORS_ORIGINS: '*',
     LOG_LEVEL: 'debug',
     // Fast enough to watch, slow enough not to spam a local Slack app.
     REMINDER_INTERVAL_MS: '15000',
-    CAT_FACTORY_BASE_URL: LOCAL_CAT_FACTORY_BASE_URL,
     ...env,
     // AFTER the spread, and `||`: `.env.example` ships `SETTINGS_ENCRYPTION_KEY=`
     // for a developer to fill in, `--env-file` reads that blank line as `''`, and
@@ -72,6 +82,7 @@ export function localConfig(env: Record<string, string | undefined> = process.en
     SETTINGS_ENCRYPTION_KEY:
       env.SETTINGS_ENCRYPTION_KEY || randomBytes(ENCRYPTION_KEY_BYTES).toString('base64'),
   })
+  return { ...config, catFactorySuggestion: LOCAL_CAT_FACTORY }
 }
 
 export async function startLocal(options: LocalOptions = {}): Promise<RunningServer> {

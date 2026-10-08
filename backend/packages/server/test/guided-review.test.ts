@@ -8,6 +8,7 @@ import { ConflictError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { withOrg } from '../src/container.js'
 import { buildHarness, get, patch, post, type TestHarness } from './helpers.js'
+import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
 
 /**
  * The guided-review relay over `app.fetch`. What this deployment adds to
@@ -141,7 +142,7 @@ describe('guided review', () => {
 
   beforeEach(async () => {
     catFactory = stubGuidedReview()
-    harness = buildHarness({ guidedReview: catFactory })
+    harness = await connectCatFactory(buildHarness(catFactoryWired({ guidedReview: catFactory })))
     await registerProject(harness)
   })
 

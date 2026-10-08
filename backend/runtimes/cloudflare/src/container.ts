@@ -1,4 +1,4 @@
-import { CatFactoryAiReviewGateway, CatFactoryGuidedReviewGateway } from '@sainte-beuve/ai-review'
+import { catFactoryGateways } from '@sainte-beuve/ai-review'
 import {
   createGatewayFactory,
   GitHubVcsGateway,
@@ -7,8 +7,6 @@ import {
   staticTokenSource,
 } from '@sainte-beuve/integrations'
 import type {
-  AiReviewGateway,
-  GuidedReviewGateway,
   AttentionBus,
   ChatGateway,
   Deferral,
@@ -31,6 +29,8 @@ import {
   DEFAULT_SESSION_LIFETIME_MS,
   type EnvironmentVcsGateways,
   InMemoryAttentionBus,
+  RETIRED_VARIABLES_MESSAGE,
+  retiredVariablesIn,
   type SecretsWiring,
   secretsFrom,
   withAppOrigin,
@@ -129,6 +129,15 @@ function busFor(env: WorkerEnv, waitUntil: Deferral): { bus: AttentionBus; kind:
  * on a warm isolate still takes effect.
  */
 let cachedSecrets: { key: string | undefined; wiring: SecretsWiring } | null = null
+let retiredVariablesChecked = false
+
+/** Once per isolate, where Node warns once per boot: per request would flood Workers Logs. */
+function warnRetiredVariables(env: WorkerEnv): void {
+  if (retiredVariablesChecked) return
+  retiredVariablesChecked = true
+  const variables = retiredVariablesIn(env)
+  if (variables.length > 0) workerLogger.warn({ variables }, RETIRED_VARIABLES_MESSAGE)
+}
 let cachedGateways: { key: string; factory: GatewayFactory } | null = null
 
 function secretsFor(env: WorkerEnv): SecretsWiring {
@@ -145,9 +154,7 @@ function secretsFor(env: WorkerEnv): SecretsWiring {
 }
 
 /**
- * The credential-shaped bindings the factory is built from, as one string. The
- * cat-factory and Slack halves are in the key as well as GitHub's, because the
- * factory closes over the base URL and the service id too.
+ * The credential-shaped bindings the factory is built from, as one string.
  *
  * `JSON.stringify` rather than `join`: a separator maps an unset binding and a
  * blank one onto the same segment, so a `wrangler secret put` that fills in a
@@ -167,9 +174,6 @@ function gatewayKey(env: WorkerEnv): string {
     env.GITLAB_OAUTH_CLIENT_ID,
     env.GITLAB_OAUTH_CLIENT_SECRET,
     env.GITLAB_OAUTH_SCOPE,
-    env.CAT_FACTORY_BASE_URL,
-    env.CAT_FACTORY_SERVICE_ID,
-    env.CAT_FACTORY_PIPELINE_ID,
     env.APP_BASE_URL,
   ])
 }
@@ -214,35 +218,8 @@ function buildGateways(env: WorkerEnv): GatewayFactory {
           : null,
     },
     appBaseUrl: env.APP_BASE_URL || undefined,
-    aiReview: (apiKey) => aiReviewFrom(env, apiKey),
-    guidedReview: (apiKey) => guidedReviewFrom(env, apiKey),
+    catFactory: catFactoryGateways(),
   })
-}
-
-/** cat-factory needs a base URL and a service id that no credential carries. */
-function aiReviewFrom(env: WorkerEnv, apiKey: string): AiReviewGateway | null {
-  const { CAT_FACTORY_BASE_URL, CAT_FACTORY_SERVICE_ID } = env
-  if (!CAT_FACTORY_BASE_URL || !CAT_FACTORY_SERVICE_ID) return null
-  return new CatFactoryAiReviewGateway({
-    baseUrl: CAT_FACTORY_BASE_URL,
-    apiKey,
-    serviceId: CAT_FACTORY_SERVICE_ID,
-    pipelineId: env.CAT_FACTORY_PIPELINE_ID || undefined,
-  })
-}
-
-/** The guided review finds the repository from the pull request, so it needs no service id. */
-function guidedReviewFrom(env: WorkerEnv, apiKey: string): GuidedReviewGateway | null {
-  if (!env.CAT_FACTORY_BASE_URL) return null
-  return new CatFactoryGuidedReviewGateway({ baseUrl: env.CAT_FACTORY_BASE_URL, apiKey })
-}
-
-function buildGuidedReview(env: WorkerEnv): GuidedReviewGateway | null {
-  return env.CAT_FACTORY_API_KEY ? guidedReviewFrom(env, env.CAT_FACTORY_API_KEY) : null
-}
-
-function buildAiReview(env: WorkerEnv): AiReviewGateway | null {
-  return env.CAT_FACTORY_API_KEY ? aiReviewFrom(env, env.CAT_FACTORY_API_KEY) : null
 }
 
 function buildChat(env: WorkerEnv): ChatGateway | null {
@@ -283,6 +260,7 @@ export function containerFor(
     void work.catch(() => {})
   },
 ): AppContainer {
+  warnRetiredVariables(env)
   const store = storeFor(env)
   const fanout = busFor(env, waitUntil)
   return createContainer({
@@ -291,8 +269,6 @@ export function containerFor(
     logger: workerLogger,
     chat: buildChat(env),
     vcs: buildVcs(env),
-    aiReview: buildAiReview(env),
-    guidedReview: buildGuidedReview(env),
     gateways: gatewaysFor(env),
     bus: fanout.bus,
     realtime: fanout.kind,
