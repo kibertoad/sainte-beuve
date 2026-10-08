@@ -72,7 +72,7 @@ export interface AppOptions {
   corsOrigins?: string[] | ((scope: RequestScope) => string[])
   /**
    * The address the request came from, as the runtime knows it: the socket's
-   * peer on Node, `CF-Connecting-IP` on a Worker. It keys the throttle on
+   * peer or a trusted proxy's header on Node, `CF-Connecting-IP` on a Worker. It keys the throttle on
    * failed API keys (see `CredentialThrottle`); a facade that leaves it out has
    * every caller in one bucket, which is strict rather than open.
    */

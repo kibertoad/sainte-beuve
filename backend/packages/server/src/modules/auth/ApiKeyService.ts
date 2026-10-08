@@ -38,6 +38,17 @@ export interface ApiKeyPrincipal {
   role: Role
 }
 
+/**
+ * Whether a bearer is shaped like a minted key.
+ *
+ * The prefix splits every bearer in two: a minted key is 256 bits that only the
+ * store can name and nobody guesses, and anything else can only be
+ * `AUTH_API_KEY`, which is the one value worth throttling guesses at.
+ */
+export function isMintedKey(token: string): boolean {
+  return token.startsWith(API_KEY_PREFIX)
+}
+
 export class ApiKeyService {
   constructor(private readonly container: AppContainer) {}
 
@@ -86,45 +97,47 @@ export class ApiKeyService {
     await this.container.repositories.apiKeys.delete(keyId)
   }
 
-  /**
-   * Whether `verify` could name anybody for this value: the deployment holds an
-   * `AUTH_API_KEY`, or the value is shaped like a minted key.
-   */
-  couldMatch(token: string): boolean {
-    return this.container.auth.environmentApiKey !== null || token.startsWith(API_KEY_PREFIX)
+  /** Whether the deployment holds an `AUTH_API_KEY` for a bearer to be compared against. */
+  holdsEnvironmentKey(): boolean {
+    return this.container.auth.environmentApiKey !== null
   }
 
   /**
-   * Who a presented key is, or null.
+   * The deployment's own key, if this is it.
    *
-   * The environment's key is matched FIRST, and not by digest: it never went
-   * through `mint`, and matching it before the store is what keeps a deployment
-   * reachable while its database is being restored.
+   * Synchronous and against the configured value, not the store: it never went
+   * through `mint`, and matching it without a store read is what keeps a
+   * deployment reachable while its database is being restored. It is also what
+   * lets `CredentialThrottle` refuse, compare and count in one step.
    *
-   * It is also matched before the PREFIX, which is the order that matters. An
-   * operator sets `AUTH_API_KEY` to whatever their secret manager generated, and
-   * nothing anywhere asks them for `sbk_`; a prefix check in front of that
-   * comparison turns the one credential that answers the bootstrap into a value
-   * that is silently never a caller, on a deployment `/health` still reports as
-   * having one. The prefix is a cheap way to skip a store read for a value that
-   * cannot be a MINTED key, and it is only worth that much.
+   * Only a value without the minted prefix is compared here (see `isMintedKey`),
+   * and `environmentApiKeyFrom` refuses an `AUTH_API_KEY` that carries it, so
+   * the operator's value, spelled however their secret manager spelled it, is
+   * always reachable.
    */
-  async verify(token: string | null): Promise<ApiKeyPrincipal | null> {
-    if (token === null || token.length === 0) return null
-    if (this.isEnvironmentKey(token)) {
-      // The bootstrap credential, and therefore an ADMIN of the DEFAULT org. It
-      // is an environment variable rather than a row, so there is nothing to
-      // read a tenancy or a role off; it exists to answer the case where a
-      // deployment has neither, and a bootstrap that could not configure the
-      // deployment it bootstraps would answer nothing.
-      return {
-        keyId: ENVIRONMENT_KEY_ID,
-        label: ENVIRONMENT_KEY_ID,
-        orgId: DEFAULT_ORG_ID,
-        role: 'admin',
-      }
+  matchEnvironmentKey(token: string): ApiKeyPrincipal | null {
+    const configured = this.container.auth.environmentApiKey
+    if (configured === null) return null
+    // Constant-time, over bytes rather than strings. `===` on a secret leaks
+    // its prefix through timing, and this one cannot be rotated without a
+    // restart.
+    const encoder = new TextEncoder()
+    if (!timingSafeEqual(encoder.encode(configured), encoder.encode(token))) return null
+    // The bootstrap credential, and therefore an ADMIN of the DEFAULT org. It
+    // is an environment variable rather than a row, so there is nothing to
+    // read a tenancy or a role off; it exists to answer the case where a
+    // deployment has neither, and a bootstrap that could not configure the
+    // deployment it bootstraps would answer nothing.
+    return {
+      keyId: ENVIRONMENT_KEY_ID,
+      label: ENVIRONMENT_KEY_ID,
+      orgId: DEFAULT_ORG_ID,
+      role: 'admin',
     }
-    if (!token.startsWith(API_KEY_PREFIX)) return null
+  }
+
+  /** Who a minted key is, or null. Only a value `isMintedKey` accepts can be one. */
+  async verifyMinted(token: string): Promise<ApiKeyPrincipal | null> {
     // Through the TENANCY DIRECTORY, beside the session digest and for the same
     // reason: the key is what decides which org the request is in, so it is
     // matched before there is an org to scope the read by.
@@ -132,18 +145,6 @@ export class ApiKeyService {
     if (held === null) return null
     await this.touch(held)
     return { keyId: held.id, label: held.label, orgId: held.orgId, role: held.role }
-  }
-
-  /**
-   * Constant-time, over bytes rather than strings. `===` on a secret leaks its
-   * prefix through timing, and this one is the credential a deployment cannot
-   * rotate without a restart.
-   */
-  private isEnvironmentKey(token: string): boolean {
-    const configured = this.container.auth.environmentApiKey
-    if (configured === null) return false
-    const encoder = new TextEncoder()
-    return timingSafeEqual(encoder.encode(configured), encoder.encode(token))
   }
 
   /**

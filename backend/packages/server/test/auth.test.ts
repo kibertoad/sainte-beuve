@@ -182,17 +182,17 @@ describe('who is calling', () => {
 
     it('lets the deployment key in, and nothing that looks like it', async () => {
       const keyed = signable({
-        auth: { ...harness.container.auth, mode: 'required', environmentApiKey: 'sbk_the-key' },
+        auth: { ...harness.container.auth, mode: 'required', environmentApiKey: 'the-key' },
       })
       const allowed = await keyed.app.fetch(
         new Request('http://localhost/api/v1/reviews', {
-          headers: { authorization: 'Bearer sbk_the-key' },
+          headers: { authorization: 'Bearer the-key' },
         }),
       )
       expect(allowed.status).toBe(200)
       const refused = await keyed.app.fetch(
         new Request('http://localhost/api/v1/reviews', {
-          headers: { authorization: 'Bearer sbk_the-keyy' },
+          headers: { authorization: 'Bearer the-keyy' },
         }),
       )
       expect(refused.status).toBe(401)
@@ -369,7 +369,7 @@ describe('an API key', () => {
 
   it('cannot revoke the one the deployment carries in its environment', async () => {
     const keyed = buildHarness({
-      auth: { ...harness.container.auth, environmentApiKey: 'sbk_the-key' },
+      auth: { ...harness.container.auth, environmentApiKey: 'the-key' },
     })
     const res = await keyed.app.fetch(del(`${KEYS}/environment`))
     // A validation error naming the variable, rather than the 404 that would

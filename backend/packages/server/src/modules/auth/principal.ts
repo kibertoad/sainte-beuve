@@ -1,12 +1,12 @@
 import type { Role } from '@sainte-beuve/contracts'
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
-import type { StoredSession } from '@sainte-beuve/kernel'
+import type { EpochMs, StoredSession } from '@sainte-beuve/kernel'
 import { ForbiddenError, RateLimitedError, UnauthenticatedError } from '@sainte-beuve/kernel'
 import type { Context, Input, MiddlewareHandler } from 'hono'
 import { type AppContainer, withOrg } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import type { CredentialThrottle } from '../../http/throttle.js'
-import { ApiKeyService, type ApiKeyPrincipal } from './ApiKeyService.js'
+import { ApiKeyService, type ApiKeyPrincipal, isMintedKey } from './ApiKeyService.js'
 import { readSessionCookie } from './cookies.js'
 import { SessionService } from './SessionService.js'
 
@@ -76,8 +76,9 @@ function bearerToken<E extends AppEnv, P extends string, I extends Input>(
 }
 
 const TOO_MANY_FAILURES =
-  'This client has presented too many API keys that match nothing, and is refused until the ' +
-  'window it failed in runs out. Check the key, then retry after the time `Retry-After` names.'
+  'This client has presented too many values for the deployment API key that are not it, and ' +
+  'is refused until the window it failed in runs out. Check the key, then retry after the time ' +
+  '`Retry-After` names.'
 
 /**
  * What the authentication middleware needs from the app around it: the
@@ -100,9 +101,7 @@ const UNKNOWN_CLIENT = 'unknown'
  *
  * The COOKIE is tried first. A request carrying both is a browser that also set
  * a header, which is a script running inside somebody's page; the session is the
- * narrower authority of the two and is the one to act on. It is also what keeps
- * a browser working beside a guesser on the same address: the throttle is only
- * asked about a bearer, and a session that resolves never reaches it.
+ * narrower authority of the two and is the one to act on.
  */
 async function resolve(
   container: AppContainer,
@@ -114,22 +113,32 @@ async function resolve(
   const token = bearerToken(c)
   if (token === null) return ANONYMOUS
   const keys = new ApiKeyService(container)
-  // A value nothing could match guesses nothing: a proxy's own bearer, or any
-  // value on a deployment with no `AUTH_API_KEY` that is not a minted key.
-  if (!keys.couldMatch(token)) return ANONYMOUS
-  const { throttle } = options
-  const client = options.clientOf(c) ?? UNKNOWN_CLIENT
-  // Counted as a failure BEFORE the comparison and taken back if it matches.
-  const wait = throttle.attempt(client, container.clock.now())
-  if (wait !== null) throw new RateLimitedError(TOO_MANY_FAILURES, wait)
-  const key = await keys.verify(token).catch((err: unknown) => {
-    // A store that failed to answer is not a guess.
-    throttle.forgive(client, container.clock.now())
-    throw err
-  })
-  if (key === null) return ANONYMOUS
-  throttle.forgive(client, container.clock.now())
-  return { kind: 'api_key', ...key }
+  const key = isMintedKey(token)
+    ? await keys.verifyMinted(token)
+    : environmentKey(keys, token, {
+        throttle: options.throttle,
+        client: options.clientOf(c) ?? UNKNOWN_CLIENT,
+        now: container.clock.now(),
+      })
+  return key === null ? ANONYMOUS : { kind: 'api_key', ...key }
+}
+
+/**
+ * A bearer that is not a minted key, compared against `AUTH_API_KEY` under the
+ * throttle. A deployment that holds no such key has nothing to guess, so a
+ * proxy's own bearer, say, is anonymous and counts against nobody.
+ */
+function environmentKey(
+  keys: ApiKeyService,
+  token: string,
+  { throttle, client, now }: { throttle: CredentialThrottle; client: string; now: EpochMs },
+): ApiKeyPrincipal | null {
+  if (!keys.holdsEnvironmentKey()) return null
+  const attempt = throttle.attempt(client, now, () => keys.matchEnvironmentKey(token))
+  if (attempt.kind === 'refused') {
+    throw new RateLimitedError(TOO_MANY_FAILURES, attempt.retryAfterSeconds)
+  }
+  return attempt.match
 }
 
 /**

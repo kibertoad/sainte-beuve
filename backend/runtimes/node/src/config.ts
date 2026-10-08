@@ -6,6 +6,7 @@ import {
   DEFAULT_SESSION_LIFETIME_MS,
   withAppOrigin,
 } from '@sainte-beuve/server'
+import { clientAddressHeaderFrom } from './clientAddress.js'
 
 /**
  * The Node facade's configuration, read from the process environment.
@@ -98,6 +99,13 @@ export interface NodeConfig {
    */
   databaseMigrate: boolean
   corsOrigins: string[]
+  /**
+   * The header a reverse proxy in front of this process writes the client's
+   * address into, which keys the throttle on failed API keys. Null keys it on
+   * the socket's peer. Node only: a Worker reads `CF-Connecting-IP`, which the
+   * edge sets.
+   */
+  clientAddressHeader: string | null
   logLevel: string
   /** How often the reminder clock runs, in ms. */
   reminderIntervalMs: number
@@ -180,6 +188,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     // wildcard default would otherwise lose every request rather than only its
     // sign-in. The Worker reads it the same way. See `withAppOrigin`.
     corsOrigins,
+    clientAddressHeader: clientAddressHeaderFrom(env.CLIENT_ADDRESS_HEADER),
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),
     catFactory: catFactoryFrom(env),
