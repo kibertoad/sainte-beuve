@@ -80,7 +80,7 @@ describe('createSainteBeuveApi', () => {
   })
 
   it('leaves an unset My PRs filter out of the query rather than sending it empty', async () => {
-    const empty = { pullRequests: [], complete: true, sources: [] }
+    const empty = { pullRequests: [], complete: true, sources: [], searches: [] }
     const calls = stubFetch(jsonResponse(empty))
 
     await createSainteBeuveApi(API_BASE).listMyPullRequests({

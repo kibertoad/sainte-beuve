@@ -56,6 +56,8 @@ export function viewerVcs(
           pr.pullRequest.repo === project.repo,
       )
     },
+    listAuthoredOpenPullRequests: async (login) =>
+      pullRequests.filter((pr) => pr.authorLogin === login),
     identify: async () => ({
       subject: `subject-${username}`,
       username,
@@ -70,5 +72,9 @@ export function viewerVcs(
  * and it identifies NOBODY, which is exactly what an installation token is.
  */
 export function appVcs(pullRequests: OpenPullRequest[] = []): VcsGateway {
-  return { ...viewerVcs('installation', pullRequests), identify: async () => null }
+  return {
+    ...viewerVcs('installation', pullRequests),
+    listAuthoredOpenPullRequests: async () => [],
+    identify: async () => null,
+  }
 }

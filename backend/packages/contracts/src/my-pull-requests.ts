@@ -5,7 +5,7 @@ import {
   mergeCommentSourceSchema,
   pullRequestStatusSchema,
 } from './merging.js'
-import { openPullRequestSchema, repoOwnerSchema } from './vcs.js'
+import { openPullRequestSchema, repoOwnerSchema, vcsProviderSchema } from './vcs.js'
 import { workspaceSourceSchema } from './workspace.js'
 
 // ---------------------------------------------------------------------------
@@ -22,8 +22,17 @@ export const MY_PULL_REQUESTS_LIMIT = 10
 export const myPullRequestStatusFilterSchema = v.picklist(['awaiting', 'approved', 'draft'])
 export type MyPullRequestStatusFilter = v.InferOutput<typeof myPullRequestStatusFilterSchema>
 
+/**
+ * Which repositories to look in. `all` is the default: the registered projects,
+ * and whatever else the host finds the viewer authored. `linked` is the
+ * registered projects alone. Naming a `projectId` implies `linked`.
+ */
+export const myPullRequestScopeSchema = v.picklist(['all', 'linked'])
+export type MyPullRequestScope = v.InferOutput<typeof myPullRequestScopeSchema>
+
 export const myPullRequestsQuerySchema = v.object({
   status: v.optional(myPullRequestStatusFilterSchema),
+  scope: v.optional(myPullRequestScopeSchema),
   owner: v.optional(repoOwnerSchema),
   projectId: v.optional(v.pipe(v.string(), v.minLength(1))),
 })
@@ -37,13 +46,22 @@ export type MyPullRequestsQuery = v.InferOutput<typeof myPullRequestsQuerySchema
  * - `restricted`: the project sends merges through its merge comments.
  * - `override`: restricted, but the viewer is an admin and may merge anyway
  *   after confirming it.
+ * - `unlinked`: the repository is not a registered project, so nothing here
+ *   merges it until somebody links it.
  */
-export const directMergeSchema = v.picklist(['allowed', 'not_mergeable', 'restricted', 'override'])
+export const directMergeSchema = v.picklist([
+  'allowed',
+  'not_mergeable',
+  'restricted',
+  'override',
+  'unlinked',
+])
 export type DirectMerge = v.InferOutput<typeof directMergeSchema>
 
 export const myPullRequestSchema = v.object({
   ...openPullRequestSchema.entries,
-  projectId: v.string(),
+  /** Null for a pull request in a repository that is not a registered project. */
+  projectId: v.nullable(v.string()),
   /** Null when the host could not be asked; `statusError` says why. */
   status: v.nullable(pullRequestStatusSchema),
   statusError: v.nullable(v.string()),
@@ -56,6 +74,14 @@ export const myPullRequestSchema = v.object({
 })
 export type MyPullRequest = v.InferOutput<typeof myPullRequestSchema>
 
+/** Whether a host could be searched for the viewer's pull requests, and why not. */
+export const hostSearchSchema = v.object({
+  provider: vcsProviderSchema,
+  ok: v.boolean(),
+  reason: v.nullable(v.string()),
+})
+export type HostSearch = v.InferOutput<typeof hostSearchSchema>
+
 export const myPullRequestsSchema = v.object({
   pullRequests: v.array(myPullRequestSchema),
   /**
@@ -64,6 +90,8 @@ export const myPullRequestsSchema = v.object({
    */
   complete: v.boolean(),
   sources: v.array(workspaceSourceSchema),
+  /** One per host searched for pull requests outside the registered projects. */
+  searches: v.array(hostSearchSchema),
 })
 export type MyPullRequests = v.InferOutput<typeof myPullRequestsSchema>
 

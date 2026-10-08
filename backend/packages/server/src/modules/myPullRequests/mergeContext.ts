@@ -60,16 +60,22 @@ export function directMergeFor(
 }
 
 export function toMyPullRequest(
-  read: { pullRequest: OpenPullRequest; project: Project },
+  read: { pullRequest: OpenPullRequest; project: Project | null },
   status: { status: PullRequestStatus | null; error: string | null },
   context: MergeContext,
 ): MyPullRequest {
+  const row = { ...read.pullRequest, status: status.status, statusError: status.error }
+  if (read.project === null) {
+    return {
+      ...row,
+      projectId: null,
+      merge: { direct: 'unlinked', comments: [], commentsFrom: null },
+    }
+  }
   const { comments, from } = mergeCommentsFor(read.project, context)
   return {
-    ...read.pullRequest,
+    ...row,
     projectId: read.project.id,
-    status: status.status,
-    statusError: status.error,
     merge: {
       direct: directMergeFor(read.project, status.status, context),
       comments,

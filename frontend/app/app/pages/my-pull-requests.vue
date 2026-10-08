@@ -5,11 +5,17 @@ import type {
   MyPullRequestStatusFilter,
   Project,
 } from '@sainte-beuve/contracts'
-import { formatPullRequestRef, MY_PULL_REQUESTS_LIMIT } from '@sainte-beuve/contracts'
+import {
+  formatPullRequestRef,
+  MY_PULL_REQUESTS_LIMIT,
+  vcsDisplayName,
+} from '@sainte-beuve/contracts'
 
 // The viewer's own open pull requests, ten at a time, and merging them: directly
-// when the host would take it, or with a merge comment for a bot to act on.
+// when the host would take it, or with a merge comment for a bot to act on. One
+// in a repository nobody linked is listed too, with a button to link it.
 const api = useSainteBeuveApi()
+const auth = useAuthState()
 const { confirm } = useConfirm()
 const toast = useToast()
 const route = useRoute()
@@ -34,14 +40,16 @@ const status = ref<MyPullRequestStatusFilter>(
 )
 const owner = ref(queryValue('owner') ?? ALL)
 const projectId = ref(queryValue('projectId') ?? ALL)
+const linkedOnly = ref(queryValue('scope') === 'linked')
 
 // The filters live in the URL, so a filtered view can be bookmarked and shared.
-watch([status, owner, projectId], () => {
+watch([status, owner, projectId, linkedOnly], () => {
   void router.replace({
     query: {
       status: status.value === 'awaiting' ? undefined : status.value,
       owner: owner.value === ALL ? undefined : owner.value,
       projectId: projectId.value === ALL ? undefined : projectId.value,
+      scope: linkedOnly.value ? 'linked' : undefined,
     },
   })
 })
@@ -79,15 +87,34 @@ const { data, pending, error, refresh } = useAsyncData(
       status: status.value,
       owner: owner.value === ALL ? undefined : owner.value,
       projectId: projectId.value === ALL ? undefined : projectId.value,
+      scope: linkedOnly.value ? 'linked' : 'all',
     }),
-  { lazy: true, watch: [status, owner, projectId] },
+  { lazy: true, watch: [status, owner, projectId, linkedOnly] },
 )
 
 const unreadable = computed(() => data.value?.sources.filter((source) => !source.ok) ?? [])
-const { busy, run } = useApiAction({ refresh })
+const unsearched = computed(() => data.value?.searches.filter((search) => !search.ok) ?? [])
+const { busy, run } = useApiAction({
+  refresh: () => Promise.all([refresh(), projects.refresh()]),
+})
+
+function repositoryOf(pr: MyPullRequest): string {
+  return `${pr.pullRequest.owner}/${pr.pullRequest.repo}`
+}
+
+async function link(pr: MyPullRequest) {
+  const { provider, owner, repo } = pr.pullRequest
+  const linked = await run(
+    () => api.addProject({ provider, owner, repo }),
+    `Could not link ${repositoryOf(pr)}`,
+    `${provider}:${repositoryOf(pr)}:link`,
+  )
+  if (linked) toast.add({ color: 'success', title: `Linked ${repositoryOf(pr)}` })
+}
 
 async function merge(pr: MyPullRequest) {
-  if (pr.status === null) return
+  const { projectId } = pr
+  if (pr.status === null || projectId === null) return
   const override = pr.merge.direct === 'override'
   const confirmed = await confirm({
     title: `Merge ${formatPullRequestRef(pr.pullRequest)}?`,
@@ -101,7 +128,7 @@ async function merge(pr: MyPullRequest) {
   await run(
     () =>
       api.mergeMyPullRequest({
-        projectId: pr.projectId,
+        projectId,
         number: pr.pullRequest.number,
         expectedHeadSha: pr.status?.headSha ?? '',
         override,
@@ -112,8 +139,10 @@ async function merge(pr: MyPullRequest) {
 }
 
 async function postComment(pr: MyPullRequest, comment: MergeComment) {
+  const { projectId } = pr
+  if (projectId === null) return
   const posted = await run(
-    () => api.postMergeComment({ projectId: pr.projectId, number: pr.pullRequest.number, comment }),
+    () => api.postMergeComment({ projectId, number: pr.pullRequest.number, comment }),
     `Could not post "${comment.body}"`,
     `${pr.pullRequest.url}:${comment.label}`,
   )
@@ -162,6 +191,7 @@ function offersComments(pr: MyPullRequest): boolean {
           class="w-full sm:w-64"
         />
       </UFormField>
+      <USwitch v-model="linkedOnly" label="Linked repositories only" class="sm:pb-1.5" />
     </div>
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read your pull requests" />
@@ -176,6 +206,14 @@ function offersComments(pr: MyPullRequest): boolean {
         variant="subtle"
         :title="`${source.owner}/${source.repo} could not be read`"
         :description="source.reason ?? 'No reason given.'"
+      />
+      <UAlert
+        v-for="search in unsearched"
+        :key="search.provider"
+        color="warning"
+        variant="subtle"
+        :title="`${vcsDisplayName(search.provider)} could not be searched for your pull requests`"
+        :description="search.reason ?? 'No reason given.'"
       />
 
       <UCard>
@@ -201,6 +239,9 @@ function offersComments(pr: MyPullRequest): boolean {
                 <p v-if="pr.statusError" class="text-xs text-warning">{{ pr.statusError }}</p>
               </div>
               <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
+                <UBadge v-if="pr.projectId === null" variant="subtle" color="neutral">
+                  Not linked
+                </UBadge>
                 <UBadge variant="subtle" :color="mergeStateLabel(pr).color">
                   {{ mergeStateLabel(pr).label }}
                 </UBadge>
@@ -238,6 +279,21 @@ function offersComments(pr: MyPullRequest): boolean {
               <span v-else-if="pr.merge.direct === 'restricted'" class="text-xs text-muted">
                 This repository merges through its merge comments.
               </span>
+              <template v-else-if="pr.merge.direct === 'unlinked'">
+                <UButton
+                  v-if="auth.isAdmin.value"
+                  size="sm"
+                  variant="soft"
+                  icon="i-lucide-link"
+                  :loading="busy === `${pr.pullRequest.provider}:${repositoryOf(pr)}:link`"
+                  @click="link(pr)"
+                >
+                  Link {{ repositoryOf(pr) }}
+                </UButton>
+                <span v-else class="text-xs text-muted">
+                  Ask an admin to link {{ repositoryOf(pr) }} to merge it from here.
+                </span>
+              </template>
               <UButton
                 :to="safeHref(pr.pullRequest.url)"
                 target="_blank"

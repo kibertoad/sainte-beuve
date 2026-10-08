@@ -286,6 +286,7 @@ describe('a pasted GitHub credential', () => {
           removeRequestedReviewers: async () => {},
           comment: async () => {},
           listOpenPullRequests: async () => [],
+          listAuthoredOpenPullRequests: async () => [],
           ...noMerging(),
           identify: async () => ({
             subject: '4249249',
@@ -315,6 +316,7 @@ describe('a pasted GitHub credential', () => {
           removeRequestedReviewers: async () => {},
           comment: async () => {},
           listOpenPullRequests: async () => [],
+          listAuthoredOpenPullRequests: async () => [],
           ...noMerging(),
           identify: () => Promise.reject(refused),
         }),

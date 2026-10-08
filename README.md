@@ -111,11 +111,19 @@ team to ignore the next one.
 
 ## My PRs, and merging them
 
-**My PRs** lists your ten most recently updated open pull requests across the
-registered projects. By default it shows the ones still waiting on somebody else:
-not a draft and not approved yet. Switch the status to **Approved** or **Drafts**
-to see those instead, and narrow it to one repository owner or one repository.
-Each row reads its approval and merge state from the host, GitHub or GitLab alike.
+**My PRs** lists your ten most recently updated open pull requests: the ones you
+authored, in the registered projects and in any other repository the host search
+finds them in. By default it shows the ones still waiting on somebody else: not a
+draft and not approved yet. Switch the status to **Approved** or **Drafts** to see
+those instead, narrow it to one repository owner or one repository, or turn on
+**Linked repositories only**. Each row reads its approval and merge state from the
+host, GitHub or GitLab alike.
+
+The search outside the registered projects runs with a credential that acts as a
+person (a sign-in or a personal access token), because a GitHub App installation
+reaches only the repositories it is installed on. A row from a repository nobody
+registered is marked **Not linked**, and an admin links it with one click. Merging
+waits until it is linked, since the repository's merge settings live on its project.
 
 A pull request the host would merge right now gets a **Merge** button. It merges
 with the method the repository allows, at the commit you were looking at, so one

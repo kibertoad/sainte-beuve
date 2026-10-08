@@ -6,17 +6,25 @@ import type {
   OpenPullRequest,
   Project,
   PullRequestStatus,
+  Viewer,
 } from '@sainte-beuve/contracts'
 import { MY_PULL_REQUESTS_LIMIT } from '@sainte-beuve/contracts'
 import { getErrorMessage, type VcsGateway } from '@sainte-beuve/kernel'
-import { matchesStatusFilter, partitionForViewer, projectsInScope } from '@sainte-beuve/reviewers'
+import {
+  matchesStatusFilter,
+  partitionForViewer,
+  projectsInScope,
+  searchesBeyondProjects,
+  unlinkedPullRequests,
+} from '@sainte-beuve/reviewers'
 import { mapWithConcurrency } from '../../concurrency.js'
 import type { AppContainer } from '../../container.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
-import { sweepProjects } from '../workspace/sweep.js'
+import { type ProjectRead, sweepProjects } from '../workspace/sweep.js'
 import { type MergeContext, mergeContextOf, toMyPullRequest } from './mergeContext.js'
+import { type AuthoredSearch, NO_SEARCH, searchAuthored } from './search.js'
 
 /**
  * How many statuses one read asks the hosts for at most. Neither host puts
@@ -30,7 +38,9 @@ const STATUS_CONCURRENCY = 5
 
 interface Candidate {
   pullRequest: OpenPullRequest
-  project: Project
+  /** Null for a pull request the host search found outside the registered projects. */
+  project: Project | null
+  gateway: VcsGateway | null
 }
 
 interface StatusRead {
@@ -38,7 +48,11 @@ interface StatusRead {
   error: string | null
 }
 
-/** The viewer's own open pull requests, newest activity first, with what merging each takes. */
+/**
+ * The viewer's own open pull requests, newest activity first, with what merging
+ * each takes: those in the registered projects, and by default those the hosts
+ * find anywhere else the viewer authored one.
+ */
 export class MyPullRequestsService {
   constructor(
     private readonly container: AppContainer,
@@ -48,26 +62,69 @@ export class MyPullRequestsService {
   async list(query: MyPullRequestsQuery): Promise<MyPullRequests> {
     const resolutions = new VcsResolutions(this.container)
     const viewer = await new ViewerService(this.container, this.principal, resolutions).current()
-    const projects = projectsInScope(await this.container.repositories.projects.list(), query)
-    const reads = await sweepProjects(this.container, resolutions, projects)
+    const registered = await this.container.repositories.projects.list()
+    const [reads, search] = await Promise.all([
+      sweepProjects(this.container, resolutions, projectsInScope(registered, query)),
+      searchesBeyondProjects(query)
+        ? searchAuthored(this.container, resolutions, viewer)
+        : NO_SEARCH,
+    ])
+    const filter = query.status ?? 'awaiting'
+    const candidates = [
+      ...(await this.linked(reads, viewer, resolutions)),
+      ...this.unlinked(search, registered, query),
+    ]
+      .filter((candidate) => candidate.pullRequest.draft === (filter === 'draft'))
+      .sort((a, b) => b.pullRequest.updatedAt - a.pullRequest.updatedAt)
+    const context = await mergeContextOf(this.container, this.principal, viewer)
+    const { rows, complete } = await this.collect(candidates, filter, context)
+    return {
+      pullRequests: rows,
+      complete,
+      sources: reads.map((read) => read.source),
+      searches: search.searches,
+    }
+  }
+
+  /** The viewer's pull requests in the swept projects, read with the credential calls are made with. */
+  private async linked(
+    reads: readonly ProjectRead[],
+    viewer: Viewer,
+    resolutions: VcsResolutions,
+  ): Promise<Candidate[]> {
     const projectOf = new Map<OpenPullRequest, Project>()
     for (const read of reads) {
       for (const pullRequest of read.pullRequests) projectOf.set(pullRequest, read.project)
     }
-    const filter = query.status ?? 'awaiting'
-    const candidates = partitionForViewer([...projectOf.keys()], viewer.reviewer.handles)
-      .authored.filter((pullRequest) => pullRequest.draft === (filter === 'draft'))
-      .flatMap((pullRequest): Candidate[] => {
-        const project = projectOf.get(pullRequest)
-        return project === undefined ? [] : [{ pullRequest, project }]
-      })
+    const authored = partitionForViewer([...projectOf.keys()], viewer.reviewer.handles).authored
     const gateways = new Map<string, VcsGateway | null>()
-    for (const provider of new Set(candidates.map((candidate) => candidate.project.provider))) {
+    for (const provider of new Set(authored.map((pr) => pr.pullRequest.provider))) {
       gateways.set(provider, (await resolutions.acting(provider))?.gateway ?? null)
     }
-    const context = await mergeContextOf(this.container, this.principal, viewer)
-    const { rows, complete } = await this.collect(candidates, filter, gateways, context)
-    return { pullRequests: rows, complete, sources: reads.map((read) => read.source) }
+    return authored.flatMap((pullRequest): Candidate[] => {
+      const project = projectOf.get(pullRequest)
+      const gateway = gateways.get(pullRequest.pullRequest.provider) ?? null
+      return project === undefined ? [] : [{ pullRequest, project, gateway }]
+    })
+  }
+
+  /** What the search found outside every registered project, read with the credential that found it. */
+  private unlinked(
+    search: AuthoredSearch,
+    registered: readonly Project[],
+    query: MyPullRequestsQuery,
+  ): Candidate[] {
+    const gatewayOf = new Map(search.found.map((hit) => [hit.pullRequest, hit.gateway]))
+    const kept = unlinkedPullRequests(
+      search.found.map((hit) => hit.pullRequest),
+      registered,
+      query,
+    )
+    return kept.map((pullRequest) => ({
+      pullRequest,
+      project: null,
+      gateway: gatewayOf.get(pullRequest) ?? null,
+    }))
   }
 
   /**
@@ -78,7 +135,6 @@ export class MyPullRequestsService {
   private async collect(
     candidates: readonly Candidate[],
     filter: MyPullRequestStatusFilter,
-    gateways: ReadonlyMap<string, VcsGateway | null>,
     context: MergeContext,
   ): Promise<{ rows: MyPullRequest[]; complete: boolean }> {
     const rows: MyPullRequest[] = []
@@ -91,7 +147,7 @@ export class MyPullRequestsService {
       )
       next += page.length
       const statuses = await mapWithConcurrency(page, STATUS_CONCURRENCY, (candidate) =>
-        this.readStatus(candidate, gateways.get(candidate.project.provider) ?? null),
+        this.readStatus(candidate),
       )
       page.forEach((candidate, index) => {
         const read = statuses[index] ?? { status: null, error: null }
@@ -115,7 +171,8 @@ export class MyPullRequestsService {
     })
   }
 
-  private async readStatus(candidate: Candidate, gateway: VcsGateway | null): Promise<StatusRead> {
+  private async readStatus(candidate: Candidate): Promise<StatusRead> {
+    const { gateway } = candidate
     if (gateway === null) return { status: null, error: 'no credential for this host' }
     const { provider, owner, repo, number } = candidate.pullRequest.pullRequest
     try {
@@ -125,7 +182,7 @@ export class MyPullRequestsService {
       }
     } catch (err) {
       this.container.logger.warn(
-        { err, projectId: candidate.project.id, number },
+        { err, projectId: candidate.project?.id ?? null, owner, repo, number },
         'could not read the status of a pull request',
       )
       return { status: null, error: getErrorMessage(err) }

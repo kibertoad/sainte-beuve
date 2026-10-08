@@ -87,6 +87,13 @@ export interface VcsGateway {
    */
   listOpenPullRequests(project: ProjectRef): Promise<OpenPullRequest[]>
   /**
+   * The open pull requests `username` authored anywhere this credential can see,
+   * newest activity first, at most one page of the host's search. Requested
+   * reviewers are not filled in. A credential with no person behind it (a
+   * GitHub App installation) answers an empty list without a request.
+   */
+  listAuthoredOpenPullRequests(username: string): Promise<OpenPullRequest[]>
+  /**
    * One pull request's approval and whether the host would merge it now. Not
    * part of the list read, because neither host puts approvals on its list.
    */

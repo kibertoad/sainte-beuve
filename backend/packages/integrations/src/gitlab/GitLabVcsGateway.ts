@@ -60,6 +60,8 @@ interface GitLabMergeRequest {
   updated_at: string
   author?: GitLabUser | null
   reviewers?: GitLabUser[] | null
+  /** `group/sub/project!12`, which is the only place a listing names the project by path. */
+  references?: { full?: string } | null
 }
 
 export interface GitLabGatewayOptions {
@@ -99,6 +101,19 @@ export class GitLabVcsGateway implements VcsGateway {
       if (batch.length < PAGE_SIZE) break
     }
     return merges.map((merge) => this.toOpenPullRequest(project, merge))
+  }
+
+  /** One page of the instance-wide list, which `scope=all` opens past the token's own. */
+  async listAuthoredOpenPullRequests(username: string): Promise<OpenPullRequest[]> {
+    const merges = await this.call<GitLabMergeRequest[]>({
+      path:
+        `/merge_requests?state=opened&scope=all&author_username=${encodeURIComponent(username)}` +
+        `&per_page=${PAGE_SIZE}&order_by=updated_at&sort=desc`,
+    })
+    return merges.flatMap((merge) => {
+      const project = projectOf(merge)
+      return project === null ? [] : [this.toOpenPullRequest(project, merge)]
+    })
   }
 
   /** Two reads, because the approvals are their own resource on GitLab. */
@@ -238,6 +253,14 @@ export class GitLabVcsGateway implements VcsGateway {
 
 function mergeRequestPath(pr: PullRequestAddress): string {
   return `/projects/${projectPath(pr.owner, pr.repo)}/merge_requests/${pr.number}`
+}
+
+/** The last path segment is the repo and the rest is the namespace, however deep it nests. */
+function projectOf(merge: GitLabMergeRequest): ProjectRef | null {
+  const path = merge.references?.full?.split('!')[0] ?? ''
+  const slash = path.lastIndexOf('/')
+  if (slash <= 0 || slash === path.length - 1) return null
+  return { provider: 'gitlab', owner: path.slice(0, slash), repo: path.slice(slash + 1) }
 }
 
 function toAccount(user: GitLabUser): VcsAccount {

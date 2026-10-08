@@ -236,4 +236,24 @@ describe('GitLabVcsGateway', () => {
 
     await expect(gateway.listOpenPullRequests(PROJECT)).rejects.toThrow(/403 .*403 Forbidden/)
   })
+
+  it('lists what one person authored across the install, by project path', async () => {
+    const { fetchImpl, calls } = stub([
+      [
+        { ...(openMerges(12, 1)[0] as object), references: { full: 'platform/backend/api!12' } },
+        { ...(openMerges(13, 1)[0] as object), references: null },
+      ],
+    ])
+    const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
+
+    const found = await gateway.listAuthoredOpenPullRequests('ada')
+
+    const query = new URL(calls[0]?.url ?? '').searchParams
+    expect(query.get('author_username')).toBe('ada')
+    expect(query.get('scope')).toBe('all')
+    // A hit that does not name its project cannot be addressed, so it is dropped.
+    expect(found.map((pr) => pr.pullRequest)).toMatchObject([
+      { owner: 'platform/backend', repo: 'api', number: 12 },
+    ])
+  })
 })

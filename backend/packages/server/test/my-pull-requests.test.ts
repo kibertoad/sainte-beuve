@@ -116,6 +116,42 @@ describe('listing', () => {
   })
 })
 
+describe('beyond the linked repositories', () => {
+  it('lists mine from repositories nobody linked, and none of them as mergeable', async () => {
+    const vcs = viewerVcs('ada', [pr(1), pr(2, {}, 'web'), pr(3, { authorLogin: 'bob' }, 'web')])
+    const harness = buildHarness({ vcs: environmentVcs(vcs) })
+    await addProject(harness, { owner: 'acme', repo: 'api' })
+
+    const view = await list(harness)
+    expect(view.pullRequests.map((row) => [row.pullRequest.number, row.projectId])).toStrictEqual([
+      [2, null],
+      [1, expect.any(String)],
+    ])
+    expect(view.pullRequests[0]?.merge.direct).toBe('unlinked')
+    expect(view.searches).toStrictEqual([{ provider: 'github', ok: true, reason: null }])
+  })
+
+  it('keeps to the linked repositories on request', async () => {
+    const vcs = viewerVcs('ada', [pr(1), pr(2, {}, 'web')])
+    const harness = buildHarness({ vcs: environmentVcs(vcs) })
+    await addProject(harness, { owner: 'acme', repo: 'api' })
+
+    const view = await list(harness, '?scope=linked')
+    expect(view.pullRequests.map((row) => row.pullRequest.number)).toStrictEqual([1])
+    expect(view.searches).toStrictEqual([])
+  })
+
+  it('merges one once its repository is linked', async () => {
+    const vcs = viewerVcs('ada', [pr(2, {}, 'web')])
+    const harness = buildHarness({ vcs: environmentVcs(vcs) })
+    expect((await list(harness)).pullRequests[0]?.projectId).toBeNull()
+
+    const web = await addProject(harness, { owner: 'acme', repo: 'web' })
+    const row = (await list(harness)).pullRequests[0]
+    expect(row).toMatchObject({ projectId: web.id, merge: { direct: 'allowed' } })
+  })
+})
+
 describe('merging', () => {
   async function setUp(statuses = {}) {
     const vcs = viewerVcs('ada', [pr(1), pr(2, { authorLogin: 'bob' })], statuses)

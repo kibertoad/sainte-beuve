@@ -245,4 +245,35 @@ describe('GitHubVcsGateway', () => {
     expect(asked).toStrictEqual(['kibertoad/sainte-beuve'])
     expect(calls[0]?.authorization).toBe('Bearer ghs_installation')
   })
+
+  it('searches for what one person authored across repositories', async () => {
+    const { fetchImpl, urls } = pagedStub([
+      {
+        items: [
+          {
+            ...(openPulls(4, 1)[0] as object),
+            draft: true,
+            repository_url: 'https://api.github.com/repos/acme/web',
+          },
+        ],
+      } as never,
+    ])
+    const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
+
+    const found = await gateway.listAuthoredOpenPullRequests('ada')
+
+    expect(new URL(urls[0] ?? '').searchParams.get('q')).toBe(
+      'is:pr is:open archived:false author:ada',
+    )
+    expect(found[0]?.pullRequest).toMatchObject({ owner: 'acme', repo: 'web', number: 4 })
+    expect(found[0]?.draft).toBe(true)
+  })
+
+  it('searches nothing as an App, which has nobody to search for', async () => {
+    const { fetchImpl, calls } = stub()
+    const gateway = new GitHubVcsGateway({ tokens: appTokenSource({} as never), fetchImpl })
+
+    expect(await gateway.listAuthoredOpenPullRequests('ada')).toStrictEqual([])
+    expect(calls).toHaveLength(0)
+  })
 })

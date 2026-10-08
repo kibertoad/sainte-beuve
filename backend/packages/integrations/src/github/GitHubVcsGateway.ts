@@ -66,6 +66,11 @@ interface GitHubPullRequest {
   requested_reviewers?: GitHubUser[] | null
 }
 
+/** A search hit. A pull request is an issue to the search API, and names its repository by API URL. */
+interface GitHubSearchItem extends GitHubPullRequest {
+  repository_url: string
+}
+
 export interface GitHubGatewayOptions {
   /** How to authenticate. `staticTokenSource(token)` covers a plain token. */
   tokens: GitHubTokenSource
@@ -116,6 +121,25 @@ export class GitHubVcsGateway implements VcsGateway {
       if (batch.length < PAGE_SIZE) break
     }
     return pulls.map((pull) => toOpenPullRequest(project, pull))
+  }
+
+  /**
+   * The search API, which is the only one that crosses repositories. Its lag
+   * and its smaller rate limit are why the registered projects still go
+   * through {@link listOpenPullRequests}.
+   */
+  async listAuthoredOpenPullRequests(username: string): Promise<OpenPullRequest[]> {
+    if (!this.options.tokens.hasUser) return []
+    const token = await this.options.tokens.tokenFor('', '')
+    const query = encodeURIComponent(`is:pr is:open archived:false author:${username}`)
+    const result = await this.get<{ items: GitHubSearchItem[] }>(
+      `/search/issues?q=${query}&sort=updated&order=desc&per_page=${PAGE_SIZE}`,
+      token,
+    )
+    return result.items.flatMap((item) => {
+      const project = repositoryOf(item.repository_url)
+      return project === null ? [] : [toOpenPullRequest(project, item)]
+    })
   }
 
   /** Two reads, because GitHub's pull request carries no review verdicts. */
@@ -249,6 +273,13 @@ export class GitHubVcsGateway implements VcsGateway {
       fetchImpl: this.options.fetchImpl,
     })
   }
+}
+
+/** `owner/repo` from a search hit's `https://api.github.com/repos/{owner}/{repo}`. */
+function repositoryOf(repositoryUrl: string): ProjectRef | null {
+  const [owner, repo] = repositoryUrl.split('/repos/').at(-1)?.split('/') ?? []
+  if (owner === undefined || repo === undefined || owner === '' || repo === '') return null
+  return { provider: 'github', owner, repo }
 }
 
 function toOpenPullRequest(project: ProjectRef, pull: GitHubPullRequest): OpenPullRequest {

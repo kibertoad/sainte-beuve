@@ -38,6 +38,8 @@ export {
   projectsInScope,
   type ResolvedMergeComments,
   resolveMergeComments,
+  searchesBeyondProjects,
+  unlinkedPullRequests,
 } from './merging.js'
 export {
   decideTeamAction,

@@ -5,7 +5,9 @@ import type {
   MergeCommentSource,
   MyPullRequestStatusFilter,
   MyPullRequestsQuery,
+  OpenPullRequest,
   Project,
+  ProjectRef,
   PullRequestApproval,
 } from '@sainte-beuve/contracts'
 
@@ -76,4 +78,35 @@ export function projectsInScope(
       (query.projectId === undefined || project.id === query.projectId) &&
       (owner === undefined || project.owner.toLowerCase() === owner),
   )
+}
+
+/** Whether My PRs looks past the registered projects at all for this query. */
+export function searchesBeyondProjects(
+  query: Pick<MyPullRequestsQuery, 'scope' | 'projectId'>,
+): boolean {
+  return query.scope !== 'linked' && query.projectId === undefined
+}
+
+/**
+ * The pull requests a host search found that no registered project accounts
+ * for, within the owner filter. One in a registered repository is left to the
+ * sweep of that project, even when the filter kept the project out of it.
+ */
+export function unlinkedPullRequests(
+  found: readonly OpenPullRequest[],
+  projects: readonly ProjectRef[],
+  query: Pick<MyPullRequestsQuery, 'owner'>,
+): OpenPullRequest[] {
+  const registered = new Set(projects.map(repositoryKey))
+  const owner = query.owner?.toLowerCase()
+  return found.filter(
+    (pr) =>
+      !registered.has(repositoryKey(pr.pullRequest)) &&
+      (owner === undefined || pr.pullRequest.owner.toLowerCase() === owner),
+  )
+}
+
+/** Both hosts treat owner and repository names case-insensitively. */
+function repositoryKey(ref: ProjectRef): string {
+  return `${ref.provider}:${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}`
 }

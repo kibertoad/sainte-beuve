@@ -1,10 +1,12 @@
-import type { Project } from '@sainte-beuve/contracts'
+import type { OpenPullRequest, Project } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   decideDirectMerge,
   matchesStatusFilter,
   projectsInScope,
   resolveMergeComments,
+  searchesBeyondProjects,
+  unlinkedPullRequests,
 } from './merging.js'
 
 const QUEUE = { label: 'Queue', body: '/merge' }
@@ -112,5 +114,41 @@ describe('projectsInScope', () => {
     ])
     expect(projectsInScope(projects, { projectId: 'cli' }).map((p) => p.id)).toStrictEqual(['cli'])
     expect(projectsInScope(projects, { owner: 'acme', projectId: 'cli' })).toStrictEqual([])
+  })
+})
+
+describe('searchesBeyondProjects', () => {
+  it('searches unless the query keeps to the registered projects', () => {
+    expect(searchesBeyondProjects({})).toBe(true)
+    expect(searchesBeyondProjects({ scope: 'all' })).toBe(true)
+    expect(searchesBeyondProjects({ scope: 'linked' })).toBe(false)
+    expect(searchesBeyondProjects({ projectId: 'p1' })).toBe(false)
+  })
+})
+
+describe('unlinkedPullRequests', () => {
+  function found(owner: string, repo: string): OpenPullRequest {
+    return {
+      pullRequest: { provider: 'github', owner, repo, number: 1, url: 'https://x.test/1' },
+      title: 'A change',
+      authorLogin: 'ada',
+      requestedReviewerLogins: [],
+      draft: false,
+      createdAt: 0,
+      updatedAt: 0,
+    }
+  }
+
+  it('leaves a registered repository to its sweep, whatever its case', () => {
+    const projects = [{ provider: 'github' as const, owner: 'acme', repo: 'api' }]
+    const rows = unlinkedPullRequests([found('Acme', 'API'), found('acme', 'web')], projects, {})
+    expect(rows.map((row) => row.pullRequest.repo)).toStrictEqual(['web'])
+  })
+
+  it('keeps to the owner filter', () => {
+    const rows = unlinkedPullRequests([found('acme', 'web'), found('other', 'cli')], [], {
+      owner: 'ACME',
+    })
+    expect(rows.map((row) => row.pullRequest.owner)).toStrictEqual(['acme'])
   })
 })
