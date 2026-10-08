@@ -3,6 +3,7 @@ import { issuePath } from '@sainte-beuve/contracts'
 import {
   type DomainErrorCode,
   type Logger,
+  RateLimitedError,
   UnavailableError,
   isDomainError,
 } from '@sainte-beuve/kernel'
@@ -71,19 +72,13 @@ export function handleError(err: unknown, c: Context<AppEnv>): Response {
   if (isDomainError(err)) {
     const status = STATUS_BY_CODE[err.code]
     if (status >= 500) loggerFor(c).error({ err, code: err.code }, err.message)
-    const retryAfter = retryAfterOf(err.details)
-    if (retryAfter !== null) c.header('retry-after', String(retryAfter))
+    if (err instanceof RateLimitedError) {
+      c.header('retry-after', String(Math.ceil(err.retryAfterSeconds)))
+    }
     return c.json(errorBody(err.code, err.message, err.details), status)
   }
   loggerFor(c).error({ err }, 'unhandled error')
   return c.json(errorBody('internal', 'Unexpected error'), 500)
-}
-
-/** The `Retry-After` a refusal asked for, when it asked for one. See `RateLimitedError`. */
-function retryAfterOf(details: unknown): number | null {
-  if (typeof details !== 'object' || details === null) return null
-  const seconds: unknown = (details as { retryAfterSeconds?: unknown }).retryAfterSeconds
-  return typeof seconds === 'number' && Number.isFinite(seconds) ? Math.ceil(seconds) : null
 }
 
 /**

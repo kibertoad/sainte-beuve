@@ -105,22 +105,29 @@ describe('failed API keys', () => {
     }
     expect((await app.fetch(bearer(OPERATOR_KEY))).status).toBe(200)
   })
+
+  it('does not count a bearer nothing could match, such as a proxy token', async () => {
+    const { app } = buildHarness()
+    for (let attempt = 0; attempt < 25; attempt++) {
+      expect((await app.fetch(bearer(`proxy-token-${attempt}`))).status).toBe(200)
+    }
+  })
 })
 
 describe('CredentialThrottle', () => {
   it('opens a fresh window once the last one has run out', () => {
     const throttle = new CredentialThrottle(LIMITS)
-    for (let n = 0; n < 3; n++) throttle.failed('a', 0)
-    expect(throttle.refusal('a', 1_000)).toBe(59)
-    expect(throttle.refusal('a', 60_000)).toBeNull()
+    for (let n = 0; n < 3; n++) throttle.attempt('a', 0)
+    expect(throttle.attempt('a', 1_000)).toBe(59)
+    expect(throttle.attempt('a', 60_000)).toBeNull()
   })
 
   it('forgets the stalest client rather than growing without bound', () => {
     const throttle = new CredentialThrottle(LIMITS)
-    for (let n = 0; n < 3; n++) throttle.failed('a', 0)
-    throttle.failed('b', 1)
-    throttle.failed('c', 2)
-    expect(throttle.refusal('a', 3)).toBeNull()
+    for (let n = 0; n < 3; n++) throttle.attempt('a', 0)
+    throttle.attempt('b', 1)
+    throttle.attempt('c', 2)
+    expect(throttle.attempt('a', 3)).toBeNull()
   })
 })
 

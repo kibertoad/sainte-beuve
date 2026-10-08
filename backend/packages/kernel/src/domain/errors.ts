@@ -115,12 +115,15 @@ export class ConfigurationError extends DomainError {
  *
  * Its own code rather than `unauthenticated`, because the two send a caller
  * different places: that one says present a credential, and this one says
- * stop presenting them for a while. `details.retryAfterSeconds` is how long,
- * and the error handler repeats it as `Retry-After`.
+ * stop presenting them for a while. `retryAfterSeconds` is how long, and the
+ * error handler repeats it as `Retry-After`.
  */
 export class RateLimitedError extends DomainError {
+  readonly retryAfterSeconds: number
+
   constructor(message: string, retryAfterSeconds: number) {
     super('rate_limited', message, { retryAfterSeconds })
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 

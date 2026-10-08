@@ -5,8 +5,9 @@ import { ConfigurationError } from '@sainte-beuve/kernel'
  *
  * 32 characters is 128 bits written as hex and more than that as base64, which
  * is what `openssl rand` gives anybody who asks it. Length is not entropy, and a
- * long dictionary phrase passes; what this refuses is the value nobody generated
- * — `changeme`, a project name, a word — which is the one that gets guessed.
+ * long dictionary phrase passes. What this refuses is the value nobody
+ * generated (`changeme`, a project name, a word), which is the one that gets
+ * guessed.
  */
 const MIN_ENVIRONMENT_API_KEY_LENGTH = 32
 

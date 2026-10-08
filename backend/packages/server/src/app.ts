@@ -205,7 +205,7 @@ const SECURITY_HEADERS = secureHeaders({
 /**
  * Nothing an authenticated route answers belongs in a cache: it is somebody's
  * board, somebody's keys, an org's configuration. A response that already said
- * otherwise keeps what it said — the event stream sets its own, for the proxy
+ * otherwise keeps what it said: the event stream sets its own, for the proxy
  * between it and the browser.
  */
 const noStore: MiddlewareHandler<AppEnv> = async (c, next) => {
@@ -242,8 +242,8 @@ function mountMiddleware(app: Hono<AppEnv>, options: AppOptions): void {
   const originsFor =
     typeof corsOrigins === 'function' ? corsOrigins : () => corsOrigins ?? [WILDCARD]
 
-  // Outermost, so a refusal from anything below — a 413, a 401, a 503 for a
-  // misconfigured Worker — carries them too.
+  // Outermost, so a refusal from anything below (a 413, a 401, a 503 for a
+  // misconfigured Worker) carries them too.
   app.use('*', SECURITY_HEADERS)
   app.use('/api/v1/*', noStore)
   app.use('*', allowCredentials)

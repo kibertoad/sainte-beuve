@@ -5,8 +5,8 @@ import { createHash } from 'node:crypto'
  * page itself.
  *
  * In the HTML rather than in a header, because the SPA is a static bucket and a
- * bucket's headers are whatever its host's configuration file says — Pages'
- * `_headers`, an S3 bucket's metadata, an nginx block — while the page is the
+ * bucket's headers are whatever its host's configuration file says (Pages'
+ * `_headers`, an S3 bucket's metadata, an nginx block), while the page is the
  * same file everywhere. A `<meta>` policy cannot carry `frame-ancestors`, so
  * that one stays with the host (see deploy/frontend/public/_headers).
  *
@@ -52,7 +52,7 @@ function typeOf(attributes: string): string {
 function inlineScriptHashes(html: string): string[] {
   const hashes = new Set<string>()
   for (const [, attributes = '', body = ''] of html.matchAll(INLINE_SCRIPT)) {
-    if (/\bsrc\s*=/i.test(attributes)) continue
+    if (/(?:^|\s)src\s*=/i.test(attributes)) continue
     if (!EXECUTED.has(typeOf(attributes))) continue
     hashes.add(`'sha256-${createHash('sha256').update(body, 'utf8').digest('base64')}'`)
   }
@@ -95,5 +95,9 @@ export function withContentSecurityPolicy(html: string, input: PolicyInput): str
     const end = charset.index + charset[0].length
     return `${html.slice(0, end)}${meta}${html.slice(end)}`
   }
-  return html.replace(HEAD, (head) => `${head}${meta}`)
+  const head = HEAD.exec(html)
+  // A page with nowhere to put the policy would ship without one: fail the build.
+  if (head === null) throw new Error('A generated page has no <head> to carry its CSP')
+  const end = head.index + head[0].length
+  return `${html.slice(0, end)}${meta}${html.slice(end)}`
 }

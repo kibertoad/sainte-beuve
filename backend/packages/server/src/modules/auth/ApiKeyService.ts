@@ -87,6 +87,14 @@ export class ApiKeyService {
   }
 
   /**
+   * Whether `verify` could name anybody for this value: the deployment holds an
+   * `AUTH_API_KEY`, or the value is shaped like a minted key.
+   */
+  couldMatch(token: string): boolean {
+    return this.container.auth.environmentApiKey !== null || token.startsWith(API_KEY_PREFIX)
+  }
+
+  /**
    * Who a presented key is, or null.
    *
    * The environment's key is matched FIRST, and not by digest: it never went

@@ -19,8 +19,8 @@ Close L4 and L10 of the security review.
   /64, and a burst sent at once is held to the same ceiling as a sequence.
 - L10: every API response carries `secureHeaders()` with a
   `default-src 'none'; frame-ancestors 'none'` policy, `X-Frame-Options: DENY`
-  and `Referrer-Policy: no-referrer`, and `/api/v1` answers `Cache-Control:
-no-store` unless a route set its own. Every page the SPA layer generates
+  and `Referrer-Policy: no-referrer`, and `/api/v1` answers
+  `Cache-Control: no-store` unless a route set its own. Every page the SPA layer generates
   carries a Content-Security-Policy that allows its inline scripts by hash and
   nothing else inline, so a `javascript:` URL in a rendered link does not run.
 

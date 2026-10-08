@@ -113,15 +113,16 @@ async function resolve(
   if (session !== null) return { kind: 'session', session }
   const token = bearerToken(c)
   if (token === null) return ANONYMOUS
+  const keys = new ApiKeyService(container)
+  // A value nothing could match guesses nothing: a proxy's own bearer, or any
+  // value on a deployment with no `AUTH_API_KEY` that is not a minted key.
+  if (!keys.couldMatch(token)) return ANONYMOUS
   const { throttle } = options
   const client = options.clientOf(c) ?? UNKNOWN_CLIENT
-  const wait = throttle.refusal(client, container.clock.now())
+  // Counted as a failure BEFORE the comparison and taken back if it matches.
+  const wait = throttle.attempt(client, container.clock.now())
   if (wait !== null) throw new RateLimitedError(TOO_MANY_FAILURES, wait)
-  // Counted as a failure BEFORE the comparison and taken back if it matches:
-  // the question and the count share one synchronous step, so a burst of
-  // guesses sent at once cannot all be asked before any of them is counted.
-  throttle.failed(client, container.clock.now())
-  const key = await new ApiKeyService(container).verify(token).catch((err: unknown) => {
+  const key = await keys.verify(token).catch((err: unknown) => {
     // A store that failed to answer is not a guess.
     throttle.forgive(client, container.clock.now())
     throw err

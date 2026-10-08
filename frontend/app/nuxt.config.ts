@@ -24,13 +24,15 @@ const DEFAULT_API_BASE = 'http://localhost:8788'
  * SPA reports at the first call, and a missing performance hint must not be the
  * thing that reports it.
  */
-const API_ORIGIN = ((base: string) => {
+function originOf(base: string): string | null {
   try {
     return new URL(base).origin
   } catch {
     return null
   }
-})(process.env.NUXT_PUBLIC_API_BASE || DEFAULT_API_BASE)
+}
+
+const API_ORIGIN = originOf(process.env.NUXT_PUBLIC_API_BASE || DEFAULT_API_BASE)
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-06-01',
@@ -70,10 +72,19 @@ export default defineNuxtConfig({
     // because the runtime config script carries the build id and only the page
     // as written can be hashed. `nuxt dev` serves no generated page and so
     // carries no policy. See `build/csp.ts`.
+    //
+    // The origin comes from the MERGED runtime config: a consuming app may set
+    // `apiBase` in its own config, and a `connect-src` naming this layer's
+    // default would refuse every call that app makes.
     'nitro:init'(nitro) {
+      const configured: unknown = nitro.options.runtimeConfig.public?.apiBase
+      const apiOrigin = originOf(
+        process.env.NUXT_PUBLIC_API_BASE ||
+          (typeof configured === 'string' ? configured : DEFAULT_API_BASE),
+      )
       nitro.hooks.hook('prerender:generate', (route) => {
         if (typeof route.contents !== 'string' || !route.fileName?.endsWith('.html')) return
-        route.contents = withContentSecurityPolicy(route.contents, { apiOrigin: API_ORIGIN })
+        route.contents = withContentSecurityPolicy(route.contents, { apiOrigin })
       })
     },
   },

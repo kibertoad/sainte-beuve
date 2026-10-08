@@ -1,30 +1,6 @@
 import type { EpochMs } from '@sainte-beuve/kernel'
 
-/**
- * How often one client may present a bearer credential that matches nothing.
- *
- * Minted keys and sessions are 256-bit and nobody guesses one. `AUTH_API_KEY` is
- * whatever an operator typed, it is an ADMIN of the default org, and it is
- * compared on every bearer attempt — so without a ceiling, the only thing
- * between a weak one and a stranger is how fast the stranger can send requests.
- * `environmentApiKeyFrom` refuses the short ones; this is the other half.
- *
- * WHAT IS COUNTED is a presented bearer that verified to nobody, and nothing
- * else. Not a request with no credential, which is the ordinary state of an
- * `open` deployment and of the sign-in screen. Not a session cookie that no
- * longer resolves, which is every browser whose session expired overnight and
- * guesses nothing. And a session that DOES resolve is answered before this is
- * asked, so a browser behind the same address as a guesser keeps working.
- *
- * WHERE IT LIVES is the app, not the container: one per Node process and one per
- * Worker isolate. That is a floor rather than a guarantee on a Worker, where a
- * guesser spread across isolates gets a ceiling per isolate, and a deployment
- * that wants a hard one sets a rate-limiting rule at the edge as well. It is
- * still the difference between a guess per request and a guess per minute.
- *
- * Fixed windows rather than a sliding log: the question is "is this address
- * guessing", and a window answers it with one counter per address.
- */
+/** The ceiling `CredentialThrottle` holds each client to. */
 export interface ThrottleLimits {
   /** Failures one client may have in a window before it is refused. */
   maxFailures: number
@@ -48,36 +24,54 @@ interface Window {
   failures: number
 }
 
+/**
+ * How often one client may present a bearer credential that matches nothing.
+ *
+ * Minted keys and sessions are 256-bit and nobody guesses one. `AUTH_API_KEY` is
+ * whatever an operator typed, it is an ADMIN of the default org, and it is
+ * compared on every bearer attempt. Without a ceiling, the only thing between a
+ * weak one and a stranger is how fast the stranger can send requests.
+ * `environmentApiKeyFrom` refuses the short ones; this is the other half.
+ *
+ * WHAT IS COUNTED is a presented bearer that verified to nobody, and nothing
+ * else. Not a request with no credential, which is the ordinary state of an
+ * `open` deployment and of the sign-in screen. Not a session cookie that no
+ * longer resolves, which is every browser whose session expired overnight and
+ * guesses nothing. And a session that DOES resolve is answered before this is
+ * asked, so a browser behind the same address as a guesser keeps working.
+ *
+ * WHERE IT LIVES is the app, not the container: one per Node process and one per
+ * Worker isolate. That is a floor rather than a guarantee on a Worker, where a
+ * guesser spread across isolates gets a ceiling per isolate, and a deployment
+ * that wants a hard one sets a rate-limiting rule at the edge as well.
+ *
+ * Fixed windows rather than a sliding log: the question is "is this address
+ * guessing", and a window answers it with one counter per address.
+ */
 export class CredentialThrottle {
   private readonly windows = new Map<string, Window>()
 
   constructor(private readonly limits: ThrottleLimits = DEFAULT_THROTTLE_LIMITS) {}
 
   /**
-   * How many seconds this client must wait, or null when it may be answered.
+   * Admit one bearer for comparison: the seconds this client must wait, or null
+   * once the attempt is counted as a failure that `forgive` takes back if it
+   * matches.
    *
-   * Asked BEFORE a bearer is verified, because a refusal after the comparison
-   * would refuse nothing: the guess that matched would already have matched.
+   * Asked BEFORE the comparison, because a refusal after it would refuse
+   * nothing. Asking and counting in one call is what holds the ceiling for a
+   * burst: split across an `await`, every guess sent at once would be asked
+   * before the first of them had been counted.
    */
-  refusal(client: string, now: EpochMs): number | null {
-    const window = this.current(bucketOf(client), now)
-    if (window === null || window.failures < this.limits.maxFailures) return null
-    return Math.max(1, Math.ceil((window.startedAt + this.limits.windowMs - now) / 1000))
-  }
-
-  /**
-   * Count one bearer that matched nobody — or one about to be compared, which
-   * the caller takes back with `forgive` if it matches. Counting BEFORE the
-   * comparison, in the same synchronous step as `refusal`, is what makes the
-   * ceiling hold for a burst: asked and counted across an `await`, every guess
-   * sent at once would be asked before the first of them had been counted.
-   */
-  failed(address: string, now: EpochMs): void {
+  attempt(address: string, now: EpochMs): number | null {
     const client = bucketOf(address)
     const window = this.current(client, now)
+    if (window !== null && window.failures >= this.limits.maxFailures) {
+      return Math.max(1, Math.ceil((window.startedAt + this.limits.windowMs - now) / 1000))
+    }
     if (window !== null) {
       window.failures += 1
-      return
+      return null
     }
     // The oldest entry goes first. A Map iterates in insertion order and a
     // window is inserted when it starts, so the first key is the stalest.
@@ -86,9 +80,10 @@ export class CredentialThrottle {
       if (oldest.done !== true) this.windows.delete(oldest.value)
     }
     this.windows.set(client, { startedAt: now, failures: 1 })
+    return null
   }
 
-  /** Take back one count `failed` made for a bearer that went on to match. */
+  /** Take back the count `attempt` made for a bearer that matched, or never got compared. */
   forgive(address: string, now: EpochMs): void {
     const client = bucketOf(address)
     const window = this.current(client, now)
@@ -111,7 +106,7 @@ export class CredentialThrottle {
  * The bucket an address counts against.
  *
  * An IPv6 client is handed a /64 at the least, so keying on the full address
- * would give one guesser 2^64 buckets of `maxFailures` each — and enough of them
+ * would give one guesser 2^64 buckets of `maxFailures` each, and enough of them
  * to push every other client out of `maxClients`. Its /64 is the client. IPv4,
  * an IPv4-mapped address and anything that does not parse as IPv6 count as
  * themselves.

@@ -59,4 +59,18 @@ describe('inline script detection', () => {
     const page = `<html><head><SCRIPT data-type="application/json">${body}</SCRIPT></head></html>`
     expect(contentSecurityPolicy(page, { apiOrigin: null })).toContain(hashOf(body))
   })
+
+  it('hashes an inline script carrying a data-src attribute', () => {
+    const body = 'window.lazy=1'
+    const page = `<html><head><script data-src="/x.js">${body}</script></head></html>`
+    expect(contentSecurityPolicy(page, { apiOrigin: null })).toContain(hashOf(body))
+  })
+})
+
+describe('a page with no head', () => {
+  it('fails the build rather than shipping without a policy', () => {
+    expect(() =>
+      withContentSecurityPolicy('<html><body></body></html>', { apiOrigin: null }),
+    ).toThrow(/Content-Security-Policy|CSP/)
+  })
 })
