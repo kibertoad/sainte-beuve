@@ -132,6 +132,7 @@ export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFa
     },
     vcsAsApp: () => null,
     aiReview: () => null,
+    guidedReview: () => null,
     signIn: () => null,
     ...overrides,
   }

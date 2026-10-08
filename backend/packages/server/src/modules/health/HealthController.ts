@@ -3,6 +3,7 @@ import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import {
   resolveAiReview,
+  resolveGuidedReview,
   resolveChat,
   resolveSlackSigningSecret,
   resolveVcs,
@@ -32,14 +33,16 @@ export function healthController(): Hono<AppEnv> {
 
   app.get('/health', async (c) => {
     const container = c.get('container')
-    const [chat, github, gitlab, aiReview, slackSigning, persistenceReady] = await Promise.all([
-      resolveChat(container),
-      resolveVcs(container, 'github'),
-      resolveVcs(container, 'gitlab'),
-      resolveAiReview(container),
-      resolveSlackSigningSecret(container),
-      storeAnswers(container),
-    ])
+    const [chat, github, gitlab, aiReview, guidedReview, slackSigning, persistenceReady] =
+      await Promise.all([
+        resolveChat(container),
+        resolveVcs(container, 'github'),
+        resolveVcs(container, 'gitlab'),
+        resolveAiReview(container),
+        resolveGuidedReview(container),
+        resolveSlackSigningSecret(container),
+        storeAnswers(container),
+      ])
     const body = {
       status: persistenceReady ? 'ok' : 'degraded',
       ...shape(container),
@@ -51,6 +54,7 @@ export function healthController(): Hono<AppEnv> {
         // and one boolean would report that as either fine or broken.
         vcs: { github: github !== null, gitlab: gitlab !== null },
         aiReview: aiReview !== null,
+        guidedReview: guidedReview !== null,
         secrets: container.secrets !== null,
         githubWebhooks: container.github.webhookSecret !== null,
         // For the org this probe is in, which on an unauthenticated `/health` is
@@ -101,6 +105,8 @@ function shape(container: AppContainer) {
       // in the list above with this false is a sign-in that answers 503 on a
       // hosted origin; see `callbackOrigin`.
       apiBaseUrl: container.apiBaseUrl !== null,
+      // Any caller may act as any person while this is on.
+      devMode: container.auth.devMode,
     },
   }
 }

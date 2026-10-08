@@ -36,6 +36,7 @@ export class AuthService {
       org,
       role,
       signInProviders: this.signInProviders(requestUrl),
+      devMode: this.container.auth.devMode,
     }
   }
 

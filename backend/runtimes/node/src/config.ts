@@ -1,6 +1,7 @@
 import type { AuthMode, GitHubLabelRules } from '@sainte-beuve/contracts'
 import {
   authModeFrom,
+  devModeFrom,
   environmentApiKeyFrom,
   DEFAULT_GITHUB_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
@@ -79,6 +80,8 @@ interface AuthConfig {
    */
   apiKey: string | null
   sessionLifetimeMs: number
+  /** Persona switching, `DEV_MODE`. See `devModeFrom` in @sainte-beuve/server. */
+  devMode: boolean
 }
 
 export interface NodeConfig {
@@ -110,6 +113,11 @@ export interface NodeConfig {
   /** How often the reminder clock runs, in ms. */
   reminderIntervalMs: number
   catFactory: { baseUrl: string; serviceId: string; pipelineId?: string } | null
+  /**
+   * Where cat-factory is, on its own: all the guided review needs. It finds the
+   * repository from the pull request, so it reads no service id.
+   */
+  catFactoryBaseUrl: string | null
   /** The cat-factory key from the environment, when there is one. */
   catFactoryApiKey: string | null
   github: GitHubConfig
@@ -194,6 +202,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),
     catFactory: catFactoryFrom(env),
+    catFactoryBaseUrl: env.CAT_FACTORY_BASE_URL || null,
     // `||` throughout, not `??`: an empty variable is one somebody left blank,
     // not one they set, and `.env.example` ships every name with no value.
     catFactoryApiKey: env.CAT_FACTORY_API_KEY || null,
@@ -228,6 +237,7 @@ function authFrom(env: Env, corsOrigins: readonly string[]): AuthConfig {
     // never sticks with nothing anywhere saying why.
     sessionLifetimeMs:
       optionalCountFrom(env.AUTH_SESSION_LIFETIME_MS) ?? DEFAULT_SESSION_LIFETIME_MS,
+    devMode: devModeFrom({ value: env.DEV_MODE, appBaseUrl: env.APP_BASE_URL, corsOrigins }),
   }
 }
 

@@ -61,7 +61,13 @@ describe('sainte-beuve worker', () => {
       // wrangler.toml leaves AUTH_MODE at `open`, which is what every
       // deployment ran before sessions existed and what this reports so an
       // operator can see it from outside the process.
-      auth: { mode: 'open', signInProviders: [], environmentApiKey: false, apiBaseUrl: false },
+      auth: {
+        mode: 'open',
+        signInProviders: [],
+        environmentApiKey: false,
+        apiBaseUrl: false,
+        devMode: false,
+      },
       // The suite's env carries an encryption key and nothing else, so the flags
       // are read off the bindings rather than reported from a fixed table. The
       // inbound pair is separate from the outbound one: posting to Slack needs a
@@ -70,6 +76,7 @@ describe('sainte-beuve worker', () => {
         chat: false,
         vcs: { github: false, gitlab: false },
         aiReview: false,
+        guidedReview: false,
         secrets: true,
         githubWebhooks: false,
         slackInteractivity: false,

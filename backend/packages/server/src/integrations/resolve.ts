@@ -9,6 +9,7 @@ import {
   type AiReviewGateway,
   type ChatGateway,
   getErrorMessage,
+  type GuidedReviewGateway,
   isSecretDecryptError,
   type VcsGateway,
 } from '@sainte-beuve/kernel'
@@ -240,6 +241,21 @@ export async function resolveAiReview(
   const fromStored = stored === null ? null : (container.gateways?.aiReview(stored) ?? null)
   if (fromStored !== null) return { gateway: fromStored, source: 'stored' }
   return container.aiReview === null ? null : { gateway: container.aiReview, source: 'environment' }
+}
+
+/**
+ * The guided reviewer in force, from the same stored cat-factory key as the AI
+ * reviewer and with the same fallback to the environment's.
+ */
+export async function resolveGuidedReview(
+  container: AppContainer,
+): Promise<Resolved<GuidedReviewGateway, CredentialSource> | null> {
+  const stored = await openCredential(container, 'cat-factory')
+  const fromStored = stored === null ? null : (container.gateways?.guidedReview(stored) ?? null)
+  if (fromStored !== null) return { gateway: fromStored, source: 'stored' }
+  return container.guidedReview === null
+    ? null
+    : { gateway: container.guidedReview, source: 'environment' }
 }
 
 /**

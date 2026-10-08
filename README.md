@@ -59,6 +59,38 @@ Each run is a billed cat-factory job, so every way to ask for one (the button,
 the label, `@bot ai`, `/review ai`) meets the same limit: one run in flight per
 review, and no more than three filed on it in an hour.
 
+## A guided review explains the change before you read it
+
+**Guided review** sits beside every pull request on the workspace and the board.
+It opens a page where cat-factory reads the change and lays it out: what it is
+for, what changed, what it affects, the risks ranked by severity, and where to
+look first, each pointing at the lines on the host at the commit it read.
+
+From there you ask. A suggested question, or one of your own, opens a thread,
+and every thread is answered on its own, so a slow one never holds up the rest.
+**Dig into a checkout** sends the question to a read-only checkout of the whole
+repository, for the ones the diff cannot answer ("where else is this called").
+That answer takes minutes rather than seconds.
+
+The page is live: it follows cat-factory's stream for the review, so the
+overview, an answer and new drafts appear as they land, for everybody who has it
+open. While the stream is down it re-reads on an interval instead.
+
+**Draft comments** turns what a thread concluded into review comments anchored
+on the diff. Edit them, move one to another line, discard the noise, and post
+the rest: they go up as plain review comments from cat-factory, never as an
+approval or a change request. A post reports per comment, and posting again
+never duplicates one that landed. A pull request with commits past the reviewed
+one refuses the post until the review is re-read at the latest commit, because
+every anchor was computed against the old one.
+
+There is one guided review per pull request on a deployment, and everybody who
+opens it sees the same threads. Opening the page reads; only **Start a guided
+review** spends model budget. It needs the same cat-factory key as the AI
+review (the `write` scope is enough) and a base URL, but no service id: the
+repository has to be linked in the cat-factory workspace, and registered as a
+project here.
+
 ## Asking for attention
 
 A pull request that nobody has picked up is the thing the workspace exists to

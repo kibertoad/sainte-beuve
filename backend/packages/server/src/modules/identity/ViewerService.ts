@@ -94,7 +94,7 @@ export class ViewerService {
    * sign-in underneath it: the App identifies nobody, so a deployment holding
    * both would otherwise be viewed as nobody.
    */
-  private async signedInAccount(): Promise<{ provider: VcsProvider; account: VcsAccount }> {
+  async signedInAccount(): Promise<{ provider: VcsProvider; account: VcsAccount }> {
     for (const provider of VCS_PROVIDERS) {
       const resolved = await this.resolutions.asPerson(provider)
       if (resolved === null) continue

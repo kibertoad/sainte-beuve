@@ -1,4 +1,5 @@
 import {
+  CatFactoryApiError,
   CatFactoryConflictError,
   CatFactoryCredentialRequiredError,
   CatFactoryForbiddenError,
@@ -18,6 +19,24 @@ import {
   ValidationError,
   getErrorMessage,
 } from '@sainte-beuve/kernel'
+
+/**
+ * What a refusal carries besides its source: cat-factory's own name for it.
+ *
+ * The status class says what kind of refusal it was; `reason` says which one
+ * (`repo_not_linked`, `pr_not_found`, `thread_busy`, `session_stale`), and a
+ * screen needs that to say what to do about it. It is the envelope's
+ * `details.reason` when cat-factory gave one, else its `code`.
+ */
+interface CatFactoryRefusalDetails extends UpstreamDetails {
+  reason?: string
+}
+
+function reasonOf(err: unknown): { reason?: string } {
+  if (!(err instanceof CatFactoryApiError)) return {}
+  const details = err.details as { reason?: unknown } | null | undefined
+  return { reason: typeof details?.reason === 'string' ? details.reason : err.code }
+}
 
 /**
  * A cat-factory refusal, as the fault sainte-beuve answers with.
@@ -54,11 +73,15 @@ import {
  * Anything else is 502: cat-factory faulted, and an operator reading our logs
  * should be sent upstream rather than into this codebase.
  */
-export function refusalFor(err: unknown, what: string): DomainError {
+export function refusalFor(
+  err: unknown,
+  what: string,
+  scope: 'decide' | 'write' = 'decide',
+): DomainError {
   const detail = `${what}: ${getErrorMessage(err)}`
   // Every refusal below names cat-factory as its source, so a public surface can
   // say so without repeating what cat-factory said. See `upstreamOf`.
-  const source: UpstreamDetails = { upstream: 'cat-factory' }
+  const source: CatFactoryRefusalDetails = { upstream: 'cat-factory', ...reasonOf(err) }
   if (err instanceof CatFactoryConflictError) {
     return new ConflictError(`cat-factory would not ${detail}`, source)
   }
@@ -67,7 +90,7 @@ export function refusalFor(err: unknown, what: string): DomainError {
   }
   if (err instanceof CatFactoryForbiddenError) {
     return new ForbiddenError(
-      `cat-factory refused to ${detail}. A review is filed and driven with an API key carrying the \`decide\` scope`,
+      `cat-factory refused to ${detail}. This needs an API key carrying the \`${scope}\` scope`,
       source,
     )
   }

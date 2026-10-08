@@ -122,6 +122,7 @@ describe('who is calling', () => {
         // without changing who can get at it. See `roleOf`.
         role: 'admin',
         signInProviders: [],
+        devMode: false,
       })
     })
 

@@ -38,8 +38,8 @@ importers:
   backend/packages/ai-review:
     dependencies:
       '@cat-factory/sdk':
-        specifier: ^0.52.0
-        version: 0.52.0
+        specifier: ^0.56.1
+        version: 0.56.1
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -59,15 +59,18 @@ importers:
 
   backend/packages/contracts:
     dependencies:
+      '@cat-factory/contracts':
+        specifier: ^0.362.0
+        version: 0.362.0(typescript@7.0.2)
       '@toad-contracts/core':
         specifier: 0.4.0
         version: 0.4.0
       '@toad-contracts/valibot':
         specifier: 0.5.0
-        version: 0.5.0(valibot@1.4.2(typescript@7.0.2))
+        version: 0.5.0(valibot@1.5.0(typescript@7.0.2))
       valibot:
-        specifier: ^1.4.2
-        version: 1.4.2(typescript@7.0.2)
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
     devDependencies:
       typescript:
         specifier: 7.0.2
@@ -139,8 +142,8 @@ importers:
         specifier: workspace:*
         version: link:../kernel
       valibot:
-        specifier: ^1.4.2
-        version: 1.4.2(typescript@7.0.2)
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0
@@ -193,13 +196,13 @@ importers:
         version: link:../kernel
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260815.1)(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)(valibot@1.4.2(typescript@7.0.2))(zod@4.5.4)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260815.1)(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)(valibot@1.5.0(typescript@7.0.2))(zod@4.5.4)
       pg:
         specifier: ^8.23.0
         version: 8.23.0
       valibot:
-        specifier: ^1.4.2
-        version: 1.4.2(typescript@7.0.2)
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.5.8
@@ -316,8 +319,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/server
       valibot:
-        specifier: ^1.4.2
-        version: 1.4.2(typescript@7.0.2)
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0
@@ -462,7 +465,7 @@ importers:
     dependencies:
       '@nuxt/ui':
         specifier: ^4.11.1
-        version: 4.11.1(950857dfef21e1d6abe341440592c3d1)
+        version: 4.11.1(a32e6604d1ce12904a7e412c6fc2dd3f)
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../../backend/packages/contracts
@@ -473,8 +476,8 @@ importers:
         specifier: 0.3.2
         version: 0.3.2(wretch@3.0.9)
       valibot:
-        specifier: ^1.4.2
-        version: 1.4.2(typescript@6.0.3)
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@6.0.3)
       vue:
         specifier: 3.5.42
         version: 3.5.42(typescript@6.0.3)
@@ -643,8 +646,11 @@ packages:
     resolution: {integrity: sha512-CuNiSqg7+e1cO/GjffyMOm5Tt2jUF9CWHHnvQ/UkqvtkGfHdgwEC0wpmq7fkN3gxwpRnrAN0WzO3vREKmNolMQ==}
     engines: {node: '>=18'}
 
-  '@cat-factory/sdk@0.52.0':
-    resolution: {integrity: sha512-KjOd9AgDXL58eFspLbeOdDVdgS9dEuFbKdOxyhdIY3zjSDKY24SZO/wUaFwITzyHQeik9FYhN/Dk7+7zNc/f/g==}
+  '@cat-factory/contracts@0.362.0':
+    resolution: {integrity: sha512-vx04nwJ/EzwvpBFZT6Xwim38gI8GZfDiMqN1uKwwvXCS9p6aIZaVFfJuEw2qKFM1HDBWoPJ6b+o9NWfV5vateA==}
+
+  '@cat-factory/sdk@0.56.1':
+    resolution: {integrity: sha512-3J0vLS0AM4+H4rpLnUD4wPLkIPoTn5ZfKEAAtndM8nWCfMj3JQ2QJjjtQNEItbVTfVRjAcrErwzlBFFqls4Uyw==}
     engines: {node: '>=20'}
 
   '@changesets/apply-release-plan@8.1.0':
@@ -735,6 +741,7 @@ packages:
 
   '@cloudflare/vitest-pool-workers@0.22.0':
     resolution: {integrity: sha512-OJv/qikkOgxnKxJ5xrLS7zuOLZhc/6iziU+llqZm4tiQf2CJUYwlMuXN68VaWIQebORd1AUx4w6A0oy8XRbuaQ==}
+    deprecated: '@cloudflare/vitest-pool-workers has been renamed to @cloudflare/vitest-plugin. This package will not receive future updates.'
     peerDependencies:
       '@vitest/runner': ^4.1.0
       '@vitest/snapshot': ^4.1.0
@@ -3041,6 +3048,9 @@ packages:
   '@toad-contracts/core@0.4.0':
     resolution: {integrity: sha512-5wyHoGMPN/X/J1woRk279jFoup2B+kmbyW1MF+BbdqD5aEQJtqWI9WWyoZLYIczhi02c4Yap1unonfcQz7GAyw==}
 
+  '@toad-contracts/core@1.0.0':
+    resolution: {integrity: sha512-x+nETb0h1brV9DZqOrVcxw9Eo8+p0mHaM8ri2ziMZqCF0lG3qr+RjPdK72yF1zullcLEjxy1EaLz7HObfJNFuQ==}
+
   '@toad-contracts/frontend-http-client@0.3.2':
     resolution: {integrity: sha512-jCE1EJa1ks0Y4EzoPfuJPRZgCz0QN6hI6gZzpjKT/qje2SAlOpI9pYasl4NKaYbSozXzUGdhu+bCyiVcbbCxcA==}
     peerDependencies:
@@ -3053,6 +3063,11 @@ packages:
 
   '@toad-contracts/valibot@0.5.0':
     resolution: {integrity: sha512-Zi9+YlyPzUz9Vcf/NLtQTkenR16YnD4ipl3Uwr+/den6wYnfrJ+V8Pxdcwe/3akpIdZuP7cz/5R7E0/Khaz1/Q==}
+    peerDependencies:
+      valibot: '>=1.0.0'
+
+  '@toad-contracts/valibot@1.0.0':
+    resolution: {integrity: sha512-fqpbBzeroyjH5y3pxD9jhuZxMr2pVx0mdPtp1HhAdJ4xPfHEkuLjTYpI6AX0fTEDaTXoS9sd1WnbU00luTRo7g==}
     peerDependencies:
       valibot: '>=1.0.0'
 
@@ -6177,8 +6192,8 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
-  valibot@1.4.2:
-    resolution: {integrity: sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==}
+  valibot@1.5.0:
+    resolution: {integrity: sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ==}
     peerDependencies:
       typescript: '>=5'
     peerDependenciesMeta:
@@ -6735,7 +6750,15 @@ snapshots:
     dependencies:
       fontkitten: 1.0.3
 
-  '@cat-factory/sdk@0.52.0': {}
+  '@cat-factory/contracts@0.362.0(typescript@7.0.2)':
+    dependencies:
+      '@toad-contracts/core': 1.0.0
+      '@toad-contracts/valibot': 1.0.0(valibot@1.5.0(typescript@7.0.2))
+      valibot: 1.5.0(typescript@7.0.2)
+    transitivePeerDependencies:
+      - typescript
+
+  '@cat-factory/sdk@0.56.1': {}
 
   '@changesets/apply-release-plan@8.1.0':
     dependencies:
@@ -7948,7 +7971,7 @@ snapshots:
       rc9: 3.1.0
       std-env: 4.2.0
 
-  '@nuxt/ui@4.11.1(950857dfef21e1d6abe341440592c3d1)':
+  '@nuxt/ui@4.11.1(a32e6604d1ce12904a7e412c6fc2dd3f)':
     dependencies:
       '@floating-ui/dom': 1.8.0
       '@iconify/vue': 5.0.1(vue@3.5.42(typescript@6.0.3))
@@ -8017,7 +8040,7 @@ snapshots:
     optionalDependencies:
       '@internationalized/date': 3.12.4
       '@internationalized/number': 3.6.8
-      valibot: 1.4.2(typescript@6.0.3)
+      valibot: 1.5.0(typescript@6.0.3)
       vue-router: 5.3.1(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.8)(rollup@4.63.1)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(vue@3.5.42(typescript@6.0.3))
       zod: 4.5.4
     transitivePeerDependencies:
@@ -9015,6 +9038,10 @@ snapshots:
     dependencies:
       '@standard-schema/spec': 1.1.0
 
+  '@toad-contracts/core@1.0.0':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+
   '@toad-contracts/frontend-http-client@0.3.2(wretch@3.0.9)':
     dependencies:
       '@standard-schema/spec': 1.1.0
@@ -9029,10 +9056,15 @@ snapshots:
       '@toad-contracts/core': 0.4.0
       hono: 4.13.7
 
-  '@toad-contracts/valibot@0.5.0(valibot@1.4.2(typescript@7.0.2))':
+  '@toad-contracts/valibot@0.5.0(valibot@1.5.0(typescript@7.0.2))':
     dependencies:
       '@toad-contracts/core': 0.4.0
-      valibot: 1.4.2(typescript@7.0.2)
+      valibot: 1.5.0(typescript@7.0.2)
+
+  '@toad-contracts/valibot@1.0.0(valibot@1.5.0(typescript@7.0.2))':
+    dependencies:
+      '@toad-contracts/core': 1.0.0
+      valibot: 1.5.0(typescript@7.0.2)
 
   '@turbo/darwin-64@2.10.12':
     optional: true
@@ -9877,13 +9909,13 @@ snapshots:
       get-tsconfig: 4.14.3
       jiti: 2.7.0
 
-  drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260815.1)(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)(valibot@1.4.2(typescript@7.0.2))(zod@4.5.4):
+  drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260815.1)(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)(valibot@1.5.0(typescript@7.0.2))(zod@4.5.4):
     optionalDependencies:
       '@cloudflare/workers-types': 5.20260815.1
       '@electric-sql/pglite': 0.5.8
       '@types/pg': 8.23.1
       pg: 8.23.0
-      valibot: 1.4.2(typescript@7.0.2)
+      valibot: 1.5.0(typescript@7.0.2)
       zod: 4.5.4
 
   duplexer@0.1.2: {}
@@ -12471,11 +12503,11 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  valibot@1.4.2(typescript@6.0.3):
+  valibot@1.5.0(typescript@6.0.3):
     optionalDependencies:
       typescript: 6.0.3
 
-  valibot@1.4.2(typescript@7.0.2):
+  valibot@1.5.0(typescript@7.0.2):
     optionalDependencies:
       typescript: 7.0.2
 

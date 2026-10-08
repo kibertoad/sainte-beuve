@@ -11,6 +11,7 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import {
+  actAsContract,
   addProjectContract,
   assignReviewersContract,
   cancelAttentionContract,
@@ -39,6 +40,7 @@ import {
   signOutContract,
   startSessionSignInContract,
   streamAttentionContract,
+  streamGuidedReviewContract,
   updateProjectContract,
   updateReviewerContract,
 } from '@sainte-beuve/contracts'
@@ -53,6 +55,7 @@ import {
 import { sendByApiContract, UnexpectedResponseError } from '@toad-contracts/frontend-http-client'
 import wretch from 'wretch'
 import type { RequestParams, SuccessBody } from './contractCall'
+import { guidedReviewCalls } from './guidedReviewApi'
 import { configurationCalls } from './sainteBeuveSettingsApi'
 
 // ---------------------------------------------------------------------------
@@ -254,12 +257,17 @@ export function createSainteBeuveApi(apiBase: string) {
      * live half survives a laptop closing. The contract still owns the path.
      */
     attentionStreamUrl: `${apiBase}${API_PREFIX}${mapApiContractToPath(streamAttentionContract)}`,
+    /** The same, for one guided review. */
+    guidedReviewStreamUrl: (sessionId: string) =>
+      `${apiBase}${API_PREFIX}${streamGuidedReviewContract.pathResolver({ sessionId })}`,
 
     // Who is calling, and whether this deployment cares. Never refused, in
     // either mode: a screen that had to be signed in to discover that it is not
     // signed in has nowhere to start.
     getAuthState: () => call(getAuthStateContract, {}),
     signOut: () => call(signOutContract, { body: {} }),
+    /** Development mode only: the next requests are made as this directory row. */
+    actAs: (reviewerId: string) => call(actAsContract, { body: { reviewerId } }),
     /**
      * Where to send the browser to sign IN, as opposed to connecting a credential.
      *
@@ -347,6 +355,7 @@ export function createSainteBeuveApi(apiBase: string) {
     resumeAiReview: (runId: string) =>
       call(resumeAiReviewContract, { pathParams: { runId }, body: {} }),
 
+    ...guidedReviewCalls(call),
     ...configurationCalls(call),
   }
 }

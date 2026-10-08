@@ -1,6 +1,7 @@
 import type { VcsProvider } from '@sainte-beuve/contracts'
 import type {
   AiReviewGateway,
+  GuidedReviewGateway,
   Clock,
   GatewayFactory,
   VcsGateway,
@@ -73,6 +74,8 @@ export interface GatewayFactoryConfig {
    * cat-factory's configuration (base URL, service id) is missing.
    */
   aiReview: (apiKey: string) => AiReviewGateway | null
+  /** Builds the guided reviewer from the same key, or null without a base URL. */
+  guidedReview: (apiKey: string) => GuidedReviewGateway | null
   clock?: Clock
   /** Swap the HTTP implementation. Only a test has a reason to. */
   fetchImpl?: typeof globalThis.fetch
@@ -104,6 +107,7 @@ export function createGatewayFactory(config: GatewayFactoryConfig): GatewayFacto
     vcsFromToken: fromToken,
     vcsAsApp: (provider) => asApp[provider],
     aiReview: config.aiReview,
+    guidedReview: config.guidedReview,
     signIn: (provider) => signIn[provider],
   }
 }

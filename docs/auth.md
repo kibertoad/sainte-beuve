@@ -307,6 +307,26 @@ count lives in the process on Node and in the isolate on a Worker, which makes
 it a floor there rather than a hard ceiling, and an edge rate-limiting rule is
 the complement.
 
+## Development mode
+
+`DEV_MODE=true` adds `POST /api/v1/dev/act-as`, which replaces the caller's
+session with one for any row of their org's directory, without a sign-in. It
+exists to test what happens between people (an author asking, a reviewer
+answering) from one laptop and one GitHub account. How to use it is in
+[deploy/local](../deploy/local/README.md#testing-multi-user-flows).
+
+The session it issues is an ordinary one, so everything above holds: it is
+bound to the caller's org, a paused row is refused, and sign-out ends it. It
+records the host account of whoever switched (their own session's, or the
+deployment credential's for an anonymous caller on an `open` deployment),
+because that account established it. Calls to the host keep going through the
+deployment's credential whoever the session names.
+
+Any caller can become an admin this way, so `devModeFrom` reads the variable the
+way `authModeFrom` reads `AUTH_MODE`: an unrecognised value is a configuration
+error, and `true` beside a public origin refuses to start (a 503 per request on
+a Worker). `/health` and `GET /api/v1/auth/session` both report `devMode`.
+
 ## The org boundary
 
 A session says WHO is calling. What they may reach, and what they may change, is

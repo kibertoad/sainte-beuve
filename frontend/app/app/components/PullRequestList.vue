@@ -58,6 +58,14 @@ defineProps<{
         <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <slot name="actions" :pull-request="pr" />
           <UButton
+            :to="guidedReviewRoute(pr.pullRequest)"
+            size="sm"
+            variant="ghost"
+            icon="i-lucide-sparkles"
+          >
+            Guided review
+          </UButton>
+          <UButton
             :to="safeHref(pr.pullRequest.url)"
             target="_blank"
             size="sm"

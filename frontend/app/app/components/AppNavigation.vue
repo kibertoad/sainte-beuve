@@ -60,24 +60,30 @@ const whoami = computed(() => {
   if (principal?.kind === 'api_key') return `API key: ${principal.label}`
   return auth.canSignIn.value ? 'Not signed in' : null
 })
+
+/** Persona switching, which a deployment turns on with DEV_MODE=true. */
+const devMode = computed(() => auth.state.value?.devMode === true)
 </script>
 
 <template>
   <div class="flex flex-col gap-4 h-full" @click="reportNavigation">
     <UNavigationMenu orientation="vertical" :items="links" />
-    <div v-if="orgName || whoami" class="mt-auto flex flex-col gap-1">
-      <p v-if="orgName" class="flex items-center gap-2 px-2.5 text-sm text-muted">
-        <UIcon name="i-lucide-building-2" />
-        <span class="truncate">{{ orgName }}</span>
-      </p>
-      <NuxtLink
-        v-if="whoami"
-        to="/configuration"
-        class="flex items-center gap-2 px-2.5 py-2 text-sm text-muted hover:text-default"
-      >
-        <UIcon name="i-lucide-user-round" />
-        <span class="truncate">{{ whoami }}</span>
-      </NuxtLink>
+    <div v-if="devMode || orgName || whoami" class="mt-auto flex flex-col gap-3">
+      <PersonaSwitcher v-if="devMode" />
+      <div v-if="orgName || whoami" class="flex flex-col gap-1">
+        <p v-if="orgName" class="flex items-center gap-2 px-2.5 text-sm text-muted">
+          <UIcon name="i-lucide-building-2" />
+          <span class="truncate">{{ orgName }}</span>
+        </p>
+        <NuxtLink
+          v-if="whoami"
+          to="/configuration"
+          class="flex items-center gap-2 px-2.5 py-2 text-sm text-muted hover:text-default"
+        >
+          <UIcon name="i-lucide-user-round" />
+          <span class="truncate">{{ whoami }}</span>
+        </NuxtLink>
+      </div>
     </div>
   </div>
 </template>

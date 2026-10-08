@@ -1,6 +1,7 @@
 import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
+  actAsInputSchema,
   apiKeyListSchema,
   authStateSchema,
   createApiKeyInputSchema,
@@ -73,6 +74,18 @@ export const signOutContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/auth/sign-out',
   requestBodySchema: v.object({}),
+  responsesByStatusCode: { 200: authStateSchema, ...errorResponses },
+})
+
+/**
+ * Replace the caller's session with one for another person in the directory.
+ * Refused unless the deployment runs with `DEV_MODE=true`. Answers the auth
+ * state of the new session.
+ */
+export const actAsContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/dev/act-as',
+  requestBodySchema: actAsInputSchema,
   responsesByStatusCode: { 200: authStateSchema, ...errorResponses },
 })
 
