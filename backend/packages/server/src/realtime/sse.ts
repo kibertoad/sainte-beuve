@@ -21,7 +21,7 @@
 const HEARTBEAT_MS = 25_000
 
 /** How long a browser waits before reconnecting after the READER dropped the stream. */
-const RETRY_MS = 3_000
+export const RETRY_MS = 3_000
 
 /**
  * How long it waits when the SUBSCRIPTION died instead.
@@ -50,8 +50,10 @@ export interface SseStreamOptions {
    * in a way the REST inbox does not already cover.
    *
    * `end` closes the response, for a subscription that has died on its own.
+   * It tells the browser to wait `LOST_RETRY_MS` unless given another wait: a
+   * subscription that ended on schedule can be picked up again at once.
    */
-  subscribe: (emit: (payload: unknown) => void, end: () => void) => () => void
+  subscribe: (emit: (payload: unknown) => void, end: (retryMs?: number) => void) => () => void
 }
 
 /** What one open stream is holding: a subscription, and a timer feeding it. */
@@ -110,12 +112,12 @@ function attach(
       detach(state)
     }
   }
-  const end = (): void => {
+  const end = (retryMs: number = LOST_RETRY_MS): void => {
     detach(state)
     // The last thing the reader is told, and the only place this can be said:
     // the response is about to end and the next one is a new request. See
     // `LOST_RETRY_MS`.
-    write(`retry: ${LOST_RETRY_MS}\n\n`)
+    write(`retry: ${retryMs}\n\n`)
     try {
       controller.close()
     } catch {

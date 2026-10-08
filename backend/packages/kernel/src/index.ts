@@ -37,6 +37,7 @@ export type {
   ChatGateway,
   GatewayFactory,
   GuidedReviewGateway,
+  GuidedReviewWatchEvent,
   VcsAccount,
   VcsGateway,
   VcsIdentityGateway,

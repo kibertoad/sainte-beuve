@@ -7,6 +7,7 @@ import type {
   GuidedReviewExchange,
   GuidedReviewPostResult,
   GuidedReviewSessionView,
+  GuidedReviewStreamEvent,
   GuidedReviewTarget,
   GuidedReviewThreadView,
   OpenGuidedReviewThreadInput,
@@ -183,6 +184,12 @@ export interface AiReviewGateway {
 }
 
 /**
+ * What a guided review's upstream stream yields: the frames a screen receives,
+ * and `timeout` when cat-factory capped the connection and expects a reconnect.
+ */
+export type GuidedReviewWatchEvent = GuidedReviewStreamEvent | { kind: 'timeout' }
+
+/**
  * cat-factory's guided review of one pull request, over the published SDK.
  *
  * Every session belongs to the API key this deployment holds, so a pull request
@@ -220,6 +227,12 @@ export interface GuidedReviewGateway {
     input: EditGuidedReviewDraftInput,
   ): Promise<GuidedReviewCommentDraft>
   postDrafts(sessionId: string, input: PostGuidedReviewDraftsInput): Promise<GuidedReviewPostResult>
+  /**
+   * The session's changes as cat-factory pushes them, until it caps the
+   * connection or `signal` aborts. Rejects on the first iteration if the stream
+   * cannot be opened.
+   */
+  watch(sessionId: string, signal: AbortSignal): AsyncIterable<GuidedReviewWatchEvent>
 }
 
 /**

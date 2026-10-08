@@ -13,7 +13,11 @@ import type {
   PostGuidedReviewDraftsInput,
   RequestGuidedReviewDraftsInput,
 } from '@sainte-beuve/contracts'
-import { type GuidedReviewGateway, withDeadline } from '@sainte-beuve/kernel'
+import {
+  type GuidedReviewGateway,
+  type GuidedReviewWatchEvent,
+  withDeadline,
+} from '@sainte-beuve/kernel'
 import { refusalFor } from './refusals.js'
 
 export interface CatFactoryGuidedReviewOptions {
@@ -48,13 +52,21 @@ function isFor(session: GuidedReviewSession, target: GuidedReviewTarget): boolea
  */
 export class CatFactoryGuidedReviewGateway implements GuidedReviewGateway {
   private readonly client: CatFactoryClient
+  /**
+   * The same key without the transport deadline, for the stream alone. A
+   * deadline aborts the body as well as the connect, so the shared one would
+   * cut every stream at twenty seconds. cat-factory caps the stream's length
+   * itself, and the reader aborts it on leaving.
+   */
+  private readonly streaming: CatFactoryClient
 
   constructor(options: CatFactoryGuidedReviewOptions) {
-    this.client = new CatFactoryClient({
-      baseUrl: options.baseUrl,
-      apiKey: options.apiKey,
-      userAgent: 'sainte-beuve',
-      fetch: withDeadline(options.fetch),
+    const client = { baseUrl: options.baseUrl, apiKey: options.apiKey, userAgent: 'sainte-beuve' }
+    this.client = new CatFactoryClient({ ...client, fetch: withDeadline(options.fetch) })
+    this.streaming = new CatFactoryClient({
+      ...client,
+      timeoutMs: 0,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
     })
   }
 
@@ -150,6 +162,21 @@ export class CatFactoryGuidedReviewGateway implements GuidedReviewGateway {
     )
   }
 
+  async *watch(sessionId: string, signal: AbortSignal): AsyncGenerator<GuidedReviewWatchEvent> {
+    const stream = await this.relay(`stream guided review ${sessionId}`, () =>
+      this.streaming.guidedReviews.stream(sessionId, { signal, timeoutMs: 0 }),
+    )
+    try {
+      for await (const frame of stream) {
+        const event = watchEventOf(frame.event, () => frame.json())
+        if (event !== null) yield event
+        if (event?.kind === 'deleted' || event?.kind === 'timeout') return
+      }
+    } finally {
+      await stream.close()
+    }
+  }
+
   private async relay<T>(what: string, call: () => Promise<T>): Promise<T> {
     try {
       return await call()
@@ -157,4 +184,16 @@ export class CatFactoryGuidedReviewGateway implements GuidedReviewGateway {
       throw refusalFor(err, what, 'write')
     }
   }
+}
+
+/**
+ * One upstream frame as the port's event, or null for one this deployment has
+ * no use for (a keep-alive, or a kind cat-factory adds later).
+ */
+function watchEventOf(name: string, json: () => unknown): GuidedReviewWatchEvent | null {
+  if (name === 'deleted' || name === 'timeout') return { kind: name }
+  if (name !== 'state') return null
+  // The SDK decodes the frame; its shape is the session view `get` answers with.
+  const view = json() as GuidedReviewSessionView | null
+  return view === null ? null : { kind: 'state', view }
 }

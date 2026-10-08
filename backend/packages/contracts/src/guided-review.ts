@@ -1,3 +1,4 @@
+import { guidedReviewSessionViewSchema } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { vcsProviderSchema } from './vcs.js'
 
@@ -76,3 +77,15 @@ export const guidedReviewTargetQuerySchema = v.object({
     v.minValue(1),
   ),
 })
+
+/**
+ * One frame of a guided review's live stream: the whole session view whenever
+ * it changes, or word that the session is gone. A thread whose
+ * `pendingMessageId` clears has an answer to fetch; the frame does not carry
+ * it.
+ */
+export const guidedReviewStreamEventSchema = v.variant('kind', [
+  v.object({ kind: v.literal('state'), view: guidedReviewSessionViewSchema }),
+  v.object({ kind: v.literal('deleted') }),
+])
+export type GuidedReviewStreamEvent = v.InferOutput<typeof guidedReviewStreamEventSchema>

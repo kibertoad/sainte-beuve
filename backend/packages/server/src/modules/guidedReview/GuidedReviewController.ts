@@ -9,11 +9,13 @@ import {
   postGuidedReviewDraftsContract,
   refreshGuidedReviewContract,
   requestGuidedReviewDraftsContract,
+  streamGuidedReviewContract,
 } from '@sainte-beuve/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { GuidedReviewService } from './GuidedReviewService.js'
+import { guidedReviewStream } from './guidedReviewStream.js'
 
 /** cat-factory's guided review of a pull request. See `routes/guided-review.ts` in the contracts. */
 export function guidedReviewController(): Hono<AppEnv> {
@@ -32,6 +34,13 @@ export function guidedReviewController(): Hono<AppEnv> {
   buildHonoRoute(app, getGuidedReviewContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
     return c.json(await service.get(c.req.valid('param').sessionId), 200)
+  })
+
+  // The live half. A page that cannot hold it re-reads the session instead.
+  buildHonoRoute(app, streamGuidedReviewContract, async (c) => {
+    const container = c.get('container')
+    const watched = await new GuidedReviewService(container).watch(c.req.valid('param').sessionId)
+    return guidedReviewStream(watched, container.logger)
   })
 
   buildHonoRoute(app, refreshGuidedReviewContract, async (c) => {

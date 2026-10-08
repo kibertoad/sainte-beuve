@@ -9,6 +9,10 @@ import { GUIDED_REVIEW_QUESTION_MAX } from '@sainte-beuve/contracts'
 const props = defineProps<{
   session: GuidedReviewSession
   threadId: string
+  /** The answer this thread waits on, from the session's stream. */
+  pendingMessageId: string | null
+  /** Whether the session is streaming. While it is, the thread re-reads on its word instead of polling. */
+  live: boolean
   prUrl: string | null
 }>()
 
@@ -27,8 +31,24 @@ const waiting = computed(() =>
   messages.value.some((message) => message.status === 'pending' || message.status === 'running'),
 )
 
+/**
+ * Re-read the thread, and the session too when nothing is streaming it: a
+ * settled answer can have added drafts, and a new question a pending one.
+ */
+async function reread(): Promise<void> {
+  await refresh()
+  if (!props.live) emit('changed')
+}
+
+// The stream reports when a pending answer starts or settles, and that is the
+// moment to read the thread; the poll covers a page without the stream.
+watch(
+  () => props.pendingMessageId,
+  () => refresh(),
+)
+
 usePolling(
-  () => waiting.value,
+  () => !props.live && waiting.value,
   async () => {
     await refresh()
     if (!waiting.value) emit('changed')
@@ -38,12 +58,7 @@ usePolling(
 
 const question = ref('')
 const deep = ref(false)
-const { busy, run } = useApiAction({
-  refresh: async () => {
-    await refresh()
-    emit('changed')
-  },
-})
+const { busy, run } = useApiAction({ refresh: reread })
 
 async function ask(): Promise<void> {
   const content = question.value.trim()

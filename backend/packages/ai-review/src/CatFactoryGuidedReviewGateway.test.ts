@@ -173,6 +173,29 @@ describe('CatFactoryGuidedReviewGateway', () => {
     })
   })
 
+  it("relays cat-factory's stream as state frames, and stops at its cap", async () => {
+    const sse = [
+      `event: state\ndata: ${JSON.stringify(view())}\n\n`,
+      ': keep-alive\n\n',
+      'event: timeout\ndata: {}\n\n',
+      `event: state\ndata: ${JSON.stringify(view({ id: 'after-the-cap' }))}\n\n`,
+    ].join('')
+    const gateway = new CatFactoryGuidedReviewGateway({
+      baseUrl: 'https://cat-factory.example.com',
+      apiKey: 'cf_live_key.secret',
+      fetch: async () =>
+        new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+    })
+
+    const events = []
+    for await (const event of gateway.watch('grs-1', new AbortController().signal)) {
+      events.push(event)
+    }
+
+    expect(events.map((event) => event.kind)).toStrictEqual(['state', 'timeout'])
+    expect(events[0]).toMatchObject({ view: { session: { id: 'grs-1' } } })
+  })
+
   it('names the `write` scope when the key is too weak', async () => {
     const { gateway } = gatewayOver({
       'POST /api/v1/guided-reviews': {

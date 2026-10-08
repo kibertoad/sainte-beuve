@@ -3,7 +3,7 @@ import type {
   GuidedReviewTarget,
   GuidedReviewThreadView,
 } from '@sainte-beuve/contracts'
-import type { GuidedReviewGateway } from '@sainte-beuve/kernel'
+import type { GuidedReviewGateway, GuidedReviewWatchEvent } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { buildHarness, get, patch, post, type TestHarness } from './helpers.js'
@@ -55,6 +55,8 @@ function threadView(sessionId: string): GuidedReviewThreadView {
 
 interface StubGuidedReview extends GuidedReviewGateway {
   calls: string[]
+  /** What the next `watch` yields, in order. */
+  frames: GuidedReviewWatchEvent[]
 }
 
 /** cat-factory holding `grs-ours` on a registered repository and `grs-theirs` on another. */
@@ -73,8 +75,13 @@ function stubGuidedReview(): StubGuidedReview {
     calls.push(call)
     return Promise.resolve(answer)
   }
-  return {
+  const stub: StubGuidedReview = {
     calls,
+    frames: [],
+    async *watch(sessionId) {
+      calls.push(`watch ${sessionId}`)
+      yield* stub.frames
+    },
     find: (target: GuidedReviewTarget) => record(`find ${target.repo}`, null),
     open: (target) => record(`open ${target.repo}#${target.number}`, read('grs-ours')),
     get: (sessionId) => record(`get ${sessionId}`, read(sessionId)),
@@ -112,6 +119,7 @@ function stubGuidedReview(): StubGuidedReview {
         summary: { posted: null, error: null },
       }),
   }
+  return stub
 }
 
 async function registerProject(harness: TestHarness): Promise<void> {
@@ -219,6 +227,39 @@ describe('guided review', () => {
 
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ error: { details: { reason: 'draft_conflict' } } })
+  })
+
+  it('streams the session it opened on, then what cat-factory pushes, and reconnects at once on its cap', async () => {
+    catFactory.frames = [
+      { kind: 'state', view: { ...sessionView('grs-ours', 'sainte-beuve'), drafts: [] } },
+      { kind: 'timeout' },
+    ]
+
+    const res = await harness.app.fetch(get(`${BASE}/grs-ours/stream`))
+    const body = await res.text()
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/event-stream')
+    expect(body.match(/event: guidedReview/g)).toHaveLength(2)
+    expect(body).toContain('"kind":"state"')
+    expect(body.trimEnd().endsWith('retry: 3000')).toBe(true)
+    expect(catFactory.calls).toStrictEqual(['get grs-ours', 'watch grs-ours'])
+  })
+
+  it('relays a deleted session and tells the browser to back off', async () => {
+    catFactory.frames = [{ kind: 'deleted' }]
+
+    const body = await (await harness.app.fetch(get(`${BASE}/grs-ours/stream`))).text()
+
+    expect(body).toContain('"kind":"deleted"')
+    expect(body.trimEnd().endsWith('retry: 30000')).toBe(true)
+  })
+
+  it("streams nothing of another org's session", async () => {
+    const res = await harness.app.fetch(get(`${BASE}/grs-theirs/stream`))
+
+    expect(res.status).toBe(404)
+    expect(catFactory.calls).toStrictEqual(['get grs-theirs'])
   })
 
   it('names the missing configuration when no cat-factory is wired', async () => {

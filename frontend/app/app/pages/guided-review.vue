@@ -28,8 +28,19 @@ const view = computed<GuidedReviewSessionView | null>(() => data.value ?? null)
 const session = computed(() => view.value?.session ?? null)
 const threads = computed(() => view.value?.threads ?? [])
 
+// The stream keeps the view current; the poll is what a page without it falls
+// back on, so it only runs while the stream is down.
+const stream = useGuidedReviewStream(() => session.value?.id ?? null, {
+  state: (next) => {
+    data.value = next
+  },
+  deleted: () => {
+    data.value = null
+  },
+})
+
 usePolling(
-  () => view.value !== null && isSessionWorking(view.value),
+  () => !stream.live.value && view.value !== null && isSessionWorking(view.value),
   () => refresh(),
   () => (view.value === null ? FAST_POLL_MS : sessionPollInterval(view.value)),
 )
@@ -93,6 +104,11 @@ async function askNew(): Promise<void> {
   const content = question.value.trim()
   if (content.length === 0) return
   if (await startThread({ content, depth: deep.value ? 'deep' : 'inline' })) question.value = ''
+}
+
+/** What the active thread waits on, as the session last reported it. */
+function pendingOf(threadId: string): string | null {
+  return threads.value.find((thread) => thread.id === threadId)?.pendingMessageId ?? null
 }
 
 const overviewReady = computed(() => session.value?.overview.status === 'complete')
@@ -221,6 +237,8 @@ const overviewReady = computed(() => session.value?.overview.status === 'complet
                 :key="activeThreadId"
                 :session="session"
                 :thread-id="activeThreadId"
+                :pending-message-id="pendingOf(activeThreadId)"
+                :live="stream.live.value"
                 :pr-url="prUrl"
                 @changed="refresh()"
               />

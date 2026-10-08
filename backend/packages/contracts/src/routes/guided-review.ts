@@ -1,4 +1,4 @@
-import { defineApiContract } from '@toad-contracts/valibot'
+import { defineApiContract, sseResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   askGuidedReviewSchema,
@@ -7,6 +7,7 @@ import {
   guidedReviewExchangeSchema,
   guidedReviewPostResultSchema,
   guidedReviewSessionViewSchema,
+  guidedReviewStreamEventSchema,
   guidedReviewTargetQuerySchema,
   guidedReviewTargetSchema,
   guidedReviewThreadViewSchema,
@@ -21,8 +22,8 @@ import { errorResponses, singleStringParam, stringParams } from './_shared.js'
 // GuidedReviewController in @sainte-beuve/server.
 //
 // Every write answers with the state cat-factory persisted, at once: the
-// overview and the answers are generated afterwards, so a screen re-reads the
-// session or the thread until nothing in it is pending. The one route that
+// overview and the answers are generated afterwards, and the session's stream
+// says when they land. A screen that cannot hold the stream re-reads instead. The one route that
 // reaches the pull request is the explicit post of named comment drafts.
 // ---------------------------------------------------------------------------
 
@@ -137,4 +138,19 @@ export const postGuidedReviewDraftsContract = defineApiContract({
   pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}/comment-drafts/post`,
   requestBodySchema: postGuidedReviewDraftsSchema,
   responsesByStatusCode: { 200: guidedReviewPostResultSchema, ...errorResponses },
+})
+
+/**
+ * The session, live: its current view first, then a frame each time cat-factory
+ * reports a change. The stream ends when cat-factory caps its own connection,
+ * and the browser reconnects.
+ */
+export const streamGuidedReviewContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: sessionParams,
+  pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}/stream`,
+  responsesByStatusCode: {
+    200: sseResponse({ guidedReview: guidedReviewStreamEventSchema }),
+    ...errorResponses,
+  },
 })

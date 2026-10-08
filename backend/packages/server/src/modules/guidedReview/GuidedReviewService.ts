@@ -11,10 +11,19 @@ import type {
   PostGuidedReviewDraftsInput,
   RequestGuidedReviewDraftsInput,
 } from '@sainte-beuve/contracts'
-import { type GuidedReviewGateway, NotFoundError } from '@sainte-beuve/kernel'
+import {
+  type GuidedReviewGateway,
+  type GuidedReviewWatchEvent,
+  NotFoundError,
+} from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { resolveGuidedReview } from '../../integrations/resolve.js'
+
+export interface GuidedReviewWatch {
+  initial: GuidedReviewSessionView
+  events: (signal: AbortSignal) => AsyncIterable<GuidedReviewWatchEvent>
+}
 
 const NOT_CONFIGURED =
   'cat-factory is not configured for this deployment: a guided review needs a base URL and an ' +
@@ -102,6 +111,17 @@ export class GuidedReviewService {
   ): Promise<GuidedReviewPostResult> {
     await this.get(sessionId)
     return (await this.gateway()).postDrafts(sessionId, input)
+  }
+
+  /**
+   * The session as it stands, checked against this org once, and its changes
+   * as cat-factory pushes them. The check happens before the stream is
+   * answered, so a foreign session is a 404 rather than an empty stream.
+   */
+  async watch(sessionId: string): Promise<GuidedReviewWatch> {
+    const initial = await this.get(sessionId)
+    const gateway = await this.gateway()
+    return { initial, events: (signal) => gateway.watch(sessionId, signal) }
   }
 
   /**

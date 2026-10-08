@@ -40,6 +40,7 @@ import {
   signOutContract,
   startSessionSignInContract,
   streamAttentionContract,
+  streamGuidedReviewContract,
   updateProjectContract,
   updateReviewerContract,
 } from '@sainte-beuve/contracts'
@@ -256,6 +257,9 @@ export function createSainteBeuveApi(apiBase: string) {
      * live half survives a laptop closing. The contract still owns the path.
      */
     attentionStreamUrl: `${apiBase}${API_PREFIX}${mapApiContractToPath(streamAttentionContract)}`,
+    /** The same, for one guided review. */
+    guidedReviewStreamUrl: (sessionId: string) =>
+      `${apiBase}${API_PREFIX}${streamGuidedReviewContract.pathResolver({ sessionId })}`,
 
     // Who is calling, and whether this deployment cares. Never refused, in
     // either mode: a screen that had to be signed in to discover that it is not
