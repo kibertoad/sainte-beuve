@@ -34,6 +34,7 @@ export function useGuidedReviewStream(
   let reconnect: ReturnType<typeof setTimeout> | null = null
   let backoffMs = RECONNECT_MS
   let openedAt = 0
+  let opened = false
   let unmounted = false
 
   function read(event: Event): void {
@@ -59,21 +60,46 @@ export function useGuidedReviewStream(
     reconnect = null
     openedAt = Date.now()
     source = new EventSource(api.guidedReviewStreamUrl(id), { withCredentials: true })
+    opened = false
     source.addEventListener('open', () => {
+      opened = true
       live.value = true
     })
     source.addEventListener('guidedReview', read)
     source.addEventListener('error', dropped)
   }
 
-  function dropped(): void {
+  async function dropped(): Promise<void> {
     live.value = false
     source?.close()
     source = null
     if (reconnect !== null) return
+    if (!opened && (await sessionIsGone())) {
+      close()
+      handlers.deleted()
+      return
+    }
+    if (unmounted || reconnect !== null) return
     const wait = Date.now() - openedAt >= HEALTHY_MS ? RECONNECT_MS : backoffMs
     backoffMs = Math.min(wait * 2, RECONNECT_MAX_MS)
     reconnect = setTimeout(connect, wait)
+  }
+
+  /**
+   * Whether a refused stream was refused because the session is gone.
+   *
+   * EventSource reports a 404 as a bare error, the same as a dropped network,
+   * so the session is read once to tell the two apart.
+   */
+  async function sessionIsGone(): Promise<boolean> {
+    const id = sessionId()
+    if (id === null) return false
+    try {
+      await api.getGuidedReview(id)
+      return false
+    } catch (err) {
+      return err instanceof ApiError && err.statusCode === 404
+    }
   }
 
   function close(): void {

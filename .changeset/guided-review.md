@@ -21,8 +21,10 @@ the board.
 - `/api/v1/guided-reviews` relays cat-factory's public guided-review surface
   through `@cat-factory/sdk`. Its wire shapes are cat-factory's own schemas,
   imported from `@cat-factory/contracts`.
-- Every session is checked against the org's registered projects before it is
-  read or acted on, so one cat-factory key can serve several orgs.
+- Every session is checked against the org that holds the claim on its
+  repository before it is read or acted on, so one cat-factory key can serve
+  several orgs. Where two orgs hold one repository, the older claim gets its
+  sessions, the same rule webhook intake follows.
 - A cat-factory refusal carries cat-factory's reason (`repo_not_linked`,
   `thread_busy`, `draft_conflict`, `session_stale`) in `details.reason`, and the
   page says what to do about each.
@@ -31,6 +33,7 @@ the board.
   page follows it and re-reads a thread only when its pending answer settles.
   While the stream is down the page polls instead, slowly while it waits on a
   deep answer, which takes minutes.
+  A stream refused because its session is gone stops instead of reconnecting.
 - `sseStream`'s `end` takes the retry interval to send, so a stream that ended on
   schedule is resumed at once.
 - The guided reviewer needs `CAT_FACTORY_BASE_URL` and a key, but no service id.

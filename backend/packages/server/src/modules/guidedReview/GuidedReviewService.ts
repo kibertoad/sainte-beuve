@@ -125,14 +125,17 @@ export class GuidedReviewService {
   }
 
   /**
-   * Refuse a pull request in a repository this org has not registered.
+   * Refuse a pull request in a repository this org does not hold the claim on.
    *
-   * Named by the session when there is one, so a foreign session id says no
-   * more than a missing one would.
+   * The claim, not merely a registration: sessions belong to the cat-factory
+   * key, so two orgs holding one repository would otherwise share its sessions.
+   * The oldest claim is the one webhook intake follows, and it is the one that
+   * answers here. Named by the session when there is one, so a foreign session
+   * id says no more than a missing one would.
    */
   private async assertRegistered(target: GuidedReviewTarget, sessionId?: string): Promise<void> {
-    const project = await this.container.repositories.projects.getByRef(target)
-    if (project !== null) return
+    const holder = await this.container.stores.tenancy.findOrgIdForProject(target)
+    if (holder === this.container.orgId) return
     throw new NotFoundError(
       sessionId === undefined
         ? `${target.owner}/${target.repo} is not a registered project`

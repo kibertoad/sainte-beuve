@@ -6,6 +6,7 @@ import type {
 import type { GuidedReviewGateway, GuidedReviewWatchEvent } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { withOrg } from '../src/container.js'
 import { buildHarness, get, patch, post, type TestHarness } from './helpers.js'
 
 /**
@@ -181,6 +182,27 @@ describe('guided review', () => {
     expect(read.status).toBe(404)
     expect(asked.status).toBe(404)
     expect(catFactory.calls).toStrictEqual(['get grs-theirs', 'get grs-theirs'])
+  })
+
+  it('leaves the sessions of a repository two orgs hold to the older claim', async () => {
+    await withOrg(harness.container, 'org-earlier').repositories.projects.create({
+      id: 'project-earlier',
+      provider: 'github',
+      owner: 'kibertoad',
+      repo: 'sainte-beuve',
+      webUrl: null,
+      skills: [],
+      createdAt: -1,
+    })
+
+    const read = await harness.app.fetch(get(`${BASE}/grs-ours`))
+    const opened = await harness.app.fetch(
+      post(BASE, { provider: 'github', owner: 'kibertoad', repo: 'sainte-beuve', number: 7 }),
+    )
+
+    expect(read.status).toBe(404)
+    expect(opened.status).toBe(404)
+    expect(catFactory.calls).toStrictEqual(['get grs-ours'])
   })
 
   it('opens a thread on a session of its own', async () => {
