@@ -129,6 +129,15 @@ export interface WorkerEnv {
   APP_BASE_URL?: string
 
   /**
+   * Where THIS Worker is served from, as a browser reaches it
+   * (`https://api.sainte-beuve.example.com`). The OAuth callback a host sends
+   * the browser back to is built on it rather than on the request's `Host`,
+   * which the caller writes; without it a sign-in can only be started from
+   * `wrangler dev` on loopback. See `callbackOrigin` in @sainte-beuve/server.
+   */
+  API_BASE_URL?: string
+
+  /**
    * Master key for the credentials an operator enters on the Configuration
    * screen, base64, 32 bytes or more (`openssl rand -base64 32`). Without it the
    * screen refuses to store anything rather than writing a token in the clear,

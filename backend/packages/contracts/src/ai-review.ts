@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { webUrlSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // AI-review wire contracts.
@@ -203,7 +204,7 @@ export const aiReviewRunSchema = v.object({
    */
   catFactoryRunId: v.nullable(v.string()),
   /** Deep link into the cat-factory instance that ran it. */
-  catFactoryUrl: v.nullable(v.string()),
+  catFactoryUrl: v.nullable(webUrlSchema),
   /** Short verdict text once the run completes. The full output lives in cat-factory. */
   summary: v.nullable(v.string()),
   failureReason: v.nullable(v.string()),

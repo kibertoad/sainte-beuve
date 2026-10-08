@@ -224,6 +224,14 @@ export interface AppContainer {
    * not say, and then a callback answers with a plain page instead of redirecting.
    */
   appBaseUrl: string | null
+  /**
+   * Where THIS API is served from, as the browser reaches it. The OAuth
+   * callback is built from it, because the one the request arrived with is
+   * whatever its `Host` header said. Null when the deployment did not say, and
+   * then a sign-in can only be started on a loopback host. See
+   * `callbackOrigin`.
+   */
+  apiBaseUrl: string | null
 }
 
 export interface ContainerOptions {
@@ -248,6 +256,7 @@ export interface ContainerOptions {
   slack?: Partial<SlackWiring>
   auth?: Partial<AuthWiring>
   appBaseUrl?: string | null
+  apiBaseUrl?: string | null
 }
 
 /**
@@ -342,6 +351,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     slack: slackWiring(options.slack),
     auth: authWiring(options.auth),
     appBaseUrl: configured(options.appBaseUrl),
+    apiBaseUrl: configured(options.apiBaseUrl),
   }
 }
 

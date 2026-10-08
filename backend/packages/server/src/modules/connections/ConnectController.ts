@@ -80,7 +80,9 @@ async function finishSignIn(c: Context<AppEnv>, provider: VcsProvider): Promise<
     provider,
     code,
     state: c.req.query('state') ?? null,
-    origin: new URL(c.req.url).origin,
+    // Not the callback's origin: the service derives that from configuration,
+    // and only once the state has verified. See `callbackOrigin`.
+    requestUrl: c.req.url,
     nonce,
   })
   // The cookie is set BEFORE the redirect, on the response that carries it: a

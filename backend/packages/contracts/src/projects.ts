@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import { skillSchema } from './reviewers.js'
-import { projectRefSchema, vcsProviderSchema } from './vcs.js'
+import { projectRefSchema, vcsProviderSchema, webUrlSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // The projects a workspace watches.
@@ -31,7 +31,7 @@ export const projectSchema = v.object({
    * The project's page on its host. Stored rather than derived: a self-hosted
    * GitLab has no address anything here could guess.
    */
-  webUrl: v.nullable(v.pipe(v.string(), v.url())),
+  webUrl: v.nullable(webUrlSchema),
   /** The vocabulary an attention request on this project picks its skills from. */
   skills: v.array(skillSchema),
   createdAt: v.number(),
@@ -42,7 +42,7 @@ export const createProjectSchema = v.object({
   provider: vcsProviderSchema,
   owner: projectRefSchema.entries.owner,
   repo: projectRefSchema.entries.repo,
-  webUrl: v.optional(v.nullable(v.pipe(v.string(), v.url())), null),
+  webUrl: v.optional(v.nullable(webUrlSchema), null),
   /** Absent means {@link DEFAULT_PROJECT_SKILLS}; an explicit `[]` means the team wants none. */
   skills: v.optional(v.array(skillSchema)),
 })
@@ -52,7 +52,7 @@ export type CreateProjectInput = v.InferInput<typeof createProjectSchema>
 
 export const updateProjectSchema = v.partial(
   v.object({
-    webUrl: v.nullable(v.pipe(v.string(), v.url())),
+    webUrl: v.nullable(webUrlSchema),
     skills: v.array(skillSchema),
   }),
 )

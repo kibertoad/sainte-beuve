@@ -172,7 +172,12 @@ async function remove(project: Project) {
               <UBadge variant="subtle" color="neutral">
                 {{ vcsDisplayName(project.provider) }}
               </UBadge>
-              <ULink v-if="project.webUrl" :to="project.webUrl" target="_blank" class="font-medium">
+              <ULink
+                v-if="safeHref(project.webUrl)"
+                :to="safeHref(project.webUrl)"
+                target="_blank"
+                class="font-medium"
+              >
                 {{ project.owner }}/{{ project.repo }}
               </ULink>
               <span v-else class="font-medium">{{ project.owner }}/{{ project.repo }}</span>

@@ -76,6 +76,7 @@ export function buildContainer(config: NodeConfig, store: NodeStore, logger: Log
       sessionLifetimeMs: config.auth.sessionLifetimeMs,
     },
     appBaseUrl: config.appBaseUrl ?? null,
+    apiBaseUrl: config.apiBaseUrl,
   })
 }
 

@@ -191,7 +191,7 @@ async function release(commitmentId: string) {
           >
             <div class="min-w-0">
               <ULink
-                :to="commitment.pullRequest.url"
+                :to="safeHref(commitment.pullRequest.url)"
                 target="_blank"
                 class="font-medium line-clamp-2"
               >
@@ -210,7 +210,7 @@ async function release(commitmentId: string) {
                 Hand back
               </UButton>
               <UButton
-                :to="commitment.pullRequest.url"
+                :to="safeHref(commitment.pullRequest.url)"
                 target="_blank"
                 size="sm"
                 variant="ghost"

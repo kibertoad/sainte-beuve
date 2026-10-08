@@ -31,17 +31,16 @@ export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, getAuthStateContract, async (c) => {
-    return c.json(await new AuthService(c.get('container')).state(principalOf(c)), 200)
+    return c.json(await new AuthService(c.get('container')).state(principalOf(c), c.req.url), 200)
   })
 
   buildHonoRoute(app, startSessionSignInContract, async (c) => {
     const container = c.get('container')
-    // The API's own origin, from the request rather than from configuration: the
-    // redirect URI the host matches has to name the origin that will receive the
-    // callback, and that is the one this request arrived on.
+    // The URL this arrived on, which the service does NOT build the callback
+    // on: its host is whatever the caller wrote. See `callbackOrigin`.
     const { url, nonce } = await new ConnectionsService(container).signInUrl(
       c.req.valid('param').provider,
-      new URL(c.req.url).origin,
+      c.req.url,
       'session',
       // The one place an org is chosen by something a caller sent, and the
       // choice goes into the SIGNED state rather than riding the query string
@@ -64,7 +63,7 @@ export function authController(): Hono<AppEnv> {
     // sweep or by a sign-out somewhere else, and leaving it there means every
     // request carries a value that resolves to nobody.
     clearSessionCookie(c, container)
-    return c.json(await new AuthService(container).state({ kind: 'anonymous' }), 200)
+    return c.json(await new AuthService(container).state({ kind: 'anonymous' }, c.req.url), 200)
   })
 
   apiKeyRoutes(app)

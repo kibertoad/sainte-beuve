@@ -75,6 +75,13 @@ describe('loadConfig', () => {
     )
   })
 
+  it('reads the API origin a callback is built on, and a blank one as none', () => {
+    expect(loadConfig({ API_BASE_URL: '' }).apiBaseUrl).toBeNull()
+    expect(loadConfig({ API_BASE_URL: 'https://api.example.com' }).apiBaseUrl).toBe(
+      'https://api.example.com',
+    )
+  })
+
   it('treats a partly configured cat-factory as not configured', () => {
     // A base URL with no service id names no service, so a gateway built from it
     // would fail on the first delegation instead of on `/health`.

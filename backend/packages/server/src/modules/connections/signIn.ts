@@ -1,6 +1,6 @@
 import type { VcsProvider } from '@sainte-beuve/contracts'
 import { vcsOauthCredentialKey } from '@sainte-beuve/contracts'
-import type { VcsAccount } from '@sainte-beuve/kernel'
+import { ForbiddenError, type VcsAccount } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { hintOf } from '../../integrations/credentials.js'
@@ -23,6 +23,10 @@ import type { SignInPurpose } from './ConnectionsService.js'
 const NO_STATE =
   'Connecting an integration needs an encryption key, because the round trip has to be signed ' +
   'and the credential it returns has to be sealed: set SETTINGS_ENCRYPTION_KEY'
+
+const PAUSED =
+  'This account is paused in this org\u2019s directory, so it cannot sign in. Ask an admin of ' +
+  'the org to make you available again.'
 
 /** A session the callback has to hand to the browser. See `writeSessionCookie`. */
 export interface IssuedSession {
@@ -90,6 +94,12 @@ export async function establishSession(
     input.purpose === 'connect'
       ? await people.reviewerFor(provider, account)
       : await people.enrol(provider, account)
+  // PAUSED IS "NOT THEM, FOR NOW", AND A SIGN-IN DOES NOT UNDO IT. Pausing
+  // revokes every session (see `ReviewerService.update`), but the identity link
+  // survives, so without this a paused person clicks "Sign in" and is back with
+  // the same role, and a paused admin un-pauses themselves. Asked on BOTH
+  // purposes: a connect is an admin's act, and a paused admin is not one.
+  if (reviewer.availability === 'paused') throw new ForbiddenError(PAUSED)
   const { token, session } = await new SessionService(container).issue({
     reviewerId: reviewer.id,
     provider,

@@ -162,18 +162,6 @@ describe('GitHub and Slack connections', () => {
     expect(state.appInstallable).toBe(false)
   })
 
-  it('sends the browser to GitHub with a state it can check on the way back', async () => {
-    const identity = stubSignIn()
-    const signing = keyed({ gateways: stubGateways({ signIn: everyHost(identity) }) })
-
-    const url = new URL(await urlFrom(signing, `${CONNECTIONS}/github/sign-in`))
-    expect(url.origin).toBe('https://github.com')
-    expect(url.searchParams.get('state')).not.toBeNull()
-    // The redirect URI names the host this request arrived on, because that is
-    // the host that will receive the callback.
-    expect(identity.redirects).toStrictEqual(['http://localhost/connect/github/callback'])
-  })
-
   it('stores the credential a sign-in produced, and says whose it is', async () => {
     const signing = keyed({
       gateways: stubGateways({
@@ -320,6 +308,67 @@ describe('GitHub and Slack connections', () => {
 })
 
 /** What the Slack card on the Configuration screen renders from. */
+describe('the callback a sign-in names', () => {
+  it('sends the browser to GitHub with a state it can check on the way back', async () => {
+    const identity = stubSignIn()
+    const signing = keyed({ gateways: stubGateways({ signIn: everyHost(identity) }) })
+
+    const url = new URL(await urlFrom(signing, `${CONNECTIONS}/github/sign-in`))
+    expect(url.origin).toBe('https://github.com')
+    expect(url.searchParams.get('state')).not.toBeNull()
+    // Nothing configured, on loopback: the request's own origin, which is what a
+    // laptop has and the only host where trusting it costs nobody but the caller.
+    expect(identity.redirects).toStrictEqual(['http://localhost/connect/github/callback'])
+  })
+
+  it("names the configured API origin in the redirect, whatever the request's Host said", async () => {
+    // On Node `c.req.url` is built from the `Host` header. GitHub accepts any
+    // subdomain of the registered callback host, so a caller who controls one
+    // would otherwise receive the code a victim's browser carries back.
+    const identity = stubSignIn()
+    const signing = keyed({
+      apiBaseUrl: 'https://api.example.com/',
+      gateways: stubGateways({ signIn: everyHost(identity) }),
+    })
+    const res = await signing.app.fetch(
+      new Request(`http://evil.api.example.com${CONNECTIONS}/github/sign-in`),
+    )
+    expect(res.status).toBe(200)
+    expect(identity.redirects).toStrictEqual(['https://api.example.com/connect/github/callback'])
+  })
+
+  it('refuses an API_BASE_URL with a path rather than dropping the path', async () => {
+    // The callback is `<origin>/connect/<host>/callback`, so a path would be lost
+    // without a word and the redirect would not be the one the operator registered.
+    const identity = stubSignIn()
+    const signing = keyed({
+      apiBaseUrl: 'https://example.com/api',
+      gateways: stubGateways({ signIn: everyHost(identity) }),
+    })
+    const res = await signing.app.fetch(
+      new Request(`https://example.com${CONNECTIONS}/github/sign-in`),
+    )
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({
+      error: { code: 'misconfigured', message: expect.stringContaining('API_BASE_URL') },
+    })
+    expect(identity.redirects).toStrictEqual([])
+  })
+
+  it('refuses to start a sign-in on a public host it was not told the origin of', async () => {
+    const identity = stubSignIn()
+    const signing = keyed({ gateways: stubGateways({ signIn: everyHost(identity) }) })
+    for (const path of [`${CONNECTIONS}/github/sign-in`, '/api/v1/auth/sign-in/github']) {
+      const res = await signing.app.fetch(new Request(`https://api.example.com${path}`))
+      expect(res.status).toBe(503)
+      expect(await res.json()).toMatchObject({
+        error: { code: 'unavailable', message: expect.stringContaining('API_BASE_URL') },
+      })
+    }
+    expect(identity.redirects).toStrictEqual([])
+  })
+})
+
 describe('the Slack connection', () => {
   it('reports the two halves separately', async () => {
     // Posting out needs a bot token and trusting what comes back needs the
