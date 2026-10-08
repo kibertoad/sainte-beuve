@@ -21,7 +21,9 @@ function reportNavigation(event: MouseEvent): void {
   if (event.target instanceof Element && event.target.closest('a')) emit('navigate')
 }
 
-const links = [
+const route = useRoute()
+
+const links = computed(() => [
   { label: 'Workspace', to: '/', icon: 'i-lucide-layout-dashboard' },
   { label: 'Projects', to: '/projects', icon: 'i-lucide-folder-git-2' },
   { label: 'Board', to: '/board', icon: 'i-lucide-git-pull-request' },
@@ -30,8 +32,15 @@ const links = [
   // the Access card, which holds the only sign-out button there is, and a rail
   // that hid it from the people it refuses would leave them signed in with no
   // way out. What the page itself shows them is its own decision.
-  { label: 'Configuration', to: '/configuration', icon: 'i-lucide-settings' },
-]
+  {
+    label: 'Configuration',
+    to: '/configuration',
+    icon: 'i-lucide-settings',
+    // An integration's screen is not a child route of the list, so the router
+    // alone would not mark this one active there.
+    active: route.path.startsWith('/configuration'),
+  },
+])
 
 // Read rather than refreshed: the shell does that once, and this renders in two
 // places at once, so a fetch here would be the same call made twice.

@@ -63,6 +63,11 @@ const SIGN_IN_PURPOSES: readonly SignInPurpose[] = ['connect', 'session']
 
 const APP_INSTALL_FLOW = 'github-app-install'
 
+/** The SPA screen a host's connect round trip was started from, and so returns to. */
+function integrationScreen(provider: VcsProvider): string {
+  return `/configuration/${provider}`
+}
+
 const NO_APP =
   'This deployment has no GitHub App to install: set GITHUB_APP_SLUG (with GITHUB_APP_ID and ' +
   'GITHUB_APP_PRIVATE_KEY) to offer one'
@@ -125,7 +130,7 @@ export class ConnectionsService {
    */
   async appInstallUrl(): Promise<StartedFlow> {
     const slug = requireCapability(this.container.github.appSlug, NO_APP)
-    const { state, nonce } = await this.mintState(APP_INSTALL_FLOW)
+    const { state, nonce } = await this.mintState(APP_INSTALL_FLOW, integrationScreen('github'))
     const url = new URL(`/apps/${slug}/installations/new`, 'https://github.com')
     url.searchParams.set('state', state)
     return { url: url.toString(), nonce }
@@ -153,12 +158,12 @@ export class ConnectionsService {
       noOAuth(provider),
     )
     // A session sign-in lands back on the workspace and a connect lands on the
-    // Configuration screen, because those are the pages the two were started
-    // from and a round trip that dumps somebody somewhere else reads as a
+    // host's own Configuration screen, because those are the pages the two were
+    // started from and a round trip that dumps somebody somewhere else reads as a
     // failure even when it worked.
     const { state, nonce } = await this.mintState(
       signInFlow(provider, purpose),
-      purpose === 'connect' ? '/configuration' : '/',
+      purpose === 'connect' ? integrationScreen(provider) : '/',
       await this.orgIdFor(orgSlug),
     )
     return {
@@ -335,7 +340,7 @@ export class ConnectionsService {
 
   private async mintState(
     flow: string,
-    returnPath = '/configuration',
+    returnPath: string,
     orgId: string = this.container.orgId,
   ): Promise<{ state: string; nonce: string }> {
     const signer = requireCapability(this.container.states, NO_STATE)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { IntegrationTokenStatus, VcsAuthMethod, VcsConnection } from '@sainte-beuve/contracts'
+import type { IntegrationTokenStatus, VcsConnection } from '@sainte-beuve/contracts'
 import { signInCallbackPath, vcsDisplayName } from '@sainte-beuve/contracts'
 
 // How this deployment reaches one source-control host. Several ways to
@@ -38,31 +38,7 @@ defineExpose({ clearDraft })
 
 const hostName = computed(() => vcsDisplayName(props.connection.provider))
 
-/**
- * What the deployment is authenticating as, in one line. The order the methods
- * win in is the API's (`vcsAuthMethodSchema`), so this only has to render the
- * answer rather than work it out.
- */
-const ACTIVE_LABEL = {
-  app: 'Connected as the GitHub App',
-  oauth: 'Signed in',
-  pat: 'Using a personal access token',
-  environment: 'Using the token from the deployment environment',
-} satisfies Record<VcsAuthMethod, string>
-
-function lookup<T>(table: Record<string, T | undefined>, key: string): T | undefined {
-  return table[key]
-}
-
-const active = computed(() => {
-  const method = props.connection.activeMethod
-  if (method === null) return { color: 'neutral' as const, label: 'Not connected' }
-  const suffix = props.connection.account === null ? '' : ` as ${props.connection.account}`
-  return {
-    color: method === 'app' ? ('success' as const) : ('info' as const),
-    label: `${lookup(ACTIVE_LABEL, method) ?? method}${method === 'oauth' ? suffix : ''}`,
-  }
-})
+const active = computed(() => vcsBadge(props.connection))
 
 const offers = computed(() => ({
   // The install button follows `appInstallable`, not the method list: an App can

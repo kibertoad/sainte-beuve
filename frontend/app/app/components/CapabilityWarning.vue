@@ -36,7 +36,9 @@ const missing = computed(() => !capabilities.available(props.need))
       {{ descriptor.missing }}
       <template v-if="auth.isAdmin.value">
         Set it up on the
-        <ULink to="/configuration" class="underline">Configuration screen</ULink>.
+        <ULink to="/configuration/cat-factory" class="underline"
+          >cat-factory configuration screen</ULink
+        >.
       </template>
       <template v-else>Ask an admin of this org to set it up on the Configuration screen.</template>
     </template>

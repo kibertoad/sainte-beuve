@@ -73,20 +73,7 @@ const suggesting = computed(
   () => props.connection.config === null && props.connection.suggested !== null,
 )
 
-interface Badge {
-  color: 'success' | 'warning' | 'neutral'
-  label: string
-}
-
-/** The badge, by the first rule the connection meets. */
-const BADGES: readonly (Badge & { when: (connection: CatFactoryConnection) => boolean })[] = [
-  { when: (c) => c.aiReviewReady, color: 'success', label: 'Ready' },
-  { when: (c) => c.guidedReviewReady, color: 'warning', label: 'Guided review only' },
-]
-
-const NOT_CONFIGURED: Badge = { color: 'neutral', label: 'Not configured' }
-
-const badge = computed(() => BADGES.find((rule) => rule.when(props.connection)) ?? NOT_CONFIGURED)
+const badge = computed(() => catFactoryBadge(props.connection))
 
 const checking = ref(false)
 const result = ref<CatFactoryCheck | null>(null)

@@ -42,11 +42,7 @@ defineExpose({
 
 const requestUrl = computed(() => `${props.apiBase}${props.connection.requestPath}`)
 
-const badge = computed(() =>
-  props.connection.ready
-    ? { color: 'success' as const, label: 'Delivering' }
-    : { color: 'neutral' as const, label: 'Not configured' },
-)
+const badge = computed(() => slackBadge(props.connection))
 </script>
 
 <template>

@@ -173,7 +173,7 @@ describe('GitHub and Slack connections', () => {
     const callback = await signIn(signing)
     expect(callback.status).toBe(302)
     expect(callback.headers.get('location')).toBe(
-      'https://board.example.com/configuration?connected=github',
+      'https://board.example.com/configuration/github?connected=github',
     )
 
     const state = await github(signing)
