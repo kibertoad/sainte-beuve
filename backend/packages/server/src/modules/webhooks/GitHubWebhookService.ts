@@ -253,8 +253,8 @@ export class GitHubWebhookService {
    * fault and the operator's copy stays in the log, which is where somebody who
    * can act on it is looking.
    *
-   * What does go through unchanged is the board's own answer — "no reviewer
-   * rev-3", "a run is already in flight" — because that is what the person who
+   * What does go through unchanged is the board's own answer ("no reviewer
+   * rev-3", "a run is already in flight"), because that is what the person who
    * asked actually needs. The same codes from cat-factory are NOT the board's,
    * and `upstreamOf` is how the two are told apart.
    */

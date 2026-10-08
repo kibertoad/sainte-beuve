@@ -97,7 +97,7 @@ export async function establishSession(
   // PAUSED IS "NOT THEM, FOR NOW", AND A SIGN-IN DOES NOT UNDO IT. Pausing
   // revokes every session (see `ReviewerService.update`), but the identity link
   // survives, so without this a paused person clicks "Sign in" and is back with
-  // the same role — and a paused admin un-pauses themselves. Asked on BOTH
+  // the same role, and a paused admin un-pauses themselves. Asked on BOTH
   // purposes: a connect is an admin's act, and a paused admin is not one.
   if (reviewer.availability === 'paused') throw new ForbiddenError(PAUSED)
   const { token, session } = await new SessionService(container).issue({

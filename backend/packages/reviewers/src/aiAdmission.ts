@@ -4,8 +4,8 @@ import { AI_REVIEW_IN_FLIGHT_STATUSES, type AiReviewRun } from '@sainte-beuve/co
  * WHETHER ONE MORE AI REVIEW MAY BE FILED ON A REVIEW, decided over the runs it
  * already has.
  *
- * A run is a billed cat-factory job, and every way to ask for one — the board's
- * button, the AI-review label, `@bot ai`, `/review ai` — is one gesture from a
+ * A run is a billed cat-factory job, and every way to ask for one (the board's
+ * button, the AI-review label, `@bot ai`, `/review ai`) is one gesture from a
  * person who does not pay for it. So the question is asked in one place, below
  * every surface, rather than as a guard on each:
  *
@@ -28,8 +28,14 @@ export const AI_REVIEW_HOURLY_LIMIT = 3
 
 const HOUR_MS = 60 * 60 * 1000
 
-/** How long a run that never heard back from cat-factory still counts as in flight. */
-export const AI_REVIEW_FILING_TIMEOUT_MS = 10 * 60 * 1000
+/**
+ * How long a run still `requested`, with no cat-factory task, counts as alive.
+ * Admission stops counting it after this, and the reminder sweep writes it off.
+ *
+ * Generous on purpose: it only has to outlast the one call that moves a run out
+ * of `requested`, and a Worker's whole wall-clock budget is a fraction of it.
+ */
+export const AI_REVIEW_FILING_TIMEOUT_MS = 5 * 60 * 1000
 
 const IN_FLIGHT = new Set(AI_REVIEW_IN_FLIGHT_STATUSES)
 

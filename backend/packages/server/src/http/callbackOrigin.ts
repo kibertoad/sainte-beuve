@@ -9,8 +9,8 @@ import { isLoopback } from '../config/authMode.js'
  * FROM CONFIGURATION, NOT FROM THE REQUEST. `c.req.url` on Node is built from
  * the `Host` header, which the caller writes. GitHub matches a `redirect_uri` on
  * the registered host INCLUDING its subdomains, so a caller who controls any
- * subdomain of the API's host — or reaches a Node process whose proxy forwards
- * any `Host` — could start a flow whose callback lands on their own server,
+ * subdomain of the API's host (or reaches a Node process whose proxy forwards
+ * any `Host`) could start a flow whose callback lands on their own server,
  * hand the authorize URL to a victim, and finish the round trip with the code
  * themselves. On the `connect` purpose the victim's token would become the org's
  * credential. `API_BASE_URL` closes that, and it is also the only reading that

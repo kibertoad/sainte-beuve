@@ -55,7 +55,7 @@ export const botReply = {
 
   /**
    * No link to cat-factory. Its URL is where this deployment's own instance
-   * lives — often an internal host, `http://localhost:8787` in local mode — and
+   * lives (often an internal host, `http://localhost:8787` in local mode), and
    * a task id is cat-factory's to hand out, and a comment on a public repository
    * would give both to anybody who can read it. The board carries the link,
    * behind a sign-in.

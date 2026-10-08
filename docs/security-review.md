@@ -59,23 +59,23 @@ reviewed commit and no longer describe the tree. What landed, in one line each:
 
 All seven **Medium** findings are fixed too:
 
-- **M1** — the OAuth callback is built on `API_BASE_URL`, never on the request's
+- **M1**: the OAuth callback is built on `API_BASE_URL`, never on the request's
   `Host`; without it a sign-in starts only on a loopback host, and the callback
   asks only after its state verifies. See [docs/auth.md](./auth.md).
-- **M2** — every URL on the wire (`pullRequest.url`, `webUrl`, `catFactoryUrl`)
+- **M2**: every URL on the wire (`pullRequest.url`, `webUrl`, `catFactoryUrl`)
   is held to `http` or `https` by `webUrlSchema`, and the SPA renders a stored
   link only through `safeHref`, which refuses any other scheme.
-- **M3** — comment commands and submitted reviews count only from an `OWNER`,
+- **M3**: comment commands and submitted reviews count only from an `OWNER`,
   `MEMBER` or `COLLABORATOR`; a review gets one AI run in flight and at most three
   filed an hour, whichever surface asked (`decideAiReviewAdmission`).
-- **M4** — a delivery for a repository no org registered is dropped, the default
+- **M4**: a delivery for a repository no org registered is dropped, the default
   org included.
-- **M5** — a paused row is refused at the end of every sign-in, and `roleOf` reads
+- **M5**: a paused row is refused at the end of every sign-in, and `roleOf` reads
   one as no admin.
-- **M6** — every Slack command that writes needs a directory row for the Slack
+- **M6**: every Slack command that writes needs a directory row for the Slack
   user, refuses a paused one, and a reroll comes only from the holder or an admin
   (`decideChatCommand`).
-- **M7** — the bot's PR comment carries no cat-factory link, and a refusal
+- **M7**: the bot's PR comment carries no cat-factory link, and a refusal
   cat-factory wrote (marked by `upstreamOf`) becomes one fixed sentence.
 
 The Low and Informational findings below are open.

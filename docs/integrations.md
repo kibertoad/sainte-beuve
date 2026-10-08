@@ -92,7 +92,7 @@ reminder ladder exists to shorten. The **label** is how a team asks for one now.
 
 **Only a repository an org registered is acted on.** A delivery is placed by the
 project registry, and one for a repository nobody registered is acked and
-dropped (`ignored:unregistered`) — the default org included. A GitHub App can be
+dropped (`ignored:unregistered`), the default org included. A GitHub App can be
 installed by anybody who finds it, and falling back to the default org would hand
 whoever installed it on their own repository that org's reviewers, its
 installation tokens and its cat-factory budget. Register each repository on the
@@ -106,7 +106,7 @@ could spend the org's cat-factory budget with `@bot ai` in a loop, pull reviews
 off people with `@bot reroll`, or settle a tracked review with a drive-by
 approval. A stranger's mention gets SILENCE rather than a refusal, because an
 answer would be a way to make the bot comment at will. Labels need no such check
-— adding one takes triage access, which the repository's owner granted — and an
+(adding one takes triage access, which the repository's owner granted), and an
 opened pull request is tracked from anybody, because that asks nobody and spends
 nothing.
 
@@ -163,7 +163,7 @@ operator gets: a pull request is public, and the message that names
 belongs in the deployment's logs. The same goes for a refusal cat-factory itself
 wrote, which carries its own response text and what this deployment's key lacks:
 the comment says cat-factory declined, and the log says why. Only the board's own
-answers — "no reviewer rev-3", "already in flight" — are repeated as they are.
+answers ("no reviewer rev-3", "already in flight") are repeated as they are.
 
 Nor does it link to cat-factory. Where this deployment's instance lives (often an
 internal host, `http://localhost:8787` in local mode) and the task id it handed
@@ -229,14 +229,14 @@ the default one, and everything above it is the behaviour it already had.
 /review ai <id>              hand it to cat-factory
 ```
 
-Every command that changes something — `take`, `reroll`, `snooze`, `ai` — maps
+Every command that changes something (`take`, `reroll`, `snooze`, `ai`) maps
 the Slack user id to a reviewer row by its `slackUserId` first, and does nothing
 for somebody the directory does not hold. A Slack signature proves Slack sent the
 request, not who typed it, and any member of the workspace (a guest included,
 where the command is enabled) can type `/review`. When there is no such row the
 reply says so and quotes the id to paste, because that is the state every fresh
-deployment is in. A paused row changes nothing either, and a **reroll** — which
-takes the review off whoever has it — comes only from the person who has it or an
+deployment is in. A paused row changes nothing either, and a **reroll** (which
+takes the review off whoever has it) comes only from the person who has it or an
 admin. Listing what is waiting asks nobody: it writes nothing.
 
 `/review` on its own lists what is waiting, the reviews nobody is on first and

@@ -190,13 +190,13 @@ with `AUTH_API_KEY` if there is no OAuth client to sign in with at all.
 
 ### The callback is built on configuration, not on the request
 
-The `redirect_uri` a flow names — the URL the host sends the browser back to with
-a code, and the one the code is exchanged under — is built on `API_BASE_URL`, the
-API's public origin. It used to be the origin the request arrived on, and on Node
-that is the `Host` header, which the caller writes. GitHub matches a redirect URI
-on the registered host including its subdomains, so a caller who controlled any
-subdomain of the API's host, or reached a Node process whose proxy forwards any
-`Host`, could start a flow whose callback landed on their own server, hand the
+The `redirect_uri` a flow names (the URL the host sends the browser back to with
+a code, and the one the code is exchanged under) is built on `API_BASE_URL`, the
+API's public origin, and not on the origin the request arrived on. On Node that
+origin is the `Host` header, which the caller writes. GitHub matches a redirect
+URI on the registered host including its subdomains, so a caller who controls
+any subdomain of the API's host, or reaches a Node process whose proxy forwards
+any `Host`, could start a flow whose callback lands on their own server, hand the
 authorize URL to a victim and finish the round trip with the victim's code. On the
 `connect` flow that code becomes the org's stored credential, and the nonce below
 does not help, because the attacker started the flow.
@@ -214,7 +214,7 @@ Behind a TLS terminator this is also what keeps the callback on `https`.
 
 Pausing somebody revokes their sessions (see [docs/orgs.md](./orgs.md)), but the
 link between their host account and their row survives, so a finished round trip
-would otherwise seat them again with the same role — and a paused admin could
+would otherwise seat them again with the same role, and a paused admin could
 un-pause themselves. Both flows refuse a paused row with a 403 before a session is
 issued, and `roleOf` reads a paused row as no admin, for the one request that was
 already in flight when the pause landed.

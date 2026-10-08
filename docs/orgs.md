@@ -283,12 +283,11 @@ thing that can place it: `findOrgIdForProject` names the org that registered the
 repository, and the delivery runs in that org.
 
 **An inbound delivery for a repository nobody registered is dropped**, the
-default org included. It used to land in the default org as a single-tenant
-convenience, but a GitHub App can be installed by anybody who finds it, and that
-fallback handed whoever installed it on their own repository the default org's
-reviewers, its installation tokens and its cat-factory budget. A deployment
-registers its repositories on the Projects screen — the same act a second tenancy
-already had to perform.
+default org included. A GitHub App can be installed by anybody who finds it, and
+falling back to the default org would hand whoever installed it on their own
+repository the default org's reviewers, its installation tokens and its
+cat-factory budget. A deployment registers its repositories on the Projects
+screen, which is the same act a second tenancy has to perform.
 
 ## A Slack app belongs to an org
 

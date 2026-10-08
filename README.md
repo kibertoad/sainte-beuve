@@ -55,8 +55,8 @@ like any other — the assigned reviewer's DM, or the channel while nobody owns
 it — said once per park, and again if a post fails and re-parks it. A pull
 request that has already been approved or closed is left alone.
 
-Each run is a billed cat-factory job, so every way to ask for one — the button,
-the label, `@bot ai`, `/review ai` — meets the same limit: one run in flight per
+Each run is a billed cat-factory job, so every way to ask for one (the button,
+the label, `@bot ai`, `/review ai`) meets the same limit: one run in flight per
 review, and no more than three filed on it in an hour.
 
 ## Asking for attention

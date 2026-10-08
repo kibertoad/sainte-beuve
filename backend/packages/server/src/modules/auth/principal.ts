@@ -212,7 +212,7 @@ export async function roleOf(container: AppContainer, principal: RequestPrincipa
   //
   // A PAUSED row is not an admin either. Pausing revokes the row's sessions and
   // the sign-in refuses it, so a live session on one is a request that raced the
-  // pause — and the one thing it must not be able to do is un-pause itself.
+  // pause, and the one thing it must not be able to do is un-pause itself.
   if (reviewer === null || reviewer.availability === 'paused') return 'member'
   return reviewer.role
 }

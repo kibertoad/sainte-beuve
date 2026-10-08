@@ -130,7 +130,7 @@ export interface GitHubIntentContext {
  * LABELS need no such check, because GitHub already makes it: adding one takes
  * triage access to the repository, which is a decision the repository's owner
  * made. Opening a pull request is open to anybody and stays so, because it only
- * puts the pull request on the board unassigned — nobody is asked and nothing is
+ * puts the pull request on the board unassigned: nobody is asked and nothing is
  * spent until somebody trusted does something about it.
  */
 const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])

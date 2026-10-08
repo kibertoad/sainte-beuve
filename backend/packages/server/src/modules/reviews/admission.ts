@@ -8,7 +8,7 @@ import type { AppContainer } from '../../container.js'
  * the refusal says.
  *
  * A `ConflictError`, which is the board's own answer about a review's state, so
- * every surface repeats it as it is — including the pull-request comment, which
+ * every surface repeats it as it is, including the pull-request comment, which
  * is how somebody typing `@bot ai` twice finds out why the second did nothing.
  */
 export async function admitAiReview(container: AppContainer, reviewId: string): Promise<void> {

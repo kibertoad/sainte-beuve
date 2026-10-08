@@ -124,8 +124,8 @@ export function isDomainError(err: unknown): err is DomainError {
  * The `details` a refusal translated from a third party carries, naming whose
  * words its message is.
  *
- * A refusal like that is written for an OPERATOR — it embeds the upstream's own
- * response text and hints about this deployment's configuration — and the same
+ * A refusal like that is written for an OPERATOR (it embeds the upstream's own
+ * response text and hints about this deployment's configuration), and the same
  * code (`forbidden`, `not_found`, `validation`) is also what the board's own
  * refusals carry. A surface that is read by strangers, such as a pull-request
  * comment, has to tell the two apart without parsing a sentence, and this is

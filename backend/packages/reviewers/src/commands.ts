@@ -5,7 +5,7 @@ import type { Reviewer, ReviewRequest } from '@sainte-beuve/contracts'
  * user maps to and the review they named.
  *
  * A Slack signature proves the request came from Slack, not who typed it: any
- * member of the workspace — a guest included, where the command is enabled —
+ * member of the workspace (a guest included, where the command is enabled)
  * can type `/review`. So every command that WRITES is asked for a directory row
  * first, the same row a sign-in would seat them on:
  *
@@ -14,7 +14,7 @@ import type { Reviewer, ReviewRequest } from '@sainte-beuve/contracts'
  *    too, because the second spends the org's cat-factory budget and the first
  *    two move work off somebody else.
  *  - A PAUSED row is "not them, for now", here as at the sign-in.
- *  - A REROLL takes the review off whoever has it, so it is theirs to ask for —
+ *  - A REROLL takes the review off whoever has it, so it is theirs to ask for,
  *    or an admin's, who decides who is in the pool at all. Anybody else asking
  *    is one person pulling a review off another.
  *
