@@ -42,23 +42,31 @@ const anchor = computed(() => ({
 const editing = ref(false)
 const body = ref('')
 const line = ref(0)
+/**
+ * The draft as it stood when editing began. The stream can replace `draft`
+ * mid-edit, and the edit has to go up against the revision it was made on, so
+ * a change made elsewhere meanwhile is a 409 rather than overwritten.
+ */
+let base: Pick<GuidedReviewCommentDraft, 'rev' | 'body' | 'line'> | null = null
 
 function startEditing(): void {
-  body.value = props.draft.body
-  line.value = props.draft.line
+  const { rev, body: text, line: at } = props.draft
+  base = { rev, body: text, line: at }
+  body.value = text
+  line.value = at
   editing.value = true
 }
 
 /**
- * Only what changed goes up, against the revision on screen. Moving the line
- * drops a multi-line span to the one line, since its start was chosen for the
- * old position.
+ * Only what changed goes up. Moving the line drops a multi-line span to the one
+ * line, since its start was chosen for the old position.
  */
 function save(): void {
-  const input: EditGuidedReviewDraftInput = { rev: props.draft.rev }
+  if (base === null) return
+  const input: EditGuidedReviewDraftInput = { rev: base.rev }
   const trimmed = body.value.trim()
-  if (trimmed !== props.draft.body) input.body = trimmed
-  if (line.value !== props.draft.line) {
+  if (trimmed !== base.body) input.body = trimmed
+  if (line.value !== base.line) {
     input.line = line.value
     input.startLine = null
   }

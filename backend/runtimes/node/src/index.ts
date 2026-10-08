@@ -72,6 +72,7 @@ async function listen(
       port: config.port,
       persistence: store.kind,
       catFactory: config.catFactory === null ? 'not configured' : config.catFactory.baseUrl,
+      guidedReview: config.catFactoryBaseUrl ?? 'not configured',
       slack: slackSummary(config),
       github: githubSummary(config),
       gitlab: gitlabSummary(config),

@@ -73,7 +73,7 @@ async function open(): Promise<void> {
   }
 }
 
-const { busy, run } = useApiAction({ refresh })
+const { busy, run } = useApiAction({ refresh, describe: refusalMessage })
 
 async function refreshOverview(): Promise<void> {
   const id = session.value?.id

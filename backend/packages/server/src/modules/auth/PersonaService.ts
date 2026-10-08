@@ -39,11 +39,13 @@ export class PersonaService {
     if (reviewer.availability === 'paused') throw new ForbiddenError(PAUSED)
     const origin = await this.originAccount()
     const sessions = new SessionService(this.container)
+    const issued = await sessions.issue({ reviewerId, ...origin })
     // The session being replaced is dropped, so switching back and forth does not
-    // leave a row per switch behind.
+    // leave a row per switch behind. After the issue, so a failed one leaves the
+    // caller signed in as before.
     if (this.principal.kind === 'session') await sessions.revoke(this.principal.session.id)
     this.container.logger.info({ reviewerId, ...origin }, 'dev mode: acting as a persona')
-    return sessions.issue({ reviewerId, ...origin })
+    return issued
   }
 
   private async originAccount(): Promise<{ provider: IdentityProvider; subject: string }> {

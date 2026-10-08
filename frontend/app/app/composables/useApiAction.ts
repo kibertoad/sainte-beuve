@@ -14,6 +14,8 @@
 export interface ApiActionOptions {
   /** Re-read the screen's data once the action lands, so it reports the new state. */
   refresh?: () => Promise<unknown>
+  /** What the toast says about a refusal. Defaults to the API's own message. */
+  describe?: (err: unknown) => string
 }
 
 export function useApiAction(options: ApiActionOptions = {}) {
@@ -32,7 +34,8 @@ export function useApiAction(options: ApiActionOptions = {}) {
       await options.refresh?.()
       return true
     } catch (err) {
-      toast.add({ color: 'error', title: failure, description: apiErrorMessage(err) })
+      const description = (options.describe ?? apiErrorMessage)(err)
+      toast.add({ color: 'error', title: failure, description })
       return false
     } finally {
       busy.value = null

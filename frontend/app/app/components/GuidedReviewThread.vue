@@ -58,7 +58,7 @@ usePolling(
 
 const question = ref('')
 const deep = ref(false)
-const { busy, run } = useApiAction({ refresh: reread })
+const { busy, run } = useApiAction({ refresh: reread, describe: refusalMessage })
 
 async function ask(): Promise<void> {
   const content = question.value.trim()
