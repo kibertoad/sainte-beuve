@@ -73,50 +73,28 @@ const submittable = computed(() => {
 function submit() {
   emit('submit', toCreateReviewer(draft.value))
 }
-
-/** Equal columns, so a row of fields lines up whatever their descriptions say. */
-const FIELD_GRID = 'grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2 xl:grid-cols-3'
-/** Inputs sit at the foot of their cell, so a description that wraps does not push one out of line. */
-const FIELD = 'flex flex-col'
-const FIELD_UI = { container: 'mt-auto pt-2' }
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
-    <div :class="FIELD_GRID">
-      <UFormField label="Name" :class="FIELD" :ui="FIELD_UI">
-        <UInput v-model="draft.displayName" class="w-full" placeholder="Ada Lovelace" />
-      </UFormField>
-      <UFormField
-        label="Team"
-        description="Optional. What an ask can be kept inside."
-        :class="FIELD"
-        :ui="FIELD_UI"
-      >
-        <UInput v-model="draft.team" class="w-full" placeholder="platform" />
-      </UFormField>
-      <UFormField
-        label="Slack user id"
-        description="Optional. Where a reminder is delivered."
-        :class="FIELD"
-        :ui="FIELD_UI"
-      >
-        <UInput v-model="draft.slackUserId" class="w-full" placeholder="U01ABCDEF" />
-      </UFormField>
-    </div>
+  <div class="flex flex-col gap-5 max-w-xl">
+    <UFormField label="Name">
+      <UInput v-model="draft.displayName" class="w-full" placeholder="Ada Lovelace" />
+    </UFormField>
+    <UFormField label="Team" description="Optional. What an ask can be kept inside.">
+      <UInput v-model="draft.team" class="w-full" placeholder="platform" />
+    </UFormField>
+    <UFormField label="Slack user id" description="Optional. Where a reminder is delivered.">
+      <UInput v-model="draft.slackUserId" class="w-full" placeholder="U01ABCDEF" />
+    </UFormField>
 
-    <div :class="FIELD_GRID">
-      <UFormField
-        v-for="host in hosts"
-        :key="host.provider"
-        :label="host.label"
-        description="Optional. Without it, their pull requests on that host are invisible here."
-        :class="FIELD"
-        :ui="FIELD_UI"
-      >
-        <UInput v-model="draft.handles[host.provider]" class="w-full" placeholder="ada" />
-      </UFormField>
-    </div>
+    <UFormField
+      v-for="host in hosts"
+      :key="host.provider"
+      :label="host.label"
+      description="Optional. Without it, their pull requests on that host are invisible here."
+    >
+      <UInput v-model="draft.handles[host.provider]" class="w-full" placeholder="ada" />
+    </UFormField>
 
     <UFormField
       label="Skills"
@@ -125,44 +103,36 @@ const FIELD_UI = { container: 'mt-auto pt-2' }
       <UInput v-model="draft.skills" class="w-full" placeholder="typescript, payments" />
     </UFormField>
 
-    <div :class="FIELD_GRID">
-      <UFormField
-        label="Availability"
-        description="Paused keeps the row and its skills, and signs them out."
-        :class="FIELD"
-        :ui="FIELD_UI"
-      >
-        <USelect
-          v-model="draft.availability"
-          :items="availabilities"
-          value-key="value"
-          class="w-full"
-        />
-      </UFormField>
-      <UFormField
-        label="Role"
-        description="An admin can change this org's credentials, keys, registry and directory."
-        :class="FIELD"
-        :ui="FIELD_UI"
-      >
-        <USelect v-model="draft.role" :items="roles" value-key="value" class="w-full" />
-      </UFormField>
-      <UFormField
-        label="Weight"
-        description="Share of the load, above 0. A 0.5 is picked about half as often as a 1."
-        :class="FIELD"
-        :ui="FIELD_UI"
-      >
-        <UInput
-          v-model.number="draft.weight"
-          type="number"
-          min="0.1"
-          max="10"
-          step="0.1"
-          class="w-full"
-        />
-      </UFormField>
-    </div>
+    <UFormField
+      label="Availability"
+      description="Paused keeps the row and its skills, and signs them out."
+    >
+      <USelect
+        v-model="draft.availability"
+        :items="availabilities"
+        value-key="value"
+        class="w-full sm:w-48"
+      />
+    </UFormField>
+    <UFormField
+      label="Role"
+      description="An admin can change this org's credentials, keys, registry and directory."
+    >
+      <USelect v-model="draft.role" :items="roles" value-key="value" class="w-full sm:w-48" />
+    </UFormField>
+    <UFormField
+      label="Weight"
+      description="Share of the load, above 0. A 0.5 is picked about half as often as a 1."
+    >
+      <UInput
+        v-model.number="draft.weight"
+        type="number"
+        min="0.1"
+        max="10"
+        step="0.1"
+        class="w-full sm:w-32"
+      />
+    </UFormField>
 
     <div class="flex justify-end gap-2">
       <UButton variant="ghost" color="neutral" @click="emit('cancel')">Cancel</UButton>
