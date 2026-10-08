@@ -75,16 +75,29 @@ export class ReviewService {
   }
 
   async create(input: CreateReviewRequest): Promise<ReviewRequest> {
-    const { repositories, clock, ids } = this.container
-    const existing = await repositories.reviews.getByPullRequest(input.pullRequest)
+    const existing = await this.container.repositories.reviews.getByPullRequest(input.pullRequest)
     if (existing !== null) {
       throw new ConflictError(
         `${input.pullRequest.owner}/${input.pullRequest.repo}#${input.pullRequest.number} is already tracked`,
         { reviewId: existing.id },
       )
     }
+    return this.open(input)
+  }
+
+  /** Write, plan and announce a review the caller has already checked is new. */
+  private async open(input: CreateReviewRequest): Promise<ReviewRequest> {
+    const review = await this.insert(input)
+    await scheduleNextReminder(this.container, review)
+    await announceReview(this.container, review)
+    return review
+  }
+
+  /** The row alone: no plan, no announcement, and no second `getByPullRequest`. */
+  private async insert(input: CreateReviewRequest): Promise<ReviewRequest> {
+    const { repositories, clock, ids } = this.container
     const now = clock.now()
-    const review = await repositories.reviews.create({
+    return repositories.reviews.create({
       id: ids.next(),
       pullRequest: input.pullRequest,
       title: input.title,
@@ -98,9 +111,6 @@ export class ReviewService {
       assignedAt: null,
       dueAt: input.dueAt,
     })
-    await scheduleNextReminder(this.container, review)
-    await announceReview(this.container, review)
-    return review
   }
 
   /**
@@ -117,7 +127,36 @@ export class ReviewService {
   async track(input: CreateReviewRequest): Promise<{ review: ReviewRequest; created: boolean }> {
     const existing = await this.container.repositories.reviews.getByPullRequest(input.pullRequest)
     if (existing !== null) return { review: existing, created: false }
-    return { review: await this.create(input), created: true }
+    return { review: await this.open(input), created: true }
+  }
+
+  /**
+   * `track`, then hand the review to `count` people if nobody holds it yet: a
+   * pull request opened with the review label already on it.
+   *
+   * One reminder plan, not two. `create` plans the ladder and the assignment
+   * re-plans it, so tracking and then assigning wrote a row only to cancel it a
+   * few milliseconds later, inside GitHub's delivery request. A new review skips
+   * the first plan; `handOver` writes nothing when nobody could take it, so that
+   * case plans here instead, or the review would wait with no ladder at all.
+   *
+   * An existing review's shortfall plans too: a delivery that failed between
+   * the insert and the assignment left it with no ladder, and only a
+   * redelivery comes back for it. Otherwise the re-plan writes the same row.
+   */
+  async trackAndAssign(
+    input: CreateReviewRequest,
+    count: number,
+  ): Promise<{ review: ReviewRequest; created: boolean; result: AssignReviewersResult | null }> {
+    const existing = await this.container.repositories.reviews.getByPullRequest(input.pullRequest)
+    if (existing !== null && existing.assignedReviewerIds.length > 0) {
+      return { review: existing, created: false, result: null }
+    }
+    const review = existing ?? (await this.insert(input))
+    if (existing === null) await announceReview(this.container, review)
+    const result = await this.handOver(review, { count, exclude: [] })
+    if (result.assigned.length === 0) await scheduleNextReminder(this.container, review)
+    return { review: result.review, created: existing === null, result }
   }
 
   /**
