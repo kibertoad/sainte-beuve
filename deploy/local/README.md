@@ -34,11 +34,52 @@ Copy `.env.example` to `.env` and fill in only the block you care about.
   mirror onto the real pull request and the bot can comment on it. Whichever
   credential you set is also who the workspace renders for, because there are
   no sessions yet.
+  The shortest of those is the token the GitHub CLI already holds, see
+  [GitHub from the CLI](#github-from-the-cli).
 - **GitLab**: a personal access token, or an OAuth application whose callback is
   `http://localhost:8788/connect/gitlab/callback`. Set `GITLAB_BASE_URL` for a
   self-managed install; it configures the API and the OAuth endpoints together.
 - **Slack**: a bot token and a channel id, and the reminder clock (every 15s in local
   mode, rather than hourly) delivers to a real channel.
+
+## GitHub from the CLI
+
+```bash
+gh auth login              # once, through the browser
+pnpm setup:local:github    # writes GITHUB_TOKEN into deploy/local/.env
+```
+
+The script runs `gh auth token` and writes the result into `deploy/local/.env`,
+creating the file from `.env.example` if it is missing and replacing only the
+`GITHUB_TOKEN` line otherwise. The token never reaches the terminal, the shell
+history or a command line. Restart `pnpm dev:local` afterwards. Run it again
+whenever gh's token changes, for instance after `gh auth refresh`.
+
+This reuses the credential gh already holds instead of minting a new one. It is
+scoped to you and revoked by `gh auth logout`, which makes it a better local
+default than a long-lived PAT created for the purpose. Treat it as a full secret
+all the same: it carries every scope your gh login has (`gh auth status` lists
+them).
+
+### What your token is
+
+The prefix says where a token came from, and the script checks it:
+
+| Prefix        | What it is                                                       |
+| ------------- | ---------------------------------------------------------------- |
+| `gho_`        | gh's own OAuth token, from the browser login. The expected case. |
+| `ghp_`        | A classic PAT that was pasted into `gh auth login --with-token`. |
+| `github_pat_` | A fine-grained PAT, pasted the same way.                         |
+
+The two PAT prefixes work, and the script writes them with a warning: the token
+is then a separately minted, long-lived credential, with whatever scopes and
+expiry it was created with. Run `gh auth logout` and `gh auth login` through the
+browser to get a `gho_` token instead. Anything else is not a GitHub user token
+and the script writes nothing. A `GH_TOKEN` or `GITHUB_TOKEN` variable in your
+shell takes precedence over gh's stored login, so check those first when the
+prefix surprises you.
+
+## Inbound deliveries
 
 Both OUTBOUND halves work with nothing but a credential. The inbound halves (GitHub
 deliveries, the `/review` command, the message buttons) need GitHub and Slack to

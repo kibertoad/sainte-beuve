@@ -16,6 +16,7 @@
     "dev:worker": "turbo run dev --filter=@sainte-beuve/deploy-backend",
     "dev:node": "turbo run dev --filter=@sainte-beuve/deploy-node",
     "dev:local": "turbo run dev --filter=@sainte-beuve/deploy-local",
+    "setup:local:github": "pnpm --filter @sainte-beuve/deploy-local run setup:github",
     "dev:frontend": "turbo run dev --filter=@sainte-beuve/deploy-frontend",
     "changeset": "changeset",
     "version": "changeset version",
