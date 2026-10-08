@@ -2,12 +2,10 @@ import type {
   AiReviewResolution,
   CreateAttentionRequestInput,
   CreateProjectInput,
-  CreateReviewerInput,
   PullRequestRef,
   ReviewStatus,
   Role,
   UpdateProject,
-  UpdateReviewer,
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import {
@@ -18,7 +16,6 @@ import {
   commitToAttentionContract,
   commitToPullRequestContract,
   createApiKeyContract,
-  createReviewerContract,
   dismissAiReviewFindingContract,
   getAuthStateContract,
   getViewerContract,
@@ -28,7 +25,6 @@ import {
   listApiKeysContract,
   listAttentionContract,
   listProjectsContract,
-  listReviewersContract,
   listReviewsContract,
   releaseCommitmentContract,
   removeProjectContract,
@@ -42,7 +38,6 @@ import {
   streamAttentionContract,
   streamGuidedReviewContract,
   updateProjectContract,
-  updateReviewerContract,
 } from '@sainte-beuve/contracts'
 import type { ApiContract } from '@toad-contracts/core'
 import {
@@ -57,6 +52,7 @@ import wretch from 'wretch'
 import type { RequestParams, SuccessBody } from './contractCall'
 import { capabilityCalls } from './capabilitiesApi'
 import { guidedReviewCalls } from './guidedReviewApi'
+import { organizationCalls } from './organizationApi'
 import { configurationCalls } from './sainteBeuveSettingsApi'
 
 // ---------------------------------------------------------------------------
@@ -331,12 +327,6 @@ export function createSainteBeuveApi(apiBase: string) {
     assignReviewers: (reviewId: string, count = 1) =>
       call(assignReviewersContract, { pathParams: { reviewId }, body: { count } }),
 
-    listReviewers: () => call(listReviewersContract, {}),
-    createReviewer: (reviewer: CreateReviewerInput) =>
-      call(createReviewerContract, { body: reviewer }),
-    updateReviewer: (reviewerId: string, patch: UpdateReviewer) =>
-      call(updateReviewerContract, { pathParams: { reviewerId }, body: patch }),
-
     // The AI-review loop. Filing is addressed by review; everything after it by
     // the delegated RUN, the way cat-factory's own decision surface is.
     requestAiReview: (reviewId: string, instructions: string | null = null) =>
@@ -359,6 +349,7 @@ export function createSainteBeuveApi(apiBase: string) {
     ...guidedReviewCalls(call),
     ...capabilityCalls(call),
     ...configurationCalls(call),
+    ...organizationCalls(call),
   }
 }
 

@@ -24,6 +24,7 @@ import {
   SqlReviewRequestRepository,
 } from './reviews.js'
 import { SqlIntegrationConfigRepository, SqlIntegrationTokenRepository } from './settings.js'
+import { SqlTeamRepository } from './teams.js'
 import { SqlIdentityRepository, SqlProjectRepository } from './workspace.js'
 
 /**
@@ -67,6 +68,7 @@ class D1Persistence implements PersistenceProvider {
       commitments: new SqlReviewCommitmentRepository(db, orgId),
       sessions: new SqlSessionRepository(db, orgId),
       apiKeys: new SqlApiKeyRepository(db, orgId),
+      teams: new SqlTeamRepository(db, orgId),
     }
   }
 

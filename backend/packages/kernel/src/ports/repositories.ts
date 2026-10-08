@@ -15,6 +15,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import type { EpochMs } from '../domain/types.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
+import type { TeamRepository } from './teams.js'
 
 /**
  * Persistence ports. There are three implementations (in-memory in
@@ -390,4 +391,5 @@ export interface Repositories {
   commitments: ReviewCommitmentRepository
   sessions: SessionRepository
   apiKeys: ApiKeyRepository
+  teams: TeamRepository
 }

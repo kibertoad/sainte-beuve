@@ -128,6 +128,10 @@ an API key" and "can read the board" were the same permission.
 | The reviewer directory: adding, editing, pausing        | ✔     |        |
 | The project registry: registering, removing             | ✔     |        |
 | Orgs: listing, creating                                 | ✔     |        |
+| Org settings: name, enrolment, default repository owner | ✔     |        |
+| Teams: creating one you own                             | ✔     | ✔      |
+| Teams: renaming, deleting, handing over your own        | ✔     | ✔      |
+| Teams: creating for, or changing, somebody else's       | ✔     |        |
 
 An **admin configures the deployment; a member uses it.** Anything finer is a
 permission matrix, and a matrix nobody has asked for yet is a matrix that will be

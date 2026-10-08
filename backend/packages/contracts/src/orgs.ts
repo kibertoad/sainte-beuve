@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { vcsProviderSchema } from './vcs.js'
+import { repoOwnerSchema, vcsProviderSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // The tenancy, and what a caller may do inside it.
@@ -69,6 +69,12 @@ export const orgSchema = v.object({
    * rather than open. See `orgEnrolmentSchema`.
    */
   enrolment: v.optional(orgEnrolmentSchema, 'invite'),
+  /**
+   * The repository owner (a GitHub org or a GitLab namespace) this org's
+   * projects usually live under, which the project form starts from. Optional
+   * on the way in so a row written before it existed decodes as unset.
+   */
+  defaultRepositoryOwner: v.optional(v.nullable(repoOwnerSchema), null),
   createdAt: v.number(),
 })
 export type Org = v.InferOutput<typeof orgSchema>
@@ -105,6 +111,7 @@ export function defaultOrg(): Org {
     // sign-in — the directory is empty, and that is the founder — and everybody
     // after them is somebody an admin registered.
     enrolment: 'invite',
+    defaultRepositoryOwner: null,
     createdAt: 0,
   }
 }
@@ -173,7 +180,11 @@ export type CreateOrgInputPayload = v.InferInput<typeof createOrgInputSchema>
  * close it, without either being a redeploy.
  */
 export const updateOrgInputSchema = v.partial(
-  v.object({ name: orgSchema.entries.name, enrolment: orgEnrolmentSchema }),
+  v.object({
+    name: orgSchema.entries.name,
+    enrolment: orgEnrolmentSchema,
+    defaultRepositoryOwner: v.nullable(repoOwnerSchema),
+  }),
 )
 export type UpdateOrgInput = v.InferOutput<typeof updateOrgInputSchema>
 

@@ -38,6 +38,7 @@
 //  | `review_commitments` | `(org_id, id)`                 | `reviewer_id`, `pull_request_key`, `created_at`            |
 //  | `sessions`           | `(org_id, id)`                 | `token_digest` (UNIQUE globally), `reviewer_id`, `expires_at` |
 //  | `api_keys`           | `(org_id, id)`                 | `token_digest` (UNIQUE globally), `role`, `created_at` (no payload) |
+//  | `teams`              | `(org_id, id)`                 | `name_key` (UNIQUE per org), `created_at`                  |
 
 import type { PersistenceProvider } from '@sainte-beuve/kernel'
 import { D1SqlDriver } from './D1SqlDriver.js'

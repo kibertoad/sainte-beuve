@@ -55,6 +55,12 @@ describe('asking for attention', () => {
   })
 
   it('records who asked, and captures their team at the time', async () => {
+    await harness.container.repositories.teams.create({
+      id: 'team-platform',
+      name: 'Platform',
+      ownerId: null,
+      createdAt: 0,
+    })
     await harness.app.fetch(
       post('/api/v1/reviewers', {
         displayName: 'Igor',

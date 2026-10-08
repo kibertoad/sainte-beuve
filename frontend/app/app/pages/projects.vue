@@ -25,8 +25,15 @@ const projects = computed<Project[]>(() => data.value?.projects ?? [])
 const { busy, run } = useApiAction({ refresh })
 const { confirm } = useConfirm()
 
+const auth = useAuthState()
+const defaultOwner = computed(() => auth.org.value?.defaultRepositoryOwner ?? '')
+
 const provider = ref<VcsProvider>('github')
-const owner = ref('')
+const owner = ref(defaultOwner.value)
+// The org's default can land after this screen does; it fills an owner nobody has typed over.
+watch(defaultOwner, (next, previous) => {
+  if (owner.value === previous) owner.value = next
+})
 const repo = ref('')
 const webUrl = ref('')
 
@@ -54,7 +61,7 @@ async function add() {
   // Only on success: clearing the form after a 409 throws away what was typed
   // right before the person has to correct one field of it.
   if (added) {
-    owner.value = ''
+    owner.value = defaultOwner.value
     repo.value = ''
     webUrl.value = ''
   }

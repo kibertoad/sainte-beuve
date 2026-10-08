@@ -16,6 +16,8 @@ import { draftFrom, toCreateReviewer } from '../utils/reviewerDraft'
 const props = defineProps<{
   /** The row being edited, or null when this is the "add somebody" form. */
   reviewer: Reviewer | null
+  /** The org's team names, managed on the Organization screen. */
+  teams: string[]
   busy: boolean
   submitLabel: string
 }>()
@@ -70,6 +72,26 @@ const submittable = computed(() => {
   return draft.value.displayName.trim().length > 0 && usableWeight
 })
 
+/** The select cannot hold an empty string, which is how the draft spells "no team". */
+const NO_TEAM = '__none__'
+
+const teamOptions = computed(() => {
+  const names = [...props.teams]
+  // A reviewer whose team is not on the list still shows it rather than a blank.
+  if (draft.value.team !== '' && !names.includes(draft.value.team)) names.push(draft.value.team)
+  return [
+    { label: 'No team', value: NO_TEAM },
+    ...names.map((name) => ({ label: name, value: name })),
+  ]
+})
+
+const team = computed({
+  get: () => draft.value.team || NO_TEAM,
+  set: (value: string) => {
+    draft.value.team = value === NO_TEAM ? '' : value
+  },
+})
+
 function submit() {
   emit('submit', toCreateReviewer(draft.value))
 }
@@ -81,7 +103,11 @@ function submit() {
       <UInput v-model="draft.displayName" class="w-full" placeholder="Ada Lovelace" />
     </UFormField>
     <UFormField label="Team" description="Optional. What an ask can be kept inside.">
-      <UInput v-model="draft.team" class="w-full" placeholder="platform" />
+      <USelect v-model="team" :items="teamOptions" value-key="value" class="w-full sm:w-64" />
+      <template #help>
+        Teams are managed on the
+        <ULink to="/configuration/organization" class="underline">Organization screen</ULink>.
+      </template>
     </UFormField>
     <UFormField label="Slack user id" description="Optional. Where a reminder is delivered.">
       <UInput v-model="draft.slackUserId" class="w-full" placeholder="U01ABCDEF" />

@@ -209,6 +209,7 @@ describe('the org boundary', () => {
         slug: 'default',
         name: 'Default',
         enrolment: 'invite',
+        defaultRepositoryOwner: null,
         createdAt: 0,
       })
       // Synthesised, not stored: the route every page polls must not be a write.

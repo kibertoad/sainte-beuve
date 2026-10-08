@@ -22,11 +22,17 @@ const api = useSainteBeuveApi()
 // click on this destination looks like nothing happened. Rendered immediately
 // instead, the skeleton below says what is coming. `AiReviewPanel` has done this
 // since it was written, for the same reason.
-const { data, pending, error, refresh } = useAsyncData('reviewers', () => api.listReviewers(), {
-  lazy: true,
-})
+const { data, pending, error, refresh } = useAsyncData(
+  'reviewers',
+  async () => {
+    const [reviewers, teams] = await Promise.all([api.listReviewers(), api.listTeams()])
+    return { reviewers: reviewers.reviewers, teams: teams.teams.map((team) => team.name) }
+  },
+  { lazy: true },
+)
 
 const reviewers = computed<Reviewer[]>(() => data.value?.reviewers ?? [])
+const teams = computed<string[]>(() => data.value?.teams ?? [])
 const { busy, run } = useApiAction({ refresh })
 
 /** Whether the add form is open, and which row is being edited. Never both. */
@@ -125,6 +131,7 @@ function togglePause(reviewer: Reviewer) {
         <h2 class="font-medium">Add a reviewer</h2>
       </template>
       <ReviewerForm
+        :teams="teams"
         :reviewer="null"
         :busy="busy === 'add'"
         submit-label="Add"
@@ -150,6 +157,7 @@ function togglePause(reviewer: Reviewer) {
           <p class="font-medium mb-4">Editing {{ reviewer.displayName }}</p>
           <!-- Seeded from the snapshot, which is also what the save is diffed against. -->
           <ReviewerForm
+            :teams="teams"
             :reviewer="editing"
             :busy="busy === reviewer.id"
             submit-label="Save"

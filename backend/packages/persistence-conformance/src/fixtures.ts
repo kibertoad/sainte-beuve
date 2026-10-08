@@ -29,6 +29,7 @@ export function org(id: string, overrides: Partial<Org> = {}): Org {
     slug: id.replace(/[^a-z0-9-]/g, '-'),
     name: `Org ${id}`,
     enrolment: 'invite',
+    defaultRepositoryOwner: null,
     createdAt: 1_000,
     ...overrides,
   }

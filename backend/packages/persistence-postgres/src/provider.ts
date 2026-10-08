@@ -19,6 +19,7 @@ import {
 } from './reviews.js'
 import { firstOr } from './rows.js'
 import { apiKeys, projects, sessions } from './schema.js'
+import { PostgresTeamRepository } from './teams.js'
 import {
   PostgresIntegrationConfigRepository,
   PostgresIntegrationTokenRepository,
@@ -66,6 +67,7 @@ class PostgresPersistence implements PersistenceProvider {
       commitments: new PostgresReviewCommitmentRepository(db, orgId),
       sessions: new PostgresSessionRepository(db, orgId),
       apiKeys: new PostgresApiKeyRepository(db, orgId),
+      teams: new PostgresTeamRepository(db, orgId),
     }
   }
 

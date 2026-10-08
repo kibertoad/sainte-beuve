@@ -30,6 +30,13 @@ export {
 } from './commands.js'
 export { decideEnrolment, type EnrolmentDecision, type EnrolmentInput } from './enrolment.js'
 export {
+  decideTeamAction,
+  ownerOfNewTeam,
+  type TeamAction,
+  type TeamActor,
+  type TeamDecision,
+} from './teams.js'
+export {
   type AttentionAudienceRule,
   audienceRuleOf,
   isAttentionSatisfied,

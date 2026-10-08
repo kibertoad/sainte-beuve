@@ -393,6 +393,7 @@ describe('Slack intake, per org', () => {
       slug,
       name: slug,
       enrolment: 'invite',
+      defaultRepositoryOwner: null,
       createdAt: harness.clock.now(),
     })
     return org.id
@@ -529,6 +530,7 @@ describe('Slack intake, per org', () => {
       slug: 'acme',
       name: 'acme',
       enrolment: 'invite',
+      defaultRepositoryOwner: null,
       createdAt: announcing.clock.now(),
     })
 

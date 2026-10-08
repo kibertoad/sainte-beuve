@@ -633,6 +633,7 @@ describe('a tick across tenancies', () => {
       slug: 'second',
       name: 'Second',
       enrolment: 'invite',
+      defaultRepositoryOwner: null,
       createdAt: harness.clock.now(),
     })
     // The second org posts over its OWN bot token: the deployment's belongs to

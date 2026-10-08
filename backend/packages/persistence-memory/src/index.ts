@@ -13,6 +13,7 @@ export {
   InMemoryReviewerRepository,
   InMemoryReviewRequestRepository,
 } from './stores.js'
+export { InMemoryTeamRepository } from './teams.js'
 export {
   InMemoryAttentionRepository,
   InMemoryIdentityRepository,

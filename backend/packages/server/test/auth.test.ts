@@ -114,6 +114,7 @@ describe('who is calling', () => {
           slug: 'default',
           name: 'Default',
           enrolment: 'invite',
+          defaultRepositoryOwner: null,
           createdAt: 0,
         },
         // `open` refuses nobody, so whoever can reach this deployment can

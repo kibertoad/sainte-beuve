@@ -179,6 +179,7 @@ export const storedRowConformanceCases: readonly StoredRowCase[] = [
     assert.strictEqual(bySlug?.enrolment, 'invite')
     assert.strictEqual(listed?.enrolment, 'invite')
     assert.strictEqual(byId?.name, 'Alpha')
+    assert.strictEqual(byId?.defaultRepositoryOwner, null)
   }),
 
   storedRowCase('keeps a healed org closed when something else is patched', async (harness) => {

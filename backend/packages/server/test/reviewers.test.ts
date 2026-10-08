@@ -13,8 +13,14 @@ import { type TestHarness, addReviewer, buildHarness, get, patch, post } from '.
 describe('reviewer directory API', () => {
   let harness: TestHarness
 
-  beforeEach(() => {
+  beforeEach(async () => {
     harness = buildHarness()
+    await harness.container.repositories.teams.create({
+      id: 'team-platform',
+      name: 'platform',
+      ownerId: null,
+      createdAt: 0,
+    })
   })
 
   it('creates a reviewer on the contract defaults, with nothing outstanding', async () => {

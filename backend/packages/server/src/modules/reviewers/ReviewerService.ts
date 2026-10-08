@@ -2,6 +2,7 @@ import type { CreateReviewer, Reviewer, UpdateReviewer } from '@sainte-beuve/con
 import { assertFound } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { SessionService } from '../auth/SessionService.js'
+import { resolveTeamName } from '../teams/TeamService.js'
 
 /** The reviewer directory: who is in the pool, what they know, and whether they are free. */
 export class ReviewerService {
@@ -18,7 +19,7 @@ export class ReviewerService {
       displayName: input.displayName,
       handles: input.handles,
       slackUserId: input.slackUserId,
-      team: input.team,
+      team: await resolveTeamName(this.container, input.team),
       skills: input.skills,
       availability: input.availability,
       role: input.role,
@@ -29,8 +30,12 @@ export class ReviewerService {
   }
 
   async update(reviewerId: string, patch: UpdateReviewer): Promise<Reviewer> {
+    const { reviewers } = this.container.repositories
+    assertFound(await reviewers.getById(reviewerId), `No reviewer ${reviewerId}`)
+    const team =
+      patch.team === undefined ? {} : { team: await resolveTeamName(this.container, patch.team) }
     const updated = assertFound(
-      await this.container.repositories.reviewers.update(reviewerId, patch),
+      await reviewers.update(reviewerId, { ...patch, ...team }),
       `No reviewer ${reviewerId}`,
     )
     // PAUSING SOMEBODY SIGNS THEM OUT.

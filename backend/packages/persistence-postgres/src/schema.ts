@@ -10,6 +10,7 @@ import type {
   ReviewCommitment,
   ReviewRequest,
   Role,
+  Team,
 } from '@sainte-beuve/contracts'
 import {
   aiReviewRunSchema,
@@ -21,6 +22,7 @@ import {
   reviewCommitmentSchema,
   reviewerSchema,
   reviewRequestSchema,
+  teamSchema,
 } from '@sainte-beuve/contracts'
 import { index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import * as v from 'valibot'
@@ -371,5 +373,21 @@ export const apiKeys = pgTable(
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
     index('api_keys_created_idx').on(table.orgId, table.createdAt),
+  ],
+)
+
+/** An org's teams. `name_key` is the trimmed, lowercased name, unique per org. */
+export const teams = pgTable(
+  'teams',
+  {
+    orgId: orgId(),
+    id: text('id').notNull(),
+    nameKey: text('name_key').notNull(),
+    createdAt: epochMs('created_at').notNull(),
+    data: payload<Team>('data', 'teams', teamSchema).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.orgId, table.id] }),
+    uniqueIndex('teams_name_idx').on(table.orgId, table.nameKey),
   ],
 )

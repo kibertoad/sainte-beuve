@@ -128,6 +128,7 @@ export class OrgService {
       slug: input.slug,
       name: input.name,
       enrolment: input.enrolment,
+      defaultRepositoryOwner: null,
       createdAt: clock.now(),
     }
     // The default org has no row until somebody makes one, so a deployment
