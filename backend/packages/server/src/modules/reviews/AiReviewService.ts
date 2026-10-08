@@ -6,7 +6,7 @@ import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { type Resolved, resolveAiReview } from '../../integrations/resolve.js'
 import type { CredentialSource } from '../../integrations/resolve.js'
-import { admitAiReview } from './admission.js'
+import { admitAiReview, confirmAiReviewAdmission } from './admission.js'
 import { abandonIfOrphaned } from './orphans.js'
 import { NOT_POLLED, type PollOutcome, parkedAtFor, parksIn, replanForPark } from './park.js'
 import { curationFor } from './reconcile.js'
@@ -85,6 +85,7 @@ export class AiReviewService {
       parkedAt: null,
       completedAt: null,
     })
+    await confirmAiReviewAdmission(this.container, run)
 
     try {
       const handle = await resolved.gateway.requestReview({

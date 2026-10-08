@@ -1,4 +1,5 @@
-import { decideAiReviewAdmission } from '@sainte-beuve/reviewers'
+import type { AiReviewRun } from '@sainte-beuve/contracts'
+import { type AiReviewAdmission, decideAiReviewAdmission } from '@sainte-beuve/reviewers'
 import { ConflictError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 
@@ -13,7 +14,45 @@ import type { AppContainer } from '../../container.js'
  */
 export async function admitAiReview(container: AppContainer, reviewId: string): Promise<void> {
   const runs = await container.repositories.aiReviewRuns.listByReview(reviewId)
-  const decision = decideAiReviewAdmission(runs, container.clock.now())
+  refuseUnlessAdmitted(decideAiReviewAdmission(runs, container.clock.now()))
+}
+
+/**
+ * Ask again once the run's own row is written, and give way to any other run
+ * the answer now counts.
+ *
+ * The read in `admitAiReview` and the insert after it are two statements, so two
+ * requests arriving together both pass it. Each one re-reads after its own
+ * insert and gives way to any other row it finds. For both to go on, each would
+ * have to re-read before the other inserted, which neither can, so at most one
+ * reaches cat-factory. When both re-read after both inserts, both give way, and
+ * the refusal says to ask again. The row that gave way is written
+ * off as failed with no task, so it counts toward neither rule.
+ */
+export async function confirmAiReviewAdmission(
+  container: AppContainer,
+  run: AiReviewRun,
+): Promise<void> {
+  const { aiReviewRuns } = container.repositories
+  const others = (await aiReviewRuns.listByReview(run.reviewId)).filter(
+    (other) => other.id !== run.id,
+  )
+  const decision = decideAiReviewAdmission(others, container.clock.now())
+  if (decision.admitted) return
+  await aiReviewRuns.update(run.id, {
+    status: 'failed',
+    failureReason: RACED,
+    completedAt: container.clock.now(),
+  })
+  throw new ConflictError(
+    'Another request for an AI review of this pull request arrived at the same moment. If no ' +
+      'run appears on the board, request it again.',
+  )
+}
+
+const RACED = 'another request for an AI review of this pull request arrived at the same moment'
+
+function refuseUnlessAdmitted(decision: AiReviewAdmission): void {
   if (decision.admitted) return
   if (decision.reason === 'in_flight') {
     throw new ConflictError(
