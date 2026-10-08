@@ -1,14 +1,22 @@
-import type { GuidedReviewSession, GuidedReviewSessionView } from '@sainte-beuve/contracts'
+import type {
+  GuidedReviewMessage,
+  GuidedReviewSession,
+  GuidedReviewSessionView,
+} from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   anchorHref,
   anchorLabel,
+  FAST_POLL_MS,
   guidedReviewRoute,
   isPostable,
   isSessionWorking,
   prUrlFromQuery,
   refusalMessage,
+  sessionPollInterval,
+  SLOW_POLL_MS,
   targetFromQuery,
+  threadPollInterval,
 } from '../app/utils/guidedReview'
 import { ApiError } from '../app/utils/sainteBeuveApi'
 
@@ -167,5 +175,46 @@ describe('isPostable', () => {
       }),
     )
     expect(postable).toStrictEqual(['proposed', 'failed'])
+  })
+})
+
+describe('poll cadence', () => {
+  function message(overrides: Partial<GuidedReviewMessage>): GuidedReviewMessage {
+    return {
+      id: 'msg-2',
+      threadId: 'thr-1',
+      sessionId: 'grs-1',
+      seq: 2,
+      role: 'assistant',
+      kind: 'answer',
+      depth: 'inline',
+      content: '',
+      status: 'running',
+      citations: [],
+      failure: null,
+      draftReport: null,
+      model: null,
+      createdAt: 1,
+      updatedAt: 1,
+      ...overrides,
+    }
+  }
+
+  it('waits on a deep answer slowly, because it takes minutes', () => {
+    expect(threadPollInterval([message({ depth: 'deep' })])).toBe(SLOW_POLL_MS)
+    expect(threadPollInterval([message({ depth: 'inline' })])).toBe(FAST_POLL_MS)
+    expect(threadPollInterval([message({ depth: 'deep', status: 'complete' })])).toBe(FAST_POLL_MS)
+  })
+
+  it('reads a session fast only while its overview is generated', () => {
+    const view = (status: GuidedReviewSession['overview']['status']): GuidedReviewSessionView => ({
+      session: session({
+        overview: { status, generation: 1, content: null, failure: null, model: null },
+      }),
+      threads: [],
+      drafts: [],
+    })
+    expect(sessionPollInterval(view('running'))).toBe(FAST_POLL_MS)
+    expect(sessionPollInterval(view('complete'))).toBe(SLOW_POLL_MS)
   })
 })

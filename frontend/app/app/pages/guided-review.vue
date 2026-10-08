@@ -31,6 +31,7 @@ const threads = computed(() => view.value?.threads ?? [])
 usePolling(
   () => view.value !== null && isSessionWorking(view.value),
   () => refresh(),
+  () => (view.value === null ? FAST_POLL_MS : sessionPollInterval(view.value)),
 )
 
 const activeThreadId = ref<string | null>(null)

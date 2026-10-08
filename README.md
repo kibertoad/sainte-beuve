@@ -70,6 +70,8 @@ From there you ask. A suggested question, or one of your own, opens a thread,
 and every thread is answered on its own, so a slow one never holds up the rest.
 **Dig into a checkout** sends the question to a read-only checkout of the whole
 repository, for the ones the diff cannot answer ("where else is this called").
+That answer takes minutes rather than seconds, and the page checks on it less
+often while it waits.
 **Draft comments** turns what a thread concluded into review comments anchored
 on the diff. Edit them, move one to another line, discard the noise, and post
 the rest: they go up as plain review comments from cat-factory, never as an

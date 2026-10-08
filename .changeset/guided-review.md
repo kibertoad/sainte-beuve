@@ -26,5 +26,7 @@ the board.
 - A cat-factory refusal carries cat-factory's reason (`repo_not_linked`,
   `thread_busy`, `draft_conflict`, `session_stale`) in `details.reason`, and the
   page says what to do about each.
+- A deep answer takes minutes, so the page re-reads a thread waiting on one,
+  and a session whose overview is done, every 15 seconds instead of every 4.
 - The guided reviewer needs `CAT_FACTORY_BASE_URL` and a key, but no service id.
   `/health` reports it as `capabilities.guidedReview`.

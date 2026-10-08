@@ -33,6 +33,7 @@ usePolling(
     await refresh()
     if (!waiting.value) emit('changed')
   },
+  () => threadPollInterval(messages.value),
 )
 
 const question = ref('')
@@ -70,7 +71,9 @@ async function draft(): Promise<void> {
 
 function waitingLabel(message: GuidedReviewMessage): string {
   if (message.kind === 'comment-drafts') return 'Drafting review comments'
-  return message.depth === 'deep' ? 'Investigating in a checkout of the repository' : 'Thinking'
+  return message.depth === 'deep'
+    ? 'Investigating in a checkout of the repository. This takes a few minutes.'
+    : 'Thinking'
 }
 </script>
 
@@ -138,7 +141,7 @@ function waitingLabel(message: GuidedReviewMessage): string {
         <USwitch
           v-model="deep"
           label="Dig into a checkout"
-          description="Slower: searches the whole repository, not just the diff."
+          description="Takes minutes: searches the whole repository and can run read-only commands."
           :disabled="waiting"
         />
         <div class="flex flex-wrap gap-2">

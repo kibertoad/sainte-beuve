@@ -1,6 +1,7 @@
 import type {
   GuidedReviewAnchor,
   GuidedReviewCommentDraft,
+  GuidedReviewMessage,
   GuidedReviewFailureReason,
   GuidedReviewSession,
   GuidedReviewSessionView,
@@ -42,13 +43,45 @@ export function isSessionWorking(view: GuidedReviewSessionView): boolean {
   return view.threads.some((thread) => thread.pendingMessageId !== null)
 }
 
+/** How often to re-read something a model answers in seconds. */
+export const FAST_POLL_MS = 4000
+
+/**
+ * How often to re-read something that takes minutes. Every read of a session
+ * here is two or three cat-factory calls, so a deep answer polled at the fast
+ * cadence would spend a hundred of them to learn one thing.
+ */
+export const SLOW_POLL_MS = 15000
+
+/**
+ * The cadence for a session. Only its overview arrives in seconds; an answer a
+ * thread waits on is polled by that thread, so the session read only has to
+ * keep the other tabs' spinners honest.
+ */
+export function sessionPollInterval(view: GuidedReviewSessionView): number {
+  const { status } = view.session.overview
+  return status === 'pending' || status === 'running' ? FAST_POLL_MS : SLOW_POLL_MS
+}
+
+/** The cadence for a thread: slow while what it waits on is a deep answer, which takes minutes. */
+export function threadPollInterval(messages: readonly GuidedReviewMessage[]): number {
+  const deep = messages.some(
+    (message) =>
+      message.depth === 'deep' &&
+      message.kind === 'answer' &&
+      (message.status === 'pending' || message.status === 'running'),
+  )
+  return deep ? SLOW_POLL_MS : FAST_POLL_MS
+}
+
 const FAILURES: Record<GuidedReviewFailureReason, string> = {
   budget_exhausted: 'The model budget on the cat-factory side is spent.',
   model_unavailable: 'cat-factory could not reach a model.',
   repo_unavailable: 'cat-factory could not read the repository.',
   generation_failed: 'The model failed while answering.',
   unreadable_reply: 'The model answered with something cat-factory could not read.',
-  depth_unavailable: 'A deep dive into a checkout is not available on this cat-factory.',
+  depth_unavailable:
+    'This cat-factory has no runner for answers from a checkout. Ask again without the switch.',
   head_moved: 'The pull request moved on while this was generated. Refresh to catch up.',
 }
 
