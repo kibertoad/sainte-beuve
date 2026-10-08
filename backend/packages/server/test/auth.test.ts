@@ -137,6 +137,19 @@ describe('who is calling', () => {
       const unkeyed = buildHarness({ gateways: stubGateways({ signIn: everyHost(stubSignIn()) }) })
       expect((await authState(unkeyed)).signInProviders).toStrictEqual([])
     })
+
+    it('offers no sign-in on a public host until it knows where to call back', async () => {
+      // A button here would be a 503 from the sign-in route. See `callbackOrigin`.
+      const hosted = async (harness: TestHarness) => {
+        const res = await harness.app.fetch(new Request(`https://api.example.com${SESSION}`))
+        return ((await res.json()) as AuthState).signInProviders
+      }
+      expect(await hosted(signable())).toStrictEqual([])
+      expect(await hosted(signable({ apiBaseUrl: 'https://api.example.com' }))).toStrictEqual([
+        'github',
+        'gitlab',
+      ])
+    })
   })
 
   describe('a deployment that insists', () => {

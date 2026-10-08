@@ -101,7 +101,7 @@ function mint() {
       color="error"
       variant="subtle"
       title="Nobody can sign in here"
-      description="This deployment requires a caller to identify itself and has no OAuth client to identify anybody with. Only an API key gets in. Configure GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET (or the GitLab pair), plus SETTINGS_ENCRYPTION_KEY, which signs the round trip."
+      description="This deployment requires a caller to identify itself and cannot start a sign-in with any host. Only an API key gets in. Configure GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET (or the GitLab pair), SETTINGS_ENCRYPTION_KEY, which signs the round trip, and API_BASE_URL, the API's public origin the host sends the browser back to."
     />
 
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">

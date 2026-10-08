@@ -1,5 +1,6 @@
-import type { AuthState, Principal } from '@sainte-beuve/contracts'
+import type { AuthState, Principal, VcsProvider } from '@sainte-beuve/contracts'
 import type { AppContainer } from '../../container.js'
+import { hasCallbackOrigin } from '../../http/callbackOrigin.js'
 import { ConnectionsService } from '../connections/ConnectionsService.js'
 import { ViewerService } from '../identity/ViewerService.js'
 import { OrgService } from '../orgs/OrgService.js'
@@ -18,7 +19,8 @@ import { sessionOnTheWire } from './SessionService.js'
 export class AuthService {
   constructor(private readonly container: AppContainer) {}
 
-  async state(principal: RequestPrincipal): Promise<AuthState> {
+  /** `requestUrl` is the URL this arrived on, which decides whether a sign-in can start here. */
+  async state(principal: RequestPrincipal, requestUrl: string): Promise<AuthState> {
     // The org and the role beside the principal, because a screen needs both
     // before it can draw anything: which board it is looking at, and whether to
     // offer the Configuration screen at all. All three kinds of caller have
@@ -33,8 +35,18 @@ export class AuthService {
       principal: described,
       org,
       role,
-      signInProviders: new ConnectionsService(this.container).signInProviders(),
+      signInProviders: this.signInProviders(requestUrl),
     }
+  }
+
+  /**
+   * The hosts a sign-in can be started on from where this request arrived. On a
+   * host with no origin to call back to, every sign-in route answers 503, so the
+   * screen is told there is nothing to offer rather than shown buttons that fail.
+   */
+  private signInProviders(requestUrl: string): VcsProvider[] {
+    if (!hasCallbackOrigin(this.container, requestUrl)) return []
+    return new ConnectionsService(this.container).signInProviders()
   }
 
   /**

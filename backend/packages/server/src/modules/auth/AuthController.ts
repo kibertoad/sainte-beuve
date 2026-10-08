@@ -31,7 +31,7 @@ export function authController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, getAuthStateContract, async (c) => {
-    return c.json(await new AuthService(c.get('container')).state(principalOf(c)), 200)
+    return c.json(await new AuthService(c.get('container')).state(principalOf(c), c.req.url), 200)
   })
 
   buildHonoRoute(app, startSessionSignInContract, async (c) => {
@@ -63,7 +63,7 @@ export function authController(): Hono<AppEnv> {
     // sweep or by a sign-out somewhere else, and leaving it there means every
     // request carries a value that resolves to nobody.
     clearSessionCookie(c, container)
-    return c.json(await new AuthService(container).state({ kind: 'anonymous' }), 200)
+    return c.json(await new AuthService(container).state({ kind: 'anonymous' }, c.req.url), 200)
   })
 
   apiKeyRoutes(app)

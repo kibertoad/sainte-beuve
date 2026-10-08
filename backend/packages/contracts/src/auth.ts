@@ -110,7 +110,8 @@ export const authStateSchema = v.object({
   role: roleSchema,
   /**
    * The hosts a sign-in can actually be started on: an OAuth client is
-   * configured for them AND this deployment can sign the round trip. Empty means
+   * configured for them, this deployment can sign the round trip, AND it has an
+   * origin to call back to (`API_BASE_URL`, or a loopback request). Empty means
    * nobody can sign in here, which is the state a `required` deployment must not
    * be left in and the reason the screen says so rather than showing a dead
    * button.

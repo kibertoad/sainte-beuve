@@ -205,7 +205,8 @@ With `API_BASE_URL` unset, the request's own origin is still accepted on a
 LOOPBACK host, which keeps a laptop and `wrangler dev` working with nothing set; a
 forged `Host: localhost` sends the code to the victim's own machine, which nobody
 else can read. Anywhere else a sign-in refuses to start with a 503 naming the
-variable. The callback asks the same question only AFTER its state verifies, so a
+variable, and `GET /api/v1/auth/session` lists no host in `signInProviders`, so
+the screen says nobody can sign in rather than offering a button that fails. The callback asks the same question only AFTER its state verifies, so a
 forged callback learns nothing about how the deployment is configured.
 `GET /health` reports `auth.apiBaseUrl` beside `signInProviders` for that reason.
 Behind a TLS terminator this is also what keeps the callback on `https`.

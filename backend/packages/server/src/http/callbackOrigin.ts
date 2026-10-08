@@ -29,6 +29,14 @@ export function callbackOrigin(container: AppContainer, requestUrl: string): str
   throw new UnavailableError(NO_API_BASE_URL)
 }
 
+/**
+ * Whether a sign-in started from this request has an origin to call back to:
+ * the question {@link callbackOrigin} refuses on, asked without refusing.
+ */
+export function hasCallbackOrigin(container: AppContainer, requestUrl: string): boolean {
+  return container.apiBaseUrl !== null || isLoopback(new URL(requestUrl).hostname)
+}
+
 function configuredOrigin(value: string): string {
   let url: URL
   try {
