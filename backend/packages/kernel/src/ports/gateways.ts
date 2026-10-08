@@ -2,12 +2,16 @@ import type {
   AiReviewCuration,
   AiReviewResolution,
   AskGuidedReviewInput,
+  EditGuidedReviewDraftInput,
+  GuidedReviewCommentDraft,
   GuidedReviewExchange,
+  GuidedReviewPostResult,
   GuidedReviewSessionView,
   GuidedReviewTarget,
   GuidedReviewThreadView,
   OpenGuidedReviewThreadInput,
   OpenPullRequest,
+  PostGuidedReviewDraftsInput,
   ProjectRef,
   PullRequestRef,
   Reminder,
@@ -186,7 +190,9 @@ export interface AiReviewGateway {
  * is the board's model too: a review row is the team's, not one person's.
  *
  * Every write resolves with what cat-factory persisted, before the overview or
- * the answer exists. The caller re-reads until nothing is pending.
+ * the answer exists. The caller re-reads until nothing is pending. Posting
+ * drafts is the one call that reaches the pull request, and it posts on the
+ * cat-factory workspace's credentials, because the key belongs to no person.
  */
 export interface GuidedReviewGateway {
   /** The session this deployment holds for a pull request, or null. Spends nothing. */
@@ -208,6 +214,12 @@ export interface GuidedReviewGateway {
     threadId: string,
     input: RequestGuidedReviewDraftsInput,
   ): Promise<GuidedReviewExchange>
+  editDraft(
+    sessionId: string,
+    draftId: string,
+    input: EditGuidedReviewDraftInput,
+  ): Promise<GuidedReviewCommentDraft>
+  postDrafts(sessionId: string, input: PostGuidedReviewDraftsInput): Promise<GuidedReviewPostResult>
 }
 
 /**

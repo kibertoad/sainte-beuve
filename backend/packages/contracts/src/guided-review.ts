@@ -16,14 +16,19 @@ import { vcsProviderSchema } from './vcs.js'
 export {
   GUIDED_REVIEW_QUESTION_MAX,
   askGuidedReviewSchema,
+  editGuidedReviewDraftSchema,
+  guidedReviewCommentDraftSchema,
   guidedReviewExchangeSchema,
+  guidedReviewPostResultSchema,
   guidedReviewSessionViewSchema,
   guidedReviewThreadViewSchema,
   openGuidedReviewThreadSchema,
+  postGuidedReviewDraftsSchema,
   requestGuidedReviewDraftsSchema,
 } from '@cat-factory/contracts'
 export type {
   AskGuidedReviewInput,
+  EditGuidedReviewDraftInput,
   GuidedReviewAnchor,
   GuidedReviewCommentDraft,
   GuidedReviewExchange,
@@ -32,11 +37,13 @@ export type {
   GuidedReviewMessage,
   GuidedReviewOverview,
   GuidedReviewOverviewContent,
+  GuidedReviewPostResult,
   GuidedReviewSession,
   GuidedReviewSessionView,
   GuidedReviewThreadSummary,
   GuidedReviewThreadView,
   OpenGuidedReviewThreadInput,
+  PostGuidedReviewDraftsInput,
   RequestGuidedReviewDraftsInput,
 } from '@cat-factory/contracts'
 

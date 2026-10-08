@@ -71,7 +71,12 @@ and every thread is answered on its own, so a slow one never holds up the rest.
 **Dig into a checkout** sends the question to a read-only checkout of the whole
 repository, for the ones the diff cannot answer ("where else is this called").
 **Draft comments** turns what a thread concluded into review comments anchored
-on the diff, ready to carry onto the pull request.
+on the diff. Edit them, move one to another line, discard the noise, and post
+the rest: they go up as plain review comments from cat-factory, never as an
+approval or a change request. A post reports per comment, and posting again
+never duplicates one that landed. A pull request with commits past the reviewed
+one refuses the post until the review is re-read at the latest commit, because
+every anchor was computed against the old one.
 
 There is one guided review per pull request on a deployment, and everybody who
 opens it sees the same threads. Opening the page reads; only **Start a guided

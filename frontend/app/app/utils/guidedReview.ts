@@ -1,5 +1,6 @@
 import type {
   GuidedReviewAnchor,
+  GuidedReviewCommentDraft,
   GuidedReviewFailureReason,
   GuidedReviewSession,
   GuidedReviewSessionView,
@@ -8,6 +9,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import { guidedReviewTargetQuerySchema, isWebUrl } from '@sainte-beuve/contracts'
 import * as v from 'valibot'
+import { ApiError, apiErrorMessage } from './sainteBeuveApi'
 
 // The rules behind the guided-review screen, kept out of the components so a
 // suite can pin them without mounting anything.
@@ -66,9 +68,29 @@ export function refusalHint(reason: string | undefined): string | null {
       return 'cat-factory could not find this pull request on its host.'
     case 'thread_busy':
       return 'This thread is still waiting on an answer.'
+    case 'draft_conflict':
+      return 'The draft changed since it was loaded. It has been reloaded; check it and try again.'
+    case 'draft_anchor_outside_diff':
+      return 'That line is not part of the diff, so the host would refuse a comment on it.'
+    case 'session_stale':
+      return 'The pull request has new commits. Re-read it at the latest commit and check the drafts before posting.'
+    case 'not_session_owner':
+      return 'This guided review belongs to another cat-factory identity, so it can be read but not changed.'
     default:
       return null
   }
+}
+
+/** What to tell somebody about a failed guided-review call: cat-factory's reason first. */
+export function refusalMessage(err: unknown): string {
+  const details = err instanceof ApiError ? (err.details as { reason?: unknown }) : undefined
+  const reason = typeof details?.reason === 'string' ? details.reason : undefined
+  return refusalHint(reason) ?? apiErrorMessage(err)
+}
+
+/** Whether a draft can still be posted: proposed, or a post that failed and may be retried. */
+export function isPostable(draft: GuidedReviewCommentDraft): boolean {
+  return draft.status === 'proposed' || draft.status === 'failed'
 }
 
 /** `src/poll.ts:40-52`, the way a reviewer names a span. */

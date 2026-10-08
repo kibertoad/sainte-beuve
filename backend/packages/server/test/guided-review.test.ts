@@ -6,7 +6,7 @@ import type {
 import type { GuidedReviewGateway } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { buildHarness, get, post, type TestHarness } from './helpers.js'
+import { buildHarness, get, patch, post, type TestHarness } from './helpers.js'
 
 /**
  * The guided-review relay over `app.fetch`. What this deployment adds to
@@ -94,6 +94,23 @@ function stubGuidedReview(): StubGuidedReview {
       calls.push(`requestDrafts ${sessionId}`)
       return Promise.reject(new Error('not exercised'))
     },
+    editDraft: (sessionId, draftId) => {
+      calls.push(`editDraft ${sessionId} ${draftId}`)
+      return Promise.reject(
+        new ConflictError('cat-factory would not edit', {
+          upstream: 'cat-factory',
+          reason: 'draft_conflict',
+        }),
+      )
+    },
+    postDrafts: (sessionId, input) =>
+      record(`postDrafts ${sessionId} ${input.draftIds.join(',')}`, {
+        drafts: [],
+        posted: input.draftIds.length,
+        failed: 0,
+        skipped: [],
+        summary: { posted: null, error: null },
+      }),
   }
 }
 
@@ -174,6 +191,34 @@ describe('guided review', () => {
 
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ error: { details: { reason: 'thread_busy' } } })
+  })
+
+  it('posts the named drafts of a session of its own', async () => {
+    const res = await harness.app.fetch(
+      post(`${BASE}/grs-ours/comment-drafts/post`, { draftIds: ['drf-1', 'drf-2'] }),
+    )
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ posted: 2, failed: 0 })
+    expect(catFactory.calls).toStrictEqual(['get grs-ours', 'postDrafts grs-ours drf-1,drf-2'])
+  })
+
+  it("posts nothing on another org's pull request", async () => {
+    const res = await harness.app.fetch(
+      post(`${BASE}/grs-theirs/comment-drafts/post`, { draftIds: ['drf-1'] }),
+    )
+
+    expect(res.status).toBe(404)
+    expect(catFactory.calls).toStrictEqual(['get grs-theirs'])
+  })
+
+  it('reports a stale edit as a conflict a screen can name', async () => {
+    const res = await harness.app.fetch(
+      patch(`${BASE}/grs-ours/comment-drafts/drf-1`, { rev: 1, body: 'Tighter wording' }),
+    )
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ error: { details: { reason: 'draft_conflict' } } })
   })
 
   it('names the missing configuration when no cat-factory is wired', async () => {

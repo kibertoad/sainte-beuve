@@ -31,7 +31,7 @@
     "test:run": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@cat-factory/sdk": "^0.55.0",
+    "@cat-factory/sdk": "^0.56.0",
     "@sainte-beuve/contracts": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*"
   },

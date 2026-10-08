@@ -141,6 +141,38 @@ describe('CatFactoryGuidedReviewGateway', () => {
     })
   })
 
+  it('sends an edit with the revision it was made against', async () => {
+    const { gateway, calls } = gatewayOver({
+      'PATCH /api/v1/guided-reviews/grs-1/comment-drafts/drf-1': {
+        body: { id: 'drf-1', rev: 2 },
+      },
+    })
+
+    await gateway.editDraft('grs-1', 'drf-1', { rev: 1, body: 'Tighter' })
+
+    expect(calls[0]?.body).toEqual({ rev: 1, body: 'Tighter' })
+  })
+
+  it('refuses a post on a moved head with the reason that says to refresh', async () => {
+    const { gateway } = gatewayOver({
+      'POST /api/v1/guided-reviews/grs-1/comment-drafts/post': {
+        status: 409,
+        body: {
+          error: {
+            code: 'conflict',
+            message: 'The pull request moved',
+            details: { reason: 'session_stale' },
+          },
+        },
+      },
+    })
+
+    await expect(gateway.postDrafts('grs-1', { draftIds: ['drf-1'] })).rejects.toMatchObject({
+      code: 'conflict',
+      details: { reason: 'session_stale' },
+    })
+  })
+
   it('names the `write` scope when the key is too weak', async () => {
     const { gateway } = gatewayOver({
       'POST /api/v1/guided-reviews': {

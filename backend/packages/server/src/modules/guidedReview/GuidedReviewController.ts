@@ -1,10 +1,12 @@
 import {
   askGuidedReviewContract,
+  editGuidedReviewDraftContract,
   findGuidedReviewContract,
   getGuidedReviewContract,
   getGuidedReviewThreadContract,
   openGuidedReviewContract,
   openGuidedReviewThreadContract,
+  postGuidedReviewDraftsContract,
   refreshGuidedReviewContract,
   requestGuidedReviewDraftsContract,
 } from '@sainte-beuve/contracts'
@@ -61,5 +63,22 @@ export function guidedReviewController(): Hono<AppEnv> {
     return c.json(await service.requestDrafts(sessionId, threadId, c.req.valid('json')), 200)
   })
 
+  mountDraftRoutes(app)
+
   return app
+}
+
+/** Editing and posting comment drafts: the half of the surface that reaches the pull request. */
+function mountDraftRoutes(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, editGuidedReviewDraftContract, async (c) => {
+    const service = new GuidedReviewService(c.get('container'))
+    const { sessionId, draftId } = c.req.valid('param')
+    return c.json(await service.editDraft(sessionId, draftId, c.req.valid('json')), 200)
+  })
+
+  buildHonoRoute(app, postGuidedReviewDraftsContract, async (c) => {
+    const service = new GuidedReviewService(c.get('container'))
+    const { sessionId } = c.req.valid('param')
+    return c.json(await service.postDrafts(sessionId, c.req.valid('json')), 200)
+  })
 }

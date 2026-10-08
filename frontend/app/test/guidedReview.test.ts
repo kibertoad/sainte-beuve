@@ -4,10 +4,13 @@ import {
   anchorHref,
   anchorLabel,
   guidedReviewRoute,
+  isPostable,
   isSessionWorking,
   prUrlFromQuery,
+  refusalMessage,
   targetFromQuery,
 } from '../app/utils/guidedReview'
+import { ApiError } from '../app/utils/sainteBeuveApi'
 
 function session(overrides: Partial<GuidedReviewSession> = {}): GuidedReviewSession {
   return {
@@ -119,5 +122,50 @@ describe('anchors', () => {
 
   it('links nowhere without the pull request to take a host from', () => {
     expect(anchorHref(session(), { path: 'a.ts' }, null)).toBeNull()
+  })
+})
+
+describe('refusalMessage', () => {
+  it('says what to do about a refusal cat-factory named', () => {
+    const stale = new ApiError(409, 'conflict', 'cat-factory would not post', {
+      upstream: 'cat-factory',
+      reason: 'session_stale',
+    })
+    expect(refusalMessage(stale)).toMatch(/Re-read it at the latest commit/)
+  })
+
+  it("falls back to the API's own message for a reason it has no advice for", () => {
+    const other = new ApiError(502, 'upstream_failed', 'cat-factory could not post', {
+      upstream: 'cat-factory',
+      reason: 'internal',
+    })
+    expect(refusalMessage(other)).toBe('cat-factory could not post')
+  })
+})
+
+describe('isPostable', () => {
+  it('offers a proposed draft and a failed one, and nothing that is settled or in flight', () => {
+    const statuses = ['proposed', 'failed', 'posting', 'posted', 'discarded'] as const
+    const postable = statuses.filter((status) =>
+      isPostable({
+        id: 'drf-1',
+        sessionId: 'grs-1',
+        threadId: 'thr-1',
+        messageId: 'msg-1',
+        path: 'a.ts',
+        line: 1,
+        startLine: null,
+        side: 'RIGHT',
+        body: 'x',
+        rationale: '',
+        status,
+        postError: null,
+        postedUrl: null,
+        rev: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    )
+    expect(postable).toStrictEqual(['proposed', 'failed'])
   })
 })

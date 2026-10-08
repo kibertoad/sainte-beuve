@@ -1,15 +1,18 @@
 import type {
   AskGuidedReviewInput,
+  EditGuidedReviewDraftInput,
   GuidedReviewTarget,
   OpenGuidedReviewThreadInput,
 } from '@sainte-beuve/contracts'
 import {
   askGuidedReviewContract,
+  editGuidedReviewDraftContract,
   findGuidedReviewContract,
   getGuidedReviewContract,
   getGuidedReviewThreadContract,
   openGuidedReviewContract,
   openGuidedReviewThreadContract,
+  postGuidedReviewDraftsContract,
   refreshGuidedReviewContract,
   requestGuidedReviewDraftsContract,
 } from '@sainte-beuve/contracts'
@@ -44,6 +47,17 @@ export function guidedReviewCalls(call: ContractCaller) {
       call(requestGuidedReviewDraftsContract, {
         pathParams: { sessionId, threadId },
         body: instructions.length > 0 ? { instructions } : {},
+      }),
+    editGuidedReviewDraft: (
+      sessionId: string,
+      draftId: string,
+      input: EditGuidedReviewDraftInput,
+    ) => call(editGuidedReviewDraftContract, { pathParams: { sessionId, draftId }, body: input }),
+    /** Posts on the pull request. The answer reports every named draft, posted or not. */
+    postGuidedReviewDrafts: (sessionId: string, draftIds: string[], summary: string) =>
+      call(postGuidedReviewDraftsContract, {
+        pathParams: { sessionId },
+        body: summary.length > 0 ? { draftIds, summary } : { draftIds },
       }),
   }
 }

@@ -1,12 +1,16 @@
 import { CatFactoryClient } from '@cat-factory/sdk'
 import type {
   AskGuidedReviewInput,
+  EditGuidedReviewDraftInput,
+  GuidedReviewCommentDraft,
   GuidedReviewExchange,
+  GuidedReviewPostResult,
   GuidedReviewSession,
   GuidedReviewSessionView,
   GuidedReviewTarget,
   GuidedReviewThreadView,
   OpenGuidedReviewThreadInput,
+  PostGuidedReviewDraftsInput,
   RequestGuidedReviewDraftsInput,
 } from '@sainte-beuve/contracts'
 import { type GuidedReviewGateway, withDeadline } from '@sainte-beuve/kernel'
@@ -124,6 +128,25 @@ export class CatFactoryGuidedReviewGateway implements GuidedReviewGateway {
   ): Promise<GuidedReviewExchange> {
     return this.relay(`draft comments from thread ${threadId} of guided review ${sessionId}`, () =>
       this.client.guidedReviews.requestDrafts(sessionId, threadId, input),
+    )
+  }
+
+  editDraft(
+    sessionId: string,
+    draftId: string,
+    input: EditGuidedReviewDraftInput,
+  ): Promise<GuidedReviewCommentDraft> {
+    return this.relay(`edit draft ${draftId} of guided review ${sessionId}`, () =>
+      this.client.guidedReviews.editDraft(sessionId, draftId, input),
+    )
+  }
+
+  postDrafts(
+    sessionId: string,
+    input: PostGuidedReviewDraftsInput,
+  ): Promise<GuidedReviewPostResult> {
+    return this.relay(`post the comment drafts of guided review ${sessionId}`, () =>
+      this.client.guidedReviews.postDrafts(sessionId, input),
     )
   }
 

@@ -1,10 +1,14 @@
 import type {
   AskGuidedReviewInput,
+  EditGuidedReviewDraftInput,
+  GuidedReviewCommentDraft,
   GuidedReviewExchange,
+  GuidedReviewPostResult,
   GuidedReviewSessionView,
   GuidedReviewTarget,
   GuidedReviewThreadView,
   OpenGuidedReviewThreadInput,
+  PostGuidedReviewDraftsInput,
   RequestGuidedReviewDraftsInput,
 } from '@sainte-beuve/contracts'
 import { type GuidedReviewGateway, NotFoundError } from '@sainte-beuve/kernel'
@@ -81,6 +85,23 @@ export class GuidedReviewService {
   ): Promise<GuidedReviewExchange> {
     await this.get(sessionId)
     return (await this.gateway()).requestDrafts(sessionId, threadId, input)
+  }
+
+  async editDraft(
+    sessionId: string,
+    draftId: string,
+    input: EditGuidedReviewDraftInput,
+  ): Promise<GuidedReviewCommentDraft> {
+    await this.get(sessionId)
+    return (await this.gateway()).editDraft(sessionId, draftId, input)
+  }
+
+  async postDrafts(
+    sessionId: string,
+    input: PostGuidedReviewDraftsInput,
+  ): Promise<GuidedReviewPostResult> {
+    await this.get(sessionId)
+    return (await this.gateway()).postDrafts(sessionId, input)
   }
 
   /**

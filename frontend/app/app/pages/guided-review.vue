@@ -51,12 +51,10 @@ async function open(): Promise<void> {
   try {
     data.value = await api.openGuidedReview(target.value)
   } catch (err) {
-    const reason =
-      err instanceof ApiError ? (err.details as { reason?: string } | undefined)?.reason : undefined
     toast.add({
       color: 'error',
       title: 'Could not start the guided review',
-      description: refusalHint(reason) ?? apiErrorMessage(err),
+      description: refusalMessage(err),
     })
   } finally {
     opening.value = false
@@ -230,7 +228,12 @@ const overviewReady = computed(() => session.value?.overview.status === 'complet
 
           <UCard>
             <template #header><h2 class="font-medium">Comment drafts</h2></template>
-            <GuidedReviewDrafts :session="session" :drafts="view?.drafts ?? []" :pr-url="prUrl" />
+            <GuidedReviewDrafts
+              :session="session"
+              :drafts="view?.drafts ?? []"
+              :pr-url="prUrl"
+              @changed="refresh()"
+            />
           </UCard>
         </div>
       </div>

@@ -2,12 +2,16 @@ import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   askGuidedReviewSchema,
+  editGuidedReviewDraftSchema,
+  guidedReviewCommentDraftSchema,
   guidedReviewExchangeSchema,
+  guidedReviewPostResultSchema,
   guidedReviewSessionViewSchema,
   guidedReviewTargetQuerySchema,
   guidedReviewTargetSchema,
   guidedReviewThreadViewSchema,
   openGuidedReviewThreadSchema,
+  postGuidedReviewDraftsSchema,
   requestGuidedReviewDraftsSchema,
 } from '../guided-review.js'
 import { errorResponses, singleStringParam, stringParams } from './_shared.js'
@@ -18,8 +22,8 @@ import { errorResponses, singleStringParam, stringParams } from './_shared.js'
 //
 // Every write answers with the state cat-factory persisted, at once: the
 // overview and the answers are generated afterwards, so a screen re-reads the
-// session or the thread until nothing in it is pending. Nothing here posts to
-// the pull request.
+// session or the thread until nothing in it is pending. The one route that
+// reaches the pull request is the explicit post of named comment drafts.
 // ---------------------------------------------------------------------------
 
 const sessionParams = singleStringParam('sessionId')
@@ -107,4 +111,30 @@ export const requestGuidedReviewDraftsContract = defineApiContract({
     `/guided-reviews/${sessionId}/threads/${threadId}/comment-drafts`,
   requestBodySchema: requestGuidedReviewDraftsSchema,
   responsesByStatusCode: { 200: guidedReviewExchangeSchema, ...errorResponses },
+})
+
+/**
+ * Edit a draft's body or line, or discard it. `rev` is the revision the edit
+ * was made against: a draft that moved since is a 409 rather than overwritten.
+ */
+export const editGuidedReviewDraftContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: stringParams('sessionId', 'draftId'),
+  pathResolver: ({ sessionId, draftId }) =>
+    `/guided-reviews/${sessionId}/comment-drafts/${draftId}`,
+  requestBodySchema: editGuidedReviewDraftSchema,
+  responsesByStatusCode: { 200: guidedReviewCommentDraftSchema, ...errorResponses },
+})
+
+/**
+ * Post the named drafts on the pull request as plain review comments. Each
+ * posts on its own, so the answer reports every draft, and a retry never posts
+ * one twice. Refused while the pull request has commits past the reviewed one.
+ */
+export const postGuidedReviewDraftsContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: sessionParams,
+  pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}/comment-drafts/post`,
+  requestBodySchema: postGuidedReviewDraftsSchema,
+  responsesByStatusCode: { 200: guidedReviewPostResultSchema, ...errorResponses },
 })
