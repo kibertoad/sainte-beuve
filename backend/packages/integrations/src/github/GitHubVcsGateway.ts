@@ -1,7 +1,20 @@
-import type { OpenPullRequest, ProjectRef, PullRequestRef } from '@sainte-beuve/contracts'
-import type { VcsAccount, VcsGateway } from '@sainte-beuve/kernel'
-import { githubRequest, repoPath } from './client.js'
+import type {
+  OpenPullRequest,
+  ProjectRef,
+  PullRequestRef,
+  PullRequestStatus,
+} from '@sainte-beuve/contracts'
+import type { PullRequestAddress, VcsAccount, VcsGateway } from '@sainte-beuve/kernel'
+import { ConflictError } from '@sainte-beuve/kernel'
+import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
+import {
+  type GitHubPullRequestDetail,
+  type GitHubRepositorySettings,
+  type GitHubReview,
+  mergeMethodOf,
+  toPullRequestStatus,
+} from './merging.js'
 
 /**
  * The GitHub side of the VCS port: mirror an assignment onto the pull request,
@@ -28,6 +41,12 @@ const PAGE_SIZE = 100
  * keeps one badly registered project from spending a rate-limit budget.
  */
 const MAX_PAGES = 10
+
+/**
+ * What GitHub answers a merge it will not make with: 405 for a pull request it
+ * cannot merge, 409 for a head that moved, 422 for a merge it refuses outright.
+ */
+const MERGE_REFUSALS = new Set([405, 409, 422])
 
 interface GitHubUser {
   id: number
@@ -99,6 +118,37 @@ export class GitHubVcsGateway implements VcsGateway {
     return pulls.map((pull) => toOpenPullRequest(project, pull))
   }
 
+  /** Two reads, because GitHub's pull request carries no review verdicts. */
+  async pullRequestStatus(pr: PullRequestAddress): Promise<PullRequestStatus> {
+    const token = await this.options.tokens.tokenFor(pr.owner, pr.repo)
+    const [pull, reviews] = await Promise.all([
+      this.get<GitHubPullRequestDetail>(repoPath(pr, `/pulls/${pr.number}`), token),
+      this.reviewsOf(pr, token),
+    ])
+    return toPullRequestStatus(pull, reviews)
+  }
+
+  async merge(pr: PullRequestAddress, expectedHeadSha: string): Promise<void> {
+    const token = await this.options.tokens.tokenFor(pr.owner, pr.repo)
+    const settings = await this.get<GitHubRepositorySettings>(repoPath(pr), token)
+    try {
+      await githubRequest({
+        method: 'PUT',
+        path: repoPath(pr, `/pulls/${pr.number}/merge`),
+        body: { sha: expectedHeadSha, merge_method: mergeMethodOf(settings) },
+        token,
+        baseUrl: this.options.baseUrl,
+        fetchImpl: this.options.fetchImpl,
+      })
+    } catch (err) {
+      const status = githubApiStatusOf(err)
+      if (status !== undefined && MERGE_REFUSALS.has(status) && err instanceof Error) {
+        throw new ConflictError(err.message)
+      }
+      throw err
+    }
+  }
+
   async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
     if (logins.length === 0) return
     await this.call(pr, {
@@ -163,6 +213,29 @@ export class GitHubVcsGateway implements VcsGateway {
       displayName: user.name ?? null,
       avatarUrl: user.avatar_url ?? null,
     }
+  }
+
+  /** Every review, oldest first: a verdict that has scrolled past the first page still counts. */
+  private async reviewsOf(pr: PullRequestAddress, token: string): Promise<GitHubReview[]> {
+    const reviews: GitHubReview[] = []
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      const batch = await this.get<GitHubReview[]>(
+        repoPath(pr, `/pulls/${pr.number}/reviews?per_page=${PAGE_SIZE}&page=${page}`),
+        token,
+      )
+      reviews.push(...batch)
+      if (batch.length < PAGE_SIZE) break
+    }
+    return reviews
+  }
+
+  private async get<T>(path: string, token: string): Promise<T> {
+    return githubRequest<T>({
+      path,
+      token,
+      baseUrl: this.options.baseUrl,
+      fetchImpl: this.options.fetchImpl,
+    })
   }
 
   private async call(

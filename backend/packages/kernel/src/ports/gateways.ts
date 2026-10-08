@@ -15,6 +15,7 @@ import type {
   PostGuidedReviewDraftsInput,
   ProjectRef,
   PullRequestRef,
+  PullRequestStatus,
   Reminder,
   RequestGuidedReviewDraftsInput,
   ReviewRequest,
@@ -54,6 +55,9 @@ export interface VcsAccount {
   avatarUrl: string | null
 }
 
+/** A pull request by the coordinates every host addresses it by. */
+export type PullRequestAddress = ProjectRef & { number: number }
+
 /**
  * Source control. One interface for every host: GitHub calls the objects pull
  * requests and GitLab calls them merge requests, and the translation happens
@@ -82,6 +86,17 @@ export interface VcsGateway {
    * already held, and the two halves would be from different moments.
    */
   listOpenPullRequests(project: ProjectRef): Promise<OpenPullRequest[]>
+  /**
+   * One pull request's approval and whether the host would merge it now. Not
+   * part of the list read, because neither host puts approvals on its list.
+   */
+  pullRequestStatus(pr: PullRequestAddress): Promise<PullRequestStatus>
+  /**
+   * Merge it with the method the repository's own settings allow. Refused with
+   * a `ConflictError` when the host will not merge it, or when its head is no
+   * longer `expectedHeadSha`.
+   */
+  merge(pr: PullRequestAddress, expectedHeadSha: string): Promise<void>
   /**
    * The account this gateway's credential acts as, for a screen that has to say
    * who a deployment is reaching the host as, and for the workspace, which has

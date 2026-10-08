@@ -1,0 +1,79 @@
+import type {
+  DirectMerge,
+  Mergeability,
+  MergeComment,
+  MergeCommentSource,
+  MyPullRequestStatusFilter,
+  MyPullRequestsQuery,
+  Project,
+  PullRequestApproval,
+} from '@sainte-beuve/contracts'
+
+/** The merge comments configured at each level. Null on a team or project inherits. */
+export interface MergeCommentLevels {
+  project: MergeComment[] | null
+  team: MergeComment[] | null
+  org: MergeComment[]
+}
+
+export interface ResolvedMergeComments {
+  comments: MergeComment[]
+  /** The level that decided, or null when none configures any. */
+  from: MergeCommentSource | null
+}
+
+/** The most specific level that says anything wins: project, then team, then org. */
+export function resolveMergeComments(levels: MergeCommentLevels): ResolvedMergeComments {
+  if (levels.project !== null) return { comments: levels.project, from: 'project' }
+  if (levels.team !== null) return { comments: levels.team, from: 'team' }
+  if (levels.org.length > 0) return { comments: levels.org, from: 'org' }
+  return { comments: [], from: null }
+}
+
+export interface DirectMergeInput {
+  /** Null when the host could not be asked. */
+  mergeability: Mergeability | null
+  restrictDirectMerge: boolean
+  commentsInForce: number
+  admin: boolean
+}
+
+/**
+ * Whether a direct merge is on offer. The restriction only applies while the
+ * project has merge comments in force: with none, there is no other way to
+ * merge from here, and refusing would strand the pull request.
+ */
+export function decideDirectMerge(input: DirectMergeInput): DirectMerge {
+  if (input.mergeability !== 'mergeable') return 'not_mergeable'
+  if (input.restrictDirectMerge && input.commentsInForce > 0) {
+    return input.admin ? 'override' : 'restricted'
+  }
+  return 'allowed'
+}
+
+/** Whether a pull request belongs under a status filter. A draft is only ever under `draft`. */
+export function matchesStatusFilter(
+  filter: MyPullRequestStatusFilter,
+  pr: { draft: boolean; approval: PullRequestApproval },
+): boolean {
+  if (pr.draft) return filter === 'draft'
+  if (pr.approval === 'approved') return filter === 'approved'
+  return filter === 'awaiting'
+}
+
+/**
+ * The registered projects a My PRs read has to sweep. Narrowing here, before
+ * any host is asked, is what keeps a filtered read cheap. An owner matches
+ * case-insensitively, as both hosts treat it.
+ */
+export function projectsInScope(
+  projects: readonly Project[],
+  query: Pick<MyPullRequestsQuery, 'owner' | 'projectId'>,
+): Project[] {
+  const owner = query.owner?.toLowerCase()
+  return projects.filter(
+    (project) =>
+      (query.projectId === undefined || project.id === query.projectId) &&
+      (owner === undefined || project.owner.toLowerCase() === owner),
+  )
+}

@@ -42,6 +42,7 @@ export type {
   GatewayFactory,
   GuidedReviewGateway,
   GuidedReviewWatchEvent,
+  PullRequestAddress,
   VcsAccount,
   VcsGateway,
   VcsIdentityGateway,

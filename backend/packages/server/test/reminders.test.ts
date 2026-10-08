@@ -634,6 +634,7 @@ describe('a tick across tenancies', () => {
       name: 'Second',
       enrolment: 'invite',
       defaultRepositoryOwner: null,
+      mergeComments: [],
       createdAt: harness.clock.now(),
     })
     // The second org posts over its OWN bot token: the deployment's belongs to

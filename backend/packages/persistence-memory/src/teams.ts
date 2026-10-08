@@ -41,7 +41,7 @@ export class InMemoryTeamRepository implements TeamRepository {
 
   async update(
     teamId: string,
-    patch: Partial<Pick<Team, 'name' | 'ownerId'>>,
+    patch: Partial<Pick<Team, 'name' | 'ownerId' | 'mergeComments'>>,
   ): Promise<Team | null> {
     const row = this.rows.get(teamId)
     if (row === undefined) return null

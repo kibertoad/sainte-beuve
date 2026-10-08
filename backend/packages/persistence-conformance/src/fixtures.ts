@@ -30,6 +30,7 @@ export function org(id: string, overrides: Partial<Org> = {}): Org {
     name: `Org ${id}`,
     enrolment: 'invite',
     defaultRepositoryOwner: null,
+    mergeComments: [],
     createdAt: 1_000,
     ...overrides,
   }
@@ -170,6 +171,8 @@ export function project(id: string, overrides: Partial<Project> = {}): Project {
     repo: 'api',
     webUrl: 'https://github.com/platform/api',
     skills: ['Backend', 'Frontend'],
+    mergeComments: null,
+    restrictDirectMerge: false,
     createdAt: 1_000,
     ...overrides,
   }

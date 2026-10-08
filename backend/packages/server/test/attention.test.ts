@@ -59,6 +59,7 @@ describe('asking for attention', () => {
       id: 'team-platform',
       name: 'Platform',
       ownerId: null,
+      mergeComments: null,
       createdAt: 0,
     })
     await harness.app.fetch(

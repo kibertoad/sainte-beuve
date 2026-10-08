@@ -56,10 +56,28 @@ afterAll(async () => {
 it('makes one ownerless team per distinct name, per org', async () => {
   const store = createPostgresPersistence(db)
   expect(await store.forOrg(DEFAULT_ORG_ID).teams.list()).toStrictEqual([
-    { id: 'team_7061796d656e7473', name: 'Payments', ownerId: null, createdAt: 3_000 },
-    { id: 'team_706c6174666f726d', name: 'Platform', ownerId: null, createdAt: 1_000 },
+    {
+      id: 'team_7061796d656e7473',
+      name: 'Payments',
+      ownerId: null,
+      mergeComments: null,
+      createdAt: 3_000,
+    },
+    {
+      id: 'team_706c6174666f726d',
+      name: 'Platform',
+      ownerId: null,
+      mergeComments: null,
+      createdAt: 1_000,
+    },
   ])
   expect(await store.forOrg('org-b').teams.list()).toStrictEqual([
-    { id: 'team_706c6174666f726d', name: 'Platform', ownerId: null, createdAt: 5_000 },
+    {
+      id: 'team_706c6174666f726d',
+      name: 'Platform',
+      ownerId: null,
+      mergeComments: null,
+      createdAt: 5_000,
+    },
   ])
 })

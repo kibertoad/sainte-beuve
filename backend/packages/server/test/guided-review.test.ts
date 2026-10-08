@@ -132,6 +132,8 @@ async function registerProject(harness: TestHarness): Promise<void> {
     repo: 'Sainte-Beuve',
     webUrl: null,
     skills: [],
+    mergeComments: null,
+    restrictDirectMerge: false,
     createdAt: 0,
   })
 }
@@ -193,6 +195,8 @@ describe('guided review', () => {
       repo: 'sainte-beuve',
       webUrl: null,
       skills: [],
+      mergeComments: null,
+      restrictDirectMerge: false,
       createdAt: -1,
     })
 

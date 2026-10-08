@@ -4,7 +4,7 @@ import { type ConformanceCase, conformanceCase } from './case.js'
 import { type TenancyCase, tenancyCase } from './tenancy-cases.js'
 
 function team(id: string, name: string, overrides: Partial<Team> = {}): Team {
-  return { id, name, ownerId: 'r1', createdAt: 1_000, ...overrides }
+  return { id, name, ownerId: 'r1', mergeComments: null, createdAt: 1_000, ...overrides }
 }
 
 export const teamCases: readonly ConformanceCase[] = [
@@ -51,6 +51,19 @@ export const teamCases: readonly ConformanceCase[] = [
     // The old name is free again, and the new one is the team's.
     assert.strictEqual(await repos.teams.getByName('Platform'), null)
     assert.strictEqual((await repos.teams.getByName('core'))?.id, 't1')
+  }),
+
+  conformanceCase('a team keeps its merge comments, and null inherits again', async (repos) => {
+    await repos.teams.create(team('t1', 'Platform'))
+    const comments = [{ label: 'Queue', body: '/merge' }]
+    const set = await repos.teams.update('t1', { mergeComments: comments })
+    assert.deepStrictEqual(set, team('t1', 'Platform', { mergeComments: comments }))
+    assert.deepStrictEqual((await repos.teams.getById('t1'))?.mergeComments, comments)
+    // An empty list is a decision, distinct from inheriting.
+    await repos.teams.update('t1', { mergeComments: [] })
+    assert.deepStrictEqual((await repos.teams.getById('t1'))?.mergeComments, [])
+    await repos.teams.update('t1', { mergeComments: null })
+    assert.strictEqual((await repos.teams.getById('t1'))?.mergeComments, null)
   }),
 
   conformanceCase('updating a team that is gone answers null', async (repos) => {

@@ -52,6 +52,7 @@ import wretch from 'wretch'
 import type { RequestParams, SuccessBody } from './contractCall'
 import { capabilityCalls } from './capabilitiesApi'
 import { guidedReviewCalls } from './guidedReviewApi'
+import { myPullRequestCalls } from './myPullRequestsApi'
 import { organizationCalls } from './organizationApi'
 import { configurationCalls } from './sainteBeuveSettingsApi'
 
@@ -347,6 +348,7 @@ export function createSainteBeuveApi(apiBase: string) {
       call(resumeAiReviewContract, { pathParams: { runId }, body: {} }),
 
     ...guidedReviewCalls(call),
+    ...myPullRequestCalls(call),
     ...capabilityCalls(call),
     ...configurationCalls(call),
     ...organizationCalls(call),

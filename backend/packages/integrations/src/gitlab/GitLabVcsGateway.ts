@@ -1,6 +1,17 @@
-import type { OpenPullRequest, ProjectRef, PullRequestRef } from '@sainte-beuve/contracts'
-import type { VcsAccount, VcsGateway } from '@sainte-beuve/kernel'
-import { gitlabRequest, projectPath } from './client.js'
+import type {
+  OpenPullRequest,
+  ProjectRef,
+  PullRequestRef,
+  PullRequestStatus,
+} from '@sainte-beuve/contracts'
+import type { PullRequestAddress, VcsAccount, VcsGateway } from '@sainte-beuve/kernel'
+import { ConflictError } from '@sainte-beuve/kernel'
+import { gitlabApiStatusOf, gitlabRequest, projectPath } from './client.js'
+import {
+  type GitLabApprovals,
+  type GitLabMergeRequestDetail,
+  toPullRequestStatus,
+} from './merging.js'
 
 /**
  * The GitLab side of the VCS port.
@@ -25,6 +36,12 @@ const PAGE_SIZE = 100
  * keeps one badly registered project from spending a rate-limit budget.
  */
 const MAX_PAGES = 10
+
+/**
+ * What GitLab answers a merge it will not make with: 405 or 406 for one it
+ * cannot merge, 409 for a head that moved, 422 for one it refuses outright.
+ */
+const MERGE_REFUSALS = new Set([405, 406, 409, 422])
 
 interface GitLabUser {
   id: number
@@ -82,6 +99,36 @@ export class GitLabVcsGateway implements VcsGateway {
       if (batch.length < PAGE_SIZE) break
     }
     return merges.map((merge) => this.toOpenPullRequest(project, merge))
+  }
+
+  /** Two reads, because the approvals are their own resource on GitLab. */
+  async pullRequestStatus(pr: PullRequestAddress): Promise<PullRequestStatus> {
+    const [merge, approvals] = await Promise.all([
+      this.call<GitLabMergeRequestDetail>({ path: mergeRequestPath(pr) }),
+      this.call<GitLabApprovals>({ path: `${mergeRequestPath(pr)}/approvals` }),
+    ])
+    return toPullRequestStatus(merge, approvals)
+  }
+
+  /**
+   * The project's own merge method applies, since GitLab sets it per project.
+   * Squashing is per merge request, so its setting is read and passed back.
+   */
+  async merge(pr: PullRequestAddress, expectedHeadSha: string): Promise<void> {
+    const merge = await this.call<GitLabMergeRequestDetail>({ path: mergeRequestPath(pr) })
+    try {
+      await this.call({
+        method: 'PUT',
+        path: `${mergeRequestPath(pr)}/merge`,
+        body: { sha: expectedHeadSha, squash: merge.squash_on_merge ?? merge.squash ?? false },
+      })
+    } catch (err) {
+      const status = gitlabApiStatusOf(err)
+      if (status !== undefined && MERGE_REFUSALS.has(status) && err instanceof Error) {
+        throw new ConflictError(err.message)
+      }
+      throw err
+    }
   }
 
   async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
@@ -187,6 +234,10 @@ export class GitLabVcsGateway implements VcsGateway {
       fetchImpl: this.options.fetchImpl,
     })
   }
+}
+
+function mergeRequestPath(pr: PullRequestAddress): string {
+  return `/projects/${projectPath(pr.owner, pr.repo)}/merge_requests/${pr.number}`
 }
 
 function toAccount(user: GitLabUser): VcsAccount {

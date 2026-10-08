@@ -36,7 +36,13 @@ export class TeamService {
     this.authorise({ kind: 'create', ownerId })
     await this.assertReviewer(ownerId)
     const { repositories, ids, clock } = this.container
-    const wanted: Team = { id: ids.next(), name: input.name, ownerId, createdAt: clock.now() }
+    const wanted: Team = {
+      id: ids.next(),
+      name: input.name,
+      ownerId,
+      mergeComments: null,
+      createdAt: clock.now(),
+    }
     const written = await repositories.teams.create(wanted)
     if (written.id !== wanted.id) throw nameTaken(written.name)
     return written

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Team, UpdateOrgInput } from '@sainte-beuve/contracts'
+import type { MergeComment, Team, UpdateOrgInput, UpdateTeam } from '@sainte-beuve/contracts'
 import { callerIsAdmin } from '../../composables/useIntegrationSettings'
 
 // The org: its settings, its teams, and (for an admin) the other orgs on this
@@ -48,10 +48,16 @@ async function createTeam(team: { name: string; ownerId?: string | null }) {
   if (created) teamsCard.value?.clearDraft()
 }
 
-async function saveTeam(team: Team, patch: { name: string; ownerId: string | null }) {
-  const changes: { name?: string; ownerId?: string | null } = {}
+async function saveTeam(
+  team: Team,
+  patch: { name: string; ownerId: string | null; mergeComments: MergeComment[] | null },
+) {
+  const changes: UpdateTeam = {}
   if (patch.name !== team.name) changes.name = patch.name
   if (patch.ownerId !== team.ownerId) changes.ownerId = patch.ownerId
+  if (!sameMergeComments(patch.mergeComments, team.mergeComments)) {
+    changes.mergeComments = patch.mergeComments
+  }
   if (Object.keys(changes).length === 0) return
   await run(() => api.updateTeam(team.id, changes), 'Could not save the team', team.id)
 }

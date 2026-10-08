@@ -4,7 +4,7 @@ import { UpstreamFailedError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.js'
 import { WebCryptoSecretCipher } from '../src/crypto/WebCryptoSecretCipher.js'
-import { type TestHarness, buildHarness, del, put, stubGateways } from './helpers.js'
+import { type TestHarness, buildHarness, del, noMerging, put, stubGateways } from './helpers.js'
 
 // The Configuration screen's API, through the app: the contract validation, the
 // service and the error envelope together.
@@ -286,6 +286,7 @@ describe('a pasted GitHub credential', () => {
           removeRequestedReviewers: async () => {},
           comment: async () => {},
           listOpenPullRequests: async () => [],
+          ...noMerging(),
           identify: async () => ({
             subject: '4249249',
             username: 'kibertoad',
@@ -314,6 +315,7 @@ describe('a pasted GitHub credential', () => {
           removeRequestedReviewers: async () => {},
           comment: async () => {},
           listOpenPullRequests: async () => [],
+          ...noMerging(),
           identify: () => Promise.reject(refused),
         }),
       }),

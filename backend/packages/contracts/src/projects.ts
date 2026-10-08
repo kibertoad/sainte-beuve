@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { mergeCommentListSchema, mergeCommentOverrideSchema } from './merging.js'
 import { skillSchema } from './reviewers.js'
 import { projectRefSchema, vcsProviderSchema, webUrlSchema } from './vcs.js'
 
@@ -34,6 +35,13 @@ export const projectSchema = v.object({
   webUrl: v.nullable(webUrlSchema),
   /** The vocabulary an attention request on this project picks its skills from. */
   skills: v.array(skillSchema),
+  /** Replaces the team's and the org's merge comments for this repository. */
+  mergeComments: mergeCommentOverrideSchema,
+  /**
+   * Refuses a direct merge from sainte-beuve while merge comments are in force
+   * here, so a merge goes through the bot. An admin may still override it.
+   */
+  restrictDirectMerge: v.optional(v.boolean(), false),
   createdAt: v.number(),
 })
 export type Project = v.InferOutput<typeof projectSchema>
@@ -54,6 +62,8 @@ export const updateProjectSchema = v.partial(
   v.object({
     webUrl: v.nullable(webUrlSchema),
     skills: v.array(skillSchema),
+    mergeComments: v.nullable(mergeCommentListSchema),
+    restrictDirectMerge: v.boolean(),
   }),
 )
 export type UpdateProject = v.InferOutput<typeof updateProjectSchema>

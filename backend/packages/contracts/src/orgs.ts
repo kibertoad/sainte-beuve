@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { mergeCommentListSchema } from './merging.js'
 import { repoOwnerSchema, vcsProviderSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,8 @@ export const orgSchema = v.object({
    * on the way in so a row written before it existed decodes as unset.
    */
   defaultRepositoryOwner: v.optional(v.nullable(repoOwnerSchema), null),
+  /** The merge comments every team and project starts from. See `merging.ts`. */
+  mergeComments: v.optional(mergeCommentListSchema, []),
   createdAt: v.number(),
 })
 export type Org = v.InferOutput<typeof orgSchema>
@@ -112,6 +115,7 @@ export function defaultOrg(): Org {
     // after them is somebody an admin registered.
     enrolment: 'invite',
     defaultRepositoryOwner: null,
+    mergeComments: [],
     createdAt: 0,
   }
 }
@@ -184,6 +188,7 @@ export const updateOrgInputSchema = v.partial(
     name: orgSchema.entries.name,
     enrolment: orgEnrolmentSchema,
     defaultRepositoryOwner: v.nullable(repoOwnerSchema),
+    mergeComments: mergeCommentListSchema,
   }),
 )
 export type UpdateOrgInput = v.InferOutput<typeof updateOrgInputSchema>

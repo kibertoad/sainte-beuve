@@ -2,7 +2,6 @@ import type {
   CreateReviewerInput,
   CreateReviewRequestInput,
   OpenPullRequest,
-  ProjectRef,
   Reviewer,
   ReviewRequest,
   VcsProvider,
@@ -186,6 +185,17 @@ export function recordingVcs(): VcsGateway & {
       avatarUrl: null,
     }),
     listOpenPullRequests: async () => [],
+    ...noMerging(),
+  }
+}
+
+export { appVcs, viewerVcs } from './vcs-doubles.js'
+
+/** The status and merge half of the port, for a fake that is never asked either. */
+export function noMerging(): Pick<VcsGateway, 'pullRequestStatus' | 'merge'> {
+  return {
+    pullRequestStatus: () => Promise.reject(new Error('pullRequestStatus is not stubbed')),
+    merge: () => Promise.reject(new Error('merge is not stubbed')),
   }
 }
 
@@ -306,49 +316,6 @@ export async function openReview(
 
 export async function assignReviewer(harness: TestHarness, reviewId: string): Promise<Response> {
   return harness.app.fetch(post(`/api/v1/reviews/${reviewId}/assign`, { count: 1 }))
-}
-
-/**
- * A source-control gateway acting as one named person, over a fixed list of
- * open pull requests. What the workspace suite needs and the board suite does
- * not, so it is separate from `recordingVcs`.
- */
-export function viewerVcs(
-  username: string,
-  pullRequests: OpenPullRequest[] = [],
-): VcsGateway & { listed: ProjectRef[] } {
-  const listed: ProjectRef[] = []
-  return {
-    listed,
-    requestReviewers: async () => {},
-    removeRequestedReviewers: async () => {},
-    comment: async () => {},
-    listOpenPullRequests: async (project) => {
-      listed.push(project)
-      // The HOST is part of the match, as it is in a real adapter: a gateway
-      // for one host cannot answer with the other's pull requests.
-      return pullRequests.filter(
-        (pr) =>
-          pr.pullRequest.provider === project.provider &&
-          pr.pullRequest.owner === project.owner &&
-          pr.pullRequest.repo === project.repo,
-      )
-    },
-    identify: async () => ({
-      subject: `subject-${username}`,
-      username,
-      displayName: null,
-      avatarUrl: null,
-    }),
-  }
-}
-
-/**
- * A gateway authenticated as the deployment's own App: it reaches repositories
- * and it identifies NOBODY, which is exactly what an installation token is.
- */
-export function appVcs(pullRequests: OpenPullRequest[] = []): VcsGateway {
-  return { ...viewerVcs('installation', pullRequests), identify: async () => null }
 }
 
 /** One open pull request, with only the fields a case cares about spelled out. */

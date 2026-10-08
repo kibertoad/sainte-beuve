@@ -17,6 +17,9 @@ export interface TeamRepository {
    */
   create(team: Team): Promise<Team>
   /** Null when the team is gone. The caller checks a new name is free first. */
-  update(teamId: string, patch: Partial<Pick<Team, 'name' | 'ownerId'>>): Promise<Team | null>
+  update(
+    teamId: string,
+    patch: Partial<Pick<Team, 'name' | 'ownerId' | 'mergeComments'>>,
+  ): Promise<Team | null>
   delete(teamId: string): Promise<void>
 }

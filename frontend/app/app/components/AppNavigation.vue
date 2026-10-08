@@ -25,6 +25,7 @@ const route = useRoute()
 
 const links = computed(() => [
   { label: 'Workspace', to: '/', icon: 'i-lucide-layout-dashboard' },
+  { label: 'My PRs', to: '/my-pull-requests', icon: 'i-lucide-git-merge' },
   { label: 'Projects', to: '/projects', icon: 'i-lucide-folder-git-2' },
   { label: 'Board', to: '/board', icon: 'i-lucide-git-pull-request' },
   { label: 'Reviewers', to: '/reviewers', icon: 'i-lucide-users' },

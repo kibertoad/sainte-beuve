@@ -109,6 +109,30 @@ resolved and disappears from everybody's inbox, including the people who never
 got round to it. An ask that stayed up after it was answered would train the
 team to ignore the next one.
 
+## My PRs, and merging them
+
+**My PRs** lists your ten most recently updated open pull requests across the
+registered projects. By default it shows the ones still waiting on somebody else:
+not a draft and not approved yet. Switch the status to **Approved** or **Drafts**
+to see those instead, and narrow it to one repository owner or one repository.
+Each row reads its approval and merge state from the host, GitHub or GitLab alike.
+
+A pull request the host would merge right now gets a **Merge** button. It merges
+with the method the repository allows, at the commit you were looking at, so one
+that gained commits since you loaded the page is refused rather than merged.
+
+An org that merges through a bot (a merge queue driven by `/merge`, say)
+configures **merge comments**: a button label and the comment it posts. They are
+set for the org on the Organization screen, and a team or a project can replace
+them with its own list or with none. A project's list wins over its author's
+team's, which wins over the org's. A project can also refuse direct merges while
+merge comments are in force, so everything goes through the bot. An admin still
+sees the merge button there and has to confirm the override.
+
+Both actions use the deployment's credential for the host, so they only act on
+a pull request you opened, and the host's own branch protection still applies.
+A GitHub App needs `Contents: Read & write` to merge.
+
 ## Who is in the pool
 
 Both of those depend on the same list, and **Reviewers** is where it is kept: who

@@ -55,7 +55,7 @@ export class SqlTeamRepository implements TeamRepository {
 
   async update(
     teamId: string,
-    patch: Partial<Pick<Team, 'name' | 'ownerId'>>,
+    patch: Partial<Pick<Team, 'name' | 'ownerId' | 'mergeComments'>>,
   ): Promise<Team | null> {
     const current = await this.getById(teamId)
     if (current === null) return null

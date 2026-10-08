@@ -23,6 +23,7 @@ import { authentication } from './modules/auth/principal.js'
 import { connectController } from './modules/connections/ConnectController.js'
 import { connectionsController } from './modules/connections/ConnectionsController.js'
 import { healthController } from './modules/health/HealthController.js'
+import { myPullRequestsController } from './modules/myPullRequests/MyPullRequestsController.js'
 import { orgController } from './modules/orgs/OrgController.js'
 import { teamController } from './modules/teams/TeamController.js'
 import { projectController } from './modules/projects/ProjectController.js'
@@ -326,6 +327,7 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/', webhookController())
   app.route('/', connectController())
   app.route('/api/v1', workspaceController())
+  app.route('/api/v1', myPullRequestsController())
   app.route('/api/v1', projectController())
   app.route('/api/v1', attentionController())
   app.route('/api/v1', authController())

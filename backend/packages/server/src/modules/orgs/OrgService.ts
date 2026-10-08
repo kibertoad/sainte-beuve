@@ -129,6 +129,7 @@ export class OrgService {
       name: input.name,
       enrolment: input.enrolment,
       defaultRepositoryOwner: null,
+      mergeComments: [],
       createdAt: clock.now(),
     }
     // The default org has no row until somebody makes one, so a deployment

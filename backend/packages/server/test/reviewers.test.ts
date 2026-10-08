@@ -19,6 +19,7 @@ describe('reviewer directory API', () => {
       id: 'team-platform',
       name: 'platform',
       ownerId: null,
+      mergeComments: null,
       createdAt: 0,
     })
   })

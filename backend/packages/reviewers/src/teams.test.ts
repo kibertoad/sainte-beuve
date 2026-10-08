@@ -7,7 +7,7 @@ const admin: TeamActor = { reviewerId: 'r-admin', admin: true }
 const machine: TeamActor = { reviewerId: null, admin: false }
 
 function team(ownerId: string | null): Team {
-  return { id: 't1', name: 'Platform', ownerId, createdAt: 1 }
+  return { id: 't1', name: 'Platform', ownerId, mergeComments: null, createdAt: 1 }
 }
 
 describe('decideTeamAction', () => {

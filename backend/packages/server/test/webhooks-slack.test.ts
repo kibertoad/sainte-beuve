@@ -394,6 +394,7 @@ describe('Slack intake, per org', () => {
       name: slug,
       enrolment: 'invite',
       defaultRepositoryOwner: null,
+      mergeComments: [],
       createdAt: harness.clock.now(),
     })
     return org.id
@@ -531,6 +532,7 @@ describe('Slack intake, per org', () => {
       name: 'acme',
       enrolment: 'invite',
       defaultRepositoryOwner: null,
+      mergeComments: [],
       createdAt: announcing.clock.now(),
     })
 

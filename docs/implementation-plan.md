@@ -75,6 +75,10 @@ provider)` from that host's own credential. Above the adapter there is no
   by you), reporting per project whether it could be read at all.
 - **The project registry**: GitHub or GitLab repositories, each carrying the
   skill vocabulary an attention request on it picks from.
+- **My PRs**: the viewer's ten most recently updated open pull requests,
+  filtered by status, owner and repository, with a direct merge where the host
+  would take one and the org's merge comments for a merge bot. Both hosts sit
+  behind the same two port methods, `pullRequestStatus` and `merge`.
 - **Attention requests**: raised against a pull request with the skills it
   needs, an optional same-team gate and a critical mass; delivered live over
   server-sent events and over a REST inbox that carries the same payload;

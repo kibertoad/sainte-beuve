@@ -115,6 +115,7 @@ describe('who is calling', () => {
           name: 'Default',
           enrolment: 'invite',
           defaultRepositoryOwner: null,
+          mergeComments: [],
           createdAt: 0,
         },
         // `open` refuses nobody, so whoever can reach this deployment can

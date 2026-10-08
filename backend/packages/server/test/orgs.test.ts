@@ -210,6 +210,7 @@ describe('the org boundary', () => {
         name: 'Default',
         enrolment: 'invite',
         defaultRepositoryOwner: null,
+        mergeComments: [],
         createdAt: 0,
       })
       // Synthesised, not stored: the route every page polls must not be a write.

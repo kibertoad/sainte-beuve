@@ -38,6 +38,8 @@ export class ProjectService {
       // Absent means the defaults; an explicit empty list means a team that
       // wants no skill vocabulary, and the two must not collapse into one.
       skills: input.skills ?? [...DEFAULT_PROJECT_SKILLS],
+      mergeComments: null,
+      restrictDirectMerge: false,
       createdAt: clock.now(),
     })
   }

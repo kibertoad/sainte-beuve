@@ -132,6 +132,9 @@ an API key" and "can read the board" were the same permission.
 | Teams: creating one you own                             | ✔     | ✔      |
 | Teams: renaming, deleting, handing over your own        | ✔     | ✔      |
 | Teams: creating for, or changing, somebody else's       | ✔     |        |
+| Org and project merge comments, the merge restriction   | ✔     |        |
+| Merging your own pull request, posting a merge comment  | ✔     | ✔      |
+| Merging past a project's merge restriction              | ✔     |        |
 
 An **admin configures the deployment; a member uses it.** Anything finer is a
 permission matrix, and a matrix nobody has asked for yet is a matrix that will be

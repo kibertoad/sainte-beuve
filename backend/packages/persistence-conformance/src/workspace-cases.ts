@@ -40,6 +40,20 @@ export const projectCases: readonly ConformanceCase[] = [
     assert.strictEqual(found, null)
   }),
 
+  conformanceCase('a project keeps its merge comments and its merge restriction', async (repos) => {
+    await repos.projects.create(project('p1'))
+    const comments = [{ label: 'Queue', body: '@bot merge' }]
+    const updated = await repos.projects.update('p1', {
+      mergeComments: comments,
+      restrictDirectMerge: true,
+    })
+    assert.deepStrictEqual(
+      updated,
+      project('p1', { mergeComments: comments, restrictDirectMerge: true }),
+    )
+    assert.deepStrictEqual(await repos.projects.getById('p1'), updated)
+  }),
+
   conformanceCase('a project patch touches the fields it names', async (repos) => {
     await repos.projects.create(project('p1'))
     const updated = await repos.projects.update('p1', { skills: ['payments'] })

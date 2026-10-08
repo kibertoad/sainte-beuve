@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Project, VcsProvider } from '@sainte-beuve/contracts'
+import type { Project, UpdateProject, VcsProvider } from '@sainte-beuve/contracts'
 import { DEFAULT_PROJECT_SKILLS, VCS_PROVIDERS, vcsDisplayName } from '@sainte-beuve/contracts'
 import { blankToNull, parseSkills } from '../utils/text'
 
@@ -74,6 +74,14 @@ async function saveSkills(project: Project) {
     project.id,
   )
   if (saved) delete drafts.value[project.id]
+}
+
+async function saveMerging(project: Project, patch: UpdateProject) {
+  await run(
+    () => api.updateProject(project.id, patch),
+    'Could not save how the project merges',
+    `${project.id}:merging`,
+  )
 }
 
 /**
@@ -174,7 +182,7 @@ async function remove(project: Project) {
     <div v-else class="flex flex-col gap-3">
       <UCard v-for="project in projects" :key="project.id">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-          <div class="min-w-0">
+          <div class="min-w-0 sm:flex-1">
             <div class="flex flex-wrap items-center gap-2">
               <UBadge variant="subtle" color="neutral">
                 {{ vcsDisplayName(project.provider) }}
@@ -210,6 +218,12 @@ async function remove(project: Project) {
                 Save
               </UButton>
             </div>
+            <ProjectMergeSettings
+              class="mt-3"
+              :project="project"
+              :busy="busy === `${project.id}:merging`"
+              @save="saveMerging(project, $event)"
+            />
           </div>
           <UButton
             size="sm"

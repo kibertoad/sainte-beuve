@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { mergeCommentListSchema, mergeCommentOverrideSchema } from './merging.js'
 
 // ---------------------------------------------------------------------------
 // Teams: the list a reviewer's `team` is picked from, kept per org.
@@ -19,6 +20,8 @@ export const teamSchema = v.object({
    * admin. Null for a team nobody owns, which only an admin manages.
    */
   ownerId: v.nullable(v.string()),
+  /** Replaces the org's merge comments for pull requests by this team's members. */
+  mergeComments: mergeCommentOverrideSchema,
   createdAt: v.number(),
 })
 export type Team = v.InferOutput<typeof teamSchema>
@@ -30,9 +33,13 @@ export const createTeamSchema = v.object({
 })
 export type CreateTeam = v.InferOutput<typeof createTeamSchema>
 
-/** A rename, a transfer of ownership, or both. */
+/** A rename, a transfer of ownership, the team's merge comments, or any of them together. */
 export const updateTeamSchema = v.partial(
-  v.object({ name: teamNameSchema, ownerId: v.nullable(v.string()) }),
+  v.object({
+    name: teamNameSchema,
+    ownerId: v.nullable(v.string()),
+    mergeComments: v.nullable(mergeCommentListSchema),
+  }),
 )
 export type UpdateTeam = v.InferOutput<typeof updateTeamSchema>
 

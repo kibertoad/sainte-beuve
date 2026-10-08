@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Reviewer, Team } from '@sainte-beuve/contracts'
+import type { MergeComment, Reviewer, Team } from '@sainte-beuve/contracts'
 
 // The org's teams. Anybody may create one they own; its owner or an admin may
 // rename it, hand it to somebody else or delete it. The API decides, and this
@@ -15,7 +15,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   create: [team: { name: string; ownerId?: string | null }]
-  save: [team: Team, patch: { name: string; ownerId: string | null }]
+  save: [
+    team: Team,
+    patch: { name: string; ownerId: string | null; mergeComments: MergeComment[] | null },
+  ]
   remove: [team: Team]
 }>()
 
@@ -35,6 +38,14 @@ function ownerName(team: Team): string {
   if (team.ownerId === null) return 'No owner'
   const owner = props.reviewers.find((reviewer) => reviewer.id === team.ownerId)
   return owner === undefined ? 'Unknown owner' : `Owned by ${owner.displayName}`
+}
+
+function mergeCommentsNote(team: Team): string | null {
+  if (team.mergeComments === null) return null
+  const count = team.mergeComments.length
+  return count === 0
+    ? 'No merge comments'
+    : `${count} merge comment${count === 1 ? '' : 's'} of its own`
 }
 
 function canManage(team: Team): boolean {
@@ -69,15 +80,21 @@ defineExpose({ clearDraft })
 const editing = ref<string | null>(null)
 const draftName = ref('')
 const draftOwner = ref(NOBODY)
+const draftMergeComments = ref<MergeComment[] | null>(null)
 
 function edit(team: Team) {
   editing.value = team.id
   draftName.value = team.name
   draftOwner.value = team.ownerId ?? NOBODY
+  draftMergeComments.value = team.mergeComments
 }
 
 function save(team: Team) {
-  emit('save', team, { name: draftName.value.trim(), ownerId: ownerIdOf(draftOwner.value) })
+  emit('save', team, {
+    name: draftName.value.trim(),
+    ownerId: ownerIdOf(draftOwner.value),
+    mergeComments: cleanMergeComments(draftMergeComments.value),
+  })
   editing.value = null
 }
 </script>
@@ -95,12 +112,25 @@ function save(team: Team) {
 
     <ul v-if="teams.length > 0" class="flex flex-col divide-y divide-default mb-4">
       <li v-for="team in teams" :key="team.id" class="py-3">
-        <div v-if="editing === team.id" class="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <UFormField label="Name" class="sm:flex-1">
-            <UInput v-model="draftName" class="w-full" />
-          </UFormField>
-          <UFormField label="Owner" class="sm:w-64">
-            <USelect v-model="draftOwner" :items="ownerOptions" value-key="value" class="w-full" />
+        <div v-if="editing === team.id" class="flex flex-col gap-3">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <UFormField label="Name" class="sm:flex-1">
+              <UInput v-model="draftName" class="w-full" />
+            </UFormField>
+            <UFormField label="Owner" class="sm:w-64">
+              <USelect
+                v-model="draftOwner"
+                :items="ownerOptions"
+                value-key="value"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
+          <UFormField
+            label="Merge comments"
+            description="Offered on My PRs for pull requests by this team's members, unless the project has its own."
+          >
+            <MergeCommentsEditor v-model="draftMergeComments" inherit-from="the organization's" />
           </UFormField>
           <div class="flex gap-2 justify-end">
             <UButton variant="ghost" color="neutral" @click="editing = null">Cancel</UButton>
@@ -116,7 +146,12 @@ function save(team: Team) {
         <div v-else class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
             <p class="font-medium truncate">{{ team.name }}</p>
-            <p class="text-sm text-muted">{{ ownerName(team) }}</p>
+            <p class="text-sm text-muted">
+              {{ ownerName(team) }}
+              <template v-if="mergeCommentsNote(team)">
+                &middot; {{ mergeCommentsNote(team) }}</template
+              >
+            </p>
           </div>
           <div v-if="canManage(team)" class="flex gap-2">
             <UButton icon="i-lucide-pencil" variant="ghost" @click="edit(team)">Edit</UButton>

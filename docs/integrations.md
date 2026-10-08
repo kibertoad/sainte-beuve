@@ -333,7 +333,8 @@ on github.com and slack.com by hand, so they have to survive an API version bump
    back on the Configuration screen after an install.
 5. **Repository permissions**: `Pull requests: Read & write` (to request
    reviewers and comment), `Issues: Read & write` (a pull request's comments are
-   the issues API), `Metadata: Read-only`.
+   the issues API), `Contents: Read & write` (to merge from My PRs),
+   `Metadata: Read-only`.
 6. **Subscribe to events**: `Pull request`, `Pull request review`, `Issues`,
    `Issue comment`.
 7. Generate a private key, convert it once, and set the three variables:
