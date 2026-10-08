@@ -47,6 +47,9 @@ export default defineNuxtConfig({
 
   css: [join(layerDir, 'app/assets/css/main.css')],
 
+  // Shown until the bundle mounts. Anchored here for the same reason as `css`.
+  spaLoadingTemplate: join(layerDir, 'app/spa-loading-template.html'),
+
   app: {
     head: {
       // The API is usually on ANOTHER origin, and the first act of every screen
