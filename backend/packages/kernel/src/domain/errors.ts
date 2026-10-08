@@ -138,6 +138,28 @@ export function isDomainError(err: unknown): err is DomainError {
   return err instanceof DomainError
 }
 
+/**
+ * The `details` a refusal translated from a third party carries, naming whose
+ * words its message is.
+ *
+ * A refusal like that is written for an OPERATOR (it embeds the upstream's own
+ * response text and hints about this deployment's configuration), and the same
+ * code (`forbidden`, `not_found`, `validation`) is also what the board's own
+ * refusals carry. A surface that is read by strangers, such as a pull-request
+ * comment, has to tell the two apart without parsing a sentence, and this is
+ * how.
+ */
+export interface UpstreamDetails {
+  upstream: string
+}
+
+/** Which third party a refusal came from, or null for one this deployment wrote. */
+export function upstreamOf(err: unknown): string | null {
+  if (!isDomainError(err)) return null
+  const details = err.details as Partial<UpstreamDetails> | null | undefined
+  return typeof details?.upstream === 'string' ? details.upstream : null
+}
+
 /** Narrow an optional lookup to its value, or fail with a message naming what was missing. */
 export function assertFound<T>(value: T | null | undefined, message: string): T {
   if (value === null || value === undefined) throw new NotFoundError(message)

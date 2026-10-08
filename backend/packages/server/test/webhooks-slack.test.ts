@@ -3,6 +3,7 @@ import { SLACK_ACTIONS } from '@sainte-beuve/integrations'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { withOrg } from '../src/container.js'
 import { announceReview } from '../src/modules/reviews/announce.js'
+import { ReviewService } from '../src/modules/reviews/ReviewService.js'
 import { stubAiReview } from './ai-review-doubles.js'
 import {
   addReviewer,
@@ -162,7 +163,12 @@ describe('Slack interactivity', () => {
   })
 
   it('hands a reroll to somebody else, and takes it off whoever had it', async () => {
-    const first = await addReviewer(harness, { displayName: 'First', handles: { github: 'first' } })
+    // First presses the button: a reroll is the holder's to ask for.
+    const first = await addReviewer(harness, {
+      displayName: 'First',
+      handles: { github: 'first' },
+      slackUserId: 'U-peer',
+    })
     const second = await addReviewer(harness, {
       displayName: 'Second',
       handles: { github: 'second' },
@@ -183,7 +189,11 @@ describe('Slack interactivity', () => {
   })
 
   it('leaves the review where it is when there is nobody else to hand it to', async () => {
-    const only = await addReviewer(harness, { displayName: 'Only', handles: { github: 'only' } })
+    const only = await addReviewer(harness, {
+      displayName: 'Only',
+      handles: { github: 'only' },
+      slackUserId: 'U-peer',
+    })
     const review = await openReview(harness)
     await assignReviewer(harness, review.id)
 
@@ -214,6 +224,7 @@ describe('Slack interactivity', () => {
   })
 
   it('pushes the next nudge out rather than cancelling it', async () => {
+    await addReviewer(harness, { displayName: 'Peer', slackUserId: 'U-peer' })
     const review = await openReview(harness)
     const res = await signed(harness, command(`snooze ${review.id} 4`))
     expect(res.text).toContain('Snoozed')
@@ -230,6 +241,7 @@ describe('Slack interactivity', () => {
   it('answers with the refusal rather than a status code', async () => {
     // Slack renders the reply and nothing else: a non-200 shows as "operation
     // timed out" and loses the message naming what is missing.
+    await addReviewer(harness, { displayName: 'Peer', slackUserId: 'U-peer' })
     const review = await openReview(harness)
     const res = await signed(harness, command(`ai ${review.id}`))
     expect(res.status).toBe(200)
@@ -238,6 +250,7 @@ describe('Slack interactivity', () => {
 
   it('delegates to cat-factory when it is configured', async () => {
     const wired = buildHarness({ aiReview: stubAiReview(), slack: harness.container.slack })
+    await addReviewer(wired, { displayName: 'Peer', slackUserId: 'U-peer' })
     const review = await openReview(wired)
     expect((await signed(wired, command(`ai ${review.id}`))).text).toContain('cat-factory')
   })
@@ -274,6 +287,67 @@ describe('Slack interactivity', () => {
     // A deployment with no announcement channel is a supported deployment, so
     // this is silence rather than a failure.
     expect(chat.posted).toStrictEqual([])
+  })
+})
+
+describe('Slack commands, by who typed them', () => {
+  let harness: TestHarness
+
+  beforeEach(() => {
+    harness = buildHarness({
+      slack: { signingSecret: SECRET, announcementChannelId: 'C-reviews' },
+    })
+  })
+
+  it('changes nothing for a workspace user the directory does not hold', async () => {
+    // A Slack signature proves Slack sent it, not who typed it. Any member of the
+    // workspace, a guest included, can loop `/review ai` on the org's budget or
+    // `/review reroll` to pull reviews off people.
+    const catFactory = stubAiReview()
+    const wired = buildHarness({ aiReview: catFactory, slack: harness.container.slack })
+    await addReviewer(wired, { displayName: 'Peer', handles: { github: 'peer' } })
+    const review = await openReview(wired)
+    await assignReviewer(wired, review.id)
+
+    for (const verb of ['ai', 'reroll', 'snooze']) {
+      const res = await signed(wired, command(`${verb} ${review.id}`, 'U-guest'))
+      expect(res.text).toContain('U-guest')
+    }
+    expect(catFactory.requested).toStrictEqual([])
+    const stored = await wired.container.repositories.reviews.getById(review.id)
+    expect(stored?.assignedReviewerIds).toHaveLength(1)
+    const reminders = await wired.container.repositories.reminders.listByReview(review.id)
+    expect(reminders.every((reminder) => reminder.snoozedUntil === null)).toBe(true)
+  })
+
+  it('lets a reroll come only from whoever holds the review, or an admin', async () => {
+    const holder = await addReviewer(harness, { displayName: 'Holder', handles: { github: 'h' } })
+    await addReviewer(harness, { displayName: 'Other', handles: { github: 'o' } })
+    await addReviewer(harness, { displayName: 'Bystander', slackUserId: 'U-bystander' })
+    const review = await openReview(harness)
+    await new ReviewService(harness.container).claim(review.id, holder.id)
+
+    const res = await signed(harness, command(`reroll ${review.id}`, 'U-bystander'))
+    expect(res.text).toContain('Only whoever has this review')
+    const stored = await harness.container.repositories.reviews.getById(review.id)
+    expect(stored?.assignedReviewerIds).toStrictEqual([holder.id])
+
+    await addReviewer(harness, { displayName: 'Admin', slackUserId: 'U-admin', role: 'admin' })
+    const byAdmin = await signed(harness, command(`reroll ${review.id}`, 'U-admin'))
+    expect(byAdmin.text).toContain('now goes to')
+  })
+
+  it('changes nothing for somebody paused', async () => {
+    await addReviewer(harness, {
+      displayName: 'Peer',
+      slackUserId: 'U-peer',
+      availability: 'paused',
+    })
+    const review = await openReview(harness)
+    const res = await signed(harness, command(`take ${review.id}`))
+    expect(res.text).toContain('paused')
+    const stored = await harness.container.repositories.reviews.getById(review.id)
+    expect(stored?.assignedReviewerIds).toStrictEqual([])
   })
 })
 

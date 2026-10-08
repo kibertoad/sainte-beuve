@@ -15,7 +15,9 @@ export {
   RateLimitedError,
   UnauthenticatedError,
   UnavailableError,
+  type UpstreamDetails,
   UpstreamFailedError,
+  upstreamOf,
   ValidationError,
 } from './domain/errors.js'
 export { projectRefKey, pullRequestKey } from './domain/keys.js'

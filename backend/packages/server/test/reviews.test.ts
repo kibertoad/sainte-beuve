@@ -53,7 +53,7 @@ describe('review board API', () => {
       realtime: 'memory',
       // Beside the store for the same reason: every deployment has an answer
       // and the one an operator has to be able to read from outside is WHICH.
-      auth: { mode: 'open', signInProviders: [], environmentApiKey: false },
+      auth: { mode: 'open', signInProviders: [], environmentApiKey: false, apiBaseUrl: false },
       capabilities: {
         chat: false,
         vcs: { github: false, gitlab: false },

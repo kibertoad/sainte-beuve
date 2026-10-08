@@ -137,6 +137,19 @@ describe('who is calling', () => {
       const unkeyed = buildHarness({ gateways: stubGateways({ signIn: everyHost(stubSignIn()) }) })
       expect((await authState(unkeyed)).signInProviders).toStrictEqual([])
     })
+
+    it('offers no sign-in on a public host until it knows where to call back', async () => {
+      // A button here would be a 503 from the sign-in route. See `callbackOrigin`.
+      const hosted = async (harness: TestHarness) => {
+        const res = await harness.app.fetch(new Request(`https://api.example.com${SESSION}`))
+        return ((await res.json()) as AuthState).signInProviders
+      }
+      expect(await hosted(signable())).toStrictEqual([])
+      expect(await hosted(signable({ apiBaseUrl: 'https://api.example.com' }))).toStrictEqual([
+        'github',
+        'gitlab',
+      ])
+    })
   })
 
   describe('a deployment that insists', () => {
@@ -453,7 +466,12 @@ describe('a round trip', () => {
     // than the host the browser addressed reads that as a split-host
     // deployment and answers `SameSite=None` — which works, and throws away the
     // browser's own cross-site protection on the deployment that had it.
-    const harness = signable({ appBaseUrl: 'https://board.example.com' })
+    // Which is also why it names its API origin: behind a proxy, the host this
+    // process sees is not one a callback could be built on.
+    const harness = signable({
+      appBaseUrl: 'https://board.example.com',
+      apiBaseUrl: 'https://board.example.com',
+    })
     const start = await harness.app.fetch(
       new Request('http://internal-8788/api/v1/auth/sign-in/github', {
         headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'board.example.com' },

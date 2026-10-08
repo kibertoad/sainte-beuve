@@ -1,4 +1,5 @@
 import type { AiReviewRun } from '@sainte-beuve/contracts'
+import { AI_REVIEW_FILING_TIMEOUT_MS } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 
 /**
@@ -8,16 +9,6 @@ import type { AppContainer } from '../../container.js'
  * a local truth about a local row, and it is the one thing the sweep does that
  * needs no gateway and works on a deployment that has none.
  */
-
-/**
- * How long a run may sit in `requested` with nothing acknowledged before the
- * clock writes it off.
- *
- * Generous on purpose: it only has to outlast the one call that moves a run out
- * of `requested`, and a Worker's whole wall-clock budget is a fraction of it, so
- * nothing merely slow is ever caught by it.
- */
-const ORPHANED_REQUEST_AFTER_MS = 5 * 60_000
 
 const REASON =
   'cat-factory never acknowledged this review, so there is nothing to poll: the request did not ' +
@@ -42,7 +33,7 @@ const REASON =
  */
 export async function abandonIfOrphaned(container: AppContainer, run: AiReviewRun): Promise<void> {
   const now = container.clock.now()
-  if (now - run.requestedAt < ORPHANED_REQUEST_AFTER_MS) return
+  if (now - run.requestedAt < AI_REVIEW_FILING_TIMEOUT_MS) return
   const { aiReviewRuns } = container.repositories
   const current = await aiReviewRuns.getById(run.id)
   if (current === null || current.status !== 'requested' || current.catFactoryTaskId !== null) {

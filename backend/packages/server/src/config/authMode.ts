@@ -55,7 +55,7 @@ const PUBLIC_OPEN =
  * Hostnames that are this machine. A deployment answering only these is the
  * laptop the open default exists for.
  */
-function isLoopback(hostname: string): boolean {
+export function isLoopback(hostname: string): boolean {
   return (
     hostname === 'localhost' ||
     hostname.endsWith('.localhost') ||

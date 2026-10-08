@@ -64,7 +64,7 @@ const assignedTo = computed(() => {
     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <ULink :to="review.pullRequest.url" target="_blank" class="font-medium">
+          <ULink :to="safeHref(review.pullRequest.url)" target="_blank" class="font-medium">
             {{ formatPullRequestRef(review.pullRequest) }}
           </ULink>
           <UBadge v-if="priority" color="error" variant="subtle" size="sm">{{ priority }}</UBadge>

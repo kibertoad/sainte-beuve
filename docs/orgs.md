@@ -252,6 +252,12 @@ A DEMOTION deliberately does not, because it does not have to: the role is read
 off the reviewer row, so it takes effect at once, and signing somebody out of a
 board they may still read would be a second thing happening for no reason.
 
+**And it keeps them out.** The identity link survives a pause, so a sign-in would
+otherwise find the row and seat them again with the same role. A paused row is
+refused at the end of every sign-in round trip, and `roleOf` reads one as no
+admin, so a paused admin cannot un-pause themselves. A Slack command from a paused
+row changes nothing either. See [docs/auth.md](./auth.md).
+
 ## Upgrading into it
 
 Two migrations, one per dialect, and neither needs a step anybody runs by hand:
@@ -269,6 +275,19 @@ written before roles existed belongs to somebody who could already reach every
 route on the deployment, so narrowing it would upgrade a working deployment into
 one whose Configuration screen nobody can open, or break whatever CI job is
 calling with that key.
+
+## A GitHub delivery belongs to whoever registered its repository
+
+A delivery carries no credential of ours, so the project registry is the only
+thing that can place it: `findOrgIdForProject` names the org that registered the
+repository, and the delivery runs in that org.
+
+**An inbound delivery for a repository nobody registered is dropped**, the
+default org included. A GitHub App can be installed by anybody who finds it, and
+falling back to the default org would hand whoever installed it on their own
+repository the default org's reviewers, its installation tokens and its
+cat-factory budget. A deployment registers its repositories on the Projects
+screen, which is the same act a second tenancy has to perform.
 
 ## A Slack app belongs to an org
 
@@ -352,10 +371,6 @@ slug is one store read and a verified one is two plus a decrypt — and closing
 that would mean opening a credential for an org that does not exist.
 
 ## What this does not do yet
-
-**An inbound delivery for a repository nobody registered lands in the default
-org.** Registering it is the answer, and on a single-tenant deployment the
-default org is where everything already is.
 
 **An org cannot be removed.** It owns rows in all eleven other tables, so
 removing one is a cascade across the whole store and a question — what happens to

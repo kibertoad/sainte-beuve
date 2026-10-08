@@ -406,11 +406,19 @@ describe('a parked AI review', () => {
 
   it('schedules one nudge when two runs on a review park in the same read', async () => {
     const review = await openReview(harness)
-    for (const _ of [1, 2]) {
-      expect(
-        (await harness.app.fetch(post(`/api/v1/reviews/${review.id}/ai-review`, {}))).status,
-      ).toBe(202)
-    }
+    expect(
+      (await harness.app.fetch(post(`/api/v1/reviews/${review.id}/ai-review`, {}))).status,
+    ).toBe(202)
+    // The second run goes in BEHIND the service, which now files one at a time:
+    // two in flight on a review is what a store written before that rule holds,
+    // and what two requests racing the admission read can still leave behind.
+    const [first] = await harness.container.repositories.aiReviewRuns.listByReview(review.id)
+    if (first === undefined) throw new Error('the first run was not recorded')
+    await harness.container.repositories.aiReviewRuns.create({
+      ...first,
+      id: 'run-raced',
+      catFactoryTaskId: 'task-raced',
+    })
     catFactory.report = { ...catFactory.report, status: 'awaiting_selection', curation: curation() }
 
     // Both runs park on the one read, and the ladder is a single row rewritten by

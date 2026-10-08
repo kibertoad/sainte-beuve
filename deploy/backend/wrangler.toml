@@ -81,6 +81,11 @@ new_sqlite_classes = ["AttentionHub"]
 CORS_ORIGINS = "https://sainte-beuve.example.com"
 # Where the SPA lives, so a Slack message can link back to a review.
 APP_BASE_URL = "https://sainte-beuve.example.com"
+# Where THIS Worker is served from. The OAuth callback a host sends the browser
+# back to is built on it rather than on the request's Host header, and a sign-in
+# refuses to start on a public host without it. The callback URLs registered in
+# the GitHub and GitLab OAuth apps are `<this>/connect/<host>/callback`.
+API_BASE_URL = "https://api.sainte-beuve.example.com"
 # The cat-factory instance AI reviews are delegated to. Point this at your own
 # local cat-factory (http://localhost:8787) or at the org's centralized one.
 CAT_FACTORY_BASE_URL = "https://cat-factory.example.com"

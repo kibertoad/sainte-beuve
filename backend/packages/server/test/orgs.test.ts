@@ -310,27 +310,6 @@ describe('the org boundary', () => {
     })
   })
 
-  describe('pausing somebody', () => {
-    it('signs them out', async () => {
-      // `deleteForReviewer` existed from the day sessions did and nothing called
-      // it: what pausing meant for ACCESS was the question this slice answers.
-      const cookie = await signIn(harness)
-      const state = await authState(harness, cookie)
-      const reviewerId =
-        state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
-      const paused = await harness.app.fetch(
-        new Request(`http://localhost${REVIEWERS}/${reviewerId}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json', cookie },
-          body: JSON.stringify({ availability: 'paused' }),
-        }),
-      )
-      expect(paused.status).toBe(200)
-      // The same cookie, now resolving to nobody, on a deployment that refuses one.
-      expect((await harness.app.fetch(get('/api/v1/reviews', { cookie }))).status).toBe(401)
-    })
-  })
-
   describe('making one', () => {
     it('refuses a slug another org already holds', async () => {
       await makeOrg(harness, 'acme')
@@ -412,6 +391,90 @@ describe('the org boundary', () => {
 // trip WAS the authorisation. Any GitHub or GitLab account could sign in to any
 // org whose slug it knew, and a pre-registered row handed its role — `admin`
 // included — to whoever held the username.
+describe('pausing somebody', () => {
+  let harness: TestHarness
+
+  beforeEach(() => {
+    harness = closedHarness()
+  })
+
+  it('signs them out', async () => {
+    // `deleteForReviewer` existed from the day sessions did and nothing called
+    // it: what pausing meant for ACCESS was the question this slice answers.
+    const cookie = await signIn(harness)
+    const state = await authState(harness, cookie)
+    const reviewerId = state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
+    const paused = await harness.app.fetch(
+      new Request(`http://localhost${REVIEWERS}/${reviewerId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ availability: 'paused' }),
+      }),
+    )
+    expect(paused.status).toBe(200)
+    // The same cookie, now resolving to nobody, on a deployment that refuses one.
+    expect((await harness.app.fetch(get('/api/v1/reviews', { cookie }))).status).toBe(401)
+  })
+
+  it('refuses their next sign-in, so a paused admin cannot un-pause themselves', async () => {
+    // The identity link survives the pause, and every lookup the sign-in makes
+    // finds the row. Without a check on `availability` the person clicks "Sign
+    // in" and is back with the same role.
+    const cookie = await signIn(harness)
+    const state = await authState(harness, cookie)
+    const reviewerId = state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
+    const paused = await harness.app.fetch(
+      new Request(`http://localhost${REVIEWERS}/${reviewerId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', ...asBootstrap() },
+        body: JSON.stringify({ availability: 'paused' }),
+      }),
+    )
+    expect(paused.status).toBe(200)
+
+    const again = await attemptSignIn(harness)
+    expect(again.status).toBe(403)
+    expect(await again.text()).toContain('paused')
+    expect(again.headers.get('set-cookie') ?? '').not.toContain('sb_session=')
+  })
+
+  it('stores nothing from a connect a paused account finishes', async () => {
+    // The connect is an admin's (the bootstrap key's), and the account that
+    // authorises it at the host is a paused row. The refusal has to come before
+    // the org's credential is replaced with that account's token, not after.
+    const cookie = await signIn(harness)
+    const state = await authState(harness, cookie)
+    const reviewerId = state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
+    await harness.container.repositories.reviewers.update(reviewerId, { availability: 'paused' })
+
+    const jar = cookieJar()
+    const start = await harness.app.fetch(
+      get('/api/v1/settings/connections/github/sign-in', asBootstrap()),
+    )
+    expect(start.status).toBe(200)
+    jar.keep(start)
+    const flow = new URL(((await start.json()) as { url: string }).url).searchParams.get('state')
+    const callback = await harness.app.fetch(
+      get(
+        `/connect/github/callback?code=abc&state=${encodeURIComponent(flow ?? '')}`,
+        jar.headers(),
+      ),
+    )
+    expect(callback.status).toBe(403)
+    expect(await harness.container.repositories.integrationTokens.list()).toStrictEqual([])
+  })
+
+  it('treats a session that raced the pause as nobody with authority', async () => {
+    const cookie = await signIn(harness)
+    const state = await authState(harness, cookie)
+    const reviewerId = state.principal.kind === 'session' ? state.principal.viewer.reviewer.id : ''
+    // Behind the service, which would have revoked the session: this is the
+    // request that was already in flight when the pause landed.
+    await harness.container.repositories.reviewers.update(reviewerId, { availability: 'paused' })
+    expect((await harness.app.fetch(get(ORGS, { cookie }))).status).toBe(403)
+  })
+})
+
 describe('who may join', () => {
   let harness: TestHarness
 

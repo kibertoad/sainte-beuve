@@ -47,12 +47,11 @@ export function connectionsController(): Hono<AppEnv> {
   buildHonoRoute(app, startVcsSignInContract, async (c) => {
     await requireAdmin(c, NOT_AN_ADMIN)
     const container = c.get('container')
-    // The API's own origin, from the request rather than from configuration: the
-    // redirect URI the host matches has to name the origin that will receive
-    // the callback, and that is the one this request arrived on.
+    // The URL this arrived on, which the service does NOT build the callback
+    // on: its host is whatever the caller wrote. See `callbackOrigin`.
     const { url, nonce } = await new ConnectionsService(container).signInUrl(
       c.req.valid('param').provider,
-      new URL(c.req.url).origin,
+      c.req.url,
     )
     writeFlowCookie(c, container, nonce, STATE_LIFETIME_MS)
     return c.json({ url }, 200)

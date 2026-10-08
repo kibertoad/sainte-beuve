@@ -614,3 +614,22 @@ describe('polling a delegated AI review on the reminder tick', () => {
     expect(stored?.curation?.postReport?.posted).toBe(1)
   })
 })
+
+describe('two AI-review requests for one review at the same moment', () => {
+  it('files neither when each sees the other, and leaves nothing that blocks the next', async () => {
+    const loop = buildLoop()
+    const review = await openReview(loop.harness)
+    const request = () => loop.harness.app.fetch(post(`/api/v1/reviews/${review.id}/ai-review`, {}))
+
+    // Both pass the first read before either row exists, which is the race the
+    // second read after the insert is there for.
+    const answers = await Promise.all([request(), request()])
+    expect(answers.map((res) => res.status)).toStrictEqual([409, 409])
+    expect(loop.catFactory.requested).toStrictEqual([])
+    const runs = await loop.harness.container.repositories.aiReviewRuns.listByReview(review.id)
+    expect(runs.map((run) => run.status)).toStrictEqual(['failed', 'failed'])
+
+    expect((await request()).status).toBe(202)
+    expect(loop.catFactory.requested).toHaveLength(1)
+  })
+})

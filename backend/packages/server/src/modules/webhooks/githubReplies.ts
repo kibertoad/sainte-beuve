@@ -53,9 +53,18 @@ export const botReply = {
     return shortfallLine(result.shortfallReason, 'so it stays with whoever has it.')
   },
 
+  /**
+   * No link to cat-factory. Its URL is where this deployment's own instance
+   * lives (often an internal host, `http://localhost:8787` in local mode), and
+   * a task id is cat-factory's to hand out, and a comment on a public repository
+   * would give both to anybody who can read it. The board carries the link,
+   * behind a sign-in.
+   */
   aiRequested(run: AiReviewRun): string {
-    const link = run.catFactoryUrl === null ? '' : ` Follow it at ${run.catFactoryUrl}.`
-    return `Handed this to cat-factory (run \`${run.id}\`, ${run.status}).${link}`
+    return (
+      `Handed this to cat-factory (run \`${run.id}\`, ${run.status}). ` +
+      'Its progress and findings are on the review board.'
+    )
   },
 
   status(review: ReviewRequest, reviewers: (Reviewer | null)[]): string {

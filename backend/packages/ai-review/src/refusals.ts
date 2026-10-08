@@ -14,6 +14,7 @@ import {
   NotFoundError,
   UnavailableError,
   UpstreamFailedError,
+  type UpstreamDetails,
   ValidationError,
   getErrorMessage,
 } from '@sainte-beuve/kernel'
@@ -55,34 +56,41 @@ import {
  */
 export function refusalFor(err: unknown, what: string): DomainError {
   const detail = `${what}: ${getErrorMessage(err)}`
+  // Every refusal below names cat-factory as its source, so a public surface can
+  // say so without repeating what cat-factory said. See `upstreamOf`.
+  const source: UpstreamDetails = { upstream: 'cat-factory' }
   if (err instanceof CatFactoryConflictError) {
-    return new ConflictError(`cat-factory would not ${detail}`)
+    return new ConflictError(`cat-factory would not ${detail}`, source)
   }
   if (err instanceof CatFactoryNotFoundError) {
-    return new NotFoundError(`cat-factory has nothing to ${detail}`)
+    return new NotFoundError(`cat-factory has nothing to ${detail}`, source)
   }
   if (err instanceof CatFactoryForbiddenError) {
     return new ForbiddenError(
       `cat-factory refused to ${detail}. A review is filed and driven with an API key carrying the \`decide\` scope`,
+      source,
     )
   }
   if (err instanceof CatFactoryUnauthorizedError) {
     return new ForbiddenError(
       `cat-factory rejected this deployment's API key when asked to ${detail}. The key has been revoked or rotated; a current one can be entered on the Configuration screen`,
+      source,
     )
   }
   if (err instanceof CatFactoryRateLimitedError) {
     return new UnavailableError(
       `cat-factory is at capacity and could not ${detail}. The same call is worth making again shortly`,
+      source,
     )
   }
   if (err instanceof CatFactoryCredentialRequiredError) {
     return new UnavailableError(
       `cat-factory cannot ${detail} until the credential it names is connected on the cat-factory side`,
+      source,
     )
   }
   if (err instanceof CatFactoryValidationError) {
-    return new ValidationError(`cat-factory refused to ${detail}`)
+    return new ValidationError(`cat-factory refused to ${detail}`, source)
   }
-  return new UpstreamFailedError(`cat-factory could not ${detail}`)
+  return new UpstreamFailedError(`cat-factory could not ${detail}`, source)
 }

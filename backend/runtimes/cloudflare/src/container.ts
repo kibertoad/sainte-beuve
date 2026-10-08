@@ -306,6 +306,7 @@ export function containerFor(
     },
     auth: authFor(env),
     appBaseUrl: env.APP_BASE_URL || null,
+    apiBaseUrl: env.API_BASE_URL || null,
   })
 }
 

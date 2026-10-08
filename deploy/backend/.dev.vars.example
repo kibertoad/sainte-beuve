@@ -41,6 +41,9 @@ SLACK_BOT_TOKEN=
 SLACK_SIGNING_SECRET=
 SLACK_CHANNEL_ID=
 APP_BASE_URL=http://localhost:3000
+# Unset under `wrangler dev`, which is loopback: the request's own origin is the
+# callback there. A deployed Worker names its public origin in wrangler.toml.
+API_BASE_URL=
 
 # ---------------------------------------------------------------------------
 # Who is allowed to call this deployment.
