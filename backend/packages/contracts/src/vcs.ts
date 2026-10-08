@@ -117,8 +117,7 @@ export const webUrlSchema = v.pipe(
 
 /**
  * Whether a string is a link {@link webUrlSchema} would accept. For the SPA,
- * which renders stored links as `href`s and should not trust a row written
- * before the schema held the line.
+ * which checks a link again where it renders it as an `href`.
  */
 export function isWebUrl(value: string): boolean {
   return v.is(webUrlSchema, value)

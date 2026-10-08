@@ -14,18 +14,20 @@ Close the seven medium findings of [docs/security-review.md](../docs/security-re
 
 - M1: the OAuth callback is built on the new `API_BASE_URL` (both facades, both
   templates, reported as `auth.apiBaseUrl` on `/health`), never on the request's
-  `Host`. Without it a sign-in starts only on a loopback host. The callback
+  `Host`. Without it a sign-in starts only on a loopback host, and the auth state
+  lists no sign-in host anywhere else. The callback
   derives its redirect URI only after the state verifies, so a forged callback
   learns nothing about the configuration. An `API_BASE_URL` with a path is
   refused rather than silently cut back to its origin.
 - M2: `webUrlSchema` holds `pullRequest.url`, a project's `webUrl` and a run's
   `catFactoryUrl` to `http` or `https`, and the SPA renders every stored link
-  through `safeHref` (`isWebUrl`), so a row written before the rule is still not
-  a `javascript:` link.
+  through `safeHref` (`isWebUrl`) as well.
 - M3: comment commands and submitted reviews are acted on only from an `OWNER`,
   `MEMBER` or `COLLABORATOR` (`isTrustedAssociation`); a stranger's mention gets
   silence. Every way to file an AI review meets `decideAiReviewAdmission`: one
-  run in flight per review, at most three filed an hour.
+  run in flight per review (for an hour at most, so a lost task cannot hold the
+  place), at most three filed an hour, and a second read after the run's row is
+  written so two requests arriving together cannot both be filed.
 - M4: a GitHub delivery for a repository no org registered is acked as
   `ignored:unregistered` and dropped, the default org included.
 - M5: a paused directory row is refused at the end of every sign-in, before a
