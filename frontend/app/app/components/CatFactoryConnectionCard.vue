@@ -50,9 +50,15 @@ function initial(): { baseUrl: string; serviceId: string; pipelineId: string } {
 
 const form = reactive(initial())
 
-// A save or a clear re-reads the connection, and the form follows what is stored.
+// The form follows what is stored when a save or a clear changes it. Watched by
+// value: every action on the page re-reads the connection as a new object, and
+// resetting on that would drop what is typed here when another card saves.
 watch(
-  () => props.connection.config,
+  [
+    () => props.connection.config?.baseUrl,
+    () => props.connection.config?.serviceId,
+    () => props.connection.config?.pipelineId,
+  ],
   () => Object.assign(form, initial()),
 )
 

@@ -3,6 +3,12 @@ import type { AppContainer } from '../container.js'
 
 const INTEGRATION_ID = 'cat-factory'
 
+/** The optional fields, stored only when set. `baseUrl` is the one that is always there. */
+const OPTIONAL_FIELDS = [
+  'serviceId',
+  'pipelineId',
+] as const satisfies readonly (keyof CatFactoryConfig)[]
+
 /**
  * This org's cat-factory settings, as the Configuration screen stored them.
  *
@@ -11,12 +17,6 @@ const INTEGRATION_ID = 'cat-factory'
  * would be lent across the tenancy boundary, and the base URL travels with them
  * because a key is only valid on the instance that minted it.
  */
-/** The optional fields, stored only when set. `baseUrl` is the one that is always there. */
-const OPTIONAL_FIELDS = [
-  'serviceId',
-  'pipelineId',
-] as const satisfies readonly (keyof CatFactoryConfig)[]
-
 export async function readCatFactoryConfig(
   container: AppContainer,
 ): Promise<CatFactoryConfig | null> {

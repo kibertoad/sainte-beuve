@@ -238,8 +238,9 @@ export async function resolveSlackSigningSecret(
  */
 export async function resolveAiReview(
   container: AppContainer,
+  pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
 ): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
-  const access = await catFactoryAccess(container)
+  const access = await pending
   if (access === null || access.config.serviceId === null) return null
   const gateway = container.gateways?.aiReview({
     baseUrl: access.config.baseUrl,
@@ -253,8 +254,9 @@ export async function resolveAiReview(
 /** The guided reviewer for this org: the same key and instance, and no service. */
 export async function resolveGuidedReview(
   container: AppContainer,
+  pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
 ): Promise<Resolved<GuidedReviewGateway, CredentialSource> | null> {
-  const access = await catFactoryAccess(container)
+  const access = await pending
   if (access === null) return null
   const gateway = container.gateways?.guidedReview({
     baseUrl: access.config.baseUrl,
@@ -263,9 +265,19 @@ export async function resolveGuidedReview(
   return gateway === undefined ? null : { gateway, source: 'stored' }
 }
 
-async function catFactoryAccess(
+/** An org's stored cat-factory settings with its opened key. */
+export interface CatFactoryOrgAccess {
+  config: CatFactoryConfig
+  apiKey: string
+}
+
+/**
+ * Read once and hand to both resolvers when a caller needs the AI and the guided
+ * reviewer together, so the key is opened once rather than per resolver.
+ */
+export async function catFactoryAccess(
   container: AppContainer,
-): Promise<{ config: CatFactoryConfig; apiKey: string } | null> {
+): Promise<CatFactoryOrgAccess | null> {
   const [config, apiKey] = await Promise.all([
     readCatFactoryConfig(container),
     openCredential(container, 'cat-factory'),
