@@ -282,6 +282,39 @@ The same reasoning covers GitHub. `@octokit/auth-app` signs the app JWT with
 `node:crypto`, so the App path would have needed hand-writing regardless, and
 `crypto.subtle` already signs RS256 on every runtime we target.
 
+## Connecting to cat-factory
+
+cat-factory runs the AI review and the guided review. Everything about reaching
+it belongs to an org and is set on that org's Configuration screen, never in the
+environment:
+
+| Setting     | What it is                                             | Needed for                    |
+| ----------- | ------------------------------------------------------ | ----------------------------- |
+| Base URL    | The instance, `http://localhost:8787` for a local one  | both                          |
+| API key     | `cf_live_<keyId>.<secret>`, stored sealed              | both (`decide` for AI review) |
+| Service id  | The `blk_…` frame AI reviews are filed under           | AI review                     |
+| Pipeline id | Overrides the review task's own pipeline (`pl_review`) | neither                       |
+
+The key spends one org's budget and the service is one org's repository frame,
+so a deployment-wide value would be lent across the tenancy boundary. That is the
+rule the Slack app follows too, except that cat-factory has no default-org
+exception: no org can borrow another org's cat-factory.
+
+The settings sit in `integration_configs`, beside the sealed key in
+`integration_tokens`, so the screen can show them back without opening a
+credential. **Test connection** checks a configuration before or after saving it:
+that the instance answers, that it accepts the key, that the key's scope can file
+an AI review, and that the service and pipeline exist. It lists the services and
+pipelines the key can see, so an admin picks one rather than copying an id out of
+cat-factory. A key typed into the form is tested before the stored one.
+
+Local mode prefills the form with a local cat-factory's defaults. Nothing reaches
+cat-factory until an admin saves them.
+
+`GET /api/v1/capabilities` answers whether the org can run an AI review and a
+guided review, for any member. The board and the guided review page read it to
+warn before a button fails.
+
 ## Registering it
 
 The URLs are shown on the Configuration screen, filled in with this deployment's

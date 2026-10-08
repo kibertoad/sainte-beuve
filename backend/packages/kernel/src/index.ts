@@ -34,6 +34,10 @@ export type {
   AiReviewGateway,
   AiReviewHandle,
   AiReviewReport,
+  CatFactoryAccess,
+  CatFactoryProbe,
+  CatFactoryProbeReport,
+  CatFactoryReviewTarget,
   ChatGateway,
   GatewayFactory,
   GuidedReviewGateway,
@@ -42,6 +46,10 @@ export type {
   VcsGateway,
   VcsIdentityGateway,
 } from './ports/gateways.js'
+export type {
+  IntegrationConfigRepository,
+  StoredIntegrationConfig,
+} from './ports/integration-config.js'
 export type { AttentionBus, RealtimeKind, ScopedAttentionBus } from './ports/realtime.js'
 export { isStoredRowError, StoredRowError } from './ports/stored-row.js'
 export type {

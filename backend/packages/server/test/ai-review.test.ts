@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { aiFinding, curation, type StubAiReview, stubAiReview } from './ai-review-doubles.js'
 import { runReminderTick } from '../src/reminders/tick.js'
 import { buildHarness, get, openReview, PR, post, type TestHarness } from './helpers.js'
+import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
 
 /**
  * The AI-review loop over `app.fetch`, which is where it is worth testing: one
@@ -16,9 +17,10 @@ interface Loop {
 }
 
 /** A deployment wired to a cat-factory a case drives through the loop. */
-function buildLoop(): Loop {
+async function buildLoop(): Promise<Loop> {
   const catFactory = stubAiReview()
-  return { catFactory, harness: buildHarness({ aiReview: catFactory }) }
+  const harness = await connectCatFactory(buildHarness(catFactoryWired({ aiReview: catFactory })))
+  return { catFactory, harness }
 }
 
 async function listRuns(loop: Loop, reviewId: string): Promise<AiReviewRun> {
@@ -62,8 +64,8 @@ async function parkedRun(loop: Loop): Promise<AiReviewRun> {
 describe('curating a delegated AI review', () => {
   let loop: Loop
 
-  beforeEach(() => {
-    loop = buildLoop()
+  beforeEach(async () => {
+    loop = await buildLoop()
   })
 
   it('files a review against cat-factory and tracks the run it accepted', async () => {
@@ -174,9 +176,8 @@ describe('curating a delegated AI review', () => {
     const parked = await parkedRun(loop)
     const unconfigured = buildHarness({
       // The same store, so the run is there; only the gateway is gone, which is
-      // what a deployment that dropped its cat-factory key looks like.
+      // what an org that cleared its cat-factory settings looks like.
       repositories: loop.harness.container.repositories,
-      aiReview: null,
     })
     const res = await unconfigured.app.fetch(
       post(`/api/v1/ai-review/runs/${parked.id}/resolve`, { action: 'finish' }),
@@ -189,8 +190,8 @@ describe('curating a delegated AI review', () => {
 describe('polling a delegated AI review', () => {
   let loop: Loop
 
-  beforeEach(() => {
-    loop = buildLoop()
+  beforeEach(async () => {
+    loop = await buildLoop()
   })
 
   /**
@@ -420,8 +421,8 @@ describe('polling a delegated AI review', () => {
 describe('polling a delegated AI review on the reminder tick', () => {
   let loop: Loop
 
-  beforeEach(() => {
-    loop = buildLoop()
+  beforeEach(async () => {
+    loop = await buildLoop()
   })
 
   it('polls what is in flight, with no read of the row', async () => {
@@ -617,12 +618,15 @@ describe('polling a delegated AI review on the reminder tick', () => {
 
 describe('two AI-review requests for one review at the same moment', () => {
   it('files neither when each sees the other, and leaves nothing that blocks the next', async () => {
-    const loop = buildLoop()
+    const loop = await buildLoop()
     const review = await openReview(loop.harness)
     const request = () => loop.harness.app.fetch(post(`/api/v1/reviews/${review.id}/ai-review`, {}))
 
     // Both pass the first read before either row exists, which is the race the
-    // second read after the insert is there for.
+    // second read after the insert is there for. Held at a barrier, because
+    // opening the sealed key takes real time and would otherwise let one
+    // request finish before the other starts.
+    holdFirstReads(loop.harness, 2)
     const answers = await Promise.all([request(), request()])
     expect(answers.map((res) => res.status)).toStrictEqual([409, 409])
     expect(loop.catFactory.requested).toStrictEqual([])
@@ -633,3 +637,19 @@ describe('two AI-review requests for one review at the same moment', () => {
     expect(loop.catFactory.requested).toHaveLength(1)
   })
 })
+
+/** Make the first `count` reads of a review's runs wait until all of them have arrived. */
+function holdFirstReads(harness: TestHarness, count: number): void {
+  const runs = harness.container.repositories.aiReviewRuns
+  const read = runs.listByReview.bind(runs)
+  const held: (() => void)[] = []
+  runs.listByReview = async (reviewId) => {
+    if (held.length < count) {
+      await new Promise<void>((release) => {
+        held.push(release)
+        if (held.length === count) for (const go of held) go()
+      })
+    }
+    return read(reviewId)
+  }
+}

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { catFactoryConnectionSchema } from './cat-factory.js'
 import { vcsProviderSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
@@ -134,6 +135,7 @@ export const connectionsSchema = v.object({
    */
   vcs: v.array(vcsConnectionSchema),
   slack: slackConnectionSchema,
+  catFactory: catFactoryConnectionSchema,
 })
 export type Connections = v.InferOutput<typeof connectionsSchema>
 

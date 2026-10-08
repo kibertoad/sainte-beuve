@@ -105,7 +105,12 @@ function clearDraft() {
   draft.value = ''
 }
 
-defineExpose({ clearDraft })
+/** What is typed but not saved, so a card can try it before storing it. Empty when nothing is. */
+function draftToken(): string {
+  return token.value
+}
+
+defineExpose({ clearDraft, draftToken })
 </script>
 
 <template>

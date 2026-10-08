@@ -235,6 +235,38 @@ export interface GuidedReviewGateway {
   watch(sessionId: string, signal: AbortSignal): AsyncIterable<GuidedReviewWatchEvent>
 }
 
+/** Where an org's cat-factory is, and the key it reaches it with. */
+export interface CatFactoryAccess {
+  baseUrl: string
+  apiKey: string
+}
+
+/** What filing an AI review needs on top of access: the service, and optionally a pipeline. */
+export interface CatFactoryReviewTarget extends CatFactoryAccess {
+  serviceId: string
+  /** Null runs the review task's own pinned pipeline. */
+  pipelineId: string | null
+}
+
+/**
+ * What an instance said about a key. `outcome` is the first thing that went
+ * wrong, so a screen can say which of the URL and the key to fix; the lists are
+ * empty unless the key was accepted.
+ */
+export interface CatFactoryProbeReport {
+  outcome: 'ok' | 'unreachable' | 'unauthorized' | 'refused'
+  /** What the instance or the transport said, when it was not `ok`. */
+  detail: string | null
+  /** The key's rung on cat-factory's inclusive ladder: `read` < `write` < `decide` < `admin`. */
+  scope: string | null
+  services: { id: string; title: string }[]
+  pipelines: { id: string; name: string }[]
+}
+
+export interface CatFactoryProbe {
+  probe(): Promise<CatFactoryProbeReport>
+}
+
 /**
  * Builds a gateway from a credential that was resolved at request time, for
  * whichever host the caller is reaching.
@@ -265,19 +297,16 @@ export interface GatewayFactory {
    * configured, which is always the case for a host with no App concept.
    */
   vcsAsApp(provider: VcsProvider): VcsGateway | null
+  /** The AI reviewer, for one org's cat-factory key, instance and service. */
+  aiReview(target: CatFactoryReviewTarget): AiReviewGateway
   /**
-   * The AI reviewer, from an API key. Null when the REST of its configuration is
-   * missing: a key with no base URL and no service id names an instance nothing
-   * can reach, and reporting that as configured is how a stored credential comes
-   * to sit beside a route that answers 503.
+   * The guided reviewer, from the same key and instance. It needs no service id,
+   * because cat-factory finds the repository from the pull request's own
+   * coordinates.
    */
-  aiReview(apiKey: string): AiReviewGateway | null
-  /**
-   * The guided reviewer, from the same cat-factory key. Null without a base URL;
-   * unlike the AI reviewer it needs no service id, because cat-factory finds the
-   * repository from the pull request's own coordinates.
-   */
-  guidedReview(apiKey: string): GuidedReviewGateway | null
+  guidedReview(access: CatFactoryAccess): GuidedReviewGateway
+  /** Asks an instance what a key may do there, for the Configuration screen's check. */
+  catFactoryProbe(access: CatFactoryAccess): CatFactoryProbe
   /** The sign-in round trip for one host. Null when no OAuth client is configured for it. */
   signIn(provider: VcsProvider): VcsIdentityGateway | null
 }

@@ -1,12 +1,5 @@
 import type { VcsProvider } from '@sainte-beuve/contracts'
-import type {
-  AiReviewGateway,
-  GuidedReviewGateway,
-  Clock,
-  GatewayFactory,
-  VcsGateway,
-  VcsIdentityGateway,
-} from '@sainte-beuve/kernel'
+import type { Clock, GatewayFactory, VcsGateway, VcsIdentityGateway } from '@sainte-beuve/kernel'
 import { GitHubAppAuth } from './github/GitHubAppAuth.js'
 import { GitHubIdentityGateway } from './github/GitHubIdentityGateway.js'
 import { GitHubVcsGateway } from './github/GitHubVcsGateway.js'
@@ -31,9 +24,10 @@ import { SlackChatGateway } from './slack/SlackChatGateway.js'
  * Nothing above this file learns about it: every caller asks for a provider and
  * gets a `VcsGateway` or a null it already had to handle.
  *
- * cat-factory arrives as a CLOSURE rather than as configuration, because
+ * cat-factory arrives as builders rather than as configuration, because
  * `@sainte-beuve/ai-review` is the only package that knows cat-factory exists
- * and this one has no business importing it.
+ * and this one has no business importing it. Its settings are per org and
+ * stored, so they reach the builders per call, not at construction.
  */
 
 /**
@@ -70,12 +64,10 @@ export interface GatewayFactoryConfig {
   /** Base URL of the SPA, so a chat message can link back to a review. */
   appBaseUrl?: string
   /**
-   * Builds the AI reviewer from an API key, or answers null when the rest of
-   * cat-factory's configuration (base URL, service id) is missing.
+   * The cat-factory members, from `catFactoryGateways()` in @sainte-beuve/ai-review.
+   * Passed in because this package does not depend on cat-factory's SDK.
    */
-  aiReview: (apiKey: string) => AiReviewGateway | null
-  /** Builds the guided reviewer from the same key, or null without a base URL. */
-  guidedReview: (apiKey: string) => GuidedReviewGateway | null
+  catFactory: Pick<GatewayFactory, 'aiReview' | 'guidedReview' | 'catFactoryProbe'>
   clock?: Clock
   /** Swap the HTTP implementation. Only a test has a reason to. */
   fetchImpl?: typeof globalThis.fetch
@@ -106,8 +98,7 @@ export function createGatewayFactory(config: GatewayFactoryConfig): GatewayFacto
       }),
     vcsFromToken: fromToken,
     vcsAsApp: (provider) => asApp[provider],
-    aiReview: config.aiReview,
-    guidedReview: config.guidedReview,
+    ...config.catFactory,
     signIn: (provider) => signIn[provider],
   }
 }

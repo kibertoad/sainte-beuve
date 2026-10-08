@@ -2,18 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { localConfig } from './index.js'
 
 describe('localConfig', () => {
-  it('defaults cat-factory to a local instance, with no account needed', () => {
-    const config = localConfig({ CAT_FACTORY_API_KEY: 'cf_live_x.y', CAT_FACTORY_SERVICE_ID: 's' })
-    expect(config.catFactory?.baseUrl).toBe('http://localhost:8787')
+  it('suggests the defaults a local cat-factory serves with', () => {
+    expect(localConfig({}).catFactorySuggestion).toStrictEqual({
+      baseUrl: 'http://localhost:8787',
+      serviceId: null,
+      pipelineId: 'pl_review',
+    })
   })
 
-  it('lets the environment point at the centralized instance instead', () => {
-    const config = localConfig({
-      CAT_FACTORY_BASE_URL: 'https://cat-factory.example.com',
-      CAT_FACTORY_API_KEY: 'cf_live_x.y',
-      CAT_FACTORY_SERVICE_ID: 's',
-    })
-    expect(config.catFactory?.baseUrl).toBe('https://cat-factory.example.com')
+  it('ignores cat-factory variables, which are set per org on the Configuration screen', () => {
+    const config = localConfig({ CAT_FACTORY_BASE_URL: 'https://cat-factory.example.com' })
+    expect(config.catFactorySuggestion?.baseUrl).toBe('http://localhost:8787')
   })
 
   it('runs with no Slack workspace and no GitHub app at all', () => {

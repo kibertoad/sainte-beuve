@@ -40,8 +40,8 @@ import { curationFor } from './reconcile.js'
 
 /** The message a route answers with when cat-factory is not configured at all. */
 const NOT_CONFIGURED =
-  'cat-factory is not configured for this deployment: it needs a base URL, a service id and ' +
-  'an API key with the `decide` scope (the key can be entered on the Configuration screen)'
+  'cat-factory is not configured for this org: an admin sets its base URL, a service id and an ' +
+  'API key with the `decide` scope on the Configuration screen'
 
 /** The states a poll can still learn something from. Anything else is settled. */
 const IN_FLIGHT = new Set<AiReviewRun['status']>(AI_REVIEW_IN_FLIGHT_STATUSES)

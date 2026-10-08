@@ -20,6 +20,7 @@ import type {
 } from '@sainte-beuve/kernel'
 import { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
 import { clone, patched } from './clone.js'
+import { InMemoryIntegrationConfigRepository } from './config-stores.js'
 import { byText, leastRecentlyPolledFirst, newestFirst, oldestFirst } from './order.js'
 import {
   InMemoryAttentionRepository,
@@ -327,6 +328,7 @@ export function createInMemoryRepositories(): Repositories {
     reminders: new InMemoryReminderRepository(),
     aiReviewRuns: new InMemoryAiReviewRunRepository(),
     integrationTokens: new InMemoryIntegrationTokenRepository(),
+    integrationConfigs: new InMemoryIntegrationConfigRepository(),
     projects: new InMemoryProjectRepository(),
     identities: new InMemoryIdentityRepository(),
     attention: new InMemoryAttentionRepository(),

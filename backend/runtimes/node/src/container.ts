@@ -1,4 +1,4 @@
-import { CatFactoryAiReviewGateway, CatFactoryGuidedReviewGateway } from '@sainte-beuve/ai-review'
+import { catFactoryGateways } from '@sainte-beuve/ai-review'
 import {
   createGatewayFactory,
   GitHubVcsGateway,
@@ -6,12 +6,7 @@ import {
   SlackChatGateway,
   staticTokenSource,
 } from '@sainte-beuve/integrations'
-import type {
-  AiReviewGateway,
-  GatewayFactory,
-  GuidedReviewGateway,
-  Logger,
-} from '@sainte-beuve/kernel'
+import type { GatewayFactory, Logger } from '@sainte-beuve/kernel'
 import {
   type AppContainer,
   createContainer,
@@ -49,10 +44,7 @@ export function buildContainer(config: NodeConfig, store: NodeStore, logger: Log
             appBaseUrl: config.appBaseUrl,
           }),
     vcs: environmentVcs(config),
-    aiReview:
-      config.catFactoryApiKey === null ? null : aiReviewFrom(config, config.catFactoryApiKey),
-    guidedReview:
-      config.catFactoryApiKey === null ? null : guidedReviewFrom(config, config.catFactoryApiKey),
+    catFactorySuggestion: config.catFactorySuggestion,
     gateways: gatewaysFor(config),
     // Built once, with the container, because this facade is one process: every
     // stream a page opens against it is on the same bus.
@@ -114,18 +106,6 @@ function gatewaysFor(config: NodeConfig): GatewayFactory {
     },
     gitlab: { baseUrl: config.gitlab.baseUrl, oauth: config.gitlab.oauth },
     appBaseUrl: config.appBaseUrl,
-    aiReview: (apiKey) => aiReviewFrom(config, apiKey),
-    guidedReview: (apiKey) => guidedReviewFrom(config, apiKey),
+    catFactory: catFactoryGateways(),
   })
-}
-
-/** cat-factory needs a base URL and a service id that no credential carries. */
-function aiReviewFrom(config: NodeConfig, apiKey: string): AiReviewGateway | null {
-  if (config.catFactory === null) return null
-  return new CatFactoryAiReviewGateway({ ...config.catFactory, apiKey })
-}
-
-function guidedReviewFrom(config: NodeConfig, apiKey: string): GuidedReviewGateway | null {
-  if (config.catFactoryBaseUrl === null) return null
-  return new CatFactoryGuidedReviewGateway({ baseUrl: config.catFactoryBaseUrl, apiKey })
 }

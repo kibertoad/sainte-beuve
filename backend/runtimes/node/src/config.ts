@@ -1,4 +1,4 @@
-import type { AuthMode, GitHubLabelRules } from '@sainte-beuve/contracts'
+import type { AuthMode, CatFactoryConfig, GitHubLabelRules } from '@sainte-beuve/contracts'
 import {
   authModeFrom,
   devModeFrom,
@@ -112,14 +112,12 @@ export interface NodeConfig {
   logLevel: string
   /** How often the reminder clock runs, in ms. */
   reminderIntervalMs: number
-  catFactory: { baseUrl: string; serviceId: string; pipelineId?: string } | null
   /**
-   * Where cat-factory is, on its own: all the guided review needs. It finds the
-   * repository from the pull request, so it reads no service id.
+   * What the Configuration screen proposes for an org with no cat-factory
+   * settings. Never read from the environment: cat-factory is configured per
+   * org, on that screen. Local mode fills it with a local instance's defaults.
    */
-  catFactoryBaseUrl: string | null
-  /** The cat-factory key from the environment, when there is one. */
-  catFactoryApiKey: string | null
+  catFactorySuggestion: CatFactoryConfig | null
   github: GitHubConfig
   gitlab: GitLabConfig
   slack: { botToken: string | null; signingSecret: string | null; channelId: string | null }
@@ -201,13 +199,11 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     clientAddressHeader: clientAddressHeaderFrom(env.CLIENT_ADDRESS_HEADER),
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),
-    catFactory: catFactoryFrom(env),
-    catFactoryBaseUrl: env.CAT_FACTORY_BASE_URL || null,
-    // `||` throughout, not `??`: an empty variable is one somebody left blank,
-    // not one they set, and `.env.example` ships every name with no value.
-    catFactoryApiKey: env.CAT_FACTORY_API_KEY || null,
+    catFactorySuggestion: null,
     github: githubFrom(env),
     gitlab: gitlabFrom(env),
+    // `||` throughout, not `??`: an empty variable is one somebody left blank,
+    // not one they set, and `.env.example` ships every name with no value.
     slack: {
       botToken: env.SLACK_BOT_TOKEN || null,
       signingSecret: env.SLACK_SIGNING_SECRET || null,
@@ -238,21 +234,6 @@ function authFrom(env: Env, corsOrigins: readonly string[]): AuthConfig {
     sessionLifetimeMs:
       optionalCountFrom(env.AUTH_SESSION_LIFETIME_MS) ?? DEFAULT_SESSION_LIFETIME_MS,
     devMode: devModeFrom({ value: env.DEV_MODE, appBaseUrl: env.APP_BASE_URL, corsOrigins }),
-  }
-}
-
-/**
- * cat-factory's non-credential half. Separate from the API key because the key
- * can also arrive from the Configuration screen, and a deployment that supplies
- * the base URL and the service id here can be finished from the SPA.
- */
-function catFactoryFrom(env: Env): NodeConfig['catFactory'] {
-  const { CAT_FACTORY_BASE_URL, CAT_FACTORY_SERVICE_ID } = env
-  if (!CAT_FACTORY_BASE_URL || !CAT_FACTORY_SERVICE_ID) return null
-  return {
-    baseUrl: CAT_FACTORY_BASE_URL,
-    serviceId: CAT_FACTORY_SERVICE_ID,
-    pipelineId: env.CAT_FACTORY_PIPELINE_ID || undefined,
   }
 }
 

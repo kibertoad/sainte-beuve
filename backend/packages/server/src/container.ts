@@ -1,4 +1,5 @@
 import type {
+  CatFactoryConfig,
   AuthMode,
   GitHubLabelRules,
   ReminderPolicy,
@@ -6,8 +7,6 @@ import type {
 } from '@sainte-beuve/contracts'
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type {
-  AiReviewGateway,
-  GuidedReviewGateway,
   AttentionBus,
   ChatGateway,
   Clock,
@@ -173,8 +172,12 @@ export interface AppContainer {
    * a workspace sweeping both has to reach each with its own.
    */
   vcs: EnvironmentVcsGateways
-  aiReview: AiReviewGateway | null
-  guidedReview: GuidedReviewGateway | null
+  /**
+   * What the Configuration screen proposes for an org that has not configured
+   * cat-factory: a local cat-factory's defaults, in local mode. A suggestion
+   * only; nothing reaches cat-factory until an admin saves a configuration.
+   */
+  catFactorySuggestion: CatFactoryConfig | null
   /**
    * Builds a gateway from a stored credential, which is the seam that lets a
    * token entered on the Configuration screen take effect without a redeploy
@@ -250,8 +253,7 @@ export interface ContainerOptions {
   random?: () => number
   chat?: ChatGateway | null
   vcs?: Partial<EnvironmentVcsGateways> | null
-  aiReview?: AiReviewGateway | null
-  guidedReview?: GuidedReviewGateway | null
+  catFactorySuggestion?: CatFactoryConfig | null
   bus?: AttentionBus
   /** Defaults to `memory`, which is what the bus a facade left unwired is. */
   realtime?: RealtimeKind
@@ -284,6 +286,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     random: options.random ?? Math.random,
     vcs: { ...NO_VCS_GATEWAYS, ...options.vcs },
     ...outboundGateways(options),
+    catFactorySuggestion: options.catFactorySuggestion ?? null,
     // A fresh bus per container is right for a facade that builds one at boot
     // and wrong for one that builds a container per request, which is why the
     // Worker holds its own at module level and passes it in here.

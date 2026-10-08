@@ -1,6 +1,9 @@
 import {
+  checkCatFactoryContract,
+  clearCatFactoryConfigContract,
   disconnectVcsSignInContract,
   getConnectionsContract,
+  setCatFactoryConfigContract,
   startGitHubAppInstallContract,
   startVcsSignInContract,
 } from '@sainte-beuve/contracts'
@@ -10,6 +13,7 @@ import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
 import type { AppEnv } from '../../http/env.js'
 import { writeFlowCookie } from '../auth/cookies.js'
 import { requireAdmin } from '../auth/principal.js'
+import { CatFactoryConnectionService } from './CatFactoryConnectionService.js'
 import { ConnectionsService } from './ConnectionsService.js'
 
 /**
@@ -66,9 +70,30 @@ export function connectionsController(): Hono<AppEnv> {
     return c.json(await service.read(), 200)
   })
 
+  mountCatFactory(app)
   return app
 }
 
+function mountCatFactory(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, setCatFactoryConfigContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
+    const service = new CatFactoryConnectionService(c.get('container'))
+    return c.json(await service.save(c.req.valid('json')), 200)
+  })
+
+  buildHonoRoute(app, clearCatFactoryConfigContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
+    return c.json(await new CatFactoryConnectionService(c.get('container')).clear(), 200)
+  })
+
+  // Admin-only like the rest: it spends the org's stored key on a call out.
+  buildHonoRoute(app, checkCatFactoryContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
+    const service = new CatFactoryConnectionService(c.get('container'))
+    return c.json(await service.check(c.req.valid('json')), 200)
+  })
+}
+
 const NOT_AN_ADMIN =
-  'Only an admin of this org can see or change how it reaches GitHub, GitLab and Slack. Ask an ' +
-  'admin, or sign in at /api/v1/auth/sign-in/<host> if you are only trying to say who you are.'
+  'Only an admin of this org can see or change how it reaches GitHub, GitLab, Slack and ' +
+  'cat-factory. Ask an admin, or sign in at /api/v1/auth/sign-in/<host> if you are only trying to say who you are.'

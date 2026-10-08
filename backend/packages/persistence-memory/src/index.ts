@@ -2,6 +2,7 @@
 // durable adapter is wired, and the fixture the domain suites run against.
 
 export { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
+export { InMemoryIntegrationConfigRepository } from './config-stores.js'
 export { InMemoryOrgRepository } from './orgs.js'
 export { createInMemoryPersistence } from './provider.js'
 export {

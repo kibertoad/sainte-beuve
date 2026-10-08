@@ -185,6 +185,14 @@ describe('sainte-beuve worker', () => {
         interactivityReady: false,
         requestPath: '/webhooks/slack/default',
       },
+      // Nothing read from the bindings: an org configures it on its own screen,
+      // and a Worker suggests nothing.
+      catFactory: {
+        config: null,
+        suggested: null,
+        aiReviewReady: false,
+        guidedReviewReady: false,
+      },
     })
   })
 

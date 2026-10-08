@@ -1,5 +1,5 @@
 import type { IntegrationId, IntegrationTokenStatus } from '@sainte-beuve/contracts'
-import type { AiReviewGateway, SecretCipher } from '@sainte-beuve/kernel'
+import type { GuidedReviewGateway, SecretCipher } from '@sainte-beuve/kernel'
 import { UpstreamFailedError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.js'
@@ -123,31 +123,30 @@ describe('integration configuration API', () => {
     expect(await statusOf(listing)).toMatchObject({ state: 'stored', hint: '5b4a' })
   })
 
-  it('reports a stored token as in use once the deployment can build a gateway from it', async () => {
-    // No factory at all: the credential is stored and nothing reads it, which is
-    // what a facade that wired no adapters looks like.
+  it('reports a stored cat-factory key as in use only once its instance is configured', async () => {
+    // A key with no base URL names an instance nothing can reach. Reporting it as
+    // in use is how a green badge comes to sit beside a route answering 503.
     await harness.app.fetch(put(TOKEN_PATH, { token: TOKEN }))
-    expect(await statusOf(harness)).toMatchObject({ state: 'stored', inUse: false })
-
     const wired = buildHarness({
       repositories: harness.container.repositories,
       secrets: cipherFor(KEY),
-      gateways: stubGateways({ aiReview: () => ({}) as AiReviewGateway }),
+      gateways: stubGateways({ guidedReview: () => ({}) as GuidedReviewGateway }),
+    })
+    expect(await statusOf(wired)).toMatchObject({ state: 'stored', inUse: false })
+
+    const saved = await wired.app.fetch(
+      put('/api/v1/settings/connections/cat-factory', {
+        baseUrl: 'http://localhost:8787/',
+        serviceId: null,
+        pipelineId: null,
+      }),
+    )
+    expect(await saved.json()).toMatchObject({
+      config: { baseUrl: 'http://localhost:8787' },
+      aiReviewReady: false,
+      guidedReviewReady: true,
     })
     expect(await statusOf(wired)).toMatchObject({ state: 'stored', inUse: true })
-  })
-
-  it('reports a stored key as not in use when the rest of the integration is missing', async () => {
-    // A cat-factory key with no base URL and no service id names an instance
-    // nothing can reach, and the factory answers null for it. Reporting that as
-    // in use is how a green badge comes to sit beside a route answering 503.
-    await harness.app.fetch(put(TOKEN_PATH, { token: TOKEN }))
-    const halfWired = buildHarness({
-      repositories: harness.container.repositories,
-      secrets: cipherFor(KEY),
-      gateways: stubGateways({ aiReview: () => null }),
-    })
-    expect(await statusOf(halfWired)).toMatchObject({ state: 'stored', inUse: false })
   })
 
   it('refuses to store anything when the deployment configured no encryption key', async () => {

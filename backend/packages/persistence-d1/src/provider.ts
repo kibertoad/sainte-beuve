@@ -23,7 +23,7 @@ import {
   SqlReminderRepository,
   SqlReviewRequestRepository,
 } from './reviews.js'
-import { SqlIntegrationTokenRepository } from './settings.js'
+import { SqlIntegrationConfigRepository, SqlIntegrationTokenRepository } from './settings.js'
 import { SqlIdentityRepository, SqlProjectRepository } from './workspace.js'
 
 /**
@@ -60,6 +60,7 @@ class D1Persistence implements PersistenceProvider {
       reminders: new SqlReminderRepository(db, orgId),
       aiReviewRuns: new SqlAiReviewRunRepository(db, orgId),
       integrationTokens: new SqlIntegrationTokenRepository(db, orgId),
+      integrationConfigs: new SqlIntegrationConfigRepository(db, orgId),
       projects: new SqlProjectRepository(db, orgId),
       identities: new SqlIdentityRepository(db, orgId),
       attention: new SqlAttentionRepository(db, orgId),

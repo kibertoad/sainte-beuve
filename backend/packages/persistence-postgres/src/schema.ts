@@ -23,6 +23,7 @@ import {
   reviewRequestSchema,
 } from '@sainte-beuve/contracts'
 import { index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import * as v from 'valibot'
 import { epochMs, orgId, payload } from './columns.js'
 
 /**
@@ -206,6 +207,25 @@ export const integrationTokens = pgTable(
   // Per ORG: each tenancy connects its own GitHub and its own Slack, and a
   // credential shared across the boundary would let one org's board write
   // comments as another org's bot.
+  (table) => [primaryKey({ columns: [table.orgId, table.integrationId] })],
+)
+
+/**
+ * The non-secret half of an integration, per org: one JSON object per
+ * integration, because each has its own fields and none of them is queried.
+ */
+export const integrationConfigs = pgTable(
+  'integration_configs',
+  {
+    orgId: orgId(),
+    integrationId: text('integration_id').notNull(),
+    data: payload<Record<string, string>>(
+      'data',
+      'integration_configs',
+      v.record(v.string(), v.string()),
+    ).notNull(),
+    updatedAt: epochMs('updated_at').notNull(),
+  },
   (table) => [primaryKey({ columns: [table.orgId, table.integrationId] })],
 )
 

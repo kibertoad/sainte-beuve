@@ -1,9 +1,17 @@
-import type { IntegrationId, VcsProvider } from '@sainte-beuve/contracts'
+import type {
+  CatFactoryConfig,
+  CheckCatFactory,
+  IntegrationId,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
 import {
+  checkCatFactoryContract,
+  clearCatFactoryConfigContract,
   clearIntegrationTokenContract,
   disconnectVcsSignInContract,
   getConnectionsContract,
   getIntegrationSettingsContract,
+  setCatFactoryConfigContract,
   setIntegrationTokenContract,
   startGitHubAppInstallContract,
   startVcsSignInContract,
@@ -45,5 +53,11 @@ export function configurationCalls(call: ContractCaller) {
       call(startVcsSignInContract, { pathParams: { provider } }),
     disconnectSignIn: (provider: VcsProvider) =>
       call(disconnectVcsSignInContract, { pathParams: { provider } }),
+
+    saveCatFactoryConfig: (config: CatFactoryConfig) =>
+      call(setCatFactoryConfigContract, { body: config }),
+    clearCatFactoryConfig: () => call(clearCatFactoryConfigContract, {}),
+    /** Tries a configuration against its instance without storing it. */
+    checkCatFactory: (input: CheckCatFactory) => call(checkCatFactoryContract, { body: input }),
   }
 }

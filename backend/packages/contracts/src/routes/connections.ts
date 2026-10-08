@@ -1,5 +1,11 @@
 import { defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
+import {
+  catFactoryCheckSchema,
+  catFactoryConfigSchema,
+  catFactoryConnectionSchema,
+  checkCatFactorySchema,
+} from '../cat-factory.js'
 import { connectionsSchema, connectStartSchema } from '../connections.js'
 import { vcsProviderSchema } from '../vcs.js'
 import { errorResponses } from './_shared.js'
@@ -53,4 +59,30 @@ export const disconnectVcsSignInContract = defineApiContract({
   requestPathParamsSchema: providerParams,
   pathResolver: ({ provider }) => `/settings/connections/${provider}/sign-in`,
   responsesByStatusCode: { 200: connectionsSchema, ...errorResponses },
+})
+
+/** Store this org's cat-factory configuration. PUT: a second call replaces the first. */
+export const setCatFactoryConfigContract = defineApiContract({
+  method: 'put',
+  pathResolver: () => '/settings/connections/cat-factory',
+  requestBodySchema: catFactoryConfigSchema,
+  responsesByStatusCode: { 200: catFactoryConnectionSchema, ...errorResponses },
+})
+
+/** Forget this org's cat-factory configuration. The key is a credential and is cleared on its own. */
+export const clearCatFactoryConfigContract = defineApiContract({
+  method: 'delete',
+  pathResolver: () => '/settings/connections/cat-factory',
+  responsesByStatusCode: { 200: catFactoryConnectionSchema, ...errorResponses },
+})
+
+/**
+ * Try a configuration against the instance it names, without storing it. A POST
+ * because it carries a key in its body and calls out, not because it writes.
+ */
+export const checkCatFactoryContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/settings/connections/cat-factory/check',
+  requestBodySchema: checkCatFactorySchema,
+  responsesByStatusCode: { 200: catFactoryCheckSchema, ...errorResponses },
 })

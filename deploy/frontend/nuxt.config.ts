@@ -3,6 +3,9 @@
 export default defineNuxtConfig({
   extends: ['@sainte-beuve/app'],
 
+  // Not Nuxt's default 3000, which a local cat-factory's SPA serves on.
+  devServer: { port: 3088 },
+
   // Where this deployment's backend lives. Override at build time with
   // NUXT_PUBLIC_API_BASE; `ssr: false` means it is baked into the bundle.
   runtimeConfig: {

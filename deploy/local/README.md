@@ -5,7 +5,7 @@ anywhere first.
 
 ```bash
 pnpm dev:local            # API on http://localhost:8788
-pnpm dev:frontend         # SPA on http://localhost:3000
+pnpm dev:frontend         # SPA on http://localhost:3088
 ```
 
 That is the entire setup. No database, no Slack app, no GitHub app, no cat-factory
@@ -23,12 +23,14 @@ the two is missing rather than showing an empty board.
 
 Copy `.env.example` to `.env` and fill in only the block you care about.
 
-- **cat-factory**: `CAT_FACTORY_BASE_URL` defaults to `http://localhost:8787`, where
-  a local cat-factory serves. Add an API key with the `decide` scope and a service
-  id, and the "AI review" button starts filing real review tasks: expand the board
-  row to read what came back, tick the findings worth a comment and post them.
-  Point the URL at the centralized instance instead and nothing else changes: it is
-  the same client either way.
+- **cat-factory**: not in `.env`. Each org sets it on the Configuration screen,
+  which in local mode is prefilled with a local cat-factory's defaults
+  (`http://localhost:8787` and the `pl_review` pipeline). Mint an API key with
+  the `decide` scope in cat-factory (Integrations, then API access tokens), paste
+  it, press **Test connection** and pick a service from the ones it lists. The
+  "AI review" button then files real review tasks: expand the board row to read
+  what came back, tick the findings worth a comment and post them. Point the URL
+  at the centralized instance instead and nothing else changes.
 - **GitHub**: a personal access token is enough locally, and so is signing in with
   GitHub if you register an OAuth app with the loopback callback. Assignments then
   mirror onto the real pull request and the bot can comment on it. Whichever

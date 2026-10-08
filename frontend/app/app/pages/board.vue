@@ -245,6 +245,8 @@ function clearLink() {
       </UButton>
     </div>
 
+    <CapabilityWarning need="aiReview" class="mb-4" />
+
     <div class="flex flex-wrap items-center gap-3 mb-4">
       <USwitch
         v-model="showSettled"

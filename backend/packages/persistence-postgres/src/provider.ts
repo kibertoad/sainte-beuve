@@ -19,7 +19,10 @@ import {
 } from './reviews.js'
 import { firstOr } from './rows.js'
 import { apiKeys, projects, sessions } from './schema.js'
-import { PostgresIntegrationTokenRepository } from './settings.js'
+import {
+  PostgresIntegrationConfigRepository,
+  PostgresIntegrationTokenRepository,
+} from './settings.js'
 import { PostgresIdentityRepository, PostgresProjectRepository } from './workspace.js'
 
 /**
@@ -56,6 +59,7 @@ class PostgresPersistence implements PersistenceProvider {
       reminders: new PostgresReminderRepository(db, orgId),
       aiReviewRuns: new PostgresAiReviewRunRepository(db, orgId),
       integrationTokens: new PostgresIntegrationTokenRepository(db, orgId),
+      integrationConfigs: new PostgresIntegrationConfigRepository(db, orgId),
       projects: new PostgresProjectRepository(db, orgId),
       identities: new PostgresIdentityRepository(db, orgId),
       attention: new PostgresAttentionRepository(db, orgId),

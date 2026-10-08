@@ -55,6 +55,7 @@ import {
 import { sendByApiContract, UnexpectedResponseError } from '@toad-contracts/frontend-http-client'
 import wretch from 'wretch'
 import type { RequestParams, SuccessBody } from './contractCall'
+import { capabilityCalls } from './capabilitiesApi'
 import { guidedReviewCalls } from './guidedReviewApi'
 import { configurationCalls } from './sainteBeuveSettingsApi'
 
@@ -356,6 +357,7 @@ export function createSainteBeuveApi(apiBase: string) {
       call(resumeAiReviewContract, { pathParams: { runId }, body: {} }),
 
     ...guidedReviewCalls(call),
+    ...capabilityCalls(call),
     ...configurationCalls(call),
   }
 }

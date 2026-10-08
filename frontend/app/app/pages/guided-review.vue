@@ -124,6 +124,8 @@ const overviewReady = computed(() => session.value?.overview.status === 'complet
       </p>
     </div>
 
+    <CapabilityWarning need="guidedReview" />
+
     <UAlert
       v-if="target === null"
       color="error"

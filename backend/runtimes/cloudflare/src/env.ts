@@ -35,12 +35,6 @@ export interface WorkerEnv {
   /** Comma-separated list of origins the SPA is served from. `*` in a preview. */
   CORS_ORIGINS?: string
 
-  /** cat-factory: the instance AI reviews are delegated to. */
-  CAT_FACTORY_BASE_URL?: string
-  CAT_FACTORY_API_KEY?: string
-  CAT_FACTORY_SERVICE_ID?: string
-  CAT_FACTORY_PIPELINE_ID?: string
-
   /**
    * GitHub, in the three shapes a deployment can be connected in. They are not
    * alternatives to choose between at deploy time: whichever are configured are
