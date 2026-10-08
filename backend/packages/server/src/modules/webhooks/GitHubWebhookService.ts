@@ -158,11 +158,12 @@ export class GitHubWebhookService {
     intent: Extract<GitHubIntent, { kind: 'track' }>,
   ): Promise<GitHubWebhookOutcome> {
     const service = new ReviewService(this.container)
-    const { review, created } = await service.track(intent.review)
-    if (!intent.route || review.assignedReviewerIds.length > 0) {
+    const { review, created, result } = intent.route
+      ? await service.trackAndAssign(intent.review, 1)
+      : { ...(await service.track(intent.review)), result: null }
+    if (result === null) {
       return { action: created ? 'tracked' : 'already_tracked', reviewId: review.id }
     }
-    const result = await service.assign(review.id, { count: 1, excludeReviewerIds: [] })
     return {
       action: result.assigned.length > 0 ? 'assigned' : 'no_reviewer_available',
       reviewId: review.id,
