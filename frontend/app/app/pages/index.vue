@@ -210,6 +210,14 @@ async function release(commitmentId: string) {
                 Hand back
               </UButton>
               <UButton
+                :to="guidedReviewRoute(commitment.pullRequest)"
+                size="sm"
+                variant="ghost"
+                icon="i-lucide-sparkles"
+              >
+                Guided review
+              </UButton>
+              <UButton
                 :to="safeHref(commitment.pullRequest.url)"
                 target="_blank"
                 size="sm"

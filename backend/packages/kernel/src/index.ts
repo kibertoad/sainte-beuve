@@ -36,6 +36,7 @@ export type {
   AiReviewReport,
   ChatGateway,
   GatewayFactory,
+  GuidedReviewGateway,
   VcsAccount,
   VcsGateway,
   VcsIdentityGateway,

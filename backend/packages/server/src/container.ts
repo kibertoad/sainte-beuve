@@ -7,6 +7,7 @@ import type {
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type {
   AiReviewGateway,
+  GuidedReviewGateway,
   AttentionBus,
   ChatGateway,
   Clock,
@@ -26,6 +27,15 @@ import { DEFAULT_REMINDER_POLICY, systemClock, uuidGenerator } from '@sainte-beu
 import type { SecretsWiring } from './crypto/WebCryptoSecretCipher.js'
 import { InMemoryAttentionBus } from './realtime/InMemoryAttentionBus.js'
 import { scopedBus } from './realtime/scopedBus.js'
+import {
+  authWiring,
+  configured,
+  githubWiring,
+  outboundGateways,
+  slackWiring,
+} from './containerWiring.js'
+
+export { DEFAULT_GITHUB_LABELS, DEFAULT_SESSION_LIFETIME_MS } from './containerWiring.js'
 
 /** The environment's own gateway per host. Absent for a host nothing configured. */
 export type EnvironmentVcsGateways = Record<VcsProvider, VcsGateway | null>
@@ -45,17 +55,6 @@ export const NO_VCS_GATEWAYS: EnvironmentVcsGateways = { github: null, gitlab: n
  * board. A route that needs one answers 503 naming what is missing, which is a
  * configuration answer an operator can act on.
  */
-
-/**
- * The default reviewer-facing labels. Every rule is a plain string rather than a
- * pattern, because the thing a team has to be able to do is read the label off
- * the Configuration screen and type it onto a pull request.
- */
-export const DEFAULT_GITHUB_LABELS: GitHubLabelRules = {
-  review: 'needs-review',
-  aiReview: 'ai-review',
-  skillPrefix: 'skill:',
-}
 
 /** GitHub deployment configuration: everything about the connection that is not a credential. */
 export interface GitHubWiring {
@@ -175,6 +174,7 @@ export interface AppContainer {
    */
   vcs: EnvironmentVcsGateways
   aiReview: AiReviewGateway | null
+  guidedReview: GuidedReviewGateway | null
   /**
    * Builds a gateway from a stored credential, which is the seam that lets a
    * token entered on the Configuration screen take effect without a redeploy
@@ -251,6 +251,7 @@ export interface ContainerOptions {
   chat?: ChatGateway | null
   vcs?: Partial<EnvironmentVcsGateways> | null
   aiReview?: AiReviewGateway | null
+  guidedReview?: GuidedReviewGateway | null
   bus?: AttentionBus
   /** Defaults to `memory`, which is what the bus a facade left unwired is. */
   realtime?: RealtimeKind
@@ -262,66 +263,6 @@ export interface ContainerOptions {
   auth?: Partial<AuthWiring>
   appBaseUrl?: string | null
   apiBaseUrl?: string | null
-}
-
-/**
- * A configuration string, or null when there is nothing there.
- *
- * BLANK counts as absent, and this is the one place that decides it for every
- * facade. Both example deployments ship every name with no value
- * (`GITHUB_WEBHOOK_SECRET=`), so a copied file gives `''` rather than
- * `undefined`, and `requireCapability` only refuses `null`: an empty webhook
- * secret would sail past the 503 that names the missing variable and reach Web
- * Crypto, which answers `DataError: Zero-length key is not supported`. GitHub
- * would then be told 500 by a deployment reporting the capability as ready.
- */
-function configured(value: string | null | undefined): string | null {
-  return value === undefined || value === null || value.trim().length === 0 ? null : value
-}
-
-/** The same rule for a value that has a default: blank falls back, it does not win. */
-function configuredOr(value: string | undefined, fallback: string): string {
-  return configured(value) ?? fallback
-}
-
-function githubWiring(options: Partial<GitHubWiring> | undefined): GitHubWiring {
-  const labels = options?.labels
-  return {
-    appSlug: configured(options?.appSlug),
-    webhookSecret: configured(options?.webhookSecret),
-    botLogin: configured(options?.botLogin),
-    labels: {
-      review: configuredOr(labels?.review, DEFAULT_GITHUB_LABELS.review),
-      aiReview: configuredOr(labels?.aiReview, DEFAULT_GITHUB_LABELS.aiReview),
-      skillPrefix: configuredOr(labels?.skillPrefix, DEFAULT_GITHUB_LABELS.skillPrefix),
-    },
-  }
-}
-
-/**
- * A month. Long enough that somebody is not signed out mid-week, short enough
- * that a cookie lifted off a laptop is not a permanent credential.
- */
-export const DEFAULT_SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000
-
-function authWiring(options: Partial<AuthWiring> | undefined): AuthWiring {
-  return {
-    // `open` by default, so an existing deployment and local mode keep working
-    // and closing the door is a decision somebody made rather than an upgrade
-    // that locked them out of their own board.
-    mode: options?.mode ?? 'open',
-    environmentApiKey: configured(options?.environmentApiKey),
-    sessionLifetimeMs: options?.sessionLifetimeMs ?? DEFAULT_SESSION_LIFETIME_MS,
-    devMode: options?.devMode ?? false,
-  }
-}
-
-/** Beside `githubWiring`, and here for the same reason: blank counts as absent. */
-function slackWiring(options: Partial<SlackWiring> | undefined): SlackWiring {
-  return {
-    signingSecret: configured(options?.signingSecret),
-    announcementChannelId: configured(options?.announcementChannelId),
-  }
 }
 
 export function createContainer(options: ContainerOptions): AppContainer {
@@ -341,9 +282,8 @@ export function createContainer(options: ContainerOptions): AppContainer {
     ids: options.ids ?? uuidGenerator,
     reminderPolicy: options.reminderPolicy ?? DEFAULT_REMINDER_POLICY,
     random: options.random ?? Math.random,
-    chat: options.chat ?? null,
     vcs: { ...NO_VCS_GATEWAYS, ...options.vcs },
-    aiReview: options.aiReview ?? null,
+    ...outboundGateways(options),
     // A fresh bus per container is right for a facade that builds one at boot
     // and wrong for one that builds a container per request, which is why the
     // Worker holds its own at module level and passes it in here.

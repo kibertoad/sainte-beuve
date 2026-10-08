@@ -1,4 +1,4 @@
-import { CatFactoryAiReviewGateway } from '@sainte-beuve/ai-review'
+import { CatFactoryAiReviewGateway, CatFactoryGuidedReviewGateway } from '@sainte-beuve/ai-review'
 import {
   createGatewayFactory,
   GitHubVcsGateway,
@@ -8,6 +8,7 @@ import {
 } from '@sainte-beuve/integrations'
 import type {
   AiReviewGateway,
+  GuidedReviewGateway,
   AttentionBus,
   ChatGateway,
   Deferral,
@@ -214,6 +215,7 @@ function buildGateways(env: WorkerEnv): GatewayFactory {
     },
     appBaseUrl: env.APP_BASE_URL || undefined,
     aiReview: (apiKey) => aiReviewFrom(env, apiKey),
+    guidedReview: (apiKey) => guidedReviewFrom(env, apiKey),
   })
 }
 
@@ -227,6 +229,16 @@ function aiReviewFrom(env: WorkerEnv, apiKey: string): AiReviewGateway | null {
     serviceId: CAT_FACTORY_SERVICE_ID,
     pipelineId: env.CAT_FACTORY_PIPELINE_ID || undefined,
   })
+}
+
+/** The guided review finds the repository from the pull request, so it needs no service id. */
+function guidedReviewFrom(env: WorkerEnv, apiKey: string): GuidedReviewGateway | null {
+  if (!env.CAT_FACTORY_BASE_URL) return null
+  return new CatFactoryGuidedReviewGateway({ baseUrl: env.CAT_FACTORY_BASE_URL, apiKey })
+}
+
+function buildGuidedReview(env: WorkerEnv): GuidedReviewGateway | null {
+  return env.CAT_FACTORY_API_KEY ? guidedReviewFrom(env, env.CAT_FACTORY_API_KEY) : null
 }
 
 function buildAiReview(env: WorkerEnv): AiReviewGateway | null {
@@ -280,6 +292,7 @@ export function containerFor(
     chat: buildChat(env),
     vcs: buildVcs(env),
     aiReview: buildAiReview(env),
+    guidedReview: buildGuidedReview(env),
     gateways: gatewaysFor(env),
     bus: fanout.bus,
     realtime: fanout.kind,

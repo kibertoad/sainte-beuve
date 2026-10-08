@@ -64,6 +64,7 @@ describe('review board API', () => {
         chat: false,
         vcs: { github: false, gitlab: false },
         aiReview: false,
+        guidedReview: false,
         secrets: false,
         githubWebhooks: false,
         slackInteractivity: false,

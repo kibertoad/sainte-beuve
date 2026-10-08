@@ -1,10 +1,17 @@
 import type {
   AiReviewCuration,
   AiReviewResolution,
+  AskGuidedReviewInput,
+  GuidedReviewExchange,
+  GuidedReviewSessionView,
+  GuidedReviewTarget,
+  GuidedReviewThreadView,
+  OpenGuidedReviewThreadInput,
   OpenPullRequest,
   ProjectRef,
   PullRequestRef,
   Reminder,
+  RequestGuidedReviewDraftsInput,
   ReviewRequest,
   VcsProvider,
 } from '@sainte-beuve/contracts'
@@ -172,6 +179,38 @@ export interface AiReviewGateway {
 }
 
 /**
+ * cat-factory's guided review of one pull request, over the published SDK.
+ *
+ * Every session belongs to the API key this deployment holds, so a pull request
+ * has ONE guided review per deployment, shared by everybody who opens it. That
+ * is the board's model too: a review row is the team's, not one person's.
+ *
+ * Every write resolves with what cat-factory persisted, before the overview or
+ * the answer exists. The caller re-reads until nothing is pending.
+ */
+export interface GuidedReviewGateway {
+  /** The session this deployment holds for a pull request, or null. Spends nothing. */
+  find(target: GuidedReviewTarget): Promise<GuidedReviewSessionView | null>
+  /** Open a session, or answer with the one already open. Spends model budget when new. */
+  open(target: GuidedReviewTarget): Promise<GuidedReviewSessionView>
+  get(sessionId: string): Promise<GuidedReviewSessionView>
+  /** Regenerate the overview at the pull request's current head. */
+  refresh(sessionId: string): Promise<GuidedReviewSessionView>
+  openThread(sessionId: string, input: OpenGuidedReviewThreadInput): Promise<GuidedReviewThreadView>
+  getThread(sessionId: string, threadId: string): Promise<GuidedReviewThreadView>
+  ask(
+    sessionId: string,
+    threadId: string,
+    input: AskGuidedReviewInput,
+  ): Promise<GuidedReviewExchange>
+  requestDrafts(
+    sessionId: string,
+    threadId: string,
+    input: RequestGuidedReviewDraftsInput,
+  ): Promise<GuidedReviewExchange>
+}
+
+/**
  * Builds a gateway from a credential that was resolved at request time, for
  * whichever host the caller is reaching.
  *
@@ -208,6 +247,12 @@ export interface GatewayFactory {
    * to sit beside a route that answers 503.
    */
   aiReview(apiKey: string): AiReviewGateway | null
+  /**
+   * The guided reviewer, from the same cat-factory key. Null without a base URL;
+   * unlike the AI reviewer it needs no service id, because cat-factory finds the
+   * repository from the pull request's own coordinates.
+   */
+  guidedReview(apiKey: string): GuidedReviewGateway | null
   /** The sign-in round trip for one host. Null when no OAuth client is configured for it. */
   signIn(provider: VcsProvider): VcsIdentityGateway | null
 }

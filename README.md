@@ -59,6 +59,27 @@ Each run is a billed cat-factory job, so every way to ask for one (the button,
 the label, `@bot ai`, `/review ai`) meets the same limit: one run in flight per
 review, and no more than three filed on it in an hour.
 
+## A guided review explains the change before you read it
+
+**Guided review** sits beside every pull request on the workspace and the board.
+It opens a page where cat-factory reads the change and lays it out: what it is
+for, what changed, what it affects, the risks ranked by severity, and where to
+look first, each pointing at the lines on the host at the commit it read.
+
+From there you ask. A suggested question, or one of your own, opens a thread,
+and every thread is answered on its own, so a slow one never holds up the rest.
+**Dig into a checkout** sends the question to a read-only checkout of the whole
+repository, for the ones the diff cannot answer ("where else is this called").
+**Draft comments** turns what a thread concluded into review comments anchored
+on the diff, ready to carry onto the pull request.
+
+There is one guided review per pull request on a deployment, and everybody who
+opens it sees the same threads. Opening the page reads; only **Start a guided
+review** spends model budget. It needs the same cat-factory key as the AI
+review (the `write` scope is enough) and a base URL, but no service id: the
+repository has to be linked in the cat-factory workspace, and registered as a
+project here.
+
 ## Asking for attention
 
 A pull request that nobody has picked up is the thing the workspace exists to

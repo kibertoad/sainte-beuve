@@ -37,7 +37,7 @@
     "@sainte-beuve/kernel": "workspace:*",
     "drizzle-orm": "1.0.0-rc.4",
     "pg": "^8.23.0",
-    "valibot": "^1.4.2"
+    "valibot": "^1.5.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

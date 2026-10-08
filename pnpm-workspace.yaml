@@ -50,11 +50,13 @@ allowBuilds:
 # reach an install here. 1440 minutes = 24 hours.
 minimumReleaseAge: 1440
 
-# The one exception, and it is not a convenience. `@cat-factory/sdk` is generated
-# from cat-factory's own OpenAPI spec and published out of the repository this one
-# is built against, so there is no third party between the spec and the package
-# for the window to protect us from. Holding it back a day instead pins this repo
-# to an SDK that predates the routes being wired to it, which is how a facade
-# comes to hand-write a path the spec already describes.
+# The exceptions, and they are not a convenience. `@cat-factory/sdk` is generated
+# from cat-factory's own OpenAPI spec, and `@cat-factory/contracts` holds the
+# schemas that spec is generated from. Both are published out of the repository
+# this one is built against, so there is no third party between the spec and the
+# package for the window to protect us from. Holding them back a day instead pins
+# this repo to a surface that predates the routes being wired to it, which is how
+# a facade comes to hand-write a path the spec already describes.
 minimumReleaseAgeExclude:
+  - '@cat-factory/contracts'
   - '@cat-factory/sdk'

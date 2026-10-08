@@ -76,6 +76,7 @@ describe('sainte-beuve worker', () => {
         chat: false,
         vcs: { github: false, gitlab: false },
         aiReview: false,
+        guidedReview: false,
         secrets: true,
         githubWebhooks: false,
         slackInteractivity: false,

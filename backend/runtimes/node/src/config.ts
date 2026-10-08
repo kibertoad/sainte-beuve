@@ -113,6 +113,11 @@ export interface NodeConfig {
   /** How often the reminder clock runs, in ms. */
   reminderIntervalMs: number
   catFactory: { baseUrl: string; serviceId: string; pipelineId?: string } | null
+  /**
+   * Where cat-factory is, on its own: all the guided review needs. It finds the
+   * repository from the pull request, so it reads no service id.
+   */
+  catFactoryBaseUrl: string | null
   /** The cat-factory key from the environment, when there is one. */
   catFactoryApiKey: string | null
   github: GitHubConfig
@@ -197,6 +202,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),
     catFactory: catFactoryFrom(env),
+    catFactoryBaseUrl: env.CAT_FACTORY_BASE_URL || null,
     // `||` throughout, not `??`: an empty variable is one somebody left blank,
     // not one they set, and `.env.example` ships every name with no value.
     catFactoryApiKey: env.CAT_FACTORY_API_KEY || null,

@@ -108,6 +108,9 @@ const assignedTo = computed(() => {
         </UBadge>
         <UButton size="sm" variant="soft" @click="emit('assign')">Find a reviewer</UButton>
         <UButton size="sm" variant="ghost" @click="emit('aiReview')">AI review</UButton>
+        <UButton :to="guidedReviewRoute(review.pullRequest)" size="sm" variant="ghost">
+          Guided review
+        </UButton>
         <UButton
           size="sm"
           variant="ghost"
