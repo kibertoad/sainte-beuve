@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AI_REVIEW_FILING_TIMEOUT_MS,
   AI_REVIEW_HOURLY_LIMIT,
+  AI_REVIEW_IN_FLIGHT_CEILING_MS,
   type AdmissionRun,
   decideAiReviewAdmission,
 } from './aiAdmission.js'
@@ -41,6 +42,15 @@ describe('decideAiReviewAdmission', () => {
     })
     expect(decideAiReviewAdmission([young], NOW)).toMatchObject({ admitted: false })
     expect(decideAiReviewAdmission([stuck], NOW)).toStrictEqual({ admitted: true })
+  })
+
+  it('does not let a filed run that never settles block the review for good', () => {
+    for (const status of ['running', 'awaiting_selection'] as const) {
+      const lost = run({ status, requestedAt: NOW - AI_REVIEW_IN_FLIGHT_CEILING_MS })
+      const recent = run({ status, requestedAt: NOW - AI_REVIEW_IN_FLIGHT_CEILING_MS + 1 })
+      expect(decideAiReviewAdmission([lost], NOW)).toStrictEqual({ admitted: true })
+      expect(decideAiReviewAdmission([recent], NOW)).toMatchObject({ reason: 'in_flight' })
+    }
   })
 
   it('caps the runs filed in an hour, and says when the next one may go', () => {

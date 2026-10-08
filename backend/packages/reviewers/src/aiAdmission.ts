@@ -18,9 +18,15 @@ import { AI_REVIEW_IN_FLIGHT_STATUSES, type AiReviewRun } from '@sainte-beuve/co
  *
  * Only a FILED run counts toward the hourly limit: one cat-factory refused at
  * the door cost nothing, and counting it would lock a team out for an hour for
- * a misconfiguration somebody has just fixed. A run still `requested` with no
- * task is in flight only while it is young, because a process that died between
- * writing the row and hearing back would otherwise block the review for good.
+ * a misconfiguration somebody has just fixed.
+ *
+ * No run blocks a review for good. One still `requested` with no task is in
+ * flight only for {@link AI_REVIEW_FILING_TIMEOUT_MS}, because a process that died
+ * between writing the row and hearing back leaves nothing to poll. One cat-factory
+ * did take is in flight for at most {@link AI_REVIEW_IN_FLIGHT_CEILING_MS}: a task
+ * cat-factory lost reads as "no run yet" on every poll, and a parked review nobody
+ * curates never settles, so without a ceiling either would refuse every later
+ * request on that review.
  */
 
 /** How many runs one review may file in an hour. */
@@ -36,6 +42,13 @@ const HOUR_MS = 60 * 60 * 1000
  * of `requested`, and a Worker's whole wall-clock budget is a fraction of it.
  */
 export const AI_REVIEW_FILING_TIMEOUT_MS = 5 * 60 * 1000
+
+/**
+ * The longest a filed run holds a review's one place in flight. An hour, so a run
+ * that outlives it has also left the hourly count, and the hourly limit is what
+ * bounds what a stuck run lets through.
+ */
+export const AI_REVIEW_IN_FLIGHT_CEILING_MS = HOUR_MS
 
 const IN_FLIGHT = new Set(AI_REVIEW_IN_FLIGHT_STATUSES)
 
@@ -64,6 +77,7 @@ export function decideAiReviewAdmission(
 
 function isInFlight(run: AdmissionRun, now: number): boolean {
   if (!IN_FLIGHT.has(run.status)) return false
-  if (run.catFactoryTaskId !== null) return true
-  return now - run.requestedAt < AI_REVIEW_FILING_TIMEOUT_MS
+  const age = now - run.requestedAt
+  if (run.catFactoryTaskId !== null) return age < AI_REVIEW_IN_FLIGHT_CEILING_MS
+  return age < AI_REVIEW_FILING_TIMEOUT_MS
 }
