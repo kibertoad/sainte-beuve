@@ -1,8 +1,13 @@
-import type { Reviewer, ShortfallReason, Skill } from '@sainte-beuve/contracts'
+import type { Reviewer, ShortfallReason } from '@sainte-beuve/contracts'
 
 /**
- * Reviewer selection: skill matching, then a load-aware weighted random pick
- * that favours reviewers who know the repository's domains.
+ * Reviewer selection: a load-aware weighted random pick that favours the
+ * reviewers whose skills and domains come closest to what the review wants.
+ *
+ * Nobody available is excluded for lacking a skill. A backend engineer can still
+ * review a frontend change, less effectively, and a gate would leave a review
+ * unassigned whenever the one person holding a skill is busy. The mix is a
+ * preference: each wanted skill or domain a reviewer holds raises their share.
  *
  * "Random" rather than round-robin on purpose. A deterministic rotation is
  * predictable in the bad sense: people learn their slot, pre-empt it, and trade it
@@ -14,22 +19,40 @@ import type { Reviewer, ShortfallReason, Skill } from '@sainte-beuve/contracts'
  * pins the outcome instead of asserting on a distribution.
  */
 
+/** What a review wants from its reviewer. */
+export interface MatchTarget {
+  skills: readonly string[]
+  domains: readonly string[]
+}
+
+/**
+ * What a review wants: the skills it asked for, or else the ones its repository
+ * names, and the repository's domains. A review on a repository nobody
+ * registered wants only what it asked for.
+ */
+export function matchTargetFor(
+  review: { requiredSkills: readonly string[] },
+  project: MatchTarget | null,
+): MatchTarget {
+  return {
+    skills: review.requiredSkills.length > 0 ? review.requiredSkills : (project?.skills ?? []),
+    domains: project?.domains ?? [],
+  }
+}
+
 /** A candidate scored for one review, kept beside the reviewer so a caller can explain a pick. */
 export interface ScoredCandidate {
   reviewer: Reviewer
-  /** How many of the required skills this reviewer has. Equal to `requiredSkills.length` on a full match. */
+  /** How many of the wanted skills this reviewer holds. */
   matchedSkills: number
-  /** How many of the repository's domains this reviewer knows. */
+  /** How many of the wanted domains this reviewer knows. */
   matchedDomains: number
   /** The reviewer's share of the draw. Higher is likelier; never zero for a candidate. */
   weight: number
 }
 
-export interface SelectionInput {
+export interface SelectionInput extends MatchTarget {
   candidates: Reviewer[]
-  requiredSkills: Skill[]
-  /** The repository's domains. Knowing them raises a reviewer's share of the draw; it never excludes. */
-  preferredDomains?: readonly string[]
   /** Reviewer ids that must not be picked: the author, anyone already on, the caller's vetoes. */
   excludeReviewerIds: readonly string[]
   count: number
@@ -41,7 +64,14 @@ export interface SelectionResult {
   shortfallReason: ShortfallReason | null
 }
 
-/** Case-insensitive skill comparison: 'TypeScript' and 'typescript' are one skill. */
+/**
+ * How many times more often a reviewer holding the WHOLE wanted mix is drawn
+ * than one holding none of it, minus one. Holding half the mix earns half the
+ * boost, so a full match is drawn five times as often as a stranger to it.
+ */
+export const MATCH_PREFERENCE = 4
+
+/** Case-insensitive comparison: 'TypeScript' and 'typescript' are one skill, and one domain. */
 export function normalizeSkill(skill: string): string {
   return skill.trim().toLowerCase()
 }
@@ -59,10 +89,9 @@ export function isSameHandle(left: string | null, right: string | null): boolean
 }
 
 /**
- * Whether a reviewer holds every named skill. An ALL-of gate, not a ranking: a
- * review that needs `payments` should not fall to somebody who merely knows
- * `typescript`, because a partial match reads to the author as a real review and
- * is not one. An empty requirement matches everybody.
+ * Whether a reviewer holds every named skill. The gate an attention request
+ * addresses its audience by; review selection scores skills instead. An empty
+ * requirement matches everybody.
  */
 export function hasAllSkills(reviewer: Reviewer, requiredSkills: readonly string[]): boolean {
   if (requiredSkills.length === 0) return true
@@ -70,89 +99,77 @@ export function hasAllSkills(reviewer: Reviewer, requiredSkills: readonly string
   return requiredSkills.every((skill) => owned.has(normalizeSkill(skill)))
 }
 
-/** Whether the router may hand this review to this reviewer at all. */
-export function isEligible(
-  reviewer: Reviewer,
-  requiredSkills: readonly string[],
-  excluded: ReadonlySet<string>,
-): boolean {
+/** Whether the router may hand a review to this reviewer at all. */
+export function isEligible(reviewer: Reviewer, excluded: ReadonlySet<string>): boolean {
   if (excluded.has(reviewer.id)) return false
   if (reviewer.availability !== 'available') return false
-  if (reviewer.weight <= 0) return false
-  return hasAllSkills(reviewer, requiredSkills)
+  return reviewer.weight > 0
 }
 
 /**
- * Draw weight for one eligible reviewer: their configured share, damped by what
- * they already owe. The `1 / (1 + outstanding)` term is what stops the pool
- * converging on whoever answers fastest: a reviewer with three open reviews is
- * drawn a quarter as often as an idle peer of the same weight, without ever being
- * excluded outright (which would starve a small team).
+ * Draw weight for one eligible reviewer before the match: their configured share,
+ * damped by what they already owe. The `1 / (1 + outstanding)` term is what stops
+ * the pool converging on whoever answers fastest: a reviewer with three open
+ * reviews is drawn a quarter as often as an idle peer of the same weight, without
+ * ever being excluded outright (which would starve a small team).
  */
 export function drawWeight(reviewer: Reviewer): number {
   return reviewer.weight / (1 + reviewer.outstandingReviews)
 }
 
-/**
- * How much more often a reviewer who knows ALL of a repository's domains is
- * drawn than one who knows none, minus one. Knowing half of them is half the
- * boost. A multiplier rather than a gate, so a pool with no domain expert in it
- * still assigns somebody.
- */
-export const DOMAIN_PREFERENCE = 2
+/** The entries of a list, normalised, each once. */
+function distinct(list: readonly string[]): string[] {
+  return [...new Set(list.map(normalizeSkill))]
+}
 
-/** How many of `domains` the reviewer knows, compared case-insensitively. */
-export function matchedDomains(reviewer: Reviewer, domains: readonly string[]): number {
-  const known = new Set(reviewer.domains.map(normalizeSkill))
-  return domains.filter((domain) => known.has(normalizeSkill(domain))).length
+/** How many of `wanted` appear in `held`, compared case-insensitively. */
+function countHeld(held: readonly string[], wanted: readonly string[]): number {
+  const owned = new Set(held.map(normalizeSkill))
+  return distinct(wanted).filter((entry) => owned.has(entry)).length
+}
+
+/**
+ * Skills and domains count alike: the mix is one list of what the review
+ * wants, and the affinity is the share of it the reviewer holds.
+ */
+export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredCandidate {
+  const matchedSkills = countHeld(reviewer.skills, target.skills)
+  const matchedDomains = countHeld(reviewer.domains, target.domains)
+  const wanted = distinct(target.skills).length + distinct(target.domains).length
+  const affinity = wanted === 0 ? 0 : (matchedSkills + matchedDomains) / wanted
+  return {
+    reviewer,
+    matchedSkills,
+    matchedDomains,
+    weight: drawWeight(reviewer) * (1 + MATCH_PREFERENCE * affinity),
+  }
 }
 
 export function scoreCandidates(
   candidates: readonly Reviewer[],
-  requiredSkills: readonly string[],
+  target: MatchTarget,
   excludeReviewerIds: readonly string[],
-  preferredDomains: readonly string[] = [],
 ): ScoredCandidate[] {
   const excluded = new Set(excludeReviewerIds)
-  const required = requiredSkills.map(normalizeSkill)
   return candidates
-    .filter((reviewer) => isEligible(reviewer, required, excluded))
-    .map((reviewer) => {
-      const domains = matchedDomains(reviewer, preferredDomains)
-      const affinity = preferredDomains.length === 0 ? 0 : domains / preferredDomains.length
-      return {
-        reviewer,
-        matchedSkills: required.length,
-        matchedDomains: domains,
-        weight: drawWeight(reviewer) * (1 + DOMAIN_PREFERENCE * affinity),
-      }
-    })
+    .filter((reviewer) => isEligible(reviewer, excluded))
+    .map((reviewer) => scoreCandidate(reviewer, target))
 }
 
 /**
  * Why the candidate pool came back empty.
  *
  * Checked from the coarsest cause to the finest, because the first one that holds is
- * the one worth telling somebody about: an all-paused pool is not a skills problem,
- * and a pool emptied by the author exclusion is neither of those.
- *
- * `all_excluded` is the fallback rather than a check of its own. Reaching it means
- * somebody is available and holds every skill, and the only gate left in
- * `isEligible` is the exclusion list, so the exclusion is what emptied the pool.
+ * the one worth telling somebody about: an all-paused pool is not an exclusion
+ * problem. `all_excluded` is the fallback: somebody is available, and the only
+ * gate left in `isEligible` is the exclusion list, so the exclusion emptied it.
  */
-export function diagnoseShortfall(
-  candidates: readonly Reviewer[],
-  requiredSkills: readonly string[],
-): ShortfallReason {
+export function diagnoseShortfall(candidates: readonly Reviewer[]): ShortfallReason {
   if (candidates.length === 0) return 'no_reviewers'
-
-  const selectable = candidates.filter(
+  const selectable = candidates.some(
     (reviewer) => reviewer.availability === 'available' && reviewer.weight > 0,
   )
-  if (selectable.length === 0) return 'none_available'
-
-  const skilled = selectable.some((reviewer) => hasAllSkills(reviewer, requiredSkills))
-  return skilled ? 'all_excluded' : 'no_skill_match'
+  return selectable ? 'all_excluded' : 'none_available'
 }
 
 /** One weighted draw. Returns the index, or -1 for an empty pool. */
@@ -180,17 +197,9 @@ export function selectReviewers(
   input: SelectionInput,
   random: () => number = Math.random,
 ): SelectionResult {
-  const pool = scoreCandidates(
-    input.candidates,
-    input.requiredSkills,
-    input.excludeReviewerIds,
-    input.preferredDomains,
-  )
+  const pool = scoreCandidates(input.candidates, input, input.excludeReviewerIds)
   if (pool.length === 0) {
-    return {
-      selected: [],
-      shortfallReason: diagnoseShortfall(input.candidates, input.requiredSkills),
-    }
+    return { selected: [], shortfallReason: diagnoseShortfall(input.candidates) }
   }
 
   const remaining = [...pool]

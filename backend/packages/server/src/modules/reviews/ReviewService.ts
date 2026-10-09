@@ -2,19 +2,23 @@ import type {
   AssignReviewersResult,
   BoardReview,
   CreateReviewRequest,
-  Reviewer,
   ReviewRequest,
   ReviewStatus,
-  VcsProvider,
 } from '@sainte-beuve/contracts'
 import { handleOf } from '@sainte-beuve/contracts'
 import type { ReviewListOrder } from '@sainte-beuve/kernel'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
-import { buildBoard, isSameHandle, isSettledReview, selectReviewers } from '@sainte-beuve/reviewers'
+import {
+  buildBoard,
+  isSameHandle,
+  isSettledReview,
+  matchTargetFor,
+  selectReviewers,
+} from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
-import { resolveVcs } from '../../integrations/resolve.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
 import { announceReview } from './announce.js'
+import { handlesOf, mirrorAssignment } from './mirror.js'
 
 /**
  * Review-request use cases: register a pull request, hand it to reviewers, move it
@@ -180,7 +184,7 @@ export class ReviewService {
     if (review.assignedReviewerIds.includes(reviewerId)) return review
     const provider = review.pullRequest.provider
     const updated = await this.recordAssignment(review, { assign: [reviewerId], release: [] })
-    await this.mirrorToVcs(updated, {
+    await mirrorAssignment(this.container, updated, {
       request: [handleOf(reviewer.handles, provider)],
       withdraw: [],
     })
@@ -233,9 +237,7 @@ export class ReviewService {
     const result = selectReviewers(
       {
         candidates,
-        requiredSkills: review.requiredSkills,
-        // A review on a repository nobody registered has no domains to prefer.
-        preferredDomains: project?.domains ?? [],
+        ...matchTargetFor(review, project),
         // The author and whoever is already on the hook are excluded here rather
         // than by the caller: a client that forgot would otherwise get a reviewer
         // reviewing their own pull request, which the router must never produce.
@@ -259,7 +261,7 @@ export class ReviewService {
       assign: result.selected.map((r) => r.id),
       release,
     })
-    await this.mirrorToVcs(updated, {
+    await mirrorAssignment(this.container, updated, {
       request: result.selected.map((r) => handleOf(r.handles, provider)),
       withdraw: handlesOf(candidates, release, provider),
     })
@@ -325,35 +327,6 @@ export class ReviewService {
     return updated
   }
 
-  /**
-   * Mirror the assignment onto the pull request: the new reviewers requested,
-   * and the ones who no longer hold it withdrawn.
-   *
-   * Best-effort on purpose: GitHub being down must not lose an assignment we
-   * have already committed, and the reviewer still gets their Slack nudge. The
-   * failure is logged, not swallowed silently. The withdrawal goes first, so the
-   * last notification GitHub sends is the one that puts somebody ON the hook.
-   */
-  private async mirrorToVcs(
-    review: ReviewRequest,
-    change: { request: (string | null)[]; withdraw: (string | null)[] },
-  ): Promise<void> {
-    const { logger } = this.container
-    const request = known(change.request)
-    const withdraw = known(change.withdraw).filter((login) => !request.includes(login))
-    if (request.length === 0 && withdraw.length === 0) return
-    const vcs = await resolveVcs(this.container, review.pullRequest.provider)
-    if (vcs === null) return
-    try {
-      if (withdraw.length > 0) {
-        await vcs.gateway.removeRequestedReviewers(review.pullRequest, withdraw)
-      }
-      if (request.length > 0) await vcs.gateway.requestReviewers(review.pullRequest, request)
-    } catch (err) {
-      logger.warn({ err, reviewId: review.id }, 'could not mirror the assignment to the PR')
-    }
-  }
-
   private async require(reviewId: string): Promise<ReviewRequest> {
     return assertFound(
       await this.container.repositories.reviews.getById(reviewId),
@@ -380,21 +353,4 @@ export class ReviewService {
 
 function isTerminal(status: ReviewStatus): boolean {
   return status === 'approved' || status === 'changes_requested' || status === 'closed'
-}
-
-/** The named reviewers' handles on the pull request's host, for the mirror. */
-function handlesOf(
-  candidates: Reviewer[],
-  reviewerIds: string[],
-  provider: VcsProvider,
-): (string | null)[] {
-  return reviewerIds.map((id) => {
-    const reviewer = candidates.find((r) => r.id === id)
-    return reviewer === undefined ? null : handleOf(reviewer.handles, provider)
-  })
-}
-
-/** A reviewer with no account on that host cannot be mirrored, and is not a failure. */
-function known(logins: (string | null)[]): string[] {
-  return logins.filter((login): login is string => login !== null)
 }

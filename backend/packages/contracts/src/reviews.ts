@@ -84,7 +84,11 @@ export const reviewRequestSchema = v.object({
   pullRequest: pullRequestRefSchema,
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300)),
   authorLogin: v.string(),
-  /** Skills a reviewer must have to be a candidate. Empty means anyone available. */
+  /**
+   * The skills this review wants. A reviewer holding more of them is drawn more
+   * often, and nobody is excluded for lacking one. Empty means the repository's
+   * own skills are wanted instead.
+   */
   requiredSkills: v.array(skillSchema),
   priority: reviewPrioritySchema,
   status: reviewStatusSchema,
@@ -127,20 +131,19 @@ export type AssignReviewers = v.InferOutput<typeof assignReviewersSchema>
 /**
  * Why fewer reviewers than requested came back.
  *
- * Five values rather than one because each names a different thing to go and do.
- * A single reason covering an empty directory, an all-paused pool, a skill nobody
- * holds and a candidate list emptied by the author exclusion can only be worded for
- * one of them, and it sends everybody else to fix something that was never wrong.
+ * Four values rather than one because each names a different thing to go and do.
+ * A single reason covering an empty directory, an all-paused pool and a candidate
+ * list emptied by the author exclusion can only be worded for one of them, and it
+ * sends everybody else to fix something that was never wrong. A skill nobody holds
+ * is not among them: selection scores skills rather than requiring them.
  */
 export const shortfallReasonSchema = v.picklist([
   // The directory is empty.
   'no_reviewers',
   // Reviewers exist, but none of them is available.
   'none_available',
-  // Somebody is available, but nobody available holds every required skill.
-  'no_skill_match',
-  // Somebody available holds the skills, and every one of them is the author or
-  // is already on the review.
+  // Somebody is available, and every one of them is the author or is already on
+  // the review.
   'all_excluded',
   // The pool was smaller than the number asked for, so it ran out part way.
   'pool_exhausted',
@@ -158,7 +161,6 @@ export type ShortfallReason = v.InferOutput<typeof shortfallReasonSchema>
 const SHORTFALL_CAUSES: Record<ShortfallReason, string> = {
   no_reviewers: 'There is nobody in the reviewer pool yet',
   none_available: 'Everybody in the reviewer pool is paused',
-  no_skill_match: 'Nobody available holds every skill this review needs',
   all_excluded: 'Everybody who could review this is already on it, or is the author',
   pool_exhausted: 'The pool ran out of people before it reached the number asked for',
 }
@@ -166,7 +168,6 @@ const SHORTFALL_CAUSES: Record<ShortfallReason, string> = {
 const SHORTFALL_REMEDIES: Record<ShortfallReason, string | null> = {
   no_reviewers: 'Add somebody on the Reviewers screen.',
   none_available: 'Resume somebody, or add another reviewer.',
-  no_skill_match: 'Add the skill to a reviewer, or drop it from the request.',
   all_excluded: null,
   pool_exhausted: null,
 }

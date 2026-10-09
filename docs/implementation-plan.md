@@ -10,9 +10,9 @@ today:
    project on every host. Plus the one thing a list cannot do: ask the team to
    look at something, addressed by skill rather than by name.
 2. **Find a reviewer with the right skillset.** Not a round-robin and not a
-   `CODEOWNERS` file: a weighted random pick from the people who actually hold the
-   skills a change needs, favouring those who know the repository's domains, and
-   damped by what they already owe.
+   `CODEOWNERS` file: a weighted random pick that favours the people whose skills
+   and domains come closest to what a change needs, damped by what they already
+   owe. Nobody is ruled out for missing a skill.
 3. **Keep reminders honest.** A nudge for a review nobody picked up, a nudge for a
    reviewer who has gone quiet, a word when a delegated review parks on its
    findings, and one escalation past the deadline. Then it stops.

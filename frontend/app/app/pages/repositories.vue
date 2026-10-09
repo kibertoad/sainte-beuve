@@ -47,6 +47,7 @@ watch(defaultOwner, (next, previous) => {
 })
 const repo = ref('')
 const webUrl = ref('')
+const skills = ref<string[]>([...DEFAULT_PROJECT_SKILLS])
 const domains = ref<string[]>([])
 
 const providers = VCS_PROVIDERS.map((value) => ({ value, label: vcsDisplayName(value) }))
@@ -64,6 +65,7 @@ async function add() {
         owner: owner.value.trim(),
         repo: repo.value.trim(),
         webUrl: blankToNull(webUrl.value),
+        skills: skills.value,
         domains: domains.value,
       }),
     'Could not register the repository',
@@ -76,6 +78,7 @@ async function add() {
     owner.value = defaultOwner.value
     repo.value = ''
     webUrl.value = ''
+    skills.value = [...DEFAULT_PROJECT_SKILLS]
     domains.value = []
   }
 }
@@ -169,25 +172,24 @@ async function remove(project: Project) {
             placeholder="https://gitlab.example.com/platform/api"
           />
         </UFormField>
+      </div>
+      <MatchingFields
+        v-model:skills="skills"
+        v-model:domains="domains"
+        class="mt-4"
+        :known-skills="knownSkills"
+        :known-domains="knownDomains"
+      />
+      <div class="mt-4">
         <UButton
-          class="justify-center"
+          class="w-full justify-center sm:w-auto"
           :disabled="owner.trim().length === 0 || repo.trim().length === 0"
           :loading="busy === 'add'"
           @click="add()"
         >
-          Add
+          Add repository
         </UButton>
       </div>
-      <UFormField
-        label="Domains"
-        description="Optional. Reviewers who know them are picked more often. A new one joins the organization's list."
-        class="mt-3"
-      >
-        <ChipsInput v-model="domains" :suggestions="knownDomains" placeholder="Add a domain" />
-      </UFormField>
-      <p class="text-xs text-muted mt-3">
-        New repositories start with {{ DEFAULT_PROJECT_SKILLS.join(' and ') }}. Change that below.
-      </p>
     </UCard>
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the repositories" />

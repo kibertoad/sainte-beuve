@@ -194,8 +194,12 @@ describe('GitHub webhook intake', () => {
     expect(reminders[0]?.reviewerId).not.toBeNull()
   })
 
-  it('says so rather than failing when the pool holds nobody with the skill', async () => {
-    await addReviewer(harness, { displayName: 'Peer', handles: { github: 'peer' }, skills: [] })
+  it('says so rather than failing when nobody in the pool is available', async () => {
+    await addReviewer(harness, {
+      displayName: 'Peer',
+      handles: { github: 'peer' },
+      availability: 'paused',
+    })
     const res = await deliver(
       harness,
       'pull_request',

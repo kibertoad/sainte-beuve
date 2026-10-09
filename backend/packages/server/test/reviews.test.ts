@@ -157,8 +157,8 @@ describe('review board API', () => {
     expect(body.shortfallReason).toBeNull()
   })
 
-  it('says why it could not fill the request instead of assigning the wrong person', async () => {
-    await addReviewer(harness, {
+  it('assigns somebody without the asked-for skill rather than leaving the review open', async () => {
+    const gopher = await addReviewer(harness, {
       displayName: 'Gopher',
       handles: { github: 'gopher' },
       skills: ['go'],
@@ -166,9 +166,12 @@ describe('review board API', () => {
     const review = await openReview(harness, { requiredSkills: ['rust'] })
 
     const res = await assignReviewer(harness, review.id)
-    const body = (await res.json()) as { assigned: unknown[]; shortfallReason: string }
-    expect(body.assigned).toStrictEqual([])
-    expect(body.shortfallReason).toBe('no_skill_match')
+    const body = (await res.json()) as {
+      assigned: { reviewerId: string }[]
+      shortfallReason: string | null
+    }
+    expect(body.assigned.map((a) => a.reviewerId)).toStrictEqual([gopher.id])
+    expect(body.shortfallReason).toBeNull()
   })
 
   it('answers 404 for a review that does not exist', async () => {

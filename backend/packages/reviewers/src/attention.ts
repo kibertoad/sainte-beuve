@@ -10,9 +10,10 @@ import { hasAllSkills } from './selection.js'
  * it. Three code paths reading three different rules is how somebody comes to
  * be pinged about work they are then refused.
  *
- * It shares the skill gate with reviewer selection deliberately. A ping that
- * used a looser rule than the router would send a `payments` change to people
- * the router would never have picked for it.
+ * Unlike reviewer selection, which scores skills, this is a gate: a request is
+ * a broadcast to everyone it names, so there is no ranking to put a partial
+ * match lower in, and the gate is what keeps a `payments` ping off the screens
+ * of people who hold none of it.
  */
 
 /** The gate, without the "who is asking" part that only a request carries. */

@@ -1,10 +1,12 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
-  DOMAIN_PREFERENCE,
+  MATCH_PREFERENCE,
+  type SelectionInput,
   drawWeight,
   isEligible,
   isSameHandle,
+  matchTargetFor,
   scoreCandidates,
   selectReviewers,
 } from './selection.js'
@@ -32,26 +34,20 @@ function scripted(values: number[]): () => number {
   return () => values[Math.min(i++, values.length - 1)] ?? 0
 }
 
+/** A selection over `candidates` that wants nothing in particular, unless told. */
+function input(candidates: Reviewer[], overrides: Partial<SelectionInput> = {}): SelectionInput {
+  return { candidates, skills: [], domains: [], excludeReviewerIds: [], count: 1, ...overrides }
+}
+
 describe('isEligible', () => {
-  it('requires every skill, not just one', () => {
-    const candidate = reviewer({ id: 'a', skills: ['typescript'] })
-    expect(isEligible(candidate, ['typescript', 'payments'], new Set())).toBe(false)
-    expect(isEligible(candidate, ['typescript'], new Set())).toBe(true)
-  })
-
-  it('matches skills case-insensitively', () => {
-    const candidate = reviewer({ id: 'a', skills: ['TypeScript'] })
-    expect(isEligible(candidate, ['typescript'], new Set())).toBe(true)
-  })
-
-  it('admits anyone available when no skills are required', () => {
-    expect(isEligible(reviewer({ id: 'a' }), [], new Set())).toBe(true)
+  it('admits anyone available, whatever their skills', () => {
+    expect(isEligible(reviewer({ id: 'a' }), new Set())).toBe(true)
   })
 
   it('skips paused reviewers, zero-weight reviewers and the exclusion list', () => {
-    expect(isEligible(reviewer({ id: 'a', availability: 'paused' }), [], new Set())).toBe(false)
-    expect(isEligible(reviewer({ id: 'b', weight: 0 }), [], new Set())).toBe(false)
-    expect(isEligible(reviewer({ id: 'c' }), [], new Set(['c']))).toBe(false)
+    expect(isEligible(reviewer({ id: 'a', availability: 'paused' }), new Set())).toBe(false)
+    expect(isEligible(reviewer({ id: 'b', weight: 0 }), new Set())).toBe(false)
+    expect(isEligible(reviewer({ id: 'c' }), new Set(['c']))).toBe(false)
   })
 })
 
@@ -68,6 +64,67 @@ describe('drawWeight', () => {
   })
 })
 
+describe('match scoring', () => {
+  const target = { skills: ['typescript'], domains: ['billing'] }
+
+  it('weights skills and domains alike, by the share of the mix a reviewer holds', () => {
+    const scored = scoreCandidates(
+      [
+        reviewer({ id: 'both', skills: ['TypeScript'], domains: ['Billing'] }),
+        reviewer({ id: 'skill', skills: ['typescript'] }),
+        reviewer({ id: 'domain', domains: ['billing'] }),
+        reviewer({ id: 'neither', skills: ['go'] }),
+      ],
+      target,
+      [],
+    ).map((candidate) => [candidate.reviewer.id, candidate.weight])
+    expect(scored).toStrictEqual([
+      ['both', 1 + MATCH_PREFERENCE],
+      ['skill', 1 + MATCH_PREFERENCE / 2],
+      ['domain', 1 + MATCH_PREFERENCE / 2],
+      ['neither', 1],
+    ])
+  })
+
+  it('applies the match on top of the load damping', () => {
+    const busy = reviewer({
+      id: 'busy',
+      skills: ['typescript'],
+      domains: ['billing'],
+      outstandingReviews: 1,
+    })
+    expect(scoreCandidates([busy], target, [])[0]?.weight).toBe((1 + MATCH_PREFERENCE) / 2)
+  })
+
+  it('leaves the draw to load and weight when the review wants nothing', () => {
+    const scored = scoreCandidates(
+      [reviewer({ id: 'a', skills: ['go'] })],
+      { skills: [], domains: [] },
+      [],
+    )
+    expect(scored[0]?.weight).toBe(1)
+  })
+})
+
+describe('matchTargetFor', () => {
+  const project = { skills: ['Backend'], domains: ['billing'] }
+
+  it("wants the review's own skills over the repository's", () => {
+    expect(matchTargetFor({ requiredSkills: ['go'] }, project)).toStrictEqual({
+      skills: ['go'],
+      domains: ['billing'],
+    })
+  })
+
+  it("falls back to the repository's skills when the review names none", () => {
+    expect(matchTargetFor({ requiredSkills: [] }, project).skills).toStrictEqual(['Backend'])
+  })
+
+  it('wants only what the review asked for on an unregistered repository', () => {
+    expect(matchTargetFor({ requiredSkills: [] }, null)).toStrictEqual({ skills: [], domains: [] })
+  })
+})
+
 describe('selectReviewers', () => {
   const pool = [
     reviewer({ id: 'a', skills: ['typescript'] }),
@@ -76,70 +133,46 @@ describe('selectReviewers', () => {
   ]
   const paused = pool.map((candidate) => ({ ...candidate, availability: 'paused' as const }))
 
-  it('picks only reviewers holding the required skill', () => {
-    const result = selectReviewers(
-      { candidates: pool, requiredSkills: ['go'], excludeReviewerIds: [], count: 1 },
-      scripted([0]),
-    )
-    expect(result.selected.map((r) => r.id)).toStrictEqual(['c'])
+  // Weights 1, 1 and 5 when `go` is wanted: half the total lands on `c`, where
+  // with equal weights it lands on `b`.
+  it('moves the draw towards the reviewer holding the wanted skill', () => {
+    const wanted = selectReviewers(input(pool, { skills: ['go'] }), scripted([0.5]))
+    const unwanted = selectReviewers(input(pool), scripted([0.5]))
+    expect(wanted.selected.map((r) => r.id)).toStrictEqual(['c'])
+    expect(unwanted.selected.map((r) => r.id)).toStrictEqual(['b'])
+  })
+
+  it('still assigns somebody when nobody holds the wanted skill', () => {
+    const result = selectReviewers(input(pool, { skills: ['rust'] }), scripted([0]))
+    expect(result.selected).toHaveLength(1)
     expect(result.shortfallReason).toBeNull()
   })
 
-  it('reports no_skill_match when nobody available holds the skill', () => {
-    const result = selectReviewers(
-      { candidates: pool, requiredSkills: ['rust'], excludeReviewerIds: [], count: 1 },
-      scripted([0]),
-    )
-    expect(result.selected).toStrictEqual([])
-    expect(result.shortfallReason).toBe('no_skill_match')
-  })
-
   it('reports no_reviewers when the directory is empty', () => {
-    const result = selectReviewers(
-      { candidates: [], requiredSkills: [], excludeReviewerIds: [], count: 1 },
-      scripted([0]),
-    )
-    expect(result.shortfallReason).toBe('no_reviewers')
+    expect(selectReviewers(input([]), scripted([0])).shortfallReason).toBe('no_reviewers')
   })
 
   it('reports none_available when everybody is paused', () => {
-    const result = selectReviewers(
-      { candidates: paused, requiredSkills: [], excludeReviewerIds: [], count: 1 },
-      scripted([0]),
-    )
-    expect(result.shortfallReason).toBe('none_available')
+    expect(selectReviewers(input(paused), scripted([0])).shortfallReason).toBe('none_available')
   })
 
-  it('reports all_excluded when the only match is the author or already on it', () => {
+  it('reports all_excluded when everybody available is the author or already on it', () => {
     const result = selectReviewers(
-      { candidates: pool, requiredSkills: ['go'], excludeReviewerIds: ['c'], count: 1 },
+      input(pool, { excludeReviewerIds: ['a', 'b', 'c'] }),
       scripted([0]),
     )
     expect(result.selected).toStrictEqual([])
     expect(result.shortfallReason).toBe('all_excluded')
   })
 
-  // The order the causes are checked in IS the behaviour: a paused pool reported as
-  // a skills problem sends somebody to edit skills that were never the reason.
-  it('names the paused pool rather than the skill nobody holds', () => {
-    const result = selectReviewers(
-      { candidates: paused, requiredSkills: ['rust'], excludeReviewerIds: [], count: 1 },
-      scripted([0]),
-    )
-    expect(result.shortfallReason).toBe('none_available')
-  })
-
   it('never picks the same reviewer twice', () => {
-    const result = selectReviewers(
-      { candidates: pool, requiredSkills: ['typescript'], excludeReviewerIds: [], count: 2 },
-      scripted([0, 0]),
-    )
+    const result = selectReviewers(input(pool, { count: 2 }), scripted([0, 0]))
     expect(new Set(result.selected.map((r) => r.id)).size).toBe(2)
   })
 
   it('reports pool_exhausted when it runs out before count', () => {
     const result = selectReviewers(
-      { candidates: pool, requiredSkills: ['go'], excludeReviewerIds: [], count: 2 },
+      input(pool, { excludeReviewerIds: ['a', 'b'], count: 2 }),
       scripted([0]),
     )
     expect(result.selected.map((r) => r.id)).toStrictEqual(['c'])
@@ -149,24 +182,10 @@ describe('selectReviewers', () => {
   it('lands on the candidate the draw threshold falls in', () => {
     // Equal weights over three candidates: thresholds < 1/3 pick the first, and
     // ~0.5 of the total picks the second.
-    const first = selectReviewers(
-      { candidates: pool, requiredSkills: [], excludeReviewerIds: [], count: 1 },
-      scripted([0.1]),
-    )
-    const second = selectReviewers(
-      { candidates: pool, requiredSkills: [], excludeReviewerIds: [], count: 1 },
-      scripted([0.5]),
-    )
+    const first = selectReviewers(input(pool), scripted([0.1]))
+    const second = selectReviewers(input(pool), scripted([0.5]))
     expect(first.selected.map((r) => r.id)).toStrictEqual(['a'])
     expect(second.selected.map((r) => r.id)).toStrictEqual(['b'])
-  })
-
-  it('honours the exclusion list', () => {
-    const result = selectReviewers(
-      { candidates: pool, requiredSkills: [], excludeReviewerIds: ['a', 'b'], count: 2 },
-      scripted([0]),
-    )
-    expect(result.selected.map((r) => r.id)).toStrictEqual(['c'])
   })
 })
 
@@ -180,41 +199,5 @@ describe('isSameHandle', () => {
     expect(isSameHandle('kibertoad', 'someone-else')).toBe(false)
     expect(isSameHandle(null, 'kibertoad')).toBe(false)
     expect(isSameHandle(null, null)).toBe(false)
-  })
-})
-
-describe('domain preference', () => {
-  const expert = reviewer({ id: 'expert', domains: ['Billing', 'search'] })
-  const half = reviewer({ id: 'half', domains: ['billing'] })
-  const outsider = reviewer({ id: 'outsider', domains: ['onboarding'] })
-
-  it("weights a reviewer by the share of the repository's domains they know", () => {
-    const weights = scoreCandidates([expert, half, outsider], [], [], ['billing', 'search']).map(
-      (candidate) => [candidate.reviewer.id, candidate.matchedDomains, candidate.weight],
-    )
-    expect(weights).toStrictEqual([
-      ['expert', 2, 1 + DOMAIN_PREFERENCE],
-      ['half', 1, 1 + DOMAIN_PREFERENCE / 2],
-      ['outsider', 0, 1],
-    ])
-  })
-
-  it('never excludes a reviewer who knows none of them', () => {
-    const result = selectReviewers(
-      {
-        candidates: [outsider],
-        requiredSkills: [],
-        preferredDomains: ['billing'],
-        excludeReviewerIds: [],
-        count: 1,
-      },
-      scripted([0]),
-    )
-    expect(result.selected.map((picked) => picked.id)).toStrictEqual(['outsider'])
-  })
-
-  it('leaves the draw as it was for a repository with no domains', () => {
-    const weights = scoreCandidates([expert, outsider], [], []).map((candidate) => candidate.weight)
-    expect(weights).toStrictEqual([1, 1])
   })
 })

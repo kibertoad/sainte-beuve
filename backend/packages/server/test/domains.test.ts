@@ -20,9 +20,19 @@ async function orgDomains(harness: TestHarness): Promise<string[]> {
   return orgs[0]?.domains ?? []
 }
 
-async function register(harness: TestHarness, domains: string[]): Promise<Project> {
+async function register(
+  harness: TestHarness,
+  domains: string[],
+  skills: string[] = [],
+): Promise<Project> {
   const res = await harness.app.fetch(
-    post('/api/v1/projects', { provider: 'github', owner: PR.owner, repo: PR.repo, domains }),
+    post('/api/v1/projects', {
+      provider: 'github',
+      owner: PR.owner,
+      repo: PR.repo,
+      skills,
+      domains,
+    }),
   )
   expect(res.status).toBe(201)
   return (await res.json()) as Project
@@ -52,12 +62,12 @@ describe('domains', () => {
     expect(await orgDomains(harness)).toStrictEqual(['onboarding'])
   })
 
-  // Two reviewers at equal weight, drawn with 0.3 of the total. Without
-  // domains the first takes the draw; knowing the repository's one domain
-  // triples the second's share, which moves the same draw onto them.
+  // Two reviewers at equal weight, drawn at 0.4 of the total. Without domains
+  // the first takes the draw; knowing the repository's one domain makes the
+  // second's share five times the first's, which moves the same draw onto them.
   it("favours the reviewer who knows the repository's domains", async () => {
     const assigned = async (domains: string[]) => {
-      const harness = buildHarness({ random: () => 0.3 })
+      const harness = buildHarness({ random: () => 0.4 })
       await addReviewer(harness, { displayName: 'Generalist', handles: { github: 'gen' } })
       const expert = await addReviewer(harness, {
         displayName: 'Expert',
@@ -74,5 +84,22 @@ describe('domains', () => {
 
     expect(await assigned([])).toBe(false)
     expect(await assigned(['billing'])).toBe(true)
+  })
+
+  it("wants the repository's skills when the review asks for none", async () => {
+    const harness = buildHarness({ random: () => 0.4 })
+    await addReviewer(harness, { displayName: 'Designer', handles: { github: 'des' } })
+    const backender = await addReviewer(harness, {
+      displayName: 'Backender',
+      handles: { github: 'back' },
+      skills: ['Backend'],
+    })
+    await register(harness, [], ['Backend'])
+    const review = await openReview(harness)
+
+    const body = (await (await assignReviewer(harness, review.id)).json()) as {
+      assigned: { reviewerId: string }[]
+    }
+    expect(body.assigned[0]?.reviewerId).toBe(backender.id)
   })
 })

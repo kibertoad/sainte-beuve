@@ -128,7 +128,7 @@ function submit() {
 
     <UFormField
       label="Skills"
-      description="A review needs ALL of the skills it asks for, so a partial match is never picked."
+      description="A review wanting more of these, and of the domains below, is more likely to reach them."
     >
       <ChipsInput v-model="draft.skills" :suggestions="knownSkills" placeholder="Add a skill" />
     </UFormField>

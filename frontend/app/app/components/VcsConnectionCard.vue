@@ -211,7 +211,7 @@ const shadowedAdvice = computed(() =>
           <dt>
             <code>{{ connection.labels.skillPrefix }}payments</code>
           </dt>
-          <dd>makes <code>payments</code> a skill the reviewer must have</dd>
+          <dd>makes <code>payments</code> a skill the review wants</dd>
         </dl>
       </div>
     </template>
