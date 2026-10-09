@@ -260,7 +260,7 @@ describe('GitHubVcsGateway', () => {
     ])
     const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
 
-    const found = await gateway.listAuthoredOpenPullRequests('ada')
+    const found = await gateway.searchOpenPullRequests({ username: 'ada', role: 'authored' })
 
     expect(new URL(urls[0] ?? '').searchParams.get('q')).toBe(
       'is:pr is:open archived:false author:ada',
@@ -269,11 +269,23 @@ describe('GitHubVcsGateway', () => {
     expect(found[0]?.draft).toBe(true)
   })
 
+  it('searches what a person reviewed, leaving out their own', async () => {
+    const { fetchImpl, urls } = pagedStub([{ items: [] } as never])
+    const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
+
+    await gateway.searchOpenPullRequests({ username: 'ada', role: 'reviewed' })
+    expect(new URL(urls[0] ?? '').searchParams.get('q')).toBe(
+      'is:pr is:open archived:false reviewed-by:ada -author:ada',
+    )
+  })
+
   it('searches nothing as an App, which has nobody to search for', async () => {
     const { fetchImpl, calls } = stub()
     const gateway = new GitHubVcsGateway({ tokens: appTokenSource({} as never), fetchImpl })
 
-    expect(await gateway.listAuthoredOpenPullRequests('ada')).toStrictEqual([])
+    expect(
+      await gateway.searchOpenPullRequests({ username: 'ada', role: 'review_requested' }),
+    ).toStrictEqual([])
     expect(calls).toHaveLength(0)
   })
 })

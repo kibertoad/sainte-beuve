@@ -10,6 +10,7 @@ import type {
   ProjectRef,
   PullRequestApproval,
 } from '@sainte-beuve/contracts'
+import { repositoryKey } from './repositories.js'
 
 /** The merge comments configured at each level. Null on a team or project inherits. */
 export interface MergeCommentLevels {
@@ -104,9 +105,4 @@ export function unlinkedPullRequests(
       !registered.has(repositoryKey(pr.pullRequest)) &&
       (owner === undefined || pr.pullRequest.owner.toLowerCase() === owner),
   )
-}
-
-/** Both hosts treat owner and repository names case-insensitively. */
-function repositoryKey(ref: ProjectRef): string {
-  return `${ref.provider}:${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}`
 }

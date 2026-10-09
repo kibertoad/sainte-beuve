@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends OpenPullRequest">
 import type { OpenPullRequest } from '@sainte-beuve/contracts'
 import { formatPullRequestRef } from '@sainte-beuve/contracts'
 
@@ -12,7 +12,7 @@ import { formatPullRequestRef } from '@sainte-beuve/contracts'
 defineProps<{
   title: string
   description: string
-  pullRequests: OpenPullRequest[]
+  pullRequests: T[]
   /** What to say when there is nothing, which is the state most people are in. */
   empty: string
 }>()

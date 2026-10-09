@@ -11,8 +11,9 @@
 // and which of them somebody should open next (`board`). The last two are about
 // the budget and the board's writes from outside the SPA: whether one more AI
 // review may be filed (`aiAdmission`), and who may change a review from a chat
-// command (`commands`). And what merging one of your own pull requests from
-// here may look like (`merging`).
+// command (`commands`). What merging one of your own pull requests from here
+// may look like (`merging`), and which pull requests are yours to review
+// (`reviewing`).
 
 export {
   AI_REVIEW_FILING_TIMEOUT_MS,
@@ -41,6 +42,7 @@ export {
   searchesBeyondProjects,
   unlinkedPullRequests,
 } from './merging.js'
+export { assembleReviewLists, type ReviewLists, type ReviewListsInput } from './reviewing.js'
 export {
   decideTeamAction,
   ownerOfNewTeam,

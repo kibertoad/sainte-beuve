@@ -1,12 +1,13 @@
 import type { HostSearch, OpenPullRequest, VcsProvider, Viewer } from '@sainte-beuve/contracts'
 import { handleOf, VCS_PROVIDERS } from '@sainte-beuve/contracts'
-import { getErrorMessage, type VcsGateway } from '@sainte-beuve/kernel'
+import { getErrorMessage, type PullRequestSearchRole, type VcsGateway } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import type { VcsResolutions } from '../../integrations/resolve.js'
 
 /**
- * The viewer's open pull requests on each host they have a handle on, wherever
- * they are, for the repositories nobody has registered yet.
+ * The viewer's open pull requests in each role asked for, on each host they have
+ * a handle on, wherever they are: the half of My PRs and My Reviews that the
+ * registered projects cannot answer.
  *
  * The search runs with the credential that acts as a PERSON. An App
  * installation reaches only the repositories it is installed on, and searching
@@ -18,22 +19,32 @@ const NO_PERSON =
   'no personal credential for this host, so only the linked repositories are listed: sign in ' +
   'or paste a personal access token on the Configuration screen'
 
-export interface AuthoredSearch {
-  found: { pullRequest: OpenPullRequest; gateway: VcsGateway }[]
+interface SearchHit {
+  role: PullRequestSearchRole
+  pullRequest: OpenPullRequest
+  /** The credential that found it, which is the one known to reach it. */
+  gateway: VcsGateway
+}
+
+export interface HostSearches {
+  found: SearchHit[]
+  /** One per host, failed when any of its searches did. */
   searches: HostSearch[]
 }
 
-export const NO_SEARCH: AuthoredSearch = { found: [], searches: [] }
+export const NO_SEARCH: HostSearches = { found: [], searches: [] }
 
-export async function searchAuthored(
+export async function searchHosts(
   container: AppContainer,
   resolutions: VcsResolutions,
   viewer: Viewer,
-): Promise<AuthoredSearch> {
+  roles: readonly PullRequestSearchRole[],
+): Promise<HostSearches> {
   const results = await Promise.all(
     VCS_PROVIDERS.flatMap((provider) => {
       const handle = handleOf(viewer.reviewer.handles, provider)
-      return handle === null ? [] : [searchHost(container, resolutions, provider, handle)]
+      if (handle === null) return []
+      return [searchHost(container, resolutions, { provider, handle, roles })]
     }),
   )
   return {
@@ -45,22 +56,25 @@ export async function searchAuthored(
 async function searchHost(
   container: AppContainer,
   resolutions: VcsResolutions,
-  provider: VcsProvider,
-  handle: string,
-): Promise<AuthoredSearch> {
+  target: { provider: VcsProvider; handle: string; roles: readonly PullRequestSearchRole[] },
+): Promise<HostSearches> {
+  const { provider, handle, roles } = target
   const resolved = await resolutions.asPerson(provider)
   if (resolved === null) {
     return { found: [], searches: [{ provider, ok: false, reason: NO_PERSON }] }
   }
   const { gateway } = resolved
   try {
-    const pullRequests = await gateway.listAuthoredOpenPullRequests(handle)
-    return {
-      found: pullRequests.map((pullRequest) => ({ pullRequest, gateway })),
-      searches: [{ provider, ok: true, reason: null }],
-    }
+    const found = await Promise.all(
+      roles.map(async (role) =>
+        (await gateway.searchOpenPullRequests({ username: handle, role })).map(
+          (pullRequest): SearchHit => ({ role, pullRequest, gateway }),
+        ),
+      ),
+    )
+    return { found: found.flat(), searches: [{ provider, ok: true, reason: null }] }
   } catch (err) {
-    container.logger.warn({ err, provider }, 'could not search a host for authored pull requests')
+    container.logger.warn({ err, provider }, 'could not search a host for pull requests')
     return { found: [], searches: [{ provider, ok: false, reason: getErrorMessage(err) }] }
   }
 }

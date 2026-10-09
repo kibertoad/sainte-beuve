@@ -4,7 +4,13 @@ import type {
   PullRequestRef,
   PullRequestStatus,
 } from '@sainte-beuve/contracts'
-import type { PullRequestAddress, VcsAccount, VcsGateway } from '@sainte-beuve/kernel'
+import type {
+  PullRequestAddress,
+  PullRequestSearch,
+  PullRequestSearchRole,
+  VcsAccount,
+  VcsGateway,
+} from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { gitlabApiStatusOf, gitlabRequest, projectPath } from './client.js'
 import {
@@ -42,6 +48,19 @@ const MAX_PAGES = 10
  * cannot merge, 409 for a head that moved, 422 for one it refuses outright.
  */
 const MERGE_REFUSALS = new Set([405, 406, 409, 422])
+
+/**
+ * GitLab keeps no record of who reviewed a merge request short of approving it,
+ * so `reviewed` means approved. It also names the person as a reviewer: on an
+ * install that ignores the approver filter, the list then narrows to what is
+ * already under `review_requested` rather than widening to every merge request.
+ */
+const SEARCH_FILTERS: Record<PullRequestSearchRole, (username: string) => string> = {
+  authored: (username) => `author_username=${username}`,
+  review_requested: (username) => `reviewer_username=${username}`,
+  reviewed: (username) =>
+    `approved_by_usernames[]=${username}&reviewer_username=${username}&not[author_username]=${username}`,
+}
 
 interface GitLabUser {
   id: number
@@ -104,10 +123,10 @@ export class GitLabVcsGateway implements VcsGateway {
   }
 
   /** One page of the instance-wide list, which `scope=all` opens past the token's own. */
-  async listAuthoredOpenPullRequests(username: string): Promise<OpenPullRequest[]> {
+  async searchOpenPullRequests(search: PullRequestSearch): Promise<OpenPullRequest[]> {
     const merges = await this.call<GitLabMergeRequest[]>({
       path:
-        `/merge_requests?state=opened&scope=all&author_username=${encodeURIComponent(username)}` +
+        `/merge_requests?state=opened&scope=all&${SEARCH_FILTERS[search.role](encodeURIComponent(search.username))}` +
         `&per_page=${PAGE_SIZE}&order_by=updated_at&sort=desc`,
     })
     return merges.flatMap((merge) => {

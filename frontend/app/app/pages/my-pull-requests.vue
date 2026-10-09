@@ -13,9 +13,8 @@ import {
 
 // The viewer's own open pull requests, ten at a time, and merging them: directly
 // when the host would take it, or with a merge comment for a bot to act on. One
-// in a repository nobody linked is listed too, with a button to link it.
+// in a repository nobody linked is listed too, and merges once it is linked.
 const api = useSainteBeuveApi()
-const auth = useAuthState()
 const { confirm } = useConfirm()
 const toast = useToast()
 const route = useRoute()
@@ -94,22 +93,10 @@ const { data, pending, error, refresh } = useAsyncData(
 
 const unreadable = computed(() => data.value?.sources.filter((source) => !source.ok) ?? [])
 const unsearched = computed(() => data.value?.searches.filter((search) => !search.ok) ?? [])
-const { busy, run } = useApiAction({
-  refresh: () => Promise.all([refresh(), projects.refresh()]),
-})
+const { busy, run } = useApiAction({ refresh })
 
-function repositoryOf(pr: MyPullRequest): string {
-  return `${pr.pullRequest.owner}/${pr.pullRequest.repo}`
-}
-
-async function link(pr: MyPullRequest) {
-  const { provider, owner, repo } = pr.pullRequest
-  const linked = await run(
-    () => api.addProject({ provider, owner, repo }),
-    `Could not link ${repositoryOf(pr)}`,
-    `${provider}:${repositoryOf(pr)}:link`,
-  )
-  if (linked) toast.add({ color: 'success', title: `Linked ${repositoryOf(pr)}` })
+async function refreshAfterLink() {
+  await Promise.all([refresh(), projects.refresh()])
 }
 
 async function merge(pr: MyPullRequest) {
@@ -279,21 +266,11 @@ function offersComments(pr: MyPullRequest): boolean {
               <span v-else-if="pr.merge.direct === 'restricted'" class="text-xs text-muted">
                 This repository merges through its merge comments.
               </span>
-              <template v-else-if="pr.merge.direct === 'unlinked'">
-                <UButton
-                  v-if="auth.isAdmin.value"
-                  size="sm"
-                  variant="soft"
-                  icon="i-lucide-link"
-                  :loading="busy === `${pr.pullRequest.provider}:${repositoryOf(pr)}:link`"
-                  @click="link(pr)"
-                >
-                  Link {{ repositoryOf(pr) }}
-                </UButton>
-                <span v-else class="text-xs text-muted">
-                  Ask an admin to link {{ repositoryOf(pr) }} to merge it from here.
-                </span>
-              </template>
+              <LinkRepositoryButton
+                v-else-if="pr.merge.direct === 'unlinked'"
+                :pull-request="pr.pullRequest"
+                @linked="refreshAfterLink"
+              />
               <UButton
                 :to="safeHref(pr.pullRequest.url)"
                 target="_blank"

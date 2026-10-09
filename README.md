@@ -141,6 +141,22 @@ Both actions use the deployment's credential for the host, so they only act on
 a pull request you opened, and the host's own branch protection still applies.
 A GitHub App needs `Contents: Read & write` to merge.
 
+## My Reviews
+
+**My Reviews** is the other side of My PRs: open pull requests somebody else
+opened that you have a part in. It lists three things:
+
+- **Asked to review**: the host is waiting on your review. "I will review it"
+  records a commitment.
+- **Committed to reviewing**: the promises you made here, whether or not the host
+  knows about them.
+- **Reviewed**: still open, and you have reviewed them. One the host asks you to
+  look at again moves back up to the first list.
+
+Like My PRs, it covers every repository the host search can see, and **Linked
+repositories only** narrows it to the registered projects. On GitLab, which keeps
+no record of a review short of an approval, reviewed means approved.
+
 ## Who is in the pool
 
 Both of those depend on the same list, and **Reviewers** is where it is kept: who

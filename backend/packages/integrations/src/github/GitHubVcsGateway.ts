@@ -4,7 +4,13 @@ import type {
   PullRequestRef,
   PullRequestStatus,
 } from '@sainte-beuve/contracts'
-import type { PullRequestAddress, VcsAccount, VcsGateway } from '@sainte-beuve/kernel'
+import type {
+  PullRequestAddress,
+  PullRequestSearch,
+  PullRequestSearchRole,
+  VcsAccount,
+  VcsGateway,
+} from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
@@ -64,6 +70,16 @@ interface GitHubPullRequest {
   updated_at: string
   user?: GitHubUser | null
   requested_reviewers?: GitHubUser[] | null
+}
+
+/**
+ * `review-requested` matches a request made of the person or of a team they are
+ * on, and `reviewed-by` matches the person's own pull requests too.
+ */
+const SEARCH_QUALIFIERS: Record<PullRequestSearchRole, (username: string) => string> = {
+  authored: (username) => `author:${username}`,
+  review_requested: (username) => `review-requested:${username}`,
+  reviewed: (username) => `reviewed-by:${username} -author:${username}`,
 }
 
 /** A search hit. A pull request is an issue to the search API, and names its repository by API URL. */
@@ -128,10 +144,12 @@ export class GitHubVcsGateway implements VcsGateway {
    * and its smaller rate limit are why the registered projects still go
    * through {@link listOpenPullRequests}.
    */
-  async listAuthoredOpenPullRequests(username: string): Promise<OpenPullRequest[]> {
+  async searchOpenPullRequests(search: PullRequestSearch): Promise<OpenPullRequest[]> {
     if (!this.options.tokens.hasUser) return []
     const token = await this.options.tokens.tokenFor('', '')
-    const query = encodeURIComponent(`is:pr is:open archived:false author:${username}`)
+    const query = encodeURIComponent(
+      `is:pr is:open archived:false ${SEARCH_QUALIFIERS[search.role](search.username)}`,
+    )
     const result = await this.get<{ items: GitHubSearchItem[] }>(
       `/search/issues?q=${query}&sort=updated&order=desc&per_page=${PAGE_SIZE}`,
       token,

@@ -22,9 +22,9 @@ import type { AppContainer } from '../../container.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
+import { type HostSearches, NO_SEARCH, searchHosts } from '../workspace/search.js'
 import { type ProjectRead, sweepProjects } from '../workspace/sweep.js'
 import { type MergeContext, mergeContextOf, toMyPullRequest } from './mergeContext.js'
-import { type AuthoredSearch, NO_SEARCH, searchAuthored } from './search.js'
 
 /**
  * How many statuses one read asks the hosts for at most. Neither host puts
@@ -66,7 +66,7 @@ export class MyPullRequestsService {
     const [reads, search] = await Promise.all([
       sweepProjects(this.container, resolutions, projectsInScope(registered, query)),
       searchesBeyondProjects(query)
-        ? searchAuthored(this.container, resolutions, viewer)
+        ? searchHosts(this.container, resolutions, viewer, ['authored'])
         : NO_SEARCH,
     ])
     const filter = query.status ?? 'awaiting'
@@ -110,7 +110,7 @@ export class MyPullRequestsService {
 
   /** What the search found outside every registered project, read with the credential that found it. */
   private unlinked(
-    search: AuthoredSearch,
+    search: HostSearches,
     registered: readonly Project[],
     query: MyPullRequestsQuery,
   ): Candidate[] {

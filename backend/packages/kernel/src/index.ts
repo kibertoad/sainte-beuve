@@ -43,6 +43,8 @@ export type {
   GuidedReviewGateway,
   GuidedReviewWatchEvent,
   PullRequestAddress,
+  PullRequestSearch,
+  PullRequestSearchRole,
   VcsAccount,
   VcsGateway,
   VcsIdentityGateway,

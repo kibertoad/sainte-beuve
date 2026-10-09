@@ -1,5 +1,5 @@
 import type { OpenPullRequest, ProjectRef, PullRequestStatus } from '@sainte-beuve/contracts'
-import type { VcsGateway } from '@sainte-beuve/kernel'
+import type { PullRequestSearch, VcsGateway } from '@sainte-beuve/kernel'
 
 /**
  * A source-control gateway acting as one named person, over a fixed list of
@@ -10,6 +10,8 @@ export function viewerVcs(
   username: string,
   pullRequests: OpenPullRequest[] = [],
   statuses: Record<number, Partial<PullRequestStatus>> = {},
+  /** The numbers of the pull requests the searched person has reviewed. */
+  reviewed: number[] = [],
 ): VcsGateway & {
   listed: ProjectRef[]
   merged: { number: number; sha: string }[]
@@ -47,17 +49,10 @@ export function viewerVcs(
     },
     listOpenPullRequests: async (project) => {
       listed.push(project)
-      // The HOST is part of the match, as it is in a real adapter: a gateway
-      // for one host cannot answer with the other's pull requests.
-      return pullRequests.filter(
-        (pr) =>
-          pr.pullRequest.provider === project.provider &&
-          pr.pullRequest.owner === project.owner &&
-          pr.pullRequest.repo === project.repo,
-      )
+      return pullRequests.filter((pr) => inRepository(pr, project))
     },
-    listAuthoredOpenPullRequests: async (login) =>
-      pullRequests.filter((pr) => pr.authorLogin === login),
+    searchOpenPullRequests: async (search) =>
+      pullRequests.filter((pr) => matchesSearch(pr, search, reviewed)),
     identify: async () => ({
       subject: `subject-${username}`,
       username,
@@ -74,7 +69,27 @@ export function viewerVcs(
 export function appVcs(pullRequests: OpenPullRequest[] = []): VcsGateway {
   return {
     ...viewerVcs('installation', pullRequests),
-    listAuthoredOpenPullRequests: async () => [],
+    searchOpenPullRequests: async () => [],
     identify: async () => null,
   }
+}
+
+/**
+ * The HOST is part of the match, as it is in a real adapter: a gateway for one
+ * host cannot answer with the other's pull requests.
+ */
+function inRepository(pr: OpenPullRequest, project: ProjectRef): boolean {
+  const { provider, owner, repo } = pr.pullRequest
+  return provider === project.provider && owner === project.owner && repo === project.repo
+}
+
+/** What a host search would find: `reviewed` names the numbers the person reviewed. */
+function matchesSearch(
+  pr: OpenPullRequest,
+  { username, role }: PullRequestSearch,
+  reviewed: number[],
+): boolean {
+  if (role === 'authored') return pr.authorLogin === username
+  if (role === 'review_requested') return pr.requestedReviewerLogins.includes(username)
+  return pr.authorLogin !== username && reviewed.includes(pr.pullRequest.number)
 }

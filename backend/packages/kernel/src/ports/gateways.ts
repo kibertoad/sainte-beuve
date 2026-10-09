@@ -29,6 +29,17 @@ import type {
  * deep inside a service with a null read.
  */
 
+/**
+ * What a host search looks for: pull requests `username` opened, was asked to
+ * review, or has reviewed. A reviewed one excludes the person's own.
+ */
+export type PullRequestSearchRole = 'authored' | 'review_requested' | 'reviewed'
+
+export interface PullRequestSearch {
+  username: string
+  role: PullRequestSearchRole
+}
+
 /** Chat delivery (Slack today). */
 export interface ChatGateway {
   /** Announce a new review request to the team channel. Returns the message id, for threading. */
@@ -87,12 +98,12 @@ export interface VcsGateway {
    */
   listOpenPullRequests(project: ProjectRef): Promise<OpenPullRequest[]>
   /**
-   * The open pull requests `username` authored anywhere this credential can see,
-   * newest activity first, at most one page of the host's search. Requested
-   * reviewers are not filled in. A credential with no person behind it (a
-   * GitHub App installation) answers an empty list without a request.
+   * The open pull requests anywhere this credential can see where `username`
+   * plays `role`, newest activity first, at most one page of the host's search.
+   * Requested reviewers are not filled in. A credential with no person behind it
+   * (a GitHub App installation) answers an empty list without a request.
    */
-  listAuthoredOpenPullRequests(username: string): Promise<OpenPullRequest[]>
+  searchOpenPullRequests(search: PullRequestSearch): Promise<OpenPullRequest[]>
   /**
    * One pull request's approval and whether the host would merge it now. Not
    * part of the list read, because neither host puts approvals on its list.

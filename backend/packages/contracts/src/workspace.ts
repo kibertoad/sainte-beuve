@@ -31,6 +31,22 @@ export const workspaceSourceSchema = v.object({
 })
 export type WorkspaceSource = v.InferOutput<typeof workspaceSourceSchema>
 
+/**
+ * Which repositories a personal list looks in. `all` is the default: the
+ * registered projects, and whatever else a host search finds for the viewer.
+ * `linked` is the registered projects alone.
+ */
+export const workspaceScopeSchema = v.picklist(['all', 'linked'])
+export type WorkspaceScope = v.InferOutput<typeof workspaceScopeSchema>
+
+/** Whether a host could be searched for the viewer's pull requests, and why not. */
+export const hostSearchSchema = v.object({
+  provider: vcsProviderSchema,
+  ok: v.boolean(),
+  reason: v.nullable(v.string()),
+})
+export type HostSearch = v.InferOutput<typeof hostSearchSchema>
+
 export const workspaceSchema = v.object({
   viewer: viewerSchema,
   /** Open pull requests the viewer opened. */

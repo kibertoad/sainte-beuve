@@ -185,7 +185,7 @@ export function recordingVcs(): VcsGateway & {
       avatarUrl: null,
     }),
     listOpenPullRequests: async () => [],
-    listAuthoredOpenPullRequests: async () => [],
+    searchOpenPullRequests: async () => [],
     ...noMerging(),
   }
 }

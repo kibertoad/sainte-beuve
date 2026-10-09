@@ -246,7 +246,7 @@ describe('GitLabVcsGateway', () => {
     ])
     const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
 
-    const found = await gateway.listAuthoredOpenPullRequests('ada')
+    const found = await gateway.searchOpenPullRequests({ username: 'ada', role: 'authored' })
 
     const query = new URL(calls[0]?.url ?? '').searchParams
     expect(query.get('author_username')).toBe('ada')
@@ -255,5 +255,17 @@ describe('GitLabVcsGateway', () => {
     expect(found.map((pr) => pr.pullRequest)).toMatchObject([
       { owner: 'platform/backend', repo: 'api', number: 12 },
     ])
+  })
+
+  it('reads reviewed as approved, and never as everything on the install', async () => {
+    const { fetchImpl, calls } = stub([[]])
+    const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
+
+    await gateway.searchOpenPullRequests({ username: 'ada', role: 'reviewed' })
+
+    const query = new URL(calls[0]?.url ?? '').searchParams
+    expect(query.getAll('approved_by_usernames[]')).toStrictEqual(['ada'])
+    expect(query.get('reviewer_username')).toBe('ada')
+    expect(query.get('not[author_username]')).toBe('ada')
   })
 })

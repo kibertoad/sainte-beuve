@@ -5,8 +5,8 @@ import {
   mergeCommentSourceSchema,
   pullRequestStatusSchema,
 } from './merging.js'
-import { openPullRequestSchema, repoOwnerSchema, vcsProviderSchema } from './vcs.js'
-import { workspaceSourceSchema } from './workspace.js'
+import { openPullRequestSchema, repoOwnerSchema } from './vcs.js'
+import { hostSearchSchema, workspaceScopeSchema, workspaceSourceSchema } from './workspace.js'
 
 // ---------------------------------------------------------------------------
 // My PRs: the viewer's own open pull requests, with what it takes to merge each.
@@ -22,17 +22,10 @@ export const MY_PULL_REQUESTS_LIMIT = 10
 export const myPullRequestStatusFilterSchema = v.picklist(['awaiting', 'approved', 'draft'])
 export type MyPullRequestStatusFilter = v.InferOutput<typeof myPullRequestStatusFilterSchema>
 
-/**
- * Which repositories to look in. `all` is the default: the registered projects,
- * and whatever else the host finds the viewer authored. `linked` is the
- * registered projects alone. Naming a `projectId` implies `linked`.
- */
-export const myPullRequestScopeSchema = v.picklist(['all', 'linked'])
-export type MyPullRequestScope = v.InferOutput<typeof myPullRequestScopeSchema>
-
 export const myPullRequestsQuerySchema = v.object({
   status: v.optional(myPullRequestStatusFilterSchema),
-  scope: v.optional(myPullRequestScopeSchema),
+  /** Naming a `projectId` implies `linked`. */
+  scope: v.optional(workspaceScopeSchema),
   owner: v.optional(repoOwnerSchema),
   projectId: v.optional(v.pipe(v.string(), v.minLength(1))),
 })
@@ -73,14 +66,6 @@ export const myPullRequestSchema = v.object({
   }),
 })
 export type MyPullRequest = v.InferOutput<typeof myPullRequestSchema>
-
-/** Whether a host could be searched for the viewer's pull requests, and why not. */
-export const hostSearchSchema = v.object({
-  provider: vcsProviderSchema,
-  ok: v.boolean(),
-  reason: v.nullable(v.string()),
-})
-export type HostSearch = v.InferOutput<typeof hostSearchSchema>
 
 export const myPullRequestsSchema = v.object({
   pullRequests: v.array(myPullRequestSchema),
