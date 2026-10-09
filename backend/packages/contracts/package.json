@@ -31,7 +31,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/contracts": "^0.362.0",
+    "@cat-factory/contracts": "^0.363.0",
     "@toad-contracts/core": "1.0.0",
     "@toad-contracts/valibot": "1.0.0",
     "valibot": "^1.5.0"

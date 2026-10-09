@@ -82,14 +82,6 @@ function summaryOf(steps: readonly { output: string | null }[]): string | null {
   return null
 }
 
-/**
- * cat-factory's task type for its conflict resolver on a pull request it did not
- * open. Sent as a plain string because the SDK accepts any task type, so this
- * works against an instance that has it and is refused, by name, by one that
- * does not.
- */
-export const RESOLVE_CONFLICTS_TASK_TYPE = 'resolve-conflicts'
-
 /** A poll of a task cat-factory has accepted but not yet built a run for. */
 const NO_RUN_YET: AiReviewReport = {
   status: 'running',
@@ -160,7 +152,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
       description:
         `Merge the base branch into ${ref} (${input.pullRequest.url}), resolve the ` +
         'conflicts, and push the result to its own branch.',
-      taskType: RESOLVE_CONFLICTS_TASK_TYPE,
+      taskType: 'resolve-conflicts',
       // The number is what cat-factory attaches the pull request by, and so what
       // points the resolver at its branch rather than at a new one.
       fields: { prNumber: input.pullRequest.number },

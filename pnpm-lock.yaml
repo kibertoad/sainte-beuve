@@ -38,8 +38,8 @@ importers:
   backend/packages/ai-review:
     dependencies:
       '@cat-factory/sdk':
-        specifier: ^0.56.1
-        version: 0.56.1
+        specifier: ^0.56.3
+        version: 0.56.3
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -60,8 +60,8 @@ importers:
   backend/packages/contracts:
     dependencies:
       '@cat-factory/contracts':
-        specifier: ^0.362.0
-        version: 0.362.0(typescript@7.0.2)
+        specifier: ^0.363.0
+        version: 0.363.0(typescript@7.0.2)
       '@toad-contracts/core':
         specifier: 1.0.0
         version: 1.0.0
@@ -646,11 +646,11 @@ packages:
     resolution: {integrity: sha512-CuNiSqg7+e1cO/GjffyMOm5Tt2jUF9CWHHnvQ/UkqvtkGfHdgwEC0wpmq7fkN3gxwpRnrAN0WzO3vREKmNolMQ==}
     engines: {node: '>=18'}
 
-  '@cat-factory/contracts@0.362.0':
-    resolution: {integrity: sha512-vx04nwJ/EzwvpBFZT6Xwim38gI8GZfDiMqN1uKwwvXCS9p6aIZaVFfJuEw2qKFM1HDBWoPJ6b+o9NWfV5vateA==}
+  '@cat-factory/contracts@0.363.0':
+    resolution: {integrity: sha512-PlmuRKKT4LhbYenQaQwOkjHKrLqGZ8nUhTQJi1fMMuRWd1zU9GoXYsIR940yI7j3DmOCzmEnKWwg36R2kWPluw==}
 
-  '@cat-factory/sdk@0.56.1':
-    resolution: {integrity: sha512-3J0vLS0AM4+H4rpLnUD4wPLkIPoTn5ZfKEAAtndM8nWCfMj3JQ2QJjjtQNEItbVTfVRjAcrErwzlBFFqls4Uyw==}
+  '@cat-factory/sdk@0.56.3':
+    resolution: {integrity: sha512-EIJrEWfpddMh5t2Iv7watEiripYZ47BmuMLqwi4YgygAHVZ2R12qlfDij1VL4saRMjSLGq+yDUU3INxCFseuSA==}
     engines: {node: '>=20'}
 
   '@changesets/apply-release-plan@8.1.0':
@@ -6742,7 +6742,7 @@ snapshots:
     dependencies:
       fontkitten: 1.0.3
 
-  '@cat-factory/contracts@0.362.0(typescript@7.0.2)':
+  '@cat-factory/contracts@0.363.0(typescript@7.0.2)':
     dependencies:
       '@toad-contracts/core': 1.0.0
       '@toad-contracts/valibot': 1.0.0(valibot@1.5.0(typescript@7.0.2))
@@ -6750,7 +6750,7 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@cat-factory/sdk@0.56.1': {}
+  '@cat-factory/sdk@0.56.3': {}
 
   '@changesets/apply-release-plan@8.1.0':
     dependencies:
