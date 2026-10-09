@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Project, UpdateProject, VcsProvider } from '@sainte-beuve/contracts'
 import { DEFAULT_PROJECT_SKILLS, VCS_PROVIDERS, vcsDisplayName } from '@sainte-beuve/contracts'
-import { blankToNull, parseSkills } from '../utils/text'
+import { blankToNull } from '../utils/text'
 
 // The repositories this workspace watches, and the skill vocabulary each one
 // offers when somebody asks for attention on it.
@@ -45,11 +45,37 @@ const webUrl = ref('')
 const providers = VCS_PROVIDERS.map((value) => ({ value, label: vcsDisplayName(value) }))
 
 /** The skills being edited, per project, so a row can be changed without a modal. */
-const drafts = ref<Record<string, string>>({})
+const drafts = ref<Record<string, string[]>>({})
 
-function draftFor(project: Project): string {
-  return drafts.value[project.id] ?? project.skills.join(', ')
+function draftFor(project: Project): string[] {
+  return drafts.value[project.id] ?? project.skills
 }
+
+function draftChanged(project: Project): boolean {
+  const draft = drafts.value[project.id]
+  return (
+    draft !== undefined &&
+    (draft.length !== project.skills.length ||
+      draft.some((skill, index) => skill !== project.skills[index]))
+  )
+}
+
+// Reviewers' skills are offered beside the repositories' own, because an ask
+// for a skill nobody in the pool has reaches nobody. Not essential, so a failed
+// read leaves only the repositories' skills on offer.
+const reviewerSkills = useAsyncData(
+  'repositories-reviewer-skills',
+  async () => (await api.listReviewers()).reviewers.flatMap((reviewer) => reviewer.skills),
+  { lazy: true },
+)
+
+const knownSkills = computed(() => [
+  ...new Set([
+    ...DEFAULT_PROJECT_SKILLS,
+    ...projects.value.flatMap((project) => project.skills),
+    ...(reviewerSkills.data.value ?? []),
+  ]),
+])
 
 async function add() {
   const added = await run(
@@ -74,7 +100,7 @@ async function add() {
 
 async function saveSkills(project: Project) {
   const saved = await run(
-    () => api.updateProject(project.id, { skills: parseSkills(draftFor(project)) }),
+    () => api.updateProject(project.id, { skills: draftFor(project) }),
     'Could not save the skills',
     project.id,
   )
@@ -205,18 +231,19 @@ async function remove(project: Project) {
             <div class="flex flex-col items-stretch gap-2 mt-3 sm:flex-row sm:items-end">
               <UFormField
                 label="Skills an attention request can ask for"
-                description="Comma separated. This is the list the ask picks from, so a team names its own areas here."
+                description="The list the ask picks from, so a team names its own areas here."
               >
-                <UInput
+                <SkillsInput
                   :model-value="draftFor(project)"
-                  class="w-full sm:w-96"
-                  @update:model-value="drafts[project.id] = String($event)"
+                  :suggestions="knownSkills"
+                  @update:model-value="drafts[project.id] = $event"
                 />
               </UFormField>
               <UButton
                 size="sm"
                 variant="soft"
                 class="justify-center"
+                :disabled="!draftChanged(project)"
                 :loading="busy === project.id"
                 @click="saveSkills(project)"
               >
