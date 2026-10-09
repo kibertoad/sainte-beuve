@@ -293,7 +293,7 @@ repository, and the delivery runs in that org.
 default org included. A GitHub App can be installed by anybody who finds it, and
 falling back to the default org would hand whoever installed it on their own
 repository the default org's reviewers, its installation tokens and its
-cat-factory budget. A deployment registers its repositories on the Projects
+cat-factory budget. A deployment registers its repositories on the Repositories
 screen, which is the same act a second tenancy has to perform.
 
 ## A Slack app belongs to an org

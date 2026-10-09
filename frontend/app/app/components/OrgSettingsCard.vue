@@ -71,7 +71,7 @@ function save() {
       </UFormField>
       <UFormField
         label="Default repository owner"
-        description="The GitHub org or GitLab namespace a new project starts from on the Projects screen."
+        description="The GitHub org or GitLab namespace a new repository starts from on the Repositories screen."
       >
         <UInput v-model="owner" class="w-full" placeholder="acme" :disabled="!admin" />
       </UFormField>

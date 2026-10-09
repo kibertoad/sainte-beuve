@@ -246,8 +246,8 @@ async function release(commitmentId: string) {
 
       <UCard v-if="data && data.projects.length === 0">
         <p class="text-sm text-muted">
-          No projects are registered, so there is nothing to sweep. Add one on the
-          <ULink to="/projects">Projects</ULink> screen.
+          No repositories are registered, so there is nothing to sweep. Add one on the
+          <ULink to="/repositories">Repositories</ULink> screen.
         </p>
       </UCard>
     </div>

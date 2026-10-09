@@ -1,6 +1,7 @@
 import {
   addProjectContract,
   listProjectsContract,
+  lookupRepositoriesContract,
   removeProjectContract,
   updateProjectContract,
 } from '@sainte-beuve/contracts'
@@ -9,6 +10,7 @@ import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireAdmin } from '../auth/principal.js'
 import { ProjectService } from './ProjectService.js'
+import { RepositoryLookupService } from './RepositoryLookupService.js'
 
 /**
  * The project registry: which repositories this workspace watches.
@@ -45,6 +47,12 @@ export function projectController(): Hono<AppEnv> {
     const { projectId } = c.req.valid('param')
     // What is left, not an acknowledgement: the screen redraws the list.
     return c.json({ projects: await service.remove(projectId) }, 200)
+  })
+
+  buildHonoRoute(app, lookupRepositoriesContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
+    const service = new RepositoryLookupService(c.get('container'))
+    return c.json(await service.lookup(c.req.valid('query')), 200)
   })
 
   return app

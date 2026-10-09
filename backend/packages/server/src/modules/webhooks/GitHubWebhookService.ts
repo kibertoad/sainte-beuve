@@ -30,7 +30,7 @@ import { botReply } from './githubReplies.js'
  * who can find it, and falling back to the default org would hand whoever
  * installed it on their own repository that org's reviewers, its installation
  * tokens and its cat-factory budget. A single-tenant deployment registers its
- * repositories on the Projects screen, which is the same act a second tenancy
+ * repositories on the Repositories screen, which is the same act a second tenancy
  * already had to perform.
  *
  * Deliveries are handled INLINE rather than queued. GitHub's own guidance is to

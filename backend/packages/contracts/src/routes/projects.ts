@@ -1,6 +1,12 @@
 import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { createProjectSchema, projectSchema, updateProjectSchema } from '../projects.js'
+import {
+  createProjectSchema,
+  projectSchema,
+  repositoryLookupQuerySchema,
+  repositoryLookupSchema,
+  updateProjectSchema,
+} from '../projects.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -43,4 +49,16 @@ export const removeProjectContract = defineApiContract({
   requestPathParamsSchema: projectIdParams,
   pathResolver: ({ projectId }) => `/projects/${projectId}`,
   responsesByStatusCode: { 200: projectListSchema, ...errorResponses },
+})
+
+/**
+ * The owner's repositories whose names contain `query`, for the Add form to
+ * suggest while somebody types. An admin's read, like the writes it serves: the
+ * answer lists private repositories the deployment's credential can see.
+ */
+export const lookupRepositoriesContract = defineApiContract({
+  method: 'get',
+  requestQuerySchema: repositoryLookupQuerySchema,
+  pathResolver: () => '/repositories/lookup',
+  responsesByStatusCode: { 200: repositoryLookupSchema, ...errorResponses },
 })

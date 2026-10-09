@@ -3,6 +3,7 @@ import type {
   CreateAttentionRequestInput,
   CreateProjectInput,
   PullRequestRef,
+  RepositoryLookupQuery,
   ReviewStatus,
   Role,
   UpdateProject,
@@ -25,6 +26,7 @@ import {
   listApiKeysContract,
   listAttentionContract,
   listProjectsContract,
+  lookupRepositoriesContract,
   listReviewsContract,
   releaseCommitmentContract,
   removeProjectContract,
@@ -293,6 +295,8 @@ export function createSainteBeuveApi(apiBase: string) {
       call(updateProjectContract, { pathParams: { projectId }, body: patch }),
     removeProject: (projectId: string) =>
       call(removeProjectContract, { pathParams: { projectId } }),
+    lookupRepositories: (query: RepositoryLookupQuery) =>
+      call(lookupRepositoriesContract, { queryParams: query }),
 
     listAttention: () => call(listAttentionContract, {}),
     requestAttention: (request: CreateAttentionRequestInput) =>

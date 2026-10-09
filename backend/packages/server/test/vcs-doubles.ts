@@ -1,4 +1,9 @@
-import type { OpenPullRequest, ProjectRef, PullRequestStatus } from '@sainte-beuve/contracts'
+import type {
+  OpenPullRequest,
+  ProjectRef,
+  PullRequestStatus,
+  RepositoryLookup,
+} from '@sainte-beuve/contracts'
 import type { PullRequestSearch, VcsGateway } from '@sainte-beuve/kernel'
 
 /**
@@ -53,6 +58,7 @@ export function viewerVcs(
     },
     searchOpenPullRequests: async (search) =>
       pullRequests.filter((pr) => matchesSearch(pr, search, reviewed)),
+    lookupRepositories: async (owner, query) => lookupIn(pullRequests, owner, query),
     identify: async () => ({
       subject: `subject-${username}`,
       username,
@@ -70,6 +76,7 @@ export function appVcs(pullRequests: OpenPullRequest[] = []): VcsGateway {
   return {
     ...viewerVcs('installation', pullRequests),
     searchOpenPullRequests: async () => [],
+    lookupRepositories: async () => null,
     identify: async () => null,
   }
 }
@@ -92,4 +99,16 @@ function matchesSearch(
   if (role === 'authored') return pr.authorLogin === username
   if (role === 'review_requested') return pr.requestedReviewerLogins.includes(username)
   return pr.authorLogin !== username && reviewed.includes(pr.pullRequest.number)
+}
+
+/** An owner exists when one of the pull requests is in it; its repositories are theirs. */
+function lookupIn(pullRequests: OpenPullRequest[], owner: string, query: string): RepositoryLookup {
+  const inOwner = pullRequests.filter((pr) => pr.pullRequest.owner === owner)
+  const names = new Set(inOwner.map((pr) => pr.pullRequest.repo))
+  return {
+    ownerFound: inOwner.length > 0,
+    repositories: [...names]
+      .filter((repo) => repo.includes(query))
+      .map((repo) => ({ repo, description: null, private: false })),
+  }
 }

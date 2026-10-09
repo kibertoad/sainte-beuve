@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { mergeCommentListSchema, mergeCommentOverrideSchema } from './merging.js'
 import { skillSchema } from './reviewers.js'
-import { projectRefSchema, vcsProviderSchema, webUrlSchema } from './vcs.js'
+import { projectRefSchema, repoOwnerSchema, vcsProviderSchema, webUrlSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // The projects a workspace watches.
@@ -67,3 +67,43 @@ export const updateProjectSchema = v.partial(
   }),
 )
 export type UpdateProject = v.InferOutput<typeof updateProjectSchema>
+
+/** How many characters of a repository name a lookup needs before it asks the host. */
+export const REPOSITORY_LOOKUP_MIN_QUERY = 3
+
+/**
+ * What the Add form asks while somebody types a repository name. The query is
+ * held to a repository name's own alphabet, because it is spliced into the
+ * host's search syntax and a space or a colon would add a qualifier.
+ */
+export const repositoryLookupQuerySchema = v.object({
+  provider: vcsProviderSchema,
+  owner: repoOwnerSchema,
+  query: v.pipe(
+    v.string(),
+    v.trim(),
+    v.minLength(REPOSITORY_LOOKUP_MIN_QUERY),
+    v.maxLength(100),
+    v.regex(/^[A-Za-z0-9._-]+$/, 'A lookup is part of a repository name'),
+  ),
+})
+export type RepositoryLookupQuery = v.InferOutput<typeof repositoryLookupQuerySchema>
+
+export const repositoryCandidateSchema = v.object({
+  /** The name as the host spells it, which is what the Add form registers. */
+  repo: v.string(),
+  description: v.nullable(v.string()),
+  private: v.boolean(),
+})
+export type RepositoryCandidate = v.InferOutput<typeof repositoryCandidateSchema>
+
+/**
+ * The owner's repositories whose names match, as far as the credential in force
+ * can see. `ownerFound: false` means the host has no such org, user or
+ * namespace, and the list is then empty.
+ */
+export const repositoryLookupSchema = v.object({
+  ownerFound: v.boolean(),
+  repositories: v.array(repositoryCandidateSchema),
+})
+export type RepositoryLookup = v.InferOutput<typeof repositoryLookupSchema>

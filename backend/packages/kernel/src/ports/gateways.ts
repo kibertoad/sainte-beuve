@@ -17,6 +17,7 @@ import type {
   PullRequestRef,
   PullRequestStatus,
   Reminder,
+  RepositoryLookup,
   RequestGuidedReviewDraftsInput,
   ReviewRequest,
   VcsProvider,
@@ -115,6 +116,13 @@ export interface VcsGateway {
    * longer `expectedHeadSha`.
    */
   merge(pr: PullRequestAddress, expectedHeadSha: string): Promise<void>
+  /**
+   * The repositories under `owner` whose names contain `query`, as far as this
+   * credential can see, at most one short page. Null when the credential cannot
+   * search an owner at all: a GitHub App installation token is minted for one
+   * repository, and there is none yet.
+   */
+  lookupRepositories(owner: string, query: string): Promise<RepositoryLookup | null>
   /**
    * The account this gateway's credential acts as, for a screen that has to say
    * who a deployment is reaching the host as, and for the workspace, which has

@@ -32,7 +32,7 @@ const orgsCard = ref<{ clearDraft: () => void } | null>(null)
 
 async function saveOrg(patch: UpdateOrgInput) {
   const saved = await run(() => api.updateOrg(patch), 'Could not save the organization', 'org')
-  // The org rides on the auth state, which the Projects screen reads its default from.
+  // The org rides on the auth state, which the Repositories screen reads its default from.
   if (saved) {
     auth.invalidate()
     await auth.refresh()

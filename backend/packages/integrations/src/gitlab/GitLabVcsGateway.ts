@@ -3,6 +3,7 @@ import type {
   ProjectRef,
   PullRequestRef,
   PullRequestStatus,
+  RepositoryLookup,
 } from '@sainte-beuve/contracts'
 import type {
   PullRequestAddress,
@@ -13,6 +14,7 @@ import type {
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { gitlabApiStatusOf, gitlabRequest, projectPath } from './client.js'
+import { lookupGitLabRepositories } from './lookup.js'
 import {
   type GitLabApprovals,
   type GitLabMergeRequestDetail,
@@ -181,6 +183,10 @@ export class GitLabVcsGateway implements VcsGateway {
       path: `/projects/${projectPath(pr.owner, pr.repo)}/merge_requests/${pr.number}/notes`,
       body: { body },
     })
+  }
+
+  async lookupRepositories(owner: string, query: string): Promise<RepositoryLookup> {
+    return lookupGitLabRepositories((path) => this.call({ path }), owner, query)
   }
 
   async identify(): Promise<VcsAccount | null> {

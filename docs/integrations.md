@@ -96,7 +96,7 @@ dropped (`ignored:unregistered`), the default org included. A GitHub App can be
 installed by anybody who finds it, and falling back to the default org would hand
 whoever installed it on their own repository that org's reviewers, its
 installation tokens and its cat-factory budget. Register each repository on the
-Projects screen; a single-tenant deployment does this too.
+Repositories screen; a single-tenant deployment does this too.
 
 **Only the repository's own people are listened to.** A comment command and a
 submitted review count only when GitHub reports the author's

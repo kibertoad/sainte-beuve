@@ -102,7 +102,7 @@ const WEB_SCHEME = /^https?:\/\//i
  *
  * `v.url()` alone is `new URL()`, which parses `javascript:alert(1)` and
  * `data:text/html,...` happily, and every URL on this wire is rendered as an
- * `href` on the board, the workspace and the projects screen, and wrapped in a
+ * `href` on the board, the workspace and the Repositories screen, and wrapped in a
  * bot-vouched Slack link. A member who can create a review would otherwise be
  * one click away from running script in an admin's tab. The scheme is the whole
  * of the rule, because a self-hosted GitLab has no host anything here could

@@ -3,6 +3,7 @@ import type {
   ProjectRef,
   PullRequestRef,
   PullRequestStatus,
+  RepositoryLookup,
 } from '@sainte-beuve/contracts'
 import type {
   PullRequestAddress,
@@ -14,6 +15,7 @@ import type {
 import { ConflictError } from '@sainte-beuve/kernel'
 import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
+import { lookupGitHubRepositories } from './lookup.js'
 import {
   type GitHubPullRequestDetail,
   type GitHubRepositorySettings,
@@ -219,6 +221,13 @@ export class GitHubVcsGateway implements VcsGateway {
       path: repoPath(pr, `/issues/${pr.number}/comments`),
       body: { body },
     })
+  }
+
+  /** Null under an App, whose installation tokens are each minted for one repository. */
+  async lookupRepositories(owner: string, query: string): Promise<RepositoryLookup | null> {
+    if (!this.options.tokens.hasUser) return null
+    const token = await this.options.tokens.tokenFor('', '')
+    return lookupGitHubRepositories((path) => this.get(path, token), owner, query)
   }
 
   /**

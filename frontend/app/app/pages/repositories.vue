@@ -6,11 +6,16 @@ import { blankToNull, parseSkills } from '../utils/text'
 // The repositories this workspace watches, and the skill vocabulary each one
 // offers when somebody asks for attention on it.
 //
-// Registering a project needs no credential and makes no call to the host. That
-// is deliberate: the workspace reports per project whether it could actually be
-// read, so somebody setting a deployment up can add their repositories first
-// and see exactly which connection is missing, rather than being sent to the
-// Configuration screen with nothing to explain why.
+// Registering a repository needs no credential and makes no call to the host.
+// That is deliberate: the workspace reports per repository whether it could
+// actually be read, so somebody setting a deployment up can add their
+// repositories first and see exactly which connection is missing, rather than
+// being sent to the Configuration screen with nothing to explain why. The
+// lookup below is a suggestion only, and the Add button never waits on it.
+
+// The screen's earlier address, so a bookmark still lands here.
+definePageMeta({ alias: '/projects' })
+
 const api = useSainteBeuveApi()
 // LAZY, and not awaited: a page that awaits its read at setup holds the previous
 // screen on screen until the whole list is down, validated and mounted, so a
@@ -37,6 +42,28 @@ watch(defaultOwner, (next, previous) => {
 const repo = ref('')
 const webUrl = ref('')
 
+const lookup = useRepositoryLookup({ provider, owner, repo, enabled: auth.isAdmin })
+const lookupResult = lookup.result
+const lookupPending = lookup.pending
+const lookupFailure = lookup.failure
+/** What to offer under the field: the exact name typed is already chosen, so it is not offered. */
+const suggestions = computed(
+  () =>
+    lookupResult.value?.repositories.filter((candidate) => candidate.repo !== repo.value.trim()) ??
+    [],
+)
+const exactMatch = computed(
+  () =>
+    lookupResult.value?.repositories.some((candidate) => candidate.repo === repo.value.trim()) ??
+    false,
+)
+const showLookup = computed(
+  () =>
+    lookupFailure.value !== null ||
+    suggestions.value.length > 0 ||
+    (lookupResult.value !== null && !exactMatch.value),
+)
+
 const providers = VCS_PROVIDERS.map((value) => ({ value, label: vcsDisplayName(value) }))
 
 /** The skills being edited, per project, so a row can be changed without a modal. */
@@ -55,7 +82,7 @@ async function add() {
         repo: repo.value.trim(),
         webUrl: blankToNull(webUrl.value),
       }),
-    'Could not register the project',
+    'Could not register the repository',
     'add',
   )
   // Only on success: clearing the form after a 409 throws away what was typed
@@ -79,13 +106,13 @@ async function saveSkills(project: Project) {
 async function saveMerging(project: Project, patch: UpdateProject) {
   await run(
     () => api.updateProject(project.id, patch),
-    'Could not save how the project merges',
+    'Could not save how the repository merges',
     `${project.id}:merging`,
   )
 }
 
 /**
- * Unregister a project, once somebody has said so twice.
+ * Unregister a repository, once somebody has said so twice.
  *
  * It sat in the same row as Save, on one click, and took the skill vocabulary
  * and the workspace sweep with it. There is no undo and nothing on the host
@@ -100,12 +127,12 @@ async function remove(project: Project) {
     description:
       'Its skills are forgotten, it leaves the workspace sweep, and attention requests can no ' +
       'longer be raised on it. Nothing changes on the host, and you can register it again.',
-    confirmLabel: 'Remove the project',
+    confirmLabel: 'Remove the repository',
   })
   if (!confirmed) return
   await run(
     () => api.removeProject(project.id),
-    'Could not remove the project',
+    'Could not remove the repository',
     `${project.id}:remove`,
   )
 }
@@ -115,7 +142,7 @@ async function remove(project: Project) {
   <UContainer class="py-6 sm:py-8">
     <div class="flex items-start justify-between gap-3 mb-6">
       <div>
-        <h1 class="text-2xl font-semibold">Projects</h1>
+        <h1 class="text-2xl font-semibold">Repositories</h1>
         <p class="text-sm text-muted">
           The repositories your workspace sweeps, and what a reviewer can be asked for on each.
         </p>
@@ -133,7 +160,7 @@ async function remove(project: Project) {
 
     <UCard class="mb-4">
       <template #header>
-        <h2 class="font-medium">Add a project</h2>
+        <h2 class="font-medium">Add a repository</h2>
       </template>
       <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <UFormField label="Host">
@@ -143,7 +170,12 @@ async function remove(project: Project) {
           <UInput v-model="owner" class="w-full sm:w-auto" placeholder="kibertoad" />
         </UFormField>
         <UFormField label="Repository">
-          <UInput v-model="repo" class="w-full sm:w-auto" placeholder="sainte-beuve" />
+          <UInput
+            v-model="repo"
+            class="w-full sm:w-auto"
+            placeholder="sainte-beuve"
+            :loading="lookupPending"
+          />
         </UFormField>
         <UFormField
           label="Page"
@@ -164,18 +196,41 @@ async function remove(project: Project) {
           Add
         </UButton>
       </div>
+      <div v-if="showLookup" class="mt-3 text-sm">
+        <p v-if="lookupFailure !== null" class="text-muted">{{ lookupFailure }}</p>
+        <p v-else-if="lookupResult?.ownerFound === false" class="text-warning">
+          {{ vcsDisplayName(provider) }} has no owner named {{ owner.trim() }}.
+        </p>
+        <div v-else-if="suggestions.length > 0" class="flex flex-wrap gap-2">
+          <UButton
+            v-for="candidate in suggestions"
+            :key="candidate.repo"
+            size="xs"
+            variant="outline"
+            color="neutral"
+            :icon="candidate.private ? 'i-lucide-lock' : 'i-lucide-book-marked'"
+            :title="candidate.description ?? undefined"
+            @click="repo = candidate.repo"
+          >
+            {{ candidate.repo }}
+          </UButton>
+        </div>
+        <p v-else class="text-muted">
+          No repository under {{ owner.trim() }} matches "{{ repo.trim() }}".
+        </p>
+      </div>
       <p class="text-xs text-muted mt-3">
-        New projects start with {{ DEFAULT_PROJECT_SKILLS.join(' and ') }}. Change that below.
+        New repositories start with {{ DEFAULT_PROJECT_SKILLS.join(' and ') }}. Change that below.
       </p>
     </UCard>
 
-    <ApiErrorAlert v-if="error" :error="error" title="Could not read the projects" />
+    <ApiErrorAlert v-if="error" :error="error" title="Could not read the repositories" />
 
     <LoadingCard v-else-if="pending && data === null" />
 
     <UCard v-else-if="projects.length === 0">
       <p class="text-sm text-muted">
-        No projects yet. Your workspace has nothing to sweep until one is registered.
+        No repositories yet. Your workspace has nothing to sweep until one is registered.
       </p>
     </UCard>
 

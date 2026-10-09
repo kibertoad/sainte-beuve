@@ -90,7 +90,7 @@ function submit() {
           label="Skills a reviewer needs"
           :description="
             skills.length === 0
-              ? 'This project has no skill vocabulary. Add one on the Projects screen, or ask everybody available.'
+              ? 'This repository has no skill vocabulary. Add one on the Repositories screen, or ask everybody available.'
               : 'Everyone available who holds all of these will be asked. Pick none to ask everybody.'
           "
         >
