@@ -1,7 +1,9 @@
 import type { CreateProject, Project, UpdateProject } from '@sainte-beuve/contracts'
 import { DEFAULT_PROJECT_SKILLS } from '@sainte-beuve/contracts'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
+import { mergeVocabulary } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { OrgService } from '../orgs/OrgService.js'
 
 /**
  * The projects a workspace watches.
@@ -38,6 +40,7 @@ export class ProjectService {
       // Absent means the defaults; an explicit empty list means a team that
       // wants no skill vocabulary, and the two must not collapse into one.
       skills: input.skills ?? [...DEFAULT_PROJECT_SKILLS],
+      domains: await this.inOrgVocabulary(input.domains),
       mergeComments: null,
       restrictDirectMerge: false,
       createdAt: clock.now(),
@@ -73,10 +76,27 @@ export class ProjectService {
   }
 
   async update(projectId: string, patch: UpdateProject): Promise<Project> {
-    return assertFound(
-      await this.container.repositories.projects.update(projectId, patch),
-      `No project ${projectId}`,
-    )
+    const { projects } = this.container.repositories
+    assertFound(await projects.getById(projectId), `No project ${projectId}`)
+    const next =
+      patch.domains === undefined
+        ? patch
+        : { ...patch, domains: await this.inOrgVocabulary(patch.domains) }
+    return assertFound(await projects.update(projectId, next), `No project ${projectId}`)
+  }
+
+  /**
+   * The domains in the org's spelling, after adding to the org's list any it
+   * did not have. A repository is where a new domain is usually first named, so
+   * naming it here is what puts it on offer to the reviewers who know it.
+   */
+  private async inOrgVocabulary(domains: readonly string[]): Promise<string[]> {
+    if (domains.length === 0) return []
+    const orgs = new OrgService(this.container)
+    const org = await orgs.current()
+    const merged = mergeVocabulary(org.domains, domains)
+    if (merged.added.length > 0) await orgs.update({ domains: [...org.domains, ...merged.added] })
+    return merged.values
   }
 
   /**

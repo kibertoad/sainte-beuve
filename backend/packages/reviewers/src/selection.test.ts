@@ -1,6 +1,13 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
-import { drawWeight, isEligible, isSameHandle, selectReviewers } from './selection.js'
+import {
+  DOMAIN_PREFERENCE,
+  drawWeight,
+  isEligible,
+  isSameHandle,
+  scoreCandidates,
+  selectReviewers,
+} from './selection.js'
 
 function reviewer(overrides: Partial<Reviewer> & { id: string }): Reviewer {
   return {
@@ -9,6 +16,7 @@ function reviewer(overrides: Partial<Reviewer> & { id: string }): Reviewer {
     slackUserId: null,
     team: null,
     skills: [],
+    domains: [],
     availability: 'available',
     role: 'member',
     weight: 1,
@@ -172,5 +180,41 @@ describe('isSameHandle', () => {
     expect(isSameHandle('kibertoad', 'someone-else')).toBe(false)
     expect(isSameHandle(null, 'kibertoad')).toBe(false)
     expect(isSameHandle(null, null)).toBe(false)
+  })
+})
+
+describe('domain preference', () => {
+  const expert = reviewer({ id: 'expert', domains: ['Billing', 'search'] })
+  const half = reviewer({ id: 'half', domains: ['billing'] })
+  const outsider = reviewer({ id: 'outsider', domains: ['onboarding'] })
+
+  it("weights a reviewer by the share of the repository's domains they know", () => {
+    const weights = scoreCandidates([expert, half, outsider], [], [], ['billing', 'search']).map(
+      (candidate) => [candidate.reviewer.id, candidate.matchedDomains, candidate.weight],
+    )
+    expect(weights).toStrictEqual([
+      ['expert', 2, 1 + DOMAIN_PREFERENCE],
+      ['half', 1, 1 + DOMAIN_PREFERENCE / 2],
+      ['outsider', 0, 1],
+    ])
+  })
+
+  it('never excludes a reviewer who knows none of them', () => {
+    const result = selectReviewers(
+      {
+        candidates: [outsider],
+        requiredSkills: [],
+        preferredDomains: ['billing'],
+        excludeReviewerIds: [],
+        count: 1,
+      },
+      scripted([0]),
+    )
+    expect(result.selected.map((picked) => picked.id)).toStrictEqual(['outsider'])
+  })
+
+  it('leaves the draw as it was for a repository with no domains', () => {
+    const weights = scoreCandidates([expert, outsider], [], []).map((candidate) => candidate.weight)
+    expect(weights).toStrictEqual([1, 1])
   })
 })

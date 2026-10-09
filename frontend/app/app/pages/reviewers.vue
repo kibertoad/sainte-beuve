@@ -33,7 +33,10 @@ const { data, pending, error, refresh } = useAsyncData(
 
 const reviewers = computed<Reviewer[]>(() => data.value?.reviewers ?? [])
 const teams = computed<string[]>(() => data.value?.teams ?? [])
-const knownSkills = useKnownSkills(() => reviewers.value.flatMap((reviewer) => reviewer.skills))
+const { skills: knownSkills, domains: knownDomains } = useKnownVocabulary({
+  skills: () => reviewers.value.flatMap((reviewer) => reviewer.skills),
+  domains: () => reviewers.value.flatMap((reviewer) => reviewer.domains),
+})
 const { busy, run } = useApiAction({ refresh })
 
 /** Whether the add form is open, and which row is being edited. Never both. */
@@ -134,6 +137,7 @@ function togglePause(reviewer: Reviewer) {
       <ReviewerForm
         :teams="teams"
         :known-skills="knownSkills"
+        :known-domains="knownDomains"
         :reviewer="null"
         :busy="busy === 'add'"
         submit-label="Add"
@@ -161,6 +165,7 @@ function togglePause(reviewer: Reviewer) {
           <ReviewerForm
             :teams="teams"
             :known-skills="knownSkills"
+            :known-domains="knownDomains"
             :reviewer="editing"
             :busy="busy === reviewer.id"
             submit-label="Save"

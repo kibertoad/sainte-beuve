@@ -59,11 +59,13 @@ export {
   selectAttentionAudience,
 } from './attention.js'
 export {
+  DOMAIN_PREFERENCE,
   diagnoseShortfall,
   drawWeight,
   hasAllSkills,
   isEligible,
   isSameHandle,
+  matchedDomains,
   normalizeSkill,
   type ScoredCandidate,
   scoreCandidates,
@@ -71,4 +73,5 @@ export {
   type SelectionResult,
   selectReviewers,
 } from './selection.js'
+export { mergeVocabulary, type MergedVocabulary } from './vocabulary.js'
 export { type PartitionedPullRequests, partitionForViewer } from './workspace.js'

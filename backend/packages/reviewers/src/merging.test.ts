@@ -97,6 +97,7 @@ describe('projectsInScope', () => {
     repo: id,
     webUrl: null,
     skills: [],
+    domains: [],
     mergeComments: null,
     restrictDirectMerge: false,
     createdAt: 1,

@@ -261,6 +261,7 @@ export class PeopleService {
       slackUserId: null,
       team: null,
       skills: [],
+      domains: [],
       availability: 'available',
       role,
       weight: 1,

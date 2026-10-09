@@ -27,6 +27,7 @@ const API: Project = {
   repo: 'API',
   webUrl: null,
   skills: [],
+  domains: [],
   mergeComments: null,
   restrictDirectMerge: false,
   createdAt: 0,

@@ -11,6 +11,7 @@ describe('createReviewerSchema', () => {
       slackUserId: null,
       team: null,
       skills: [],
+      domains: [],
       availability: 'available',
       // `member`, not `admin`. The migration is what makes the rows that
       // predate roles admins; a row somebody is creating now is the narrower

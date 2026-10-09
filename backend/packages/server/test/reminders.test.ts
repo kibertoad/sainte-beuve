@@ -544,6 +544,7 @@ describe('a tick across tenancies', () => {
       slackUserId: `U-${orgId}`,
       team: null,
       skills: [],
+      domains: [],
       availability: 'available',
       role: 'member',
       weight: 1,
@@ -635,6 +636,7 @@ describe('a tick across tenancies', () => {
       enrolment: 'invite',
       defaultRepositoryOwner: null,
       mergeComments: [],
+      domains: [],
       createdAt: harness.clock.now(),
     })
     // The second org posts over its OWN bot token: the deployment's belongs to

@@ -41,26 +41,14 @@ watch(defaultOwner, (next, previous) => {
 })
 const repo = ref('')
 const webUrl = ref('')
+const domains = ref<string[]>([])
 
 const providers = VCS_PROVIDERS.map((value) => ({ value, label: vcsDisplayName(value) }))
 
-/** The skills being edited, per project, so a row can be changed without a modal. */
-const drafts = ref<Record<string, string[]>>({})
-
-function draftFor(project: Project): string[] {
-  return drafts.value[project.id] ?? project.skills
-}
-
-function draftChanged(project: Project): boolean {
-  const draft = drafts.value[project.id]
-  return (
-    draft !== undefined &&
-    (draft.length !== project.skills.length ||
-      draft.some((skill, index) => skill !== project.skills[index]))
-  )
-}
-
-const knownSkills = useKnownSkills(() => projects.value.flatMap((project) => project.skills))
+const { skills: knownSkills, domains: knownDomains } = useKnownVocabulary({
+  skills: () => projects.value.flatMap((project) => project.skills),
+  domains: () => projects.value.flatMap((project) => project.domains),
+})
 
 async function add() {
   const added = await run(
@@ -70,6 +58,7 @@ async function add() {
         owner: owner.value.trim(),
         repo: repo.value.trim(),
         webUrl: blankToNull(webUrl.value),
+        domains: domains.value,
       }),
     'Could not register the repository',
     'add',
@@ -80,16 +69,16 @@ async function add() {
     owner.value = defaultOwner.value
     repo.value = ''
     webUrl.value = ''
+    domains.value = []
   }
 }
 
-async function saveSkills(project: Project) {
-  const saved = await run(
-    () => api.updateProject(project.id, { skills: draftFor(project) }),
-    'Could not save the skills',
+async function saveVocabulary(project: Project, patch: UpdateProject) {
+  await run(
+    () => api.updateProject(project.id, patch),
+    'Could not save the skills and domains',
     project.id,
   )
-  if (saved) delete drafts.value[project.id]
 }
 
 async function saveMerging(project: Project, patch: UpdateProject) {
@@ -180,6 +169,13 @@ async function remove(project: Project) {
           Add
         </UButton>
       </div>
+      <UFormField
+        label="Domains"
+        description="Optional. Reviewers who know them are picked more often. A new one joins the organization's list."
+        class="mt-3"
+      >
+        <ChipsInput v-model="domains" :suggestions="knownDomains" placeholder="Add a domain" />
+      </UFormField>
       <p class="text-xs text-muted mt-3">
         New repositories start with {{ DEFAULT_PROJECT_SKILLS.join(' and ') }}. Change that below.
       </p>
@@ -213,28 +209,14 @@ async function remove(project: Project) {
               </ULink>
               <span v-else class="font-medium">{{ project.owner }}/{{ project.repo }}</span>
             </div>
-            <div class="flex flex-col items-stretch gap-2 mt-3 sm:flex-row sm:items-end">
-              <UFormField
-                label="Skills an attention request can ask for"
-                description="The list the ask picks from, so a team names its own areas here."
-              >
-                <SkillsInput
-                  :model-value="draftFor(project)"
-                  :suggestions="knownSkills"
-                  @update:model-value="drafts[project.id] = $event"
-                />
-              </UFormField>
-              <UButton
-                size="sm"
-                variant="soft"
-                class="justify-center"
-                :disabled="!draftChanged(project)"
-                :loading="busy === project.id"
-                @click="saveSkills(project)"
-              >
-                Save
-              </UButton>
-            </div>
+            <ProjectVocabulary
+              class="mt-3"
+              :project="project"
+              :known-skills="knownSkills"
+              :known-domains="knownDomains"
+              :busy="busy === project.id"
+              @save="saveVocabulary(project, $event)"
+            />
             <ProjectMergeSettings
               class="mt-3"
               :project="project"

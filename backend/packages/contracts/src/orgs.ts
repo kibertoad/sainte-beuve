@@ -56,6 +56,15 @@ export type OrgSlug = v.InferOutput<typeof orgSlugSchema>
  * nobody can use. `createOrg` takes a `founder` precisely so that window can be
  * closed before anybody is told the slug.
  */
+/**
+ * An area of the product or the business a repository belongs to and a
+ * reviewer knows (`billing`, `onboarding`). Unlike a skill it is a preference
+ * rather than a gate: a reviewer who knows a repository's domains is drawn more
+ * often for its reviews, and one who knows none of them still can be.
+ */
+export const domainSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64))
+export type Domain = v.InferOutput<typeof domainSchema>
+
 export const orgEnrolmentSchema = v.picklist(['invite', 'open'])
 export type OrgEnrolment = v.InferOutput<typeof orgEnrolmentSchema>
 
@@ -78,6 +87,11 @@ export const orgSchema = v.object({
   defaultRepositoryOwner: v.optional(v.nullable(repoOwnerSchema), null),
   /** The merge comments every team and project starts from. See `merging.ts`. */
   mergeComments: v.optional(mergeCommentListSchema, []),
+  /**
+   * The domains a repository and a reviewer pick from. Registering a repository
+   * with a domain not on it adds it here.
+   */
+  domains: v.optional(v.array(domainSchema), () => []),
   createdAt: v.number(),
 })
 export type Org = v.InferOutput<typeof orgSchema>
@@ -116,6 +130,7 @@ export function defaultOrg(): Org {
     enrolment: 'invite',
     defaultRepositoryOwner: null,
     mergeComments: [],
+    domains: [],
     createdAt: 0,
   }
 }
@@ -189,6 +204,7 @@ export const updateOrgInputSchema = v.partial(
     enrolment: orgEnrolmentSchema,
     defaultRepositoryOwner: v.nullable(repoOwnerSchema),
     mergeComments: mergeCommentListSchema,
+    domains: v.array(domainSchema),
   }),
 )
 export type UpdateOrgInput = v.InferOutput<typeof updateOrgInputSchema>

@@ -18,6 +18,7 @@ const ada: Reviewer = {
   slackUserId: null,
   team: 'platform',
   skills: ['payments', 'typescript'],
+  domains: ['billing'],
   availability: 'available',
   weight: 1,
   outstandingReviews: 2,
@@ -81,6 +82,13 @@ describe('reviewerPatch', () => {
     const patch = reviewerPatch(ada, toCreateReviewer(draft))
     expect(patch).toStrictEqual({ skills: ['payments', 'typescript', 'go'] })
     expect(patch.availability).toBeUndefined()
+  })
+
+  it('sends the domains when one was added', () => {
+    const draft = { ...draftFrom(ada), domains: [...ada.domains, 'search'] }
+    expect(reviewerPatch(ada, toCreateReviewer(draft))).toStrictEqual({
+      domains: ['billing', 'search'],
+    })
   })
 
   it('sends an availability the form did move', () => {

@@ -226,11 +226,16 @@ export class ReviewService {
     // same person is spelled differently on each, and comparing against the
     // wrong one would put them in their own review's candidate pool.
     const provider = review.pullRequest.provider
-    const candidates = await repositories.reviewers.list()
+    const [candidates, project] = await Promise.all([
+      repositories.reviewers.list(),
+      repositories.projects.getByRef(review.pullRequest),
+    ])
     const result = selectReviewers(
       {
         candidates,
         requiredSkills: review.requiredSkills,
+        // A review on a repository nobody registered has no domains to prefer.
+        preferredDomains: project?.domains ?? [],
         // The author and whoever is already on the hook are excluded here rather
         // than by the caller: a client that forgot would otherwise get a reviewer
         // reviewing their own pull request, which the router must never produce.

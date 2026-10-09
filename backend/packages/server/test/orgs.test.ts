@@ -211,6 +211,7 @@ describe('the org boundary', () => {
         enrolment: 'invite',
         defaultRepositoryOwner: null,
         mergeComments: [],
+        domains: [],
         createdAt: 0,
       })
       // Synthesised, not stored: the route every page polls must not be a write.
@@ -254,6 +255,7 @@ describe('the org boundary', () => {
         slackUserId: null,
         team: null,
         skills: [],
+        domains: [],
         availability: 'available',
         role: 'member',
         weight: 1,

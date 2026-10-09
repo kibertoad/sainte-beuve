@@ -16,6 +16,7 @@ function reviewer(overrides: Partial<Reviewer> = {}): Reviewer {
     slackUserId: null,
     team: null,
     skills: [],
+    domains: [],
     availability: 'available',
     role: 'member',
     weight: 1,

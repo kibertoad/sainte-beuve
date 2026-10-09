@@ -395,6 +395,7 @@ describe('Slack intake, per org', () => {
       enrolment: 'invite',
       defaultRepositoryOwner: null,
       mergeComments: [],
+      domains: [],
       createdAt: harness.clock.now(),
     })
     return org.id
@@ -533,6 +534,7 @@ describe('Slack intake, per org', () => {
       enrolment: 'invite',
       defaultRepositoryOwner: null,
       mergeComments: [],
+      domains: [],
       createdAt: announcing.clock.now(),
     })
 

@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { mergeCommentListSchema, mergeCommentOverrideSchema } from './merging.js'
+import { domainSchema } from './orgs.js'
 import { skillSchema } from './reviewers.js'
 import { projectRefSchema, repoOwnerSchema, vcsProviderSchema, webUrlSchema } from './vcs.js'
 
@@ -35,6 +36,8 @@ export const projectSchema = v.object({
   webUrl: v.nullable(webUrlSchema),
   /** The vocabulary an attention request on this project picks its skills from. */
   skills: v.array(skillSchema),
+  /** What the repository is about, which a reviewer's own domains are matched against. */
+  domains: v.optional(v.array(domainSchema), () => []),
   /** Replaces the team's and the org's merge comments for this repository. */
   mergeComments: mergeCommentOverrideSchema,
   /**
@@ -53,6 +56,8 @@ export const createProjectSchema = v.object({
   webUrl: v.optional(v.nullable(webUrlSchema), null),
   /** Absent means {@link DEFAULT_PROJECT_SKILLS}; an explicit `[]` means the team wants none. */
   skills: v.optional(v.array(skillSchema)),
+  /** Any not yet on the org's list are added to it. */
+  domains: v.optional(v.array(domainSchema), () => []),
 })
 export type CreateProject = v.InferOutput<typeof createProjectSchema>
 /** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
@@ -62,6 +67,7 @@ export const updateProjectSchema = v.partial(
   v.object({
     webUrl: v.nullable(webUrlSchema),
     skills: v.array(skillSchema),
+    domains: v.array(domainSchema),
     mergeComments: v.nullable(mergeCommentListSchema),
     restrictDirectMerge: v.boolean(),
   }),

@@ -26,6 +26,7 @@ export interface ReviewerDraft {
   slackUserId: string
   team: string
   skills: string[]
+  domains: string[]
   availability: Reviewer['availability']
   /** What this person may do in the org: administer it, or use it. See `roleSchema`. */
   role: Role
@@ -52,6 +53,7 @@ export function emptyDraft(): ReviewerDraft {
     slackUserId: '',
     team: '',
     skills: [],
+    domains: [],
     availability: 'available',
     // `member` for somebody being added, because an admin is the exception: the
     // safe default for a row that decides who else can change the deployment is
@@ -69,6 +71,7 @@ export function draftFrom(reviewer: Reviewer | null): ReviewerDraft {
     slackUserId: reviewer.slackUserId ?? '',
     team: reviewer.team ?? '',
     skills: [...reviewer.skills],
+    domains: [...reviewer.domains],
     availability: reviewer.availability,
     role: reviewer.role,
     weight: reviewer.weight,
@@ -86,6 +89,7 @@ export function toCreateReviewer(draft: ReviewerDraft): CreateReviewer {
     slackUserId: blankToNull(draft.slackUserId),
     team: blankToNull(draft.team),
     skills: draft.skills.map((skill) => skill.trim()).filter((skill) => skill.length > 0),
+    domains: [...draft.domains],
     availability: draft.availability,
     role: draft.role,
     weight: draft.weight,
@@ -111,7 +115,8 @@ export function reviewerPatch(opened: Reviewer, next: CreateReviewer): UpdateRev
   if (!sameHandles(opened, next)) patch.handles = next.handles
   if (next.slackUserId !== opened.slackUserId) patch.slackUserId = next.slackUserId
   if (next.team !== opened.team) patch.team = next.team
-  if (!sameSkills(opened.skills, next.skills)) patch.skills = next.skills
+  if (!sameList(opened.skills, next.skills)) patch.skills = next.skills
+  if (!sameList(opened.domains, next.domains)) patch.domains = next.domains
   if (next.availability !== opened.availability) patch.availability = next.availability
   if (next.role !== opened.role) patch.role = next.role
   if (next.weight !== opened.weight) patch.weight = next.weight
@@ -123,6 +128,6 @@ function sameHandles(opened: Reviewer, next: CreateReviewer): boolean {
   return VCS_PROVIDERS.every((provider) => opened.handles[provider] === next.handles[provider])
 }
 
-function sameSkills(current: readonly string[], next: readonly string[]): boolean {
+function sameList(current: readonly string[], next: readonly string[]): boolean {
   return current.length === next.length && current.every((skill, index) => skill === next[index])
 }

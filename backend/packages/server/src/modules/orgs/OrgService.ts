@@ -7,6 +7,7 @@ import {
   withHandle,
 } from '@sainte-beuve/contracts'
 import { assertFound, ConflictError, NotFoundError } from '@sainte-beuve/kernel'
+import { mergeVocabulary } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 
 /**
@@ -130,6 +131,7 @@ export class OrgService {
       enrolment: input.enrolment,
       defaultRepositoryOwner: null,
       mergeComments: [],
+      domains: [],
       createdAt: clock.now(),
     }
     // The default org has no row until somebody makes one, so a deployment
@@ -153,7 +155,12 @@ export class OrgService {
   async update(patch: UpdateOrgInput): Promise<Org> {
     const { stores, orgId } = this.container
     if ((await stores.orgs.getById(orgId)) === null) await stores.orgs.create(await this.current())
-    return assertFound(await stores.orgs.update(orgId, patch), `No org ${orgId}`)
+    // One spelling per domain, whatever case it was typed in.
+    const next =
+      patch.domains === undefined
+        ? patch
+        : { ...patch, domains: mergeVocabulary([], patch.domains).values }
+    return assertFound(await stores.orgs.update(orgId, next), `No org ${orgId}`)
   }
 
   /**
@@ -174,6 +181,7 @@ export class OrgService {
       slackUserId: null,
       team: null,
       skills: [],
+      domains: [],
       availability: 'available',
       role: 'admin',
       weight: 1,

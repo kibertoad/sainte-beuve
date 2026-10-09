@@ -1,7 +1,8 @@
 import type { Reviewer, ShortfallReason, Skill } from '@sainte-beuve/contracts'
 
 /**
- * Reviewer selection: skill matching, then a load-aware weighted random pick.
+ * Reviewer selection: skill matching, then a load-aware weighted random pick
+ * that favours reviewers who know the repository's domains.
  *
  * "Random" rather than round-robin on purpose. A deterministic rotation is
  * predictable in the bad sense: people learn their slot, pre-empt it, and trade it
@@ -18,6 +19,8 @@ export interface ScoredCandidate {
   reviewer: Reviewer
   /** How many of the required skills this reviewer has. Equal to `requiredSkills.length` on a full match. */
   matchedSkills: number
+  /** How many of the repository's domains this reviewer knows. */
+  matchedDomains: number
   /** The reviewer's share of the draw. Higher is likelier; never zero for a candidate. */
   weight: number
 }
@@ -25,6 +28,8 @@ export interface ScoredCandidate {
 export interface SelectionInput {
   candidates: Reviewer[]
   requiredSkills: Skill[]
+  /** The repository's domains. Knowing them raises a reviewer's share of the draw; it never excludes. */
+  preferredDomains?: readonly string[]
   /** Reviewer ids that must not be picked: the author, anyone already on, the caller's vetoes. */
   excludeReviewerIds: readonly string[]
   count: number
@@ -88,20 +93,40 @@ export function drawWeight(reviewer: Reviewer): number {
   return reviewer.weight / (1 + reviewer.outstandingReviews)
 }
 
+/**
+ * How much more often a reviewer who knows ALL of a repository's domains is
+ * drawn than one who knows none, minus one. Knowing half of them is half the
+ * boost. A multiplier rather than a gate, so a pool with no domain expert in it
+ * still assigns somebody.
+ */
+export const DOMAIN_PREFERENCE = 2
+
+/** How many of `domains` the reviewer knows, compared case-insensitively. */
+export function matchedDomains(reviewer: Reviewer, domains: readonly string[]): number {
+  const known = new Set(reviewer.domains.map(normalizeSkill))
+  return domains.filter((domain) => known.has(normalizeSkill(domain))).length
+}
+
 export function scoreCandidates(
   candidates: readonly Reviewer[],
   requiredSkills: readonly string[],
   excludeReviewerIds: readonly string[],
+  preferredDomains: readonly string[] = [],
 ): ScoredCandidate[] {
   const excluded = new Set(excludeReviewerIds)
   const required = requiredSkills.map(normalizeSkill)
   return candidates
     .filter((reviewer) => isEligible(reviewer, required, excluded))
-    .map((reviewer) => ({
-      reviewer,
-      matchedSkills: required.length,
-      weight: drawWeight(reviewer),
-    }))
+    .map((reviewer) => {
+      const domains = matchedDomains(reviewer, preferredDomains)
+      const affinity = preferredDomains.length === 0 ? 0 : domains / preferredDomains.length
+      return {
+        reviewer,
+        matchedSkills: required.length,
+        matchedDomains: domains,
+        weight: drawWeight(reviewer) * (1 + DOMAIN_PREFERENCE * affinity),
+      }
+    })
 }
 
 /**
@@ -155,7 +180,12 @@ export function selectReviewers(
   input: SelectionInput,
   random: () => number = Math.random,
 ): SelectionResult {
-  const pool = scoreCandidates(input.candidates, input.requiredSkills, input.excludeReviewerIds)
+  const pool = scoreCandidates(
+    input.candidates,
+    input.requiredSkills,
+    input.excludeReviewerIds,
+    input.preferredDomains,
+  )
   if (pool.length === 0) {
     return {
       selected: [],

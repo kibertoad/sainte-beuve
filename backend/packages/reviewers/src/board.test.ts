@@ -38,6 +38,7 @@ function reviewer(id: string, displayName: string): Reviewer {
     slackUserId: null,
     team: null,
     skills: [],
+    domains: [],
     availability: 'available',
     role: 'member',
     weight: 1,

@@ -20,6 +20,8 @@ const props = defineProps<{
   teams: string[]
   /** The skills already in use, offered as the skills field is typed in. */
   knownSkills: readonly string[]
+  /** The org's domains. A reviewer picks from them; a new one is named on a repository. */
+  knownDomains: readonly string[]
   busy: boolean
   submitLabel: string
 }>()
@@ -128,7 +130,19 @@ function submit() {
       label="Skills"
       description="A review needs ALL of the skills it asks for, so a partial match is never picked."
     >
-      <SkillsInput v-model="draft.skills" :suggestions="knownSkills" />
+      <ChipsInput v-model="draft.skills" :suggestions="knownSkills" placeholder="Add a skill" />
+    </UFormField>
+
+    <UFormField
+      label="Domains"
+      description="What they know about the product. A review on a repository in one of these is more likely to reach them."
+    >
+      <ChipsInput
+        v-model="draft.domains"
+        :suggestions="knownDomains"
+        :creatable="false"
+        placeholder="Pick a domain"
+      />
     </UFormField>
 
     <UFormField

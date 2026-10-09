@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { roleSchema } from './orgs.js'
+import { domainSchema, roleSchema } from './orgs.js'
 import { NO_VCS_HANDLES, vcsHandlesSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
@@ -41,6 +41,8 @@ export const reviewerSchema = v.object({
    */
   team: v.nullable(v.string()),
   skills: v.array(skillSchema),
+  /** The domains this person knows. See `domainSchema`: a preference in the draw, not a gate. */
+  domains: v.optional(v.array(domainSchema), () => []),
   availability: reviewerAvailabilitySchema,
   /**
    * What this person may do in their org. It is here rather than on a membership
@@ -84,6 +86,7 @@ export const createReviewerSchema = v.object({
   slackUserId: v.optional(v.nullable(v.string()), null),
   team: v.optional(v.nullable(v.string()), null),
   skills: v.optional(v.array(skillSchema), () => []),
+  domains: v.optional(v.array(domainSchema), () => []),
   availability: v.optional(reviewerAvailabilitySchema, 'available'),
   role: v.optional(roleSchema, 'member'),
   weight: v.optional(reviewerSchema.entries.weight, 1),
@@ -104,6 +107,7 @@ export const updateReviewerSchema = v.partial(
     slackUserId: v.nullable(v.string()),
     team: v.nullable(v.string()),
     skills: v.array(skillSchema),
+    domains: v.array(domainSchema),
     availability: reviewerAvailabilitySchema,
     role: roleSchema,
     weight: reviewerSchema.entries.weight,

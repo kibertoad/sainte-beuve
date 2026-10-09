@@ -2,8 +2,9 @@
 import type { MergeComment, Org, OrgEnrolment, UpdateOrgInput } from '@sainte-beuve/contracts'
 
 // The org this caller is in: its name, who may join it, and the repository
-// owner its projects usually live under, and the merge comments every team and
-// project starts from. An admin edits it; a member reads it.
+// owner its projects usually live under, the domains its repositories and
+// reviewers are matched on, and the merge comments every team and project
+// starts from. An admin edits it; a member reads it.
 const props = defineProps<{
   org: Org
   admin: boolean
@@ -21,6 +22,7 @@ const name = ref(props.org.name)
 const enrolment = ref<OrgEnrolment>(props.org.enrolment)
 const owner = ref(props.org.defaultRepositoryOwner ?? '')
 const mergeComments = ref<MergeComment[] | null>(props.org.mergeComments)
+const domains = ref([...props.org.domains])
 
 // The org is re-read after a save; the form follows it rather than what was typed.
 watch(
@@ -30,6 +32,7 @@ watch(
     enrolment.value = org.enrolment
     owner.value = org.defaultRepositoryOwner ?? ''
     mergeComments.value = org.mergeComments
+    domains.value = [...org.domains]
   },
 )
 
@@ -40,6 +43,7 @@ function save() {
     enrolment: enrolment.value,
     defaultRepositoryOwner: trimmed.length === 0 ? null : trimmed,
     mergeComments: cleanMergeComments(mergeComments.value) ?? [],
+    domains: domains.value,
   })
 }
 </script>
@@ -74,6 +78,18 @@ function save() {
         description="The GitHub org or GitLab namespace a new repository starts from on the Repositories screen."
       >
         <UInput v-model="owner" class="w-full" placeholder="acme" :disabled="!admin" />
+      </UFormField>
+      <UFormField
+        label="Domains"
+        description="The areas a repository belongs to and a reviewer knows. A reviewer who knows a repository's domains is picked more often for its reviews."
+      >
+        <ChipsInput
+          v-model="domains"
+          :suggestions="org.domains"
+          placeholder="Add a domain"
+          class="w-full"
+          :disabled="!admin"
+        />
       </UFormField>
       <UFormField
         label="Merge comments"

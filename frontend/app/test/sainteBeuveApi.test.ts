@@ -49,6 +49,7 @@ const reviewer: Reviewer = {
   slackUserId: null,
   team: 'platform',
   skills: ['payments'],
+  domains: [],
   availability: 'available',
   role: 'member',
   weight: 1,

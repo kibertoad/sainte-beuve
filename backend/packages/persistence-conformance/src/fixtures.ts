@@ -31,6 +31,7 @@ export function org(id: string, overrides: Partial<Org> = {}): Org {
     enrolment: 'invite',
     defaultRepositoryOwner: null,
     mergeComments: [],
+    domains: ['billing'],
     createdAt: 1_000,
     ...overrides,
   }
@@ -55,6 +56,7 @@ export function reviewer(id: string, overrides: Partial<Reviewer> = {}): Reviewe
     slackUserId: 'U123',
     team: 'platform',
     skills: ['typescript'],
+    domains: ['billing'],
     availability: 'available',
     role: 'member',
     weight: 1,
@@ -171,6 +173,7 @@ export function project(id: string, overrides: Partial<Project> = {}): Project {
     repo: 'api',
     webUrl: 'https://github.com/platform/api',
     skills: ['Backend', 'Frontend'],
+    domains: ['billing'],
     mergeComments: null,
     restrictDirectMerge: false,
     createdAt: 1_000,

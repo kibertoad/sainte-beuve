@@ -21,6 +21,7 @@ export class ReviewerService {
       slackUserId: input.slackUserId,
       team: await resolveTeamName(this.container, input.team),
       skills: input.skills,
+      domains: input.domains,
       availability: input.availability,
       role: input.role,
       weight: input.weight,
