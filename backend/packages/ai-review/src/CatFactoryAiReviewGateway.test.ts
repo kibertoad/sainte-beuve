@@ -153,6 +153,25 @@ function filing(gateway: CatFactoryAiReviewGateway) {
   })
 }
 
+describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
+  it('files a resolve-conflicts task on the pull request by number, and starts its own pipeline', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/tasks': { body: task() },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    const handle = await gateway.requestConflictResolution({ pullRequest: PULL_REQUEST })
+
+    expect(handle.taskId).toBe('task-1')
+    expect(calls[0]?.body).toMatchObject({
+      taskType: 'resolve-conflicts',
+      fields: { prNumber: 7 },
+      title: 'Resolve conflicts in kibertoad/sainte-beuve#7',
+    })
+    expect(calls[1]).toMatchObject({ path: '/api/v1/tasks/task-1/start', body: {} })
+  })
+})
+
 describe('CatFactoryAiReviewGateway.requestReview', () => {
   it('files the task and starts it, and reports the handle the loop is tracked by', async () => {
     const { gateway, calls } = gatewayOver({

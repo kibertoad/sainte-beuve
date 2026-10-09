@@ -1,4 +1,4 @@
-import type { AiReviewCuration, AiReviewResolution } from '@sainte-beuve/contracts'
+import type { AiReviewCuration, AiReviewResolution, PullRequestRef } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
 import { UpstreamFailedError } from '@sainte-beuve/kernel'
 
@@ -51,6 +51,8 @@ export function aiFinding(
  */
 export interface StubAiReview extends AiReviewGateway {
   requested: { title: string; instructions: string | null }[]
+  /** The pull requests handed to the conflict resolver, in order. */
+  conflictsResolved: PullRequestRef[]
   dismissed: { runId: string; findingId: string }[]
   resolved: { runId: string; action: AiReviewResolution; findingIds: string[] }[]
   resumed: string[]
@@ -74,6 +76,7 @@ export interface StubAiReview extends AiReviewGateway {
 export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview {
   const stub: StubAiReview = {
     requested: [],
+    conflictsResolved: [],
     dismissed: [],
     resolved: [],
     resumed: [],
@@ -94,6 +97,11 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
       // Numbered, not fixed: a case about the clock's rotation files several
       // reviews and asserts WHICH of them a given tick polled.
       const taskId = `cf-task-${stub.requested.length}`
+      return { taskId, url: `https://cat-factory.example.com/tasks/${taskId}` }
+    },
+    requestConflictResolution: async (input) => {
+      stub.conflictsResolved.push(input.pullRequest)
+      const taskId = `cf-conflicts-${stub.conflictsResolved.length}`
       return { taskId, url: `https://cat-factory.example.com/tasks/${taskId}` }
     },
     getStatus: async (taskId) => {

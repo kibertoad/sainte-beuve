@@ -1,9 +1,11 @@
 import type {
+  ConflictResolution,
   MergeMyPullRequest,
   MergeOutcome,
   PostMergeComment,
   Project,
   PullRequestStatus,
+  ResolveConflicts,
 } from '@sainte-beuve/contracts'
 import { handleOf } from '@sainte-beuve/contracts'
 import {
@@ -17,7 +19,8 @@ import {
 } from '@sainte-beuve/kernel'
 import { isSameHandle } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
-import { VcsResolutions } from '../../integrations/resolve.js'
+import { requireCapability } from '../../http/errors.js'
+import { resolveAiReview, VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
 import { NO_CREDENTIAL } from '../workspace/sweep.js'
@@ -54,6 +57,12 @@ const RESTRICTED =
 
 const CONFIRM_OVERRIDE =
   'This repository merges through its merge comments. Confirm the override to merge directly.'
+
+const NO_CONFLICTS = 'This pull request has no conflicts with its base to resolve. Reload My PRs.'
+
+const NO_CAT_FACTORY =
+  'cat-factory is not configured for this org: resolving conflicts needs its base URL, a ' +
+  'service id and an API key, which an admin sets on the Configuration screen'
 
 const MOVED =
   'The pull request has new commits since you loaded it. Reload My PRs and check them first.'
@@ -99,6 +108,25 @@ export class MergeService {
     }
     await target.gateway.comment({ ...target.address, url: target.status.url }, input.comment.body)
     return { outcome: 'commented' }
+  }
+
+  /**
+   * Hand a conflicting pull request to cat-factory, whose resolver merges the
+   * base in and pushes the result to the pull request's own branch. The author's
+   * call, as a merge is: it changes their branch.
+   */
+  async resolveConflicts(input: ResolveConflicts): Promise<ConflictResolution> {
+    const target = await this.target(input)
+    if (target.status.mergeability !== 'conflicting') throw new ConflictError(NO_CONFLICTS)
+    const catFactory = requireCapability(await resolveAiReview(this.container), NO_CAT_FACTORY)
+    const handle = await catFactory.gateway.requestConflictResolution({
+      pullRequest: { ...target.address, url: target.status.url },
+    })
+    this.container.logger.info(
+      { projectId: target.project.id, number: input.number, taskId: handle.taskId },
+      'handed a conflicting pull request to cat-factory',
+    )
+    return { taskId: handle.taskId, url: handle.url }
   }
 
   private async target(input: { projectId: string; number: number }): Promise<Target> {

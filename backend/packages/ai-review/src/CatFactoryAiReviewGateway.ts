@@ -1,4 +1,9 @@
-import { CatFactoryClient, CatFactoryNotFoundError, type PublicRun } from '@cat-factory/sdk'
+import {
+  CatFactoryClient,
+  CatFactoryNotFoundError,
+  type CreatePublicTask,
+  type PublicRun,
+} from '@cat-factory/sdk'
 import type { AiReviewCuration, AiReviewResolution, PullRequestRef } from '@sainte-beuve/contracts'
 import {
   type AiReviewGateway,
@@ -77,6 +82,14 @@ function summaryOf(steps: readonly { output: string | null }[]): string | null {
   return null
 }
 
+/**
+ * cat-factory's task type for its conflict resolver on a pull request it did not
+ * open. Sent as a plain string because the SDK accepts any task type, so this
+ * works against an instance that has it and is refused, by name, by one that
+ * does not.
+ */
+export const RESOLVE_CONFLICTS_TASK_TYPE = 'resolve-conflicts'
+
 /** A poll of a task cat-factory has accepted but not yet built a run for. */
 const NO_RUN_YET: AiReviewReport = {
   status: 'running',
@@ -127,45 +140,66 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     title: string
     instructions: string | null
   }): Promise<AiReviewHandle> {
-    const task = await this.createTask(input)
-    // Create and start are two calls in cat-factory's API on purpose (a task is
-    // editable before it runs), but a review has nothing to edit, so file it and go.
-    try {
-      await this.client.tasks.start(
-        task.taskId,
-        this.options.pipelineId === undefined ? {} : { pipelineId: this.options.pipelineId },
-      )
-    } catch (err) {
-      // Through the same translation as every other call, because this is where a
-      // `write`-scope key is turned away: the run would park, so cat-factory will
-      // not start one the caller could not answer. See `refusalFor`.
-      throw refusalFor(err, `start the review task ${task.taskId} it had accepted`)
-    }
-    return { taskId: task.taskId, url: `${this.options.baseUrl}/tasks/${task.taskId}` }
-  }
-
-  private async createTask(input: {
-    pullRequest: PullRequestRef
-    title: string
-    instructions: string | null
-  }) {
     const ref = formatPullRequest(input.pullRequest)
-    const { serviceId } = this.options
-    if (serviceId === null) {
-      throw new UnavailableError(`Cannot file a review task for ${ref}: no service id is set`)
-    }
     const brief = [`Review ${ref}: ${input.pullRequest.url}`, input.instructions]
       .filter((line): line is string => line !== null && line.length > 0)
       .join('\n\n')
+    const task = await this.file(`a review task for ${ref}`, {
+      title: `Review ${ref}: ${input.title}`.slice(0, 200),
+      description: brief.slice(0, 2000),
+      taskType: 'review',
+    })
+    await this.start(task.taskId, 'review', this.options.pipelineId)
+    return this.handleOf(task.taskId)
+  }
+
+  async requestConflictResolution(input: { pullRequest: PullRequestRef }): Promise<AiReviewHandle> {
+    const ref = formatPullRequest(input.pullRequest)
+    const task = await this.file(`a conflict resolution task for ${ref}`, {
+      title: `Resolve conflicts in ${ref}`.slice(0, 200),
+      description:
+        `Merge the base branch into ${ref} (${input.pullRequest.url}), resolve the ` +
+        'conflicts, and push the result to its own branch.',
+      taskType: RESOLVE_CONFLICTS_TASK_TYPE,
+      // The number is what cat-factory attaches the pull request by, and so what
+      // points the resolver at its branch rather than at a new one.
+      fields: { prNumber: input.pullRequest.number },
+    })
+    // No pipeline pinned: the one a deployment pins is a review pipeline, and
+    // this task type brings its own.
+    await this.start(task.taskId, 'conflict resolution', undefined)
+    return this.handleOf(task.taskId)
+  }
+
+  private async file(purpose: string, body: CreatePublicTask) {
+    const { serviceId } = this.options
+    if (serviceId === null)
+      throw new UnavailableError(`Cannot file ${purpose}: no service id is set`)
     try {
-      return await this.client.tasks.create(serviceId, {
-        title: `Review ${ref}: ${input.title}`.slice(0, 200),
-        description: brief.slice(0, 2000),
-        taskType: 'review',
-      })
+      return await this.client.tasks.create(serviceId, body)
     } catch (err) {
-      throw refusalFor(err, `file a review task for ${ref}`)
+      throw refusalFor(err, `file ${purpose}`)
     }
+  }
+
+  /**
+   * Create and start are two calls in cat-factory's API on purpose (a task is
+   * editable before it runs), but nothing filed from here has anything to edit,
+   * so it is filed and started at once.
+   */
+  private async start(taskId: string, kind: string, pipelineId: string | undefined) {
+    try {
+      await this.client.tasks.start(taskId, pipelineId === undefined ? {} : { pipelineId })
+    } catch (err) {
+      // Through the same translation as every other call, because this is where a
+      // `write`-scope key is turned away from a run that would park: cat-factory
+      // will not start one the caller could not answer. See `refusalFor`.
+      throw refusalFor(err, `start the ${kind} task ${taskId} it had accepted`)
+    }
+  }
+
+  private handleOf(taskId: string): AiReviewHandle {
+    return { taskId, url: `${this.options.baseUrl}/tasks/${taskId}` }
   }
 
   async getStatus(taskId: string): Promise<AiReviewReport> {

@@ -103,6 +103,17 @@ export const postMergeCommentSchema = v.object({
 })
 export type PostMergeComment = v.InferOutput<typeof postMergeCommentSchema>
 
+/** A conflicting pull request to hand to cat-factory's conflict resolver. */
+export const resolveConflictsSchema = v.object({ ...pullRequestTargetEntries })
+export type ResolveConflicts = v.InferOutput<typeof resolveConflictsSchema>
+
+/** The cat-factory task resolving it, and where to watch it there. */
+export const conflictResolutionSchema = v.object({
+  taskId: v.string(),
+  url: v.nullable(v.string()),
+})
+export type ConflictResolution = v.InferOutput<typeof conflictResolutionSchema>
+
 export const mergeOutcomeSchema = v.object({
   outcome: v.picklist(['merged', 'commented']),
 })
