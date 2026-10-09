@@ -11,7 +11,7 @@ import { blankToNull, parseSkills } from '../utils/text'
 // actually be read, so somebody setting a deployment up can add their
 // repositories first and see exactly which connection is missing, rather than
 // being sent to the Configuration screen with nothing to explain why. The
-// lookup below is a suggestion only, and the Add button never waits on it.
+// repository field's lookup is a suggestion only, and Add never waits on it.
 
 // The screen's earlier address, so a bookmark still lands here.
 definePageMeta({ alias: '/projects' })
@@ -41,28 +41,6 @@ watch(defaultOwner, (next, previous) => {
 })
 const repo = ref('')
 const webUrl = ref('')
-
-const lookup = useRepositoryLookup({ provider, owner, repo, enabled: auth.isAdmin })
-const lookupResult = lookup.result
-const lookupPending = lookup.pending
-const lookupFailure = lookup.failure
-/** What to offer under the field: the exact name typed is already chosen, so it is not offered. */
-const suggestions = computed(
-  () =>
-    lookupResult.value?.repositories.filter((candidate) => candidate.repo !== repo.value.trim()) ??
-    [],
-)
-const exactMatch = computed(
-  () =>
-    lookupResult.value?.repositories.some((candidate) => candidate.repo === repo.value.trim()) ??
-    false,
-)
-const showLookup = computed(
-  () =>
-    lookupFailure.value !== null ||
-    suggestions.value.length > 0 ||
-    (lookupResult.value !== null && !exactMatch.value),
-)
 
 const providers = VCS_PROVIDERS.map((value) => ({ value, label: vcsDisplayName(value) }))
 
@@ -170,12 +148,7 @@ async function remove(project: Project) {
           <UInput v-model="owner" class="w-full sm:w-auto" placeholder="kibertoad" />
         </UFormField>
         <UFormField label="Repository">
-          <UInput
-            v-model="repo"
-            class="w-full sm:w-auto"
-            placeholder="sainte-beuve"
-            :loading="lookupPending"
-          />
+          <RepositoryNameInput v-model="repo" :provider="provider" :owner="owner" />
         </UFormField>
         <UFormField
           label="Page"
@@ -195,29 +168,6 @@ async function remove(project: Project) {
         >
           Add
         </UButton>
-      </div>
-      <div v-if="showLookup" class="mt-3 text-sm">
-        <p v-if="lookupFailure !== null" class="text-muted">{{ lookupFailure }}</p>
-        <p v-else-if="lookupResult?.ownerFound === false" class="text-warning">
-          {{ vcsDisplayName(provider) }} has no owner named {{ owner.trim() }}.
-        </p>
-        <div v-else-if="suggestions.length > 0" class="flex flex-wrap gap-2">
-          <UButton
-            v-for="candidate in suggestions"
-            :key="candidate.repo"
-            size="xs"
-            variant="outline"
-            color="neutral"
-            :icon="candidate.private ? 'i-lucide-lock' : 'i-lucide-book-marked'"
-            :title="candidate.description ?? undefined"
-            @click="repo = candidate.repo"
-          >
-            {{ candidate.repo }}
-          </UButton>
-        </div>
-        <p v-else class="text-muted">
-          No repository under {{ owner.trim() }} matches "{{ repo.trim() }}".
-        </p>
       </div>
       <p class="text-xs text-muted mt-3">
         New repositories start with {{ DEFAULT_PROJECT_SKILLS.join(' and ') }}. Change that below.
