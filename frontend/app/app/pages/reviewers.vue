@@ -33,6 +33,7 @@ const { data, pending, error, refresh } = useAsyncData(
 
 const reviewers = computed<Reviewer[]>(() => data.value?.reviewers ?? [])
 const teams = computed<string[]>(() => data.value?.teams ?? [])
+const knownSkills = useKnownSkills(() => reviewers.value.flatMap((reviewer) => reviewer.skills))
 const { busy, run } = useApiAction({ refresh })
 
 /** Whether the add form is open, and which row is being edited. Never both. */
@@ -132,6 +133,7 @@ function togglePause(reviewer: Reviewer) {
       </template>
       <ReviewerForm
         :teams="teams"
+        :known-skills="knownSkills"
         :reviewer="null"
         :busy="busy === 'add'"
         submit-label="Add"
@@ -158,6 +160,7 @@ function togglePause(reviewer: Reviewer) {
           <!-- Seeded from the snapshot, which is also what the save is diffed against. -->
           <ReviewerForm
             :teams="teams"
+            :known-skills="knownSkills"
             :reviewer="editing"
             :busy="busy === reviewer.id"
             submit-label="Save"

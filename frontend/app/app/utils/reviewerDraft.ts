@@ -6,7 +6,7 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import { NO_VCS_HANDLES, VCS_PROVIDERS, withHandle } from '@sainte-beuve/contracts'
-import { blankToNull, parseSkills } from './text'
+import { blankToNull } from './text'
 
 // The reviewer form's draft, and the conversions either side of it.
 //
@@ -25,7 +25,7 @@ export interface ReviewerDraft {
   handles: Record<VcsProvider, string>
   slackUserId: string
   team: string
-  skills: string
+  skills: string[]
   availability: Reviewer['availability']
   /** What this person may do in the org: administer it, or use it. See `roleSchema`. */
   role: Role
@@ -51,7 +51,7 @@ export function emptyDraft(): ReviewerDraft {
     handles: handlesOf(() => ''),
     slackUserId: '',
     team: '',
-    skills: '',
+    skills: [],
     availability: 'available',
     // `member` for somebody being added, because an admin is the exception: the
     // safe default for a row that decides who else can change the deployment is
@@ -68,7 +68,7 @@ export function draftFrom(reviewer: Reviewer | null): ReviewerDraft {
     handles: handlesOf((provider) => reviewer.handles[provider] ?? ''),
     slackUserId: reviewer.slackUserId ?? '',
     team: reviewer.team ?? '',
-    skills: reviewer.skills.join(', '),
+    skills: [...reviewer.skills],
     availability: reviewer.availability,
     role: reviewer.role,
     weight: reviewer.weight,
@@ -85,7 +85,7 @@ export function toCreateReviewer(draft: ReviewerDraft): CreateReviewer {
     ),
     slackUserId: blankToNull(draft.slackUserId),
     team: blankToNull(draft.team),
-    skills: parseSkills(draft.skills),
+    skills: draft.skills.map((skill) => skill.trim()).filter((skill) => skill.length > 0),
     availability: draft.availability,
     role: draft.role,
     weight: draft.weight,

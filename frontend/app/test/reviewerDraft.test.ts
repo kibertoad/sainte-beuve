@@ -50,8 +50,8 @@ describe('toCreateReviewer', () => {
     expect(created.handles).toStrictEqual({ github: null, gitlab: null })
   })
 
-  it('drops the blanks a half-typed skill list leaves behind', () => {
-    const created = toCreateReviewer({ ...emptyDraft(), displayName: 'Grace', skills: 'go, , ' })
+  it('drops a blank skill', () => {
+    const created = toCreateReviewer({ ...emptyDraft(), displayName: 'Grace', skills: ['go', ' '] })
     expect(created.skills).toStrictEqual(['go'])
   })
 
@@ -77,7 +77,7 @@ describe('reviewerPatch', () => {
   // and somebody paused her in a second tab. The save says only what it changed, so
   // the pause survives it; a patch carrying every field would resume her.
   it('leaves out an availability the form never touched', () => {
-    const draft = { ...draftFrom(ada), skills: 'payments, typescript, go' }
+    const draft = { ...draftFrom(ada), skills: [...ada.skills, 'go'] }
     const patch = reviewerPatch(ada, toCreateReviewer(draft))
     expect(patch).toStrictEqual({ skills: ['payments', 'typescript', 'go'] })
     expect(patch.availability).toBeUndefined()

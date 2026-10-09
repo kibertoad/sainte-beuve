@@ -1,19 +1,6 @@
-// Two rules the forms share.
-//
-// Both were written out once per screen, so a change to how a blank box or a
-// trailing comma is treated had to be found in four places. `app/utils` is
-// auto-imported, so there is one copy and no import to remember.
-
-/**
- * A comma-separated box as a list: entries trimmed, blanks and a trailing comma
- * dropped, because "typescript, payments," is what somebody mid-typing leaves behind.
- */
-export function parseSkills(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-}
+// A rule the forms share, kept in one place so a change to how a blank box is
+// treated is made once. `app/utils` is auto-imported, so there is no import to
+// remember.
 
 /** An empty box means "nothing recorded here", which is a null rather than a blank. */
 export function blankToNull(value: string): string | null {

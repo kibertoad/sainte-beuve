@@ -18,6 +18,8 @@ const props = defineProps<{
   reviewer: Reviewer | null
   /** The org's team names, managed on the Organization screen. */
   teams: string[]
+  /** The skills already in use, offered as the skills field is typed in. */
+  knownSkills: readonly string[]
   busy: boolean
   submitLabel: string
 }>()
@@ -124,9 +126,9 @@ function submit() {
 
     <UFormField
       label="Skills"
-      description="Comma separated. A review needs ALL of the skills it asks for, so a partial match is never picked."
+      description="A review needs ALL of the skills it asks for, so a partial match is never picked."
     >
-      <UInput v-model="draft.skills" class="w-full" placeholder="typescript, payments" />
+      <SkillsInput v-model="draft.skills" :suggestions="knownSkills" />
     </UFormField>
 
     <UFormField

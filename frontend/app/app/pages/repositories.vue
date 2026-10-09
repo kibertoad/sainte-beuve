@@ -60,22 +60,7 @@ function draftChanged(project: Project): boolean {
   )
 }
 
-// Reviewers' skills are offered beside the repositories' own, because an ask
-// for a skill nobody in the pool has reaches nobody. Not essential, so a failed
-// read leaves only the repositories' skills on offer.
-const reviewerSkills = useAsyncData(
-  'repositories-reviewer-skills',
-  async () => (await api.listReviewers()).reviewers.flatMap((reviewer) => reviewer.skills),
-  { lazy: true },
-)
-
-const knownSkills = computed(() => [
-  ...new Set([
-    ...DEFAULT_PROJECT_SKILLS,
-    ...projects.value.flatMap((project) => project.skills),
-    ...(reviewerSkills.data.value ?? []),
-  ]),
-])
+const knownSkills = useKnownSkills(() => projects.value.flatMap((project) => project.skills))
 
 async function add() {
   const added = await run(
