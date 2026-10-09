@@ -146,7 +146,7 @@ function signIn(provider: string) {
 
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the configuration" />
 
-    <LoadingCard v-else-if="pending && data === null" :rows="4" />
+    <LoadingCard v-else-if="data === undefined" :rows="4" />
 
     <UAlert
       v-else-if="!auth.isAdmin.value"

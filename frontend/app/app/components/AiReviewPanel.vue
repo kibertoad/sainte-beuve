@@ -151,6 +151,8 @@ async function resume(runId: string): Promise<void> {
       </UButton>
     </div>
 
+    <LoadingSpinner v-if="pending && data !== undefined" label="Updating…" class="mb-3" />
+
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the AI reviews" />
 
     <!--
@@ -159,7 +161,7 @@ async function resume(runId: string): Promise<void> {
       row that nothing had been delegated — for as long as the cat-factory read
       took, which on a slow one is long enough to be believed and acted on.
     -->
-    <LoadingCard v-else-if="pending && data === null" :rows="1" />
+    <LoadingCard v-else-if="data === undefined" :rows="1" />
 
     <p v-else-if="runs.length === 0" class="text-sm text-muted">
       Nothing delegated yet. Press <span class="font-medium">AI review</span> to hand this pull

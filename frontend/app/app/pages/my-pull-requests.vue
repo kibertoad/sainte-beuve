@@ -181,9 +181,11 @@ function offersComments(pr: MyPullRequest): boolean {
       <USwitch v-model="linkedOnly" label="Linked repositories only" class="sm:pb-1.5" />
     </div>
 
+    <LoadingSpinner v-if="pending && data !== undefined" label="Updating…" class="mb-3" />
+
     <ApiErrorAlert v-if="error" :error="error" title="Could not read your pull requests" />
 
-    <LoadingCard v-else-if="pending && data === null" />
+    <LoadingCard v-else-if="data === undefined" />
 
     <div v-else-if="data" class="flex flex-col gap-4">
       <UAlert

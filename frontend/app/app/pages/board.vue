@@ -180,7 +180,7 @@ async function requestAiReview(review: BoardReview) {
 const linkedMissing = computed(
   () =>
     linked.value !== null &&
-    data.value !== null &&
+    data.value !== undefined &&
     !reviews.value.some((review) => review.id === linked.value),
 )
 
@@ -271,9 +271,11 @@ function clearLink() {
       @update:open="clearLink()"
     />
 
+    <LoadingSpinner v-if="pending && data !== undefined" label="Updating…" class="mb-3" />
+
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the review board" />
 
-    <LoadingCard v-else-if="pending && data === null" />
+    <LoadingCard v-else-if="data === undefined" />
 
     <UCard v-else-if="reviews.length === 0">
       <p class="text-sm text-muted">

@@ -7,15 +7,14 @@
 // sign that anything had been asked for. Read lazily, the page renders at once —
 // and then has to say what it is waiting for, which is this.
 //
-// Deliberately the shape of the thing that is coming (a stack of cards, not a
-// spinner in the middle of the screen), so the layout does not jump when the
-// rows arrive.
-withDefaults(defineProps<{ rows?: number }>(), { rows: 3 })
+// The shape of the thing that is coming (a stack of cards), so the layout does
+// not jump when the rows arrive, under a spinner that says it is on its way.
+withDefaults(defineProps<{ rows?: number; label?: string }>(), { rows: 3, label: 'Loading…' })
 </script>
 
 <template>
-  <div class="flex flex-col gap-3" aria-busy="true" aria-live="polite">
-    <span class="sr-only">Loading</span>
+  <div class="flex flex-col gap-3" aria-busy="true">
+    <LoadingSpinner :label="label" />
     <UCard v-for="row in rows" :key="row">
       <div class="flex flex-col gap-3">
         <USkeleton class="h-5 w-1/3" />

@@ -122,13 +122,15 @@ async function release(commitmentId: string) {
       </UButton>
     </div>
 
+    <LoadingSpinner v-if="pending && data !== undefined" label="Updating…" class="mb-3" />
+
     <ApiErrorAlert
       v-if="error"
       :error="error"
       title="This deployment could not build your workspace"
     />
 
-    <LoadingCard v-else-if="pending && data === null" />
+    <LoadingCard v-else-if="data === undefined" />
 
     <div v-else-if="workspace" class="flex flex-col gap-4">
       <UAlert

@@ -192,9 +192,11 @@ async function remove(project: Project) {
       </div>
     </UCard>
 
+    <LoadingSpinner v-if="pending && data !== undefined" label="Updating…" class="mb-3" />
+
     <ApiErrorAlert v-if="error" :error="error" title="Could not read the repositories" />
 
-    <LoadingCard v-else-if="pending && data === null" />
+    <LoadingCard v-else-if="data === undefined" />
 
     <UCard v-else-if="projects.length === 0">
       <p class="text-sm text-muted">
