@@ -138,5 +138,24 @@ product. Local mode is the Node stack, so `DATABASE_URL` makes it durable and ap
 the schema at boot, the same way the hosted deployment does; `/health` reports which
 store is in force.
 
+To keep the board across restarts, run the bundled Postgres in Docker:
+
+```bash
+pnpm db:up            # from the repo root; starts it and waits until it is healthy
+```
+
+Then set two values in `deploy/local/.env` and restart `pnpm dev:local`:
+
+```bash
+DATABASE_URL=postgres://sainte:sainte@localhost:5433/saintebeuve
+SETTINGS_ENCRYPTION_KEY=...   # openssl rand -base64 32
+```
+
+The key is not optional beside a durable store: without it, the credentials the
+Configuration screen seals are sealed under a key generated per boot, and the next
+boot cannot read them. The container publishes port 5433 because a local
+cat-factory takes 5432. `pnpm db:down` stops it and keeps the data, which lives in
+the `sainte-beuve-local_sainte-beuve-pg` volume.
+
 Local mode is the same app the hosted deployments serve, with different defaults,
 not a reduced build. A bug you find here is a bug in production.

@@ -10,7 +10,9 @@
     "prestart": "pnpm --filter @sainte-beuve/local-server run build",
     "start": "node --env-file-if-exists=.env src/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "setup:github": "node src/setup-github-token.ts"
+    "setup:github": "node src/setup-github-token.ts",
+    "db:up": "docker compose up -d --wait postgres",
+    "db:down": "docker compose down"
   },
   "dependencies": {
     "@sainte-beuve/local-server": "workspace:*"

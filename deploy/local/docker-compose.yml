@@ -1,0 +1,37 @@
+# Local mode's durable store. The API itself runs as a plain Node process on the
+# host (`pnpm dev:local`); this is only the Postgres it can point at.
+#
+#   pnpm db:up      # start it (docker compose up -d postgres)
+#   pnpm db:down    # stop it; the volume, and the board in it, stays
+#
+# Then set DATABASE_URL (the value is in .env.example) and SETTINGS_ENCRYPTION_KEY
+# in .env. Without the key, credentials stored on the Configuration screen are
+# sealed under one generated per boot and are unreadable after a restart.
+#
+# Host port 5433 rather than 5432, because a local cat-factory, which local mode
+# is usually run beside, publishes its own Postgres on 5432.
+#
+# The project name keying the container and its volume is declared rather than
+# left to Compose's default (this directory, `local`), which other checkouts
+# would claim too.
+name: sainte-beuve-local
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: sainte
+      POSTGRES_PASSWORD: sainte
+      POSTGRES_DB: saintebeuve
+    ports:
+      - '5433:5432'
+    volumes:
+      - sainte-beuve-pg:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sainte -d saintebeuve']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sainte-beuve-pg:
