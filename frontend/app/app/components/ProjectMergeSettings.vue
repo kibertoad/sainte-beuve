@@ -28,6 +28,12 @@ const summary = computed(() => {
   return props.project.restrictDirectMerge ? `${source}, merges only through them` : source
 })
 
+const changed = computed(
+  () =>
+    !sameMergeComments(cleanMergeComments(comments.value), props.project.mergeComments) ||
+    restrict.value !== props.project.restrictDirectMerge,
+)
+
 function save() {
   emit('save', {
     mergeComments: cleanMergeComments(comments.value),
@@ -46,7 +52,7 @@ function save() {
         :icon="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
         @click="open = !open"
       >
-        Merging
+        Merge settings
       </UButton>
       <span class="text-sm text-muted">{{ summary }}</span>
     </div>
@@ -57,8 +63,11 @@ function save() {
         label="Merge only through the merge comments"
         description="My PRs refuses a direct merge while merge comments are in force for this repository. Admins can still override it."
       />
-      <div class="flex justify-end">
-        <UButton size="sm" variant="soft" :loading="busy" @click="save()">Save merging</UButton>
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        <span v-if="changed" class="text-sm text-warning">Unsaved changes</span>
+        <UButton size="sm" variant="soft" :disabled="!changed" :loading="busy" @click="save()">
+          Save merge settings
+        </UButton>
       </div>
     </div>
   </div>

@@ -53,10 +53,11 @@ function save() {
     >
       <ChipsInput v-model="domains" :suggestions="knownDomains" placeholder="Add a domain" />
     </UFormField>
-    <div>
+    <div class="flex flex-wrap items-center gap-3">
       <UButton size="sm" variant="soft" :disabled="!changed" :loading="busy" @click="save()">
-        Save
+        Save skills and domains
       </UButton>
+      <span v-if="changed" class="text-sm text-warning">Unsaved changes</span>
     </div>
   </div>
 </template>

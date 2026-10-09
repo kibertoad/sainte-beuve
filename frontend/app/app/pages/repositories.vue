@@ -29,6 +29,12 @@ const { data, pending, error, refresh } = useAsyncData('projects', () => api.lis
 const projects = computed<Project[]>(() => data.value?.projects ?? [])
 const { busy, run } = useApiAction({ refresh })
 const { confirm } = useConfirm()
+const toast = useToast()
+
+/** Said after a save lands, because the row itself looks the same before and after. */
+function saved(title: string, project: { owner: string; repo: string }) {
+  toast.add({ color: 'success', title, description: `${project.owner}/${project.repo}` })
+}
 
 const auth = useAuthState()
 const defaultOwner = computed(() => auth.org.value?.defaultRepositoryOwner ?? '')
@@ -66,6 +72,7 @@ async function add() {
   // Only on success: clearing the form after a 409 throws away what was typed
   // right before the person has to correct one field of it.
   if (added) {
+    saved('Repository registered', { owner: owner.value.trim(), repo: repo.value.trim() })
     owner.value = defaultOwner.value
     repo.value = ''
     webUrl.value = ''
@@ -74,19 +81,21 @@ async function add() {
 }
 
 async function saveVocabulary(project: Project, patch: UpdateProject) {
-  await run(
+  const ok = await run(
     () => api.updateProject(project.id, patch),
     'Could not save the skills and domains',
     project.id,
   )
+  if (ok) saved('Skills and domains saved', project)
 }
 
 async function saveMerging(project: Project, patch: UpdateProject) {
-  await run(
+  const ok = await run(
     () => api.updateProject(project.id, patch),
-    'Could not save how the repository merges',
+    'Could not save the merge settings',
     `${project.id}:merging`,
   )
+  if (ok) saved('Merge settings saved', project)
 }
 
 /**
