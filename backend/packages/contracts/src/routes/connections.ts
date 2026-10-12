@@ -7,6 +7,7 @@ import {
   checkCatFactorySchema,
 } from '../cat-factory.js'
 import { connectionsSchema, connectStartSchema } from '../connections.js'
+import { slackAppManifestResultSchema } from '../slack-app.js'
 import { vcsProviderSchema } from '../vcs.js'
 import { errorResponses } from './_shared.js'
 
@@ -97,4 +98,15 @@ export const syncCatFactoryRepositoriesContract = defineApiContract({
   pathResolver: () => '/settings/connections/cat-factory/sync',
   requestBodySchema: v.object({}),
   responsesByStatusCode: { 200: catFactoryConnectionSchema, ...errorResponses },
+})
+
+/**
+ * The Slack app manifest for the caller's org: its Request URL, the `/review`
+ * command and the bot scopes the code uses, ready to paste into Slack's
+ * "Create New App, From a manifest".
+ */
+export const getSlackAppManifestContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/settings/connections/slack/manifest',
+  responsesByStatusCode: { 200: slackAppManifestResultSchema, ...errorResponses },
 })
