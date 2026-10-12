@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OpenPullRequest, Project } from '@sainte-beuve/contracts'
-import { MAX_NEEDED_COMMITMENTS } from '@sainte-beuve/contracts'
+import { MAX_ATTENTION_RECIPIENTS, MAX_NEEDED_COMMITMENTS } from '@sainte-beuve/contracts'
 import { blankToNull } from '../utils/text'
 
 // "Somebody please look at this."
@@ -9,6 +9,10 @@ import { blankToNull } from '../utils/text'
 // renames Backend to `payments` renames it once, on the project, and everybody
 // asking about that repository picks from the same list. Typing a skill nobody
 // holds is how an ask reaches nobody and looks like a bug.
+//
+// Ticking people in the ranked list names them, and then the ask goes to
+// exactly those people; with nobody ticked it goes to everyone the skills and
+// the team gate let in.
 const props = defineProps<{
   pullRequest: OpenPullRequest | null
   projects: Project[]
@@ -18,6 +22,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   submit: [
     request: {
+      recipientIds: string[]
       requiredSkills: string[]
       sameTeamOnly: boolean
       neededCommitments: number
@@ -27,10 +32,15 @@ const emit = defineEmits<{
   close: []
 }>()
 
+/** How many matches the dialog ranks until the author asks for more. */
+const FIRST_SHOWN = 5
+
 const selectedSkills = ref<string[]>([])
+const recipientIds = ref<string[]>([])
 const sameTeamOnly = ref(false)
-const neededCommitments = ref(1)
+const chosenCommitments = ref(1)
 const note = ref('')
+const shown = ref(FIRST_SHOWN)
 
 const open = computed({
   get: () => props.pullRequest !== null,
@@ -60,24 +70,70 @@ const recommendations = useReviewerRecommendations({
   pullRequest: toRef(props, 'pullRequest'),
   requiredSkills: selectedSkills,
   sameTeamOnly,
+  limit: shown,
 })
 
-const counts = Array.from({ length: MAX_NEEDED_COMMITMENTS }, (_, index) => index + 1)
+// "Show more" goes as far as one ask can name, so anybody the author may name
+// can be put on screen first.
+const canShowMore = computed(() => {
+  const listed = recommendations.result.value?.recommendations.length ?? 0
+  return shown.value < MAX_ATTENTION_RECIPIENTS && listed >= shown.value
+})
+
+function showMore(): void {
+  shown.value = MAX_ATTENTION_RECIPIENTS
+}
+
+// Somebody ticked and then ranked out of the list by a new skill choice, or
+// hidden behind a failed ranking, would be asked without being on screen, so
+// every new answer drops whoever it does not list.
+watch(recommendations.result, (result) => {
+  const listed = new Set(result?.recommendations.map((entry) => entry.reviewerId) ?? [])
+  recipientIds.value = recipientIds.value.filter((id) => listed.has(id))
+})
+
+const named = computed(() => recipientIds.value.length > 0)
+
+/** A named ask cannot wait for more people than it names. */
+const counts = computed(() => {
+  const most = named.value
+    ? Math.min(recipientIds.value.length, MAX_NEEDED_COMMITMENTS)
+    : MAX_NEEDED_COMMITMENTS
+  return Array.from({ length: most }, (_, index) => index + 1)
+})
+
+// The cap lifts again as more people are ticked, so ticking one person at a
+// time does not lose the count the author picked.
+const neededCommitments = computed({
+  get: () => Math.min(chosenCommitments.value, counts.value.length),
+  set: (value: number) => {
+    chosenCommitments.value = value
+  },
+})
+
+const submitLabel = computed(() => {
+  const count = recipientIds.value.length
+  if (count === 0) return 'Ask everyone who matches'
+  return count === 1 ? 'Ask 1 reviewer' : `Ask ${count} reviewers`
+})
 
 watch(
   () => props.pullRequest,
   () => {
     selectedSkills.value = []
+    recipientIds.value = []
     sameTeamOnly.value = false
-    neededCommitments.value = 1
+    chosenCommitments.value = 1
     note.value = ''
+    shown.value = FIRST_SHOWN
   },
 )
 
 function submit() {
   emit('submit', {
+    recipientIds: recipientIds.value,
     requiredSkills: selectedSkills.value,
-    sameTeamOnly: sameTeamOnly.value,
+    sameTeamOnly: named.value ? false : sameTeamOnly.value,
     neededCommitments: neededCommitments.value,
     note: blankToNull(note.value),
   })
@@ -97,7 +153,9 @@ function submit() {
           :description="
             skills.length === 0
               ? 'This repository has no skill vocabulary. Add one on the Repositories screen, or ask everybody available.'
-              : 'Everyone available who holds all of these will be asked. Pick none to ask everybody.'
+              : named
+                ? 'Ranks the matches below. The people you tick are asked whatever skills they hold.'
+                : 'Everyone available who holds all of these will be asked, unless you tick people below. Pick none to ask everybody.'
           "
         >
           <div class="flex flex-wrap gap-2">
@@ -113,13 +171,16 @@ function submit() {
 
         <UFormField
           label="Best matches"
-          description="Ranked on how much of the wanted skills and domains each person holds, then on fewer open reviews. With no skill picked, the pull request's own are wanted. The ask itself goes to everyone holding all the picked skills."
+          description="Ranked on how much of the wanted skills and domains each person holds, then on fewer open reviews. With no skill picked, the pull request's own are wanted. Tick people to ask only them; with nobody ticked the ask goes to everyone holding all the picked skills."
         >
           <ReviewerRecommendations
+            v-model:selected="recipientIds"
             :result="recommendations.result.value"
             :pending="recommendations.pending.value"
             :failure="recommendations.failure.value"
             :same-team-only="sameTeamOnly"
+            :can-show-more="canShowMore"
+            @more="showMore()"
           />
         </UFormField>
 
@@ -133,7 +194,11 @@ function submit() {
         <UCheckbox
           v-model="sameTeamOnly"
           label="Only my team"
-          description="Keeps the ask inside your own team. Nobody without a team recorded is in it."
+          :description="
+            named
+              ? 'Lists only your own team above. Nobody without a team recorded is in it.'
+              : 'Keeps the ask, and the list above, inside your own team. Nobody without a team recorded is in it.'
+          "
         />
 
         <UFormField label="Anything they should know" description="Optional.">
@@ -145,7 +210,7 @@ function submit() {
     <template #footer>
       <div class="flex justify-end gap-2 w-full">
         <UButton variant="ghost" color="neutral" @click="emit('close')">Cancel</UButton>
-        <UButton :loading="busy" @click="submit()">Ask</UButton>
+        <UButton :loading="busy" @click="submit()">{{ submitLabel }}</UButton>
       </div>
     </template>
   </UModal>

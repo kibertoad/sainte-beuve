@@ -111,10 +111,17 @@ it yourself, and a busy expert still outranks an idle stranger. The list is the
 people an ask could reach, so it never names you, the author, anybody already
 on the pull request or paused, and it keeps to your team when the ask does.
 
-Everyone available who holds all of those skills is asked, two ways at once. A
-page already open is pushed the request over server-sent events; a page opened
-an hour later fetches the same thing over REST. Neither is a fallback for the
-other, and both carry the same payload.
+Tick people in that list and the ask goes to them by name: exactly those
+people, whatever skills they hold, and each of them sees who else was asked. It
+can wait for no more people than it names. Tick nobody and everyone available
+who holds all of the skills is asked instead, inside your team if you said so.
+Either way anybody can still volunteer, because a skill list is not in a
+position to overrule somebody's own judgement of what they can review.
+
+The ask is delivered two ways at once. A page already open is pushed the
+request over server-sent events; a page opened an hour later fetches the same
+thing over REST. Neither is a fallback for the other, and both carry the same
+payload.
 
 The ask ANSWERS ITSELF. Once enough people have said they will review, it is
 resolved and disappears from everybody's inbox, including the people who never

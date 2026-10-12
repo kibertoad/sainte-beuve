@@ -28,6 +28,7 @@ function reviewer(overrides: Partial<Reviewer> = {}): Reviewer {
 
 function rule(overrides: Partial<AttentionAudienceRule> = {}): AttentionAudienceRule {
   return {
+    recipientIds: [],
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,
@@ -80,6 +81,36 @@ describe('isInAttentionAudience', () => {
     expect(isInAttentionAudience(reviewer({ team: 'Payments' }), rule({ team: 'Platform' }))).toBe(
       true,
     )
+  })
+})
+
+describe('isInAttentionAudience with named recipients', () => {
+  const named = rule({
+    recipientIds: ['r-1'],
+    requiredSkills: ['Payments'],
+    sameTeamOnly: true,
+    team: 'Platform',
+  })
+
+  it('asks a named person whatever the skill and team gate would say', () => {
+    expect(isInAttentionAudience(reviewer({ id: 'r-1', team: 'Mobile' }), named)).toBe(true)
+  })
+
+  it('asks nobody who was not named, even somebody the gate would let in', () => {
+    const insider = reviewer({ id: 'r-2', team: 'Platform', skills: ['Payments'] })
+    expect(isInAttentionAudience(insider, named)).toBe(false)
+  })
+
+  it('does not ping a named person who has paused since', () => {
+    expect(isInAttentionAudience(reviewer({ id: 'r-1', availability: 'paused' }), named)).toBe(
+      false,
+    )
+  })
+
+  it('never puts the requester in their own audience, even when named', () => {
+    expect(
+      isInAttentionAudience(reviewer({ id: 'asker' }), rule({ recipientIds: ['asker'] })),
+    ).toBe(false)
   })
 })
 
