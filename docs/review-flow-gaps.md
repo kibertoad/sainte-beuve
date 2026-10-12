@@ -141,8 +141,9 @@ already do.
 No GitLab webhook lands here, so a merge request never opens a board row by
 itself, and the label rules (`GitHubLabelRules`) are read for GitHub only.
 
-A signed GitLab webhook opens, labels and closes board rows the way the GitHub
-one does, under the same label rules.
+A GitLab webhook per org, verified against the secret token that org stored,
+opens, labels, settles and closes board rows the way the GitHub one does, under
+one host-neutral label vocabulary (`ReviewLabelRules`).
 
 ### 12. Challenging a finding
 

@@ -115,7 +115,9 @@ nothing.
 
 Three rules, named by `GITHUB_LABEL_REVIEW`, `GITHUB_LABEL_AI_REVIEW` and
 `GITHUB_LABEL_SKILL_PREFIX` (`needs-review`, `ai-review`, `skill:` by default,
-and shown on the Configuration screen so a team can read them off it):
+and shown on the Configuration screen so a team can read them off it). They are
+one vocabulary for both hosts: a GitLab merge request is labelled the same way,
+and the variables keep the prefix they were introduced under.
 
 - `needs-review` opens a review request and finds it a reviewer.
 - `ai-review` hands the pull request to cat-factory.
@@ -175,6 +177,59 @@ A **label** it cannot honour is a different case, and is acked rather than
 refused. A 5xx makes GitHub redeliver, and tracking a pull request is idempotent
 where an AI-review run is not: every retry would write another run and, once
 cat-factory is configured, submit another paid job.
+
+## What GitLab can make it do
+
+Deliveries arrive at `POST /webhooks/gitlab/<org-slug>`, and the default org's
+also at `POST /webhooks/gitlab`. GitLab does not sign a delivery: it sends the
+webhook's secret token back in `X-Gitlab-Token`, and that token is compared with
+the **GitLab webhook secret** stored on the org's GitLab configuration screen.
+There is no deployment variable for it, because the GitLab credential is an
+org's rather than the deployment's.
+
+The org is in the URL for the reason Slack's is, and the stored secret is what
+makes naming it safe. On the bare path a missing secret is answered 503 with the
+setting named; on an org's path an unknown slug, an org with no secret and a
+wrong token are one 403, so the status code cannot be used to list tenancies.
+
+| Event                                         | What happens                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| merge request opened / reopened               | Tracked on the board, unassigned (a draft waits until it leaves draft) |
+| merge request leaves draft                    | Tracked, unassigned                                                    |
+| merge request merged or closed                | The review is closed and the reminder clock stops                      |
+| merge request becomes approved                | Resolved to `approved`                                                 |
+| its approval is taken back                    | An `approved` review goes back on the clock                            |
+| the review label is added                     | Tracked if it was not, and handed to a reviewer                        |
+| the AI-review label is added                  | Handed to cat-factory, or acked and logged when it is not configured   |
+| a comment on a merge request mentions the bot | The command in it runs, and the bot answers on the merge request       |
+
+Approval follows GitLab's own rules: `approved` and `unapproved` are the merge
+request as a whole becoming, or ceasing to be, approved. One person approving
+under rules that want two settles nothing, the way a bare GitHub review comment
+does not. GitLab has no "changes requested" event, so a review settles that way
+only from the board.
+
+**Only a project the org registered is acted on**, as on GitHub: a verified
+delivery about any other project is acked and dropped (`ignored:unregistered`).
+The token proves who configured the webhook, not that the org took
+responsibility for the project.
+
+**Only people the directory knows are answered.** A GitLab note says nothing
+about how its author relates to the project, so a comment command runs only for
+somebody this org's reviewer directory holds by that GitLab handle. Anybody else
+gets silence, for the reason a GitHub stranger does.
+
+The bot is the account of the GitLab credential stored for the org (a pasted
+token or a sign-in), because that is the account its replies are posted as and
+therefore the name people mention. An org reaching GitLab only through the
+deployment's `GITLAB_TOKEN` has no account recorded, and comment commands are off
+until it stores one. Use a dedicated account (a project or group access token):
+the bot answers every mention of it, so a person's own token would make every
+mention of that person a command.
+
+Deliveries are not deduplicated by `X-Gitlab-Event-UUID`, any more than GitHub's
+are by delivery id. Every intent is safe to perform twice, and an AI review is
+held to one run in flight by its own admission rule.
 
 ## What Slack can make it do
 
@@ -367,7 +422,8 @@ another project still holds.
 
 The URLs are shown on the Configuration screen, filled in with this deployment's
 own base URL. They sit outside `/api/v1` deliberately: they are typed into a form
-on github.com and slack.com by hand, so they have to survive an API version bump.
+on github.com, gitlab.com and slack.com by hand, so they have to survive an API
+version bump.
 
 ### A GitHub App
 
@@ -399,6 +455,19 @@ A key still in PKCS#1 (`BEGIN RSA PRIVATE KEY`) is refused with the conversion
 command in the message, because that is the shape GitHub hands out and therefore
 the failure everybody meets first.
 
+### A GitLab webhook
+
+1. On the project, or on the group to cover all its projects: **Settings →
+   Webhooks → Add new webhook**.
+2. **URL**: as the GitLab configuration screen shows it,
+   `https://<your-api>/webhooks/gitlab/<org-slug>` (the default org may use
+   `https://<your-api>/webhooks/gitlab`).
+3. **Secret token**: any long random value. Store the same value as the
+   **GitLab webhook secret** on that screen.
+4. **Trigger**: `Merge request events` and `Comments`.
+5. Register the project on the Repositories screen, or link it in cat-factory
+   when the org follows its workspaces.
+
 ### A Slack app
 
 1. **api.slack.com/apps → Create New App → From scratch.**
@@ -420,13 +489,13 @@ the failure everybody meets first.
 
 ### Locally
 
-GitHub and Slack both have to reach the API, which a laptop is not. A tunnel is
+GitHub, GitLab and Slack all have to reach the API, which a laptop is not. A tunnel is
 enough:
 
 ```bash
 cloudflared tunnel --url http://localhost:8788
 ```
 
-and point the two Request URLs at whatever it prints. The outbound halves (posting
+and point the webhook and Request URLs at whatever it prints. The outbound halves (posting
 to Slack, commenting on GitHub) need no tunnel at all, so a local run can exercise
 most of this with just a bot token and a personal access token.

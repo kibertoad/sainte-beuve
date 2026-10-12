@@ -133,7 +133,6 @@ describe('GitHub and Slack connections', () => {
         appSlug: 'sainte-beuve',
         webhookSecret: 'secret',
         botLogin: null,
-        labels: harness.container.github.labels,
       },
     })
     await app.app.fetch(put(PAT_PATH, { token: 'ghp_0123456789abcd' }))
@@ -217,7 +216,6 @@ describe('GitHub and Slack connections', () => {
         appSlug: 'sainte-beuve',
         webhookSecret: null,
         botLogin: null,
-        labels: harness.container.github.labels,
       },
     })
     const { state, jar } = await startFlow(signing, `${CONNECTIONS}/github/app-install`)
@@ -278,7 +276,6 @@ describe('GitHub and Slack connections', () => {
         appSlug: 'sainte-beuve',
         webhookSecret: null,
         botLogin: null,
-        labels: harness.container.github.labels,
       },
     })
     const jar = cookieJar()
@@ -304,6 +301,25 @@ describe('GitHub and Slack connections', () => {
       github: { ...harness.container.github, webhookSecret: 'secret' },
     })
     expect((await github(verifying)).webhooksReady).toBe(true)
+  })
+
+  it("reports GitLab's intake from this org's own secret, URL and credential", async () => {
+    const gitlabOf = async (target: TestHarness) =>
+      (await connections(target)).vcs.find((row) => row.provider === 'gitlab')
+    expect(await gitlabOf(harness)).toMatchObject({
+      inboundIntake: true,
+      webhooksReady: false,
+      webhookPath: '/webhooks/gitlab/default',
+      botLogin: null,
+    })
+    const secret = await harness.app.fetch(
+      put('/api/v1/settings/integrations/gitlab-webhook-secret/token', {
+        token: 'the-gitlab-webhook-token',
+      }),
+    )
+    expect(secret.status).toBe(200)
+    expect(await secret.json()).toMatchObject({ state: 'stored', inUse: true })
+    expect((await gitlabOf(harness))?.webhooksReady).toBe(true)
   })
 })
 

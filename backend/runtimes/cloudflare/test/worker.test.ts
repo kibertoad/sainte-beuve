@@ -81,6 +81,7 @@ describe('sainte-beuve worker', () => {
         secrets: true,
         githubWebhooks: false,
         slackInteractivity: false,
+        gitlabWebhooks: false,
       },
     })
   })
@@ -162,6 +163,7 @@ describe('sainte-beuve worker', () => {
           account: null,
           inboundIntake: true,
           webhooksReady: false,
+          webhookPath: '/webhooks/github',
           botLogin: null,
           labels,
         },
@@ -174,8 +176,11 @@ describe('sainte-beuve worker', () => {
           availableMethods: ['pat'],
           appInstallable: false,
           account: null,
-          inboundIntake: false,
+          // The intake is served; nothing can be verified until this org
+          // stores the secret its GitLab webhook sends.
+          inboundIntake: true,
           webhooksReady: false,
+          webhookPath: '/webhooks/gitlab/default',
           botLogin: null,
           labels,
         },

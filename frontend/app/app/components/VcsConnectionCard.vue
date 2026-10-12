@@ -14,6 +14,12 @@ const props = defineProps<{
   connection: VcsConnection
   /** The pasted-token credential, so the card can offer that method too. */
   patStatus: IntegrationTokenStatus
+  /**
+   * The secret this org's webhooks are verified against, for a host whose intake
+   * is configured per org (GitLab). Null for one whose secret is the
+   * deployment's (GitHub's `GITHUB_WEBHOOK_SECRET`).
+   */
+  webhookSecretStatus?: IntegrationTokenStatus | null
   /** Where the API is served from, so the URLs to register can be shown. */
   apiBase: string
   busy?: boolean
@@ -25,16 +31,19 @@ const emit = defineEmits<{
   signOut: []
   savePat: [token: string]
   clearPat: []
+  saveWebhookSecret: [secret: string]
+  clearWebhookSecret: []
 }>()
 
 const pat = ref<{ clearDraft: () => void } | null>(null)
+const secretField = ref<{ clearDraft: () => void } | null>(null)
 
-/** Called by the page once a save has landed, so a refusal keeps what was pasted. */
-function clearDraft() {
-  pat.value?.clearDraft()
-}
-
-defineExpose({ clearDraft })
+// One holder per credential, so storing a token cannot clear a webhook secret
+// somebody had just pasted beside it. The page clears whichever call landed.
+defineExpose({
+  pat: { clearDraft: () => pat.value?.clearDraft() },
+  webhookSecret: { clearDraft: () => secretField.value?.clearDraft() },
+})
 
 const hostName = computed(() => vcsDisplayName(props.connection.provider))
 
@@ -54,7 +63,16 @@ const offers = computed(() => ({
  * are typed into a form on the host by hand and a wrong one fails silently: the
  * host records a delivery nobody here ever sees.
  */
-const webhookUrl = computed(() => `${props.apiBase}/webhooks/${props.connection.provider}`)
+const webhookUrl = computed(() =>
+  props.connection.webhookPath === null ? null : `${props.apiBase}${props.connection.webhookPath}`,
+)
+
+/** What turns an unverifiable intake into a working one, which differs per host. */
+const webhookFix = computed(() =>
+  props.webhookSecretStatus == null
+    ? 'Nothing arriving from the host can be verified until GITHUB_WEBHOOK_SECRET matches the secret set on the App or repository webhook. Every delivery is answered 503 until then.'
+    : 'Nothing arriving from the host can be verified until the secret token set on the GitLab webhook is stored above. Every delivery is refused until then.',
+)
 const callbackUrl = computed(
   () => `${props.apiBase}${signInCallbackPath(props.connection.provider)}`,
 )
@@ -157,6 +175,19 @@ const shadowedAdvice = computed(() =>
       @clear="emit('clearPat')"
     />
 
+    <template v-if="webhookSecretStatus">
+      <USeparator class="my-4" />
+      <CredentialField
+        ref="secretField"
+        :status="webhookSecretStatus"
+        :busy="busy"
+        placeholder="The webhook's secret token"
+        description="The secret token set on the GitLab webhook, which GitLab sends with every delivery. It belongs to this org: a delivery carrying it acts on this board and no other."
+        @save="emit('saveWebhookSecret', $event)"
+        @clear="emit('clearWebhookSecret')"
+      />
+    </template>
+
     <USeparator class="my-4" />
 
     <div class="text-sm">
@@ -167,12 +198,12 @@ const shadowedAdvice = computed(() =>
         color="warning"
         variant="subtle"
         title="Inbound deliveries are refused"
-        description="Nothing arriving from the host can be verified until GITHUB_WEBHOOK_SECRET matches the secret set on the App or repository webhook. Every delivery is answered 503 until then."
+        :description="webhookFix"
       />
       <dl
         class="grid grid-cols-1 gap-x-4 gap-y-1 text-muted sm:grid-cols-[10rem_1fr] [&_code]:break-all"
       >
-        <template v-if="connection.inboundIntake">
+        <template v-if="webhookUrl">
           <dt class="font-medium text-default sm:font-normal sm:text-muted">Webhook URL</dt>
           <dd>
             <code>{{ webhookUrl }}</code>
@@ -186,7 +217,13 @@ const shadowedAdvice = computed(() =>
           <dt class="font-medium text-default sm:font-normal sm:text-muted">Bot mention</dt>
           <dd>
             <code v-if="connection.botLogin">@{{ connection.botLogin }} review</code>
-            <span v-else>not configured (set GITHUB_BOT_LOGIN to answer mentions)</span>
+            <span v-else-if="webhookSecretStatus == null"
+              >not configured (set GITHUB_BOT_LOGIN to answer mentions)</span
+            >
+            <span v-else
+              >the account of a token or sign-in stored here, once there is one (a dedicated account
+              is best: the bot answers every mention of it)</span
+            >
           </dd>
         </template>
       </dl>

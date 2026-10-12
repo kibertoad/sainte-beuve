@@ -9,7 +9,6 @@ import {
   VCS_PROVIDERS,
   vcsDisplayName,
   vcsOauthCredentialKey,
-  vcsPatCredentialKey,
 } from '@sainte-beuve/contracts'
 import type { RoundTripState } from '@sainte-beuve/kernel'
 import { type AppContainer, withOrg } from '../../container.js'
@@ -17,11 +16,12 @@ import { STATE_LIFETIME_MS } from '../../crypto/HmacStateSigner.js'
 import { mintNonce } from '../../crypto/tokens.js'
 import { callbackOrigin } from '../../http/callbackOrigin.js'
 import { requireCapability } from '../../http/errors.js'
-import { resolveVcs } from '../../integrations/resolve.js'
+import { resolveVcs, storedCredentialAccount } from '../../integrations/resolve.js'
 import { OrgService } from '../orgs/OrgService.js'
 import { CatFactoryConnectionService } from './CatFactoryConnectionService.js'
 import { notOurState, startedByThisBrowser } from './roundTrip.js'
 import { slackConnection } from './slackConnection.js'
+import { vcsInbound } from './vcsInbound.js'
 import { establishSession, type IssuedSession, storeCredential } from './signIn.js'
 
 /**
@@ -281,22 +281,15 @@ export class ConnectionsService {
 
   private async connection(provider: VcsProvider): Promise<VcsConnection> {
     const active = await resolveVcs(this.container, provider)
-    // `appSlug` is deliberately not on the wire: the install URL is its own
-    // route, so the screen never has to know how one is assembled.
-    const { webhookSecret, botLogin, labels } = this.container.github
+    const account = await storedCredentialAccount(this.container, provider, active?.source ?? null)
     return {
       provider,
       activeMethod: active?.source ?? null,
       availableMethods: this.availableMethods(provider),
       appInstallable: this.appInstallable(provider),
-      account: await this.accountFor(provider, active?.source ?? null),
-      // Inbound deliveries are a GitHub intake today; a GitLab webhook is its
-      // own slice, and reporting the GitHub secret against it would claim a
-      // capability that does not exist.
-      inboundIntake: provider === 'github',
-      webhooksReady: provider === 'github' && webhookSecret !== null,
-      botLogin: provider === 'github' ? botLogin : null,
-      labels,
+      account,
+      ...(await vcsInbound(this.container, provider, account)),
+      labels: this.container.labels,
     }
   }
 
@@ -321,21 +314,6 @@ export class ConnectionsService {
     return (
       this.container.gateways?.vcsAsApp('github') != null && this.container.github.appSlug !== null
     )
-  }
-
-  /**
-   * The account behind the active credential. Read off the stored row rather than
-   * from the host: the handle was captured when the credential was stored, and a
-   * status screen that polls must not spend a request per poll to repeat it. An
-   * App acts as itself rather than as a person, so it has none.
-   */
-  private async accountFor(
-    provider: VcsProvider,
-    method: VcsAuthMethod | null,
-  ): Promise<string | null> {
-    if (method !== 'oauth' && method !== 'pat') return null
-    const key = method === 'oauth' ? vcsOauthCredentialKey(provider) : vcsPatCredentialKey(provider)
-    return (await this.container.repositories.integrationTokens.get(key))?.subject ?? null
   }
 
   private async mintState(

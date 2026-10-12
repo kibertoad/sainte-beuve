@@ -25,7 +25,7 @@ import {
   devModeFrom,
   environmentApiKeyFrom,
   createContainer,
-  DEFAULT_GITHUB_LABELS,
+  DEFAULT_REVIEW_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
   type EnvironmentVcsGateways,
   InMemoryAttentionBus,
@@ -284,11 +284,11 @@ export function containerFor(
       appSlug: env.GITHUB_APP_SLUG || null,
       webhookSecret: env.GITHUB_WEBHOOK_SECRET || null,
       botLogin: env.GITHUB_BOT_LOGIN || null,
-      labels: {
-        review: env.GITHUB_LABEL_REVIEW || DEFAULT_GITHUB_LABELS.review,
-        aiReview: env.GITHUB_LABEL_AI_REVIEW || DEFAULT_GITHUB_LABELS.aiReview,
-        skillPrefix: env.GITHUB_LABEL_SKILL_PREFIX || DEFAULT_GITHUB_LABELS.skillPrefix,
-      },
+    },
+    labels: {
+      review: env.GITHUB_LABEL_REVIEW || DEFAULT_REVIEW_LABELS.review,
+      aiReview: env.GITHUB_LABEL_AI_REVIEW || DEFAULT_REVIEW_LABELS.aiReview,
+      skillPrefix: env.GITHUB_LABEL_SKILL_PREFIX || DEFAULT_REVIEW_LABELS.skillPrefix,
     },
     slack: {
       signingSecret: env.SLACK_SIGNING_SECRET || null,

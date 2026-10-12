@@ -2,6 +2,8 @@ import {
   CAT_FACTORY_WEBHOOK_PATH,
   DEFAULT_ORG_SLUG,
   GITHUB_WEBHOOK_PATH,
+  GITLAB_ORG_WEBHOOK_PATH,
+  GITLAB_WEBHOOK_PATH,
   SLACK_ORG_WEBHOOK_PATH,
   SLACK_WEBHOOK_PATH,
 } from '@sainte-beuve/contracts'
@@ -15,11 +17,13 @@ import type { AppEnv } from '../../http/env.js'
 import { OrgService } from '../orgs/OrgService.js'
 import { RepositorySyncService } from '../projects/RepositorySyncService.js'
 import { GitHubWebhookService } from './GitHubWebhookService.js'
+import type { GitLabIntake } from './GitLabWebhookService.js'
+import { GitLabWebhookService, unverifiedGitLabDelivery } from './GitLabWebhookService.js'
 import type { SlackIntake } from './SlackWebhookService.js'
 import { SlackWebhookService, unverifiedSlackRequest } from './SlackWebhookService.js'
 
 /**
- * Inbound webhooks from GitHub and Slack.
+ * Inbound webhooks from GitHub, GitLab and Slack.
  *
  * Both routes read the RAW body, because both signature schemes are computed
  * over the exact bytes sent and parsing first re-serialises them. Beyond that
@@ -36,24 +40,16 @@ import { SlackWebhookService, unverifiedSlackRequest } from './SlackWebhookServi
  * WHICH ORG each lands in is answered differently, because the two deliveries
  * carry different facts. A GitHub delivery names a repository and the project
  * registry says which tenancy claimed it, so `GitHubWebhookService` places
- * itself. A Slack command names a Slack user and a channel, which place nothing,
- * so the org is in the URL its app posts to — and the org's own signing secret,
- * which the service then verifies against, is what makes naming it safe.
+ * itself. A GitLab delivery names a project too, but the token that proves it
+ * came from GitLab is one org's credential, so its org is in the URL as well and
+ * the registry is checked after. A Slack command names a Slack user and a
+ * channel, which place nothing, so the org is in the URL its app posts to. The
+ * org's own signing secret, which the service then verifies against, is what
+ * makes naming it safe.
  */
 export function webhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-
-  app.post(GITHUB_WEBHOOK_PATH, async (c) => {
-    const outcome = await new GitHubWebhookService(c.get('container')).handle({
-      event: c.req.header('X-GitHub-Event') ?? 'unknown',
-      rawBody: await c.req.text(),
-      signature: c.req.header('X-Hub-Signature-256') ?? null,
-    })
-    // 202, not 200: what the delivery asked for has been done, and GitHub's
-    // delivery log is not the place to read a review board out of. The outcome
-    // rides along because it is what makes a redelivery from that log legible.
-    return c.json(outcome, 202)
-  })
+  mountGitHub(app)
 
   // The default org's URL, and the one every deployment configured before the
   // intake knew about tenancies. It stays a route of its own rather than being
@@ -97,8 +93,64 @@ export function webhookController(): Hono<AppEnv> {
     )
   })
 
+  mountGitLab(app)
   mountCatFactoryPush(app)
   return app
+}
+
+function mountGitHub(app: Hono<AppEnv>): void {
+  app.post(GITHUB_WEBHOOK_PATH, async (c) => {
+    const outcome = await new GitHubWebhookService(c.get('container')).handle({
+      event: c.req.header('X-GitHub-Event') ?? 'unknown',
+      rawBody: await c.req.text(),
+      signature: c.req.header('X-Hub-Signature-256') ?? null,
+    })
+    // 202, not 200: what the delivery asked for has been done, and GitHub's
+    // delivery log is not the place to read a review board out of. The outcome
+    // rides along because it is what makes a redelivery from that log legible.
+    return c.json(outcome, 202)
+  })
+}
+
+/**
+ * GitLab deliveries, placed the way Slack commands are: by the URL, with the
+ * org's own stored secret making the placement true. The bare path is the
+ * default org's, where a missing secret may be named; the org path answers every
+ * refusal before a verified token with one 403.
+ */
+function mountGitLab(app: Hono<AppEnv>): void {
+  app.post(GITLAB_WEBHOOK_PATH, async (c) =>
+    gitlabReply(c, c.get('container'), { orgSlug: DEFAULT_ORG_SLUG, namedInUrl: false }),
+  )
+  app.post(GITLAB_ORG_WEBHOOK_PATH, async (c) => {
+    const container = c.get('container')
+    // Before the slug is looked up, so a POST with no token costs nothing.
+    if (!c.req.header('X-Gitlab-Token')) {
+      throw refusedGitLab(c, 'the request carried no GitLab token')
+    }
+    const org = await new OrgService(container).bySlugOrNull(c.req.param('org'))
+    if (org === null) throw refusedGitLab(c, 'the URL named an org this deployment does not hold')
+    return gitlabReply(c, withOrg(container, org.id), { orgSlug: org.slug, namedInUrl: true })
+  })
+}
+
+function refusedGitLab(c: Context<AppEnv>, reason: string): Error {
+  c.get('container').logger.debug({ path: c.req.path, reason }, 'refused a GitLab delivery')
+  return unverifiedGitLabDelivery()
+}
+
+/** 202 with the outcome, for the reason the GitHub route gives. */
+async function gitlabReply(
+  c: Context<AppEnv>,
+  container: AppContainer,
+  intake: GitLabIntake,
+): Promise<Response> {
+  const outcome = await new GitLabWebhookService(container, intake).handle({
+    rawBody: await c.req.text(),
+    token: c.req.header('X-Gitlab-Token') ?? null,
+    eventId: c.req.header('X-Gitlab-Event-UUID') ?? null,
+  })
+  return c.json(outcome, 202)
 }
 
 /**

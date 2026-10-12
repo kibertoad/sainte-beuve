@@ -19,11 +19,9 @@ export {
 } from './github/client.js'
 export { appTokenSource, type GitHubTokenSource, staticTokenSource } from './github/credentials.js'
 export {
-  type BotVerb,
   botMentionLogin,
   type GitHubDelivery,
   type GitHubEventPayload,
-  type GitHubIntent,
   type GitHubIntentContext,
   type GitHubIssuePayload,
   type GitHubPullRequestPayload,
@@ -49,6 +47,19 @@ export {
   type GitLabIdentityGatewayOptions,
 } from './gitlab/GitLabIdentityGateway.js'
 export { type GitLabGatewayOptions, GitLabVcsGateway } from './gitlab/GitLabVcsGateway.js'
+export {
+  type GitLabEventPayload,
+  type GitLabIntentContext,
+  interpretGitLabDelivery,
+} from './gitlab/events.js'
+export { verifyGitLabToken } from './gitlab/webhooks.js'
+export {
+  type BotVerb,
+  type IntakeIntent,
+  labelIntent,
+  parseMentionCommand,
+  skillsFromLabels,
+} from './intake.js'
 export {
   DEFAULT_SNOOZE_HOURS,
   parseCommandText,

@@ -17,8 +17,8 @@ and GitLab are where reviews live; Slack is where the nudge arrives; the AI
 review runs on a [cat-factory](https://github.com/kibertoad/cat-factory)
 instance, local or centralized.
 
-Label a pull request `needs-review` and it lands on the board with a reviewer on it.
-Mention the bot in a comment and it answers there. Take the review from a Slack
+Label a pull request or a merge request `needs-review` and it lands on the board
+with a reviewer on it. Mention the bot in a comment and it answers there. Take the review from a Slack
 button, or snooze it with `/review snooze`. How all of that is wired, and what has
 to be registered where, is [docs/integrations.md](./docs/integrations.md).
 
@@ -253,7 +253,8 @@ the strongest one present is what calls are made with.
 GitLab has the same order minus the App, which it has no equivalent of: a
 sign-in, then a pasted token, then `GITLAB_TOKEN`. One `GITLAB_BASE_URL`
 configures a self-managed install, because GitLab serves its API and its OAuth
-endpoints under the same root.
+endpoints under the same root. GitLab's webhook belongs to an org, like Slack's
+app: it posts to `/webhooks/gitlab/<org>` with the secret token that org stored.
 
 Slack needs a bot token to post, and separately a signing secret to trust the
 `/review` command and the message buttons coming back. Both belong to an ORG

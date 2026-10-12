@@ -1,4 +1,4 @@
-import type { GitHubLabelRules } from '@sainte-beuve/contracts'
+import type { ReviewLabelRules } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   type GitHubEventPayload,
@@ -12,7 +12,7 @@ import {
 // it does nothing" is a unit test rather than a thing somebody finds out in a
 // repository, and it needs no store, no token and no HTTP.
 
-const LABELS: GitHubLabelRules = {
+const LABELS: ReviewLabelRules = {
   review: 'needs-review',
   aiReview: 'ai-review',
   skillPrefix: 'skill:',

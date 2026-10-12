@@ -38,12 +38,13 @@ export const vcsAuthMethodSchema = v.picklist(['app', 'oauth', 'pat', 'environme
 export type VcsAuthMethod = v.InferOutput<typeof vcsAuthMethodSchema>
 
 /**
- * The labels that make GitHub drive the board, so the screen can tell a team what
- * to type on a pull request. Deployment configuration rather than stored state:
- * they are read from the environment, and a team that renames one renames it in
- * one place.
+ * The labels that make a host drive the board, so the screen can tell a team
+ * what to type on a pull request or a merge request. One vocabulary for every
+ * host: a team with projects on GitHub and on GitLab labels both the same way.
+ * Deployment configuration rather than stored state: they are read from the
+ * environment, and a team that renames one renames it in one place.
  */
-export const githubLabelRulesSchema = v.object({
+export const reviewLabelRulesSchema = v.object({
   /** Adding this label opens a review request and routes it. */
   review: v.string(),
   /** Adding this label hands the pull request to cat-factory. */
@@ -51,7 +52,7 @@ export const githubLabelRulesSchema = v.object({
   /** `skill:payments` on a pull request becomes the required skill `payments`. */
   skillPrefix: v.string(),
 })
-export type GitHubLabelRules = v.InferOutput<typeof githubLabelRulesSchema>
+export type ReviewLabelRules = v.InferOutput<typeof reviewLabelRulesSchema>
 
 export const vcsConnectionSchema = v.object({
   provider: vcsProviderSchema,
@@ -94,9 +95,20 @@ export const vcsConnectionSchema = v.object({
    * answers 503 to the host on every event.
    */
   webhooksReady: v.boolean(),
-  /** The login the bot answers to when it is @-mentioned in a comment. */
+  /**
+   * Where this host posts its deliveries, as a path to hang off the API's own
+   * origin. Null when the host has no intake. On the response rather than built
+   * in the SPA because GitLab's differs per org: the slug in it is what places a
+   * delivery on this board, the way Slack's request path does.
+   */
+  webhookPath: v.nullable(v.string()),
+  /**
+   * The handle the bot answers to when it is @-mentioned in a comment. On GitHub
+   * the deployment's `GITHUB_BOT_LOGIN`; on GitLab the account of the credential
+   * stored here, because that is the account the bot comments as.
+   */
   botLogin: v.nullable(v.string()),
-  labels: githubLabelRulesSchema,
+  labels: reviewLabelRulesSchema,
 })
 export type VcsConnection = v.InferOutput<typeof vcsConnectionSchema>
 

@@ -220,6 +220,9 @@ function inUse(integrationId: IntegrationId, active: ActiveCredentials): boolean
     // whole answer — but only in the default org does the other source exist at
     // all, which is why this is a resolution rather than a row read.
     'slack-signing-secret': active.slackSigning === 'stored',
+    // The only source there is: a stored GitLab webhook secret is the one
+    // every delivery to this org is verified against.
+    'gitlab-webhook-secret': true,
     // There is no other source, so the stored key is in use once its instance
     // is configured too.
     'cat-factory': active.catFactory,

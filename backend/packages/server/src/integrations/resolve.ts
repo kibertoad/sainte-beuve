@@ -232,6 +232,43 @@ export async function resolveSlackSigningSecret(
 }
 
 /**
+ * The secret this org's GitLab webhooks send in `X-Gitlab-Token`.
+ *
+ * Stored only: there is no deployment variable to fall back to, because a GitLab
+ * credential is an org's (a pasted token or a sign-in) rather than the
+ * deployment's, and the webhook belongs to whoever holds it.
+ */
+export async function resolveGitLabWebhookSecret(container: AppContainer): Promise<string | null> {
+  return openCredential(container, 'gitlab-webhook-secret')
+}
+
+/**
+ * The account behind a credential this deployment stored, read off the stored
+ * row: the handle was captured when the credential was stored, so this costs no
+ * request to the host. An App and an environment token have none recorded.
+ */
+export async function storedCredentialAccount(
+  container: AppContainer,
+  provider: VcsProvider,
+  method: VcsAuthMethod | null,
+): Promise<string | null> {
+  if (method !== 'oauth' && method !== 'pat') return null
+  const key = method === 'oauth' ? vcsOauthCredentialKey(provider) : vcsPatCredentialKey(provider)
+  return (await container.repositories.integrationTokens.get(key))?.subject ?? null
+}
+
+/**
+ * The GitLab username the bot answers to: the account of the credential its
+ * replies are posted with, because that is the name people see on the reply and
+ * the one they will mention. Null when that credential records no account,
+ * which turns comment commands off rather than guessing a name.
+ */
+export async function resolveGitLabBotUsername(container: AppContainer): Promise<string | null> {
+  const active = await resolveVcs(container, 'gitlab')
+  return storedCredentialAccount(container, 'gitlab', active?.source ?? null)
+}
+
+/**
  * The AI reviewer for this org, able to file: its stored key, on its stored
  * instance, under its stored service. Null until all three are on the
  * Configuration screen. There is no environment fallback (see

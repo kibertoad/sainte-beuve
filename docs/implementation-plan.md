@@ -96,6 +96,10 @@ provider)` from that host's own credential. Above the adapter there is no
 - **GitLab**, behind the same port as GitHub: listing merge requests, reviewer
   changes (read-merge-write, because GitLab's update replaces the list),
   comments, the account read, and a sign-in.
+- **GitLab intake**: a webhook per org, verified against the token the org
+  stored, that opens, labels, settles and closes board rows the way GitHub's
+  deliveries do, with the same label vocabulary and the same bot commands for
+  people the org's directory knows.
 - The review board API: register a pull request, list it, route it to a reviewer,
   move it through its statuses, delegate it to cat-factory, read the run back.
 - **The AI-review loop, end to end**: a `review` task filed on cat-factory, the
@@ -166,7 +170,6 @@ provider)` from that host's own credential. Above the adapter there is no
 | Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                                                        |
 | No announcement channel per org         | `SLACK_CHANNEL_ID` names a channel in the deployment's own workspace, so it is the default org's and is not lent across the boundary. A named org posts and nudges over its own bot token and has nowhere to announce until it can store a channel of its own. |
 | A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                                                         |
-| No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                                             |
 
 ## Slices, in order
 
