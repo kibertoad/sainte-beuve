@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
-import type { RepositoryKey } from '@sainte-beuve/kernel'
+import type { ProjectRef } from '@sainte-beuve/contracts'
 import type { ConformanceCase } from './case.js'
 import { conformanceCase } from './case.js'
 import { pullRequest, review } from './fixtures.js'
 
-const API: RepositoryKey = { provider: 'github', owner: 'platform', repo: 'api' }
+const API: ProjectRef = { provider: 'github', owner: 'platform', repo: 'api' }
 
 /** One repository's review history: what a reviewer's familiarity is counted from. */
 export const reviewHistoryCases: readonly ConformanceCase[] = [
@@ -53,6 +53,24 @@ export const reviewHistoryCases: readonly ConformanceCase[] = [
       )
     },
   ),
+
+  conformanceCase('a repository history matches its path whatever the case', async (repos) => {
+    await repos.reviews.create(
+      review('rev-1', {
+        status: 'approved',
+        pullRequest: pullRequest({ owner: 'Platform', repo: 'API' }),
+      }),
+    )
+    const rows = await repos.reviews.listForRepository(API, {
+      status: ['approved'],
+      since: 0,
+      limit: 10,
+    })
+    assert.deepStrictEqual(
+      rows.map((row) => row.id),
+      ['rev-1'],
+    )
+  }),
 
   conformanceCase('a repository history starts at `since` and stops at the cap', async (repos) => {
     await repos.reviews.create(review('rev-1', { status: 'approved', createdAt: 1_000 }))

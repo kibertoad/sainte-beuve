@@ -9,9 +9,11 @@
 
 A board lookup by pull request tells GitHub and GitLab apart.
 
-`ReviewRequestRepository.getByPullRequest` takes a `PullRequestKey` (provider,
-owner, repo, number) and every store filters on the provider. Before, a GitHub
-pull request and a GitLab merge request with the same names resolved to each
-other's board row. D1 and Postgres gain a `pr_provider` column on
-`review_requests`, backfilled from each row's payload, and the lookup index
-includes it.
+`ReviewRequestRepository.getByPullRequest` takes a `PullRequestAddress`
+(provider, owner, repo, number) and matches on `pullRequestKey`, and
+`listForRepository` takes a `ProjectRef` and matches on `projectRefKey`. Before,
+a GitHub pull request and a GitLab merge request with the same names resolved to
+each other's board row, and a path that differed only in case was a second pull
+request. D1 and Postgres replace the `pr_owner`, `pr_repo` and `pr_number`
+columns of `review_requests` with `pull_request_key` and `repo_key`, backfilled
+from each row, and both lookup indexes are rebuilt on them.

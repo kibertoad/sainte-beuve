@@ -3,18 +3,19 @@ import type {
   IdentityProvider,
   LinkedIdentity,
   Project,
+  ProjectRef,
   Reminder,
   ReminderStatus,
   Reviewer,
   ReviewRequest,
   ReviewStatus,
-  VcsProvider,
 } from '@sainte-beuve/contracts'
 import type { EpochMs } from '../domain/types.js'
 import type { ApiKeyRepository, SessionRepository } from './auth.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
 import type { ExternalRepositoryRepository } from './external-repositories.js'
 import type { TeamRepository } from './teams.js'
+import type { PullRequestAddress } from './vcs.js'
 import type { AttentionRepository, ReviewCommitmentRepository } from './attention.js'
 
 /**
@@ -56,18 +57,6 @@ export interface ReviewerRepository {
  */
 export type ReviewListOrder = 'newest' | 'oldest'
 
-/** What names one repository on one host. A `PullRequestRef` is one. */
-export interface RepositoryKey {
-  provider: VcsProvider
-  owner: string
-  repo: string
-}
-
-/** What names one pull request on one host. A `PullRequestRef` is one. */
-export interface PullRequestKey extends RepositoryKey {
-  number: number
-}
-
 export interface ReviewRequestRepository {
   /**
    * The board, newest first unless asked otherwise, ties broken on the id.
@@ -90,21 +79,21 @@ export interface ReviewRequestRepository {
   getById(reviewId: string): Promise<ReviewRequest | null>
   /**
    * Look up by pull request so a webhook replay updates the row instead of
-   * duplicating it. The host is part of the key: `platform/api#12` on GitHub
-   * and on GitLab are two different changes.
+   * duplicating it. Matched on `pullRequestKey`: the host is part of it, and
+   * the path is compared without case.
    */
-  getByPullRequest(ref: PullRequestKey): Promise<ReviewRequest | null>
+  getByPullRequest(ref: PullRequestAddress): Promise<ReviewRequest | null>
   /**
    * One repository's reviews in the named statuses, created at or after `since`,
    * newest first with the id as the tie-break, capped at `limit`. What a
    * reviewer's familiarity with a repository is counted from.
    *
-   * The host is part of the key here too: the same owner and repo on the other
-   * host is another repository, and its history would credit people with
-   * reviews of code they never read.
+   * Matched on `projectRefKey`: the same owner and repo on the other host is
+   * another repository, and its history would credit people with reviews of
+   * code they never read.
    */
   listForRepository(
-    repository: RepositoryKey,
+    repository: ProjectRef,
     filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
   ): Promise<ReviewRequest[]>
   create(review: ReviewRequest): Promise<ReviewRequest>

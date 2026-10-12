@@ -171,6 +171,7 @@ and number alone. A GitHub pull request and a GitLab merge request with the same
 names resolve to each other's board row, so an intake for one can update the
 other's review or refuse to track it.
 
-The provider is part of the key: the port takes it, all three stores filter on
-it, and both durable stores carry a `pr_provider` column backfilled from the
-payload, with the lookup index leading on it.
+A board row is looked up by the kernel's `pullRequestKey` and a repository's
+history by `projectRefKey`, the keys projects and commitments already use, so
+the host is part of each and the path is compared without case. Both durable
+stores carry them as columns, backfilled from each row.

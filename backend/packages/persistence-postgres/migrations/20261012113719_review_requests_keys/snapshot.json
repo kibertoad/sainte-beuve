@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "b2bd2893-abf8-4c51-86d7-de5b005c47c1",
+  "id": "87ddbf59-617a-411e-a160-6a99b71cb7fb",
   "prevIds": ["0dd7e97a-19ab-4933-8ab4-a5b11cd79807"],
   "ddl": [
     {
@@ -960,7 +960,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "pr_provider",
+      "name": "pull_request_key",
       "entityType": "columns",
       "schema": "public",
       "table": "review_requests"
@@ -973,33 +973,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "pr_owner",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "review_requests"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "pr_repo",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "review_requests"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "pr_number",
+      "name": "repo_key",
       "entityType": "columns",
       "schema": "public",
       "table": "review_requests"
@@ -1715,28 +1689,7 @@
           "opclass": null
         },
         {
-          "value": "pr_provider",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "pr_owner",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "pr_repo",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "pr_number",
+          "value": "pull_request_key",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -1764,21 +1717,7 @@
           "opclass": null
         },
         {
-          "value": "pr_provider",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "pr_owner",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "pr_repo",
+          "value": "repo_key",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,

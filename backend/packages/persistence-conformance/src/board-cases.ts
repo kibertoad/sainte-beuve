@@ -118,6 +118,22 @@ export const reviewCases: readonly ConformanceCase[] = [
     },
   ),
 
+  conformanceCase('a pull request is found whatever the case of its path', async (repos) => {
+    // Both hosts treat the path without case, so a webhook's `Platform/API` and
+    // a hand-entered `platform/api` are one pull request.
+    await repos.reviews.create(
+      review('rev-1', { pullRequest: pullRequest({ owner: 'Platform', repo: 'API' }) }),
+    )
+    const found = await repos.reviews.getByPullRequest({
+      provider: 'github',
+      owner: 'platform',
+      repo: 'api',
+      number: 12,
+    })
+    assert.strictEqual(found?.id, 'rev-1')
+    assert.strictEqual(found?.pullRequest.owner, 'Platform')
+  }),
+
   conformanceCase('a review patch touches the fields it names', async (repos) => {
     await repos.reviews.create(review('rev-1'))
     const updated = await repos.reviews.update('rev-1', {
