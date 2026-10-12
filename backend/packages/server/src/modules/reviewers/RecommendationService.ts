@@ -15,7 +15,7 @@ import {
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { readReviewHistory } from './pastReviews.js'
-import { loadPullRequestContext, wantedFor } from './wanted.js'
+import { wantedFor } from './wanted.js'
 
 /**
  * Who an author asking for attention should pick for a pull request, best first.
@@ -47,13 +47,14 @@ export class RecommendationService {
    */
   async rank(viewer: Reviewer, input: RecommendReviewers, wanted: MatchTarget | null = null) {
     const { pullRequest } = input
-    const [candidates, context, history] = await Promise.all([
-      this.container.repositories.reviewers.list(),
-      loadPullRequestContext(this.container, pullRequest),
+    const { repositories } = this.container
+    const [candidates, review, project, history] = await Promise.all([
+      repositories.reviewers.list(),
+      repositories.reviews.getByPullRequest(pullRequest),
+      wanted === null ? repositories.projects.getByRef(pullRequest) : null,
       readReviewHistory(this.container, pullRequest),
     ])
-    const { review } = context
-    const target = wanted ?? wantedFor(input.requiredSkills, context)
+    const target = wanted ?? wantedFor(input.requiredSkills, { project, review })
     const { ranked, shortfallReason } = rankCandidates({
       ...target,
       candidates,

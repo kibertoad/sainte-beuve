@@ -58,9 +58,9 @@ export type OrgSlug = v.InferOutput<typeof orgSlugSchema>
  */
 /**
  * An area of the product or the business a repository belongs to and a
- * reviewer knows (`billing`, `onboarding`). Unlike a skill it is a preference
- * rather than a gate: a reviewer who knows a repository's domains is drawn more
- * often for its reviews, and one who knows none of them still can be.
+ * reviewer knows (`billing`, `onboarding`). Domains count alongside skills in
+ * one share of what a review wants: a reviewer who knows a repository's domains
+ * is drawn more often for its reviews, and one who knows none of them still can be.
  */
 export const domainSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64))
 export type Domain = v.InferOutput<typeof domainSchema>

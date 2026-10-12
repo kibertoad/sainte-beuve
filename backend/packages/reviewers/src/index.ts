@@ -3,7 +3,7 @@
 // Seven decisions, all pure. Three are over the same candidate list: which
 // reviewer the router picks (`selection`), who an attention request is addressed
 // to (`attention`), and which of a host's open pull requests belong to the person
-// in front of the workspace (`workspace`). They share the skill gate and the
+// in front of the workspace (`workspace`). They share the measure of fit and the
 // handle comparison on purpose, so a ping cannot reach somebody the router would
 // have refused. The fourth is upstream of all of them: whether a host account
 // may become a person in this org at all (`enrolment`). The fifth is downstream:

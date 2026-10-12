@@ -159,7 +159,7 @@ function submit() {
           label="Skills the change wants"
           :description="
             skills.length === 0
-              ? 'This repository has no skill vocabulary. Add one on the Repositories screen. Until then the ask is matched on the repository\'s domains, or reaches everybody available if it has none.'
+              ? 'This repository has no skill vocabulary. Add one on the Repositories screen. Until then the ask is matched on the pull request\'s own skills and the repository\'s domains, or reaches everybody available if there are none.'
               : named
                 ? 'Ranks the matches below. The people you tick are asked whatever skills they hold.'
                 : 'Everyone available who holds at least half of these and the repository\'s domains will be asked, unless you tick people below. Pick none to match on the pull request\'s own skills.'

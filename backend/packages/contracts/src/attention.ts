@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { domainSchema } from './orgs.js'
 import { pullRequestPeopleSchema } from './recommendations.js'
 import { skillSchema } from './reviewers.js'
 import { pullRequestRefSchema } from './vcs.js'
@@ -113,7 +114,7 @@ export const attentionRequestSchema = v.object({
    * skills. A factory default, so a request stored before domains counted
    * decodes as one that wants none.
    */
-  domains: v.optional(v.array(skillSchema), () => []),
+  domains: v.optional(v.array(domainSchema), () => []),
   /**
    * Whether the ask stays inside one team. On a named ask it gates nobody: it
    * says the ranked list the names came from was kept to the team, and the

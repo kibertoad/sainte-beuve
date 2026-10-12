@@ -280,9 +280,10 @@ slice decided, in short:
   alternative, leaving it up until somebody tidies it away, is how a team
   learns to ignore the next one.
 - **Committing is open to anybody, being ASKED is gated.** The fit floor
-  decides who a request nobody was named on reaches; somebody who wants to help anyway has made a
-  judgement about their own competence that a label list is not in a position
-  to overrule. `ReviewService.claim` already made that call for the board.
+  decides who a request nobody was named on reaches; somebody who wants to help
+  anyway has made a judgement about their own competence that a label list is
+  not in a position to overrule. `ReviewService.claim` already made that call
+  for the board.
 - **Two delivery paths, one payload.** The stream is not a faster inbox and the
   inbox is not a broken stream: a page opened an hour later has to see the same
   thing, and the REST half is the one that is correct on every runtime.

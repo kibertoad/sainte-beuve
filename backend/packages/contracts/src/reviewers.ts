@@ -41,7 +41,7 @@ export const reviewerSchema = v.object({
    */
   team: v.nullable(v.string()),
   skills: v.array(skillSchema),
-  /** The domains this person knows. See `domainSchema`: a preference in the draw, not a gate. */
+  /** The domains this person knows. See `domainSchema`: matched alongside skills. */
   domains: v.optional(v.array(domainSchema), () => []),
   availability: reviewerAvailabilitySchema,
   /**
