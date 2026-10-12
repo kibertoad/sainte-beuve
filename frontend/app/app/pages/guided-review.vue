@@ -30,7 +30,7 @@ const threads = computed(() => view.value?.threads ?? [])
 
 // The stream keeps the view current; the poll is what a page without it falls
 // back on, so it only runs while the stream is down.
-const stream = useGuidedReviewStream(() => session.value?.id ?? null, {
+const stream = useGuidedReviewStream(() => session.value, {
   state: (next) => {
     data.value = next
   },
@@ -76,9 +76,9 @@ async function open(): Promise<void> {
 const { busy, run } = useApiAction({ refresh, describe: refusalMessage })
 
 async function refreshOverview(): Promise<void> {
-  const id = session.value?.id
-  if (id === undefined) return
-  await run(() => api.refreshGuidedReview(id), 'Could not refresh the review', 'refresh')
+  const current = session.value
+  if (current === null) return
+  await run(() => api.refreshGuidedReview(current), 'Could not refresh the review', 'refresh')
 }
 
 const question = ref('')
@@ -86,12 +86,12 @@ const deep = ref(false)
 
 /** A new line of inquiry: a thread of its own, opened on its first question. */
 async function startThread(question: AskGuidedReviewInput): Promise<boolean> {
-  const id = session.value?.id
-  if (id === undefined) return false
+  const current = session.value
+  if (current === null) return false
   let opened: string | null = null
   const ok = await run(
     async () => {
-      opened = (await api.openGuidedReviewThread(id, { question })).thread.id
+      opened = (await api.openGuidedReviewThread(current, { question })).thread.id
     },
     'Could not ask the question',
     'thread',

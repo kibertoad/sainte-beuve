@@ -33,6 +33,7 @@ pull request is merged with its review findings fixed.
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
 | 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
+| 13  | A guided review names its cat-factory workspace               | 5    | 5          | In review   | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -151,3 +152,13 @@ finding. The curation screen has no way to ask for it.
 
 A challenge action on a finding files the investigation and shows the verdict on
 the finding.
+
+### 13. A guided review names its workspace
+
+`CatFactoryGuidedReviewGateway` sends no workspace on any call. cat-factory
+refuses a workspace-scoped call that names none when the key reaches several
+workspaces, so the guided review fails for every repository of such an org.
+
+Opening and looking up a session use the workspaces the org's repository mirror
+links the repository in. A call about a session names its pull request too, and
+is made in the workspace those same keys name.

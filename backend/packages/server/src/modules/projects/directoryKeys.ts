@@ -1,10 +1,10 @@
-import type { PullRequestRef } from '@sainte-beuve/contracts'
+import type { ProjectRef } from '@sainte-beuve/contracts'
 import type { AppContainer } from '../../container.js'
 import { CAT_FACTORY_SOURCE } from './RepositorySyncService.js'
 
 /**
- * The keys cat-factory's directory lists a pull request's repository under, one
- * per workspace that links it, read from this org's mirror of the directory.
+ * The keys cat-factory's directory lists a repository under, one per workspace
+ * that links it, read from this org's mirror of the directory.
  *
  * Matched on the provider, then on the host's repository id when the project
  * came from the directory, because that survives a rename the mirror has not
@@ -17,21 +17,19 @@ import { CAT_FACTORY_SOURCE } from './RepositorySyncService.js'
  */
 export async function catFactoryDirectoryKeys(
   container: AppContainer,
-  pullRequest: PullRequestRef,
+  ref: ProjectRef,
 ): Promise<string[]> {
   const { projects, externalRepositories } = container.repositories
   const [project, entries] = await Promise.all([
-    projects.getByRef(pullRequest),
+    projects.getByRef(ref),
     externalRepositories.list(CAT_FACTORY_SOURCE),
   ])
   const externalId = project?.external?.source === CAT_FACTORY_SOURCE ? project.external.id : null
   return entries
     .filter(({ repository }) => {
-      if (repository === null || repository.provider !== pullRequest.provider) return false
+      if (repository === null || repository.provider !== ref.provider) return false
       if (externalId !== null) return repository.id === externalId
-      return (
-        sameName(repository.owner, pullRequest.owner) && sameName(repository.repo, pullRequest.repo)
-      )
+      return sameName(repository.owner, ref.owner) && sameName(repository.repo, ref.repo)
     })
     .map((entry) => entry.key)
     .sort()

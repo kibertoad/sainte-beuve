@@ -61,7 +61,7 @@ async function attempt(key: string, failure: string, action: () => Promise<void>
 function edit(draftId: string, input: EditGuidedReviewDraftInput): Promise<void> {
   const failure = input.discard ? 'Could not discard the draft' : 'Could not save the draft'
   return attempt(draftId, failure, async () => {
-    await api.editGuidedReviewDraft(props.session.id, draftId, input)
+    await api.editGuidedReviewDraft(props.session, draftId, input)
   })
 }
 
@@ -77,11 +77,7 @@ async function postSelected(): Promise<void> {
   })
   if (!go) return
   await attempt('post', 'Could not post the comments', async () => {
-    const result = await api.postGuidedReviewDrafts(
-      props.session.id,
-      draftIds,
-      summary.value.trim(),
-    )
+    const result = await api.postGuidedReviewDrafts(props.session, draftIds, summary.value.trim())
     if (result.failed === 0) summary.value = ''
     toast.add({
       color: result.failed === 0 ? 'success' : 'warning',

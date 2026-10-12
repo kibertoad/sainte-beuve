@@ -25,6 +25,11 @@ import { errorResponses, singleStringParam, stringParams } from './_shared.js'
 // overview and the answers are generated afterwards, and the session's stream
 // says when they land. A screen that cannot hold the stream re-reads instead. The one route that
 // reaches the pull request is the explicit post of named comment drafts.
+//
+// A call about a session names its pull request in the query as well. The
+// session lives in one cat-factory workspace, and the repository's entries in
+// the org's mirror of the directory are what say which, so the call reads the
+// session once instead of asking every workspace the org reaches for it.
 // ---------------------------------------------------------------------------
 
 const sessionParams = singleStringParam('sessionId')
@@ -56,6 +61,7 @@ export const openGuidedReviewContract = defineApiContract({
 
 export const getGuidedReviewContract = defineApiContract({
   method: 'get',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: sessionParams,
   pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}`,
   responsesByStatusCode: { 200: guidedReviewSessionViewSchema, ...errorResponses },
@@ -69,6 +75,7 @@ export const getGuidedReviewContract = defineApiContract({
  */
 export const refreshGuidedReviewContract = defineApiContract({
   method: 'post',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: sessionParams,
   pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}/refresh`,
   requestBodySchema: v.object({}),
@@ -78,6 +85,7 @@ export const refreshGuidedReviewContract = defineApiContract({
 /** Open a thread, asking its first question when one is given. */
 export const openGuidedReviewThreadContract = defineApiContract({
   method: 'post',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: sessionParams,
   pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}/threads`,
   requestBodySchema: openGuidedReviewThreadSchema,
@@ -86,6 +94,7 @@ export const openGuidedReviewThreadContract = defineApiContract({
 
 export const getGuidedReviewThreadContract = defineApiContract({
   method: 'get',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: threadParams,
   pathResolver: ({ sessionId, threadId }) => `/guided-reviews/${sessionId}/threads/${threadId}`,
   responsesByStatusCode: { 200: guidedReviewThreadViewSchema, ...errorResponses },
@@ -97,6 +106,7 @@ export const getGuidedReviewThreadContract = defineApiContract({
  */
 export const askGuidedReviewContract = defineApiContract({
   method: 'post',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: threadParams,
   pathResolver: ({ sessionId, threadId }) =>
     `/guided-reviews/${sessionId}/threads/${threadId}/messages`,
@@ -107,6 +117,7 @@ export const askGuidedReviewContract = defineApiContract({
 /** Ask for review comments drafted from what a thread concluded. */
 export const requestGuidedReviewDraftsContract = defineApiContract({
   method: 'post',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: threadParams,
   pathResolver: ({ sessionId, threadId }) =>
     `/guided-reviews/${sessionId}/threads/${threadId}/comment-drafts`,
@@ -120,6 +131,7 @@ export const requestGuidedReviewDraftsContract = defineApiContract({
  */
 export const editGuidedReviewDraftContract = defineApiContract({
   method: 'patch',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: stringParams('sessionId', 'draftId'),
   pathResolver: ({ sessionId, draftId }) =>
     `/guided-reviews/${sessionId}/comment-drafts/${draftId}`,
@@ -134,6 +146,7 @@ export const editGuidedReviewDraftContract = defineApiContract({
  */
 export const postGuidedReviewDraftsContract = defineApiContract({
   method: 'post',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: sessionParams,
   pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}/comment-drafts/post`,
   requestBodySchema: postGuidedReviewDraftsSchema,
@@ -147,6 +160,7 @@ export const postGuidedReviewDraftsContract = defineApiContract({
  */
 export const streamGuidedReviewContract = defineApiContract({
   method: 'get',
+  requestQuerySchema: guidedReviewTargetQuerySchema,
   requestPathParamsSchema: sessionParams,
   pathResolver: ({ sessionId }) => `/guided-reviews/${sessionId}/stream`,
   responsesByStatusCode: {
