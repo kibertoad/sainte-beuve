@@ -22,7 +22,15 @@ import {
   reviewRequestSchema,
   teamSchema,
 } from '@sainte-beuve/contracts'
-import { index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 import * as v from 'valibot'
 import { epochMs, orgId, payload } from './columns.js'
 
@@ -212,6 +220,7 @@ export const integrationTokens = pgTable(
     hint: text('hint').notNull(),
     /** Null for a credential somebody pasted, because a pasted token names nobody. */
     subject: text('subject'),
+    subjectIsBot: boolean('subject_is_bot').notNull().default(false),
     updatedAt: epochMs('updated_at').notNull(),
   },
   // Per ORG: each tenancy connects its own GitHub and its own Slack, and a

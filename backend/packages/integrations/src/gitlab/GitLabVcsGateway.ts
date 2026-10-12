@@ -72,6 +72,8 @@ interface GitLabUser {
   username: string
   name?: string | null
   avatar_url?: string | null
+  /** True for a project or group access token's user and for a service account. */
+  bot?: boolean
 }
 
 interface GitLabMergeRequest {
@@ -335,6 +337,7 @@ function toAccount(user: GitLabUser): VcsAccount {
     username: user.username,
     displayName: user.name ?? null,
     avatarUrl: user.avatar_url ?? null,
+    bot: user.bot === true,
   }
 }
 

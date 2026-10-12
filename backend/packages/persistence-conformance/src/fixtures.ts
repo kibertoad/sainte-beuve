@@ -167,6 +167,7 @@ export function integrationToken(
     sealed: 'v1.aes-256-gcm.sealed-envelope',
     hint: 'cdef',
     subject: null,
+    subjectIsBot: false,
     updatedAt: 1_000,
     ...overrides,
   }

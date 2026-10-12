@@ -190,6 +190,7 @@ export function recordingVcs(): VcsGateway & {
       username: 'sainte-beuve-bot',
       displayName: null,
       avatarUrl: null,
+      bot: false,
     }),
     listOpenPullRequests: async () => [],
     searchOpenPullRequests: async () => [],

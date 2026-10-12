@@ -21,8 +21,14 @@ const connection = computed(
   () => data.value?.connections.vcs.find((row) => row.provider === provider.value) ?? null,
 )
 const patKey = computed(() => vcsPatCredentialKey(provider.value))
+// GitLab's intake is configured per org, so its secret is stored here; GitHub's
+// is the deployment's own variable and has no field.
+const webhookSecretKey = 'gitlab-webhook-secret'
+const webhookSecretStatus = computed(() =>
+  provider.value === 'gitlab' ? statusOf(webhookSecretKey) : null,
+)
 
-const card = ref<DraftHolder | null>(null)
+const card = ref<{ pat: DraftHolder; webhookSecret: DraftHolder } | null>(null)
 
 async function signOut() {
   await run(
@@ -57,6 +63,7 @@ onMounted(() => {
       ref="card"
       :connection="connection"
       :pat-status="statusOf(patKey)"
+      :webhook-secret-status="webhookSecretStatus"
       :api-base="api.apiBase"
       :busy="busy !== null"
       @install-app="
@@ -70,8 +77,10 @@ onMounted(() => {
         )
       "
       @sign-out="signOut()"
-      @save-pat="save(patKey, $event, card)"
+      @save-pat="save(patKey, $event, card?.pat ?? null)"
       @clear-pat="clear(patKey)"
+      @save-webhook-secret="save(webhookSecretKey, $event, card?.webhookSecret ?? null)"
+      @clear-webhook-secret="clear(webhookSecretKey)"
     />
   </IntegrationScreen>
 </template>

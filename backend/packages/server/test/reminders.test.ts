@@ -611,6 +611,7 @@ describe('a tick across tenancies', () => {
       sealed: await cipher.encrypt('xoxb-second', 'slack-bot-token'),
       hint: 'cond',
       subject: null,
+      subjectIsBot: false,
       updatedAt: harness.clock.now(),
     })
   }

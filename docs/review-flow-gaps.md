@@ -31,7 +31,7 @@ pull request is merged with its review findings fixed.
 | 8   | A commitment requests the reviewer on the host                | 3, 4 |            | In review   | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
 | 9   | One matching rule for assignment and asks                     | 2    | 2          | Not started |                                                          |
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
-| 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
+| 11  | GitLab webhook intake                                         | 5    |            | In review   | [#40](https://github.com/kibertoad/sainte-beuve/pull/40) |
 | 12  | Challenge an AI review finding                                | 5    |            | In review   | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
 | 13  | A guided review names its cat-factory workspace               | 5    | 5          | In review   | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
 
@@ -143,8 +143,9 @@ already do.
 No GitLab webhook lands here, so a merge request never opens a board row by
 itself, and the label rules (`GitHubLabelRules`) are read for GitHub only.
 
-A signed GitLab webhook opens, labels and closes board rows the way the GitHub
-one does, under the same label rules.
+A GitLab webhook per org, verified against the secret token that org stored,
+opens, labels, settles and closes board rows the way the GitHub one does, under
+one host-neutral label vocabulary (`ReviewLabelRules`).
 
 ### 12. Challenging a finding
 
