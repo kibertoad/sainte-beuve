@@ -46,6 +46,13 @@ function waitingFor(request: AttentionRequest): string {
 }
 
 const mine = (request: AttentionRequest): boolean => request.requestedById === props.viewerId
+
+/** Who an ask named, with the viewer said as "you". Empty for an ask sent by skill. */
+function askedLine(request: AttentionRequest): string {
+  return request.recipients
+    .map((entry) => (entry.reviewerId === props.viewerId ? 'you' : entry.displayName))
+    .join(', ')
+}
 </script>
 
 <template>
@@ -55,7 +62,7 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
         <div>
           <h2 class="font-medium">Asking for attention</h2>
           <p class="text-sm text-muted">
-            Pull requests your team has asked someone with your skills to pick up.
+            Pull requests somebody asked you, or anyone with your skills, to pick up.
           </p>
         </div>
         <UBadge v-if="error === null" :color="live ? 'success' : 'neutral'" variant="subtle">
@@ -106,12 +113,20 @@ const mine = (request: AttentionRequest): boolean => request.requestedById === p
             {{ formatPullRequestRef(request.pullRequest) }} &middot; asked by
             {{ request.requestedByName }} &middot; waiting for {{ waitingFor(request) }}
           </p>
+          <p v-if="request.recipients.length > 0" class="text-xs text-muted">
+            Asked: {{ askedLine(request) }}
+          </p>
           <p v-if="request.note" class="text-sm mt-1">{{ request.note }}</p>
           <div class="flex flex-wrap gap-1 mt-2">
             <UBadge v-for="skill in request.requiredSkills" :key="skill" size="sm" variant="subtle">
               {{ skill }}
             </UBadge>
-            <UBadge v-if="request.sameTeamOnly" size="sm" variant="subtle" color="neutral">
+            <UBadge
+              v-if="request.sameTeamOnly && request.recipients.length === 0"
+              size="sm"
+              variant="subtle"
+              color="neutral"
+            >
               {{ request.team ?? 'no team' }} only
             </UBadge>
           </div>

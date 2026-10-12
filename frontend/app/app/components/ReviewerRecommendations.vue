@@ -3,12 +3,21 @@ import type { ReviewerRecommendation, ReviewerRecommendations } from '@sainte-be
 import { shortfallCause, shortfallRemedy } from '@sainte-beuve/contracts'
 
 // Who fits this pull request best, and why: the router's own ranking, so the
-// list agrees with whoever an automatic assignment would have drawn.
+// list agrees with whoever an automatic assignment would have drawn. Ticking
+// somebody names them on the ask.
 const props = defineProps<{
   result: ReviewerRecommendations | null
   pending: boolean
   failure: string | null
 }>()
+
+/** The reviewer ids ticked, in the order they were ticked. */
+const selected = defineModel<string[]>('selected', { required: true })
+
+function toggle(reviewerId: string, ticked: boolean | 'indeterminate'): void {
+  const others = selected.value.filter((id) => id !== reviewerId)
+  selected.value = ticked === true ? [...others, reviewerId] : others
+}
 
 const wantedCount = computed(() => {
   const wanted = props.result?.wanted
@@ -50,10 +59,17 @@ function loadLine(entry: ReviewerRecommendation): string {
           class="flex flex-col gap-1 rounded-md border border-default p-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
         >
           <div class="flex min-w-0 flex-col gap-1">
-            <span class="text-sm font-medium">
-              {{ entry.displayName }}
-              <span v-if="entry.team" class="font-normal text-muted">· {{ entry.team }}</span>
-            </span>
+            <UCheckbox
+              :model-value="selected.includes(entry.reviewerId)"
+              @update:model-value="toggle(entry.reviewerId, $event)"
+            >
+              <template #label>
+                <span class="text-sm font-medium">
+                  {{ entry.displayName }}
+                  <span v-if="entry.team" class="font-normal text-muted">· {{ entry.team }}</span>
+                </span>
+              </template>
+            </UCheckbox>
             <div
               v-if="entry.reasons.matchedSkills.length + entry.reasons.matchedDomains.length > 0"
               class="flex flex-wrap gap-1"

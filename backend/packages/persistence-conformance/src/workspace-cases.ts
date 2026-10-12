@@ -140,6 +140,20 @@ export const attentionCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.attention.getById('a1'), written)
   }),
 
+  conformanceCase(
+    'an ask keeps the people it named, in the order they were named',
+    async (repos) => {
+      const recipients = [
+        { reviewerId: 'r2', displayName: 'Two' },
+        { reviewerId: 'r1', displayName: 'One' },
+      ]
+      await repos.attention.create(attentionRequest('a1', { recipients, neededCommitments: 2 }))
+      assert.deepStrictEqual((await repos.attention.getById('a1'))?.recipients, recipients)
+      const [listed] = await repos.attention.list({ status: ['open'] })
+      assert.deepStrictEqual(listed?.recipients, recipients)
+    },
+  ),
+
   conformanceCase('lists the asks newest first, ties on the id', async (repos) => {
     await repos.attention.create(attentionRequest('a1', { createdAt: 1_000 }))
     await repos.attention.create(attentionRequest('a2', { createdAt: 2_000 }))

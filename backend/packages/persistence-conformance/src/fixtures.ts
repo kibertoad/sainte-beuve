@@ -195,6 +195,7 @@ export function attentionRequest(
     title: `Attention ${id}`,
     requestedById: 'reviewer-1',
     requestedByName: 'Reviewer 1',
+    recipients: [],
     requiredSkills: ['typescript'],
     sameTeamOnly: false,
     team: 'platform',

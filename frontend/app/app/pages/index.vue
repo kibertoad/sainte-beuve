@@ -50,6 +50,7 @@ const { busy: askBusy, run: runAsk } = useApiAction({ refresh: attention.refresh
 const asking = ref<OpenPullRequest | null>(null)
 
 async function ask(request: {
+  recipientIds: string[]
   requiredSkills: string[]
   sameTeamOnly: boolean
   neededCommitments: number

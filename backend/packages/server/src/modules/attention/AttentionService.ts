@@ -1,6 +1,7 @@
 import type {
   AttentionEvent,
   AttentionEventKind,
+  AttentionRecipient,
   AttentionRequest,
   CreateAttentionRequest,
   CreateReviewCommitment,
@@ -8,7 +9,7 @@ import type {
   Reviewer,
   ReviewCommitment,
 } from '@sainte-beuve/contracts'
-import { ConflictError, ForbiddenError, assertFound } from '@sainte-beuve/kernel'
+import { ConflictError, ForbiddenError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
   audienceRuleOf,
   isAttentionSatisfied,
@@ -44,6 +45,7 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
+    const recipients = await this.resolveRecipients(viewer, input)
     const now = clock.now()
     const request = await repositories.attention.create({
       id: ids.next(),
@@ -51,6 +53,7 @@ export class AttentionService {
       title: input.title,
       requestedById: viewer.id,
       requestedByName: viewer.displayName,
+      recipients,
       requiredSkills: input.requiredSkills,
       sameTeamOnly: input.sameTeamOnly,
       // The requester's team is captured HERE rather than read at delivery
@@ -189,6 +192,46 @@ export class AttentionService {
       title,
       attentionRequestId,
       createdAt: clock.now(),
+    })
+  }
+
+  /**
+   * The people an ask names, checked against the directory as it stands now.
+   * Each has to be somebody who could answer: in the directory, not paused,
+   * and not the requester. An ask naming fewer people than it waits for could
+   * never resolve, so that is refused too.
+   */
+  private async resolveRecipients(
+    viewer: Reviewer,
+    input: CreateAttentionRequest,
+  ): Promise<AttentionRecipient[]> {
+    const wanted = [...new Set(input.recipientIds)]
+    if (wanted.length === 0) return []
+    if (wanted.length < input.neededCommitments) {
+      throw new ValidationError(
+        `This ask waits for ${input.neededCommitments} reviewers but names only ${wanted.length}`,
+        { neededCommitments: input.neededCommitments, recipients: wanted.length },
+      )
+    }
+    const directory = new Map(
+      (await this.container.repositories.reviewers.list()).map((entry) => [entry.id, entry]),
+    )
+    return wanted.map((reviewerId) => {
+      const reviewer = directory.get(reviewerId)
+      if (reviewer === undefined) {
+        throw new ValidationError(`No reviewer ${reviewerId} to ask`, { reviewerId })
+      }
+      if (reviewer.id === viewer.id) {
+        throw new ValidationError('You cannot ask yourself to review your own request', {
+          reviewerId,
+        })
+      }
+      if (reviewer.availability !== 'available') {
+        throw new ValidationError(`${reviewer.displayName} is paused and cannot be asked`, {
+          reviewerId,
+        })
+      }
+      return { reviewerId: reviewer.id, displayName: reviewer.displayName }
     })
   }
 
