@@ -30,7 +30,7 @@ pull request is merged with its review findings fixed.
 | 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | In review   | [#38](https://github.com/kibertoad/sainte-beuve/pull/38) |
 | 8   | A commitment requests the reviewer on the host                | 3, 4 |            | In review   | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
 | 9   | One matching rule for assignment and asks                     | 2    | 2          | Not started |                                                          |
-| 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
+| 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | In review   | [#42](https://github.com/kibertoad/sainte-beuve/pull/42) |
 | 11  | GitLab webhook intake                                         | 5    |            | In review   | [#40](https://github.com/kibertoad/sainte-beuve/pull/40) |
 | 12  | Challenge an AI review finding                                | 5    |            | In review   | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
 | 13  | A guided review names its cat-factory workspace               | 5    | 5          | In review   | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
@@ -133,12 +133,15 @@ Both paths share one rule, and the docs describe it.
 
 ### 10. cat-factory workspaces and users
 
-The directory sync reads users, workspaces and memberships and drops them. All
-the repositories a key reaches become one flat list.
+The directory sync reads users, workspaces and memberships and drops them, so
+the reviewer pool and the teams are kept by hand.
 
-Workspaces map to teams and directory users to reviewers, matched on their host
-accounts, so the pool and the teams follow cat-factory the way the repositories
-already do.
+Workspaces become teams and directory users become reviewers, matched on their
+GitHub or GitLab account, which cat-factory publishes on a directory user from
+[kibertoad/cat-factory#2358](https://github.com/kibertoad/cat-factory/pull/2358).
+Until an instance serves that, workspaces still become teams and nobody is
+matched. A new reviewer joins paused with no skills, so a first sync that adds
+many people sends no reviews their way before an admin sets them up.
 
 ### 11. GitLab intake
 

@@ -1,6 +1,6 @@
 import type { Team } from '@sainte-beuve/contracts'
 import { teamSchema } from '@sainte-beuve/contracts'
-import type { TeamRepository } from '@sainte-beuve/kernel'
+import type { TeamPatch, TeamRepository } from '@sainte-beuve/kernel'
 import type { SqlDriver } from './driver.js'
 import { decodeData, decodeRows, encodeData, patched } from './rows.js'
 
@@ -53,10 +53,7 @@ export class SqlTeamRepository implements TeamRepository {
     return (await this.getByName(team.name)) ?? (await this.getById(team.id)) ?? team
   }
 
-  async update(
-    teamId: string,
-    patch: Partial<Pick<Team, 'name' | 'ownerId' | 'mergeComments'>>,
-  ): Promise<Team | null> {
+  async update(teamId: string, patch: TeamPatch): Promise<Team | null> {
     const current = await this.getById(teamId)
     if (current === null) return null
     const next = patched<Team>(current, patch)

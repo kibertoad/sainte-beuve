@@ -1,8 +1,15 @@
-import type { CreateReviewer, Reviewer, UpdateReviewer } from '@sainte-beuve/contracts'
-import { assertFound } from '@sainte-beuve/kernel'
+import type {
+  CreateReviewer,
+  Reviewer,
+  ReviewerTeamChoices,
+  UpdateReviewer,
+} from '@sainte-beuve/contracts'
+import { assertFound, ConflictError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
+import { repositoryDirectoryAccess } from '../../integrations/resolve.js'
 import { SessionService } from '../auth/SessionService.js'
 import { resolveTeamName } from '../teams/TeamService.js'
+import { directoryTeamNames } from './directorySync.js'
 
 /** The reviewer directory: who is in the pool, what they know, and whether they are free. */
 export class ReviewerService {
@@ -30,9 +37,19 @@ export class ReviewerService {
     })
   }
 
+  /** The teams the reviewer form may offer this person. */
+  async teamChoices(reviewerId: string): Promise<ReviewerTeamChoices> {
+    const { reviewers, teams } = this.container.repositories
+    const reviewer = assertFound(await reviewers.getById(reviewerId), `No reviewer ${reviewerId}`)
+    const managed = await this.directoryTeams(reviewer)
+    if (managed !== null) return { teams: managed, managed: true }
+    return { teams: (await teams.list()).map((team) => team.name), managed: false }
+  }
+
   async update(reviewerId: string, patch: UpdateReviewer): Promise<Reviewer> {
     const { reviewers } = this.container.repositories
-    assertFound(await reviewers.getById(reviewerId), `No reviewer ${reviewerId}`)
+    const current = assertFound(await reviewers.getById(reviewerId), `No reviewer ${reviewerId}`)
+    await this.refuseWhatTheDirectoryOwns(current, patch)
     const team =
       patch.team === undefined ? {} : { team: await resolveTeamName(this.container, patch.team) }
     const updated = assertFound(
@@ -61,4 +78,58 @@ export class ReviewerService {
     }
     return updated
   }
+
+  /**
+   * While a directory follows this reviewer it owns their name and handles, and
+   * their team is one of the teams its groups put them in: a change here would
+   * be undone by the next sync. Everything else stays editable.
+   */
+  private async refuseWhatTheDirectoryOwns(reviewer: Reviewer, patch: UpdateReviewer) {
+    if (!(await this.followed(reviewer))) return
+    if (movesNameOrHandles(reviewer, patch)) {
+      throw new ConflictError(
+        `${reviewer.displayName} comes from cat-factory, so their name and handles are changed ` +
+          'there. Skills, domains, weight, availability and Slack stay editable here.',
+        { reason: 'reviewer_managed_externally' },
+      )
+    }
+    if (patch.team === undefined || sameTeam(patch.team, reviewer.team)) return
+    await this.refuseTeamOutsideDirectory(reviewer, patch.team)
+  }
+
+  /** Whether a directory this org follows owns the reviewer's name, handles and team now. */
+  private async followed(reviewer: Reviewer): Promise<boolean> {
+    if (reviewer.external === null || reviewer.external === undefined) return false
+    return (await repositoryDirectoryAccess(this.container)) !== null
+  }
+
+  /** The teams a followed reviewer's groups give them, or null for one no directory follows. */
+  private async directoryTeams(reviewer: Reviewer): Promise<string[] | null> {
+    if (!(await this.followed(reviewer)) || !reviewer.external) return null
+    return directoryTeamNames(this.container, reviewer.external)
+  }
+
+  private async refuseTeamOutsideDirectory(reviewer: Reviewer, team: string | null): Promise<void> {
+    const allowed = (await this.directoryTeams(reviewer)) ?? []
+    if (allowed.some((name) => sameTeam(name, team))) return
+    throw new ConflictError(
+      allowed.length === 0
+        ? `${reviewer.displayName} is in no cat-factory workspace, so their team is set there.`
+        : `${reviewer.displayName}'s team is one of their cat-factory workspaces: ${allowed.join(', ')}.`,
+      { reason: 'reviewer_managed_externally' },
+    )
+  }
+}
+
+function movesNameOrHandles(reviewer: Reviewer, patch: UpdateReviewer): boolean {
+  if (patch.displayName !== undefined && patch.displayName !== reviewer.displayName) return true
+  if (patch.handles === undefined) return false
+  return (
+    patch.handles.github !== reviewer.handles.github ||
+    patch.handles.gitlab !== reviewer.handles.gitlab
+  )
+}
+
+function sameTeam(a: string | null, b: string | null): boolean {
+  return (a?.trim().toLowerCase() ?? null) === (b?.trim().toLowerCase() ?? null)
 }

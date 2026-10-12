@@ -31,6 +31,10 @@ import type { ConformanceCase } from './case.js'
 import { attentionChangeCases } from './attention-change-cases.js'
 import { integrationConfigCases, integrationConfigTenancyCases } from './config-cases.js'
 import {
+  externalDirectoryCases,
+  externalDirectoryTenancyCases,
+} from './external-directory-cases.js'
+import {
   externalRepositoryCases,
   externalRepositoryTenancyCases,
 } from './external-repository-cases.js'
@@ -55,6 +59,7 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
   ...commitmentCases,
   ...teamCases,
   ...externalRepositoryCases,
+  ...externalDirectoryCases,
 ]
 
 /**
@@ -67,6 +72,7 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
   ...integrationConfigTenancyCases,
   ...teamTenancyCases,
   ...externalRepositoryTenancyCases,
+  ...externalDirectoryTenancyCases,
   ...sessionCases,
   ...apiKeyCases,
 ]
