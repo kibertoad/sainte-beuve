@@ -1,4 +1,8 @@
-import type { ExternalDirectoryEntry, ExternalRepository } from '@sainte-beuve/contracts'
+import type {
+  DirectoryReach,
+  ExternalDirectoryEntry,
+  ExternalRepository,
+} from '@sainte-beuve/contracts'
 
 /** An external repository entry before it is bound to the source it came from. */
 export type ExternalRepositoryEntry = Omit<ExternalRepository, 'source'>
@@ -34,6 +38,11 @@ export interface DirectorySyncReport {
   cursor: number
   /** Whether it walked the snapshots rather than only following the feed. */
   reconciled: boolean
+  /**
+   * What the key reached on that walk, which decides whether the source listed
+   * its people at all. Null when it only followed the feed.
+   */
+  reach: DirectoryReach | null
 }
 
 /** A pushed delivery, verified or not. A refusal carries the verifier's reason. */

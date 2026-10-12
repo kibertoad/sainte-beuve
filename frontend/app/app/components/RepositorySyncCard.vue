@@ -62,10 +62,24 @@ function when(at: number | null): string {
       title="The last sync did not complete"
       :description="sync.error"
     />
+    <UAlert
+      v-if="sync.reach === 'workspaces'"
+      class="mt-3"
+      color="warning"
+      variant="subtle"
+      icon="i-lucide-users"
+      title="Nobody from cat-factory is in the reviewer pool"
+      description="This key reaches only some workspaces, and cat-factory lists its users only to a key that reaches every workspace. The workspaces still become teams. Use a key that reaches every workspace to bring their members in."
+    />
+    <p v-if="sync.people && sync.people.awaitingSetup > 0" class="mt-3 text-sm text-muted">
+      {{ sync.people.awaitingSetup }} of them are paused with no skills, so no review is routed to
+      them yet. Everybody cat-factory adds starts that way: give them skills and resume them on the
+      <ULink to="/reviewers" class="underline">Reviewers screen</ULink>.
+    </p>
     <p v-if="sync.people && sync.people.withoutAccount > 0" class="mt-3 text-sm text-muted">
       {{ sync.people.withoutAccount }} of them have no GitHub or GitLab account in cat-factory, so
-      nobody here can be matched to them. They join the pool once they sign in to cat-factory
-      through GitHub or GitLab.
+      nobody here can be matched to them. They are added once they sign in to cat-factory through
+      GitHub or GitLab.
     </p>
     <p v-if="sync.webhook === 'failed'" class="mt-3 text-sm text-muted">
       Changes are still picked up every few minutes. Pushes need a key with the

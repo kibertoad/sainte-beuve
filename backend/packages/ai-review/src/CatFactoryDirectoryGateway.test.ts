@@ -87,12 +87,26 @@ function directoryAnswering(changes: unknown[] = []): typeof globalThis.fetch {
     '/api/v1/directory/account-memberships': () => page([]),
     '/api/v1/directory/workspace-memberships': () => page([membership('u1'), membership('u2')]),
     '/api/v1/directory/repos': () => page([repo]),
+    '/api/v1/me': () => json(identity(null)),
     '/api/v1/directory/changes': () =>
       json({ changes, nextAfter: 5 + changes.length, headSeq: 5 + changes.length }),
   }
   return async (input) => {
     const path = new URL(input instanceof Request ? input.url : String(input)).pathname
     return routes[path]?.() ?? json({ error: { code: 'not_found', message: path } }, 404)
+  }
+}
+
+function identity(workspaceIds: string[] | null) {
+  return {
+    accountId: 'acc_1',
+    createdAt: 1,
+    externalIdentity: null,
+    keyId: 'key_1',
+    label: 'sainte-beuve',
+    scope: 'admin',
+    workspaceId: 'ws_1',
+    workspaceIds,
   }
 }
 
@@ -109,7 +123,7 @@ describe('CatFactoryDirectoryGateway', () => {
   it('keeps the linked repositories from a first sync', async () => {
     const store = memoryStore()
     const report = await gateway(directoryAnswering()).catchUp(store)
-    expect(report).toEqual({ cursor: 5, reconciled: true })
+    expect(report).toEqual({ cursor: 5, reconciled: true, reach: 'account' })
     expect([...store.entries.values()]).toEqual([
       {
         key: 'ws_1/101',
@@ -136,6 +150,34 @@ describe('CatFactoryDirectoryGateway', () => {
       { groupId: 'ws_1', personId: 'u1' },
       { groupId: 'ws_1', personId: 'u2' },
     ])
+  })
+
+  it('reports a key limited to some workspaces, which is listed no users', async () => {
+    const store = memoryStore()
+    const answering = directoryAnswering()
+    const restricted: typeof globalThis.fetch = async (input, init) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname
+      if (path === '/api/v1/me') return json(identity(['ws_1']))
+      if (path === '/api/v1/directory/users') {
+        const refusal = {
+          code: 'forbidden',
+          message: 'account-wide',
+          details: { reason: 'account_scope_required' },
+        }
+        return json({ error: refusal }, 403)
+      }
+      return answering(input, init)
+    }
+    const report = await gateway(restricted).reconcile(store)
+    expect(report.reach).toBe('workspaces')
+    expect([...store.directory.values()].filter((e) => e.kind === 'person')).toEqual([])
+    expect(store.directory.get('group:ws_1')?.record).toEqual({ id: 'ws_1', name: 'Core' })
+  })
+
+  it('reports no reach when it only followed the feed', async () => {
+    const store = memoryStore()
+    await store.setCursor(5)
+    expect((await gateway(directoryAnswering()).catchUp(store)).reach).toBeNull()
   })
 
   it('applies an unlink from the feed as a dropped entry', async () => {

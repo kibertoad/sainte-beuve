@@ -42,6 +42,13 @@ export const catFactoryConfigSchema = v.object({
 export type CatFactoryConfig = v.InferOutput<typeof catFactoryConfigSchema>
 
 /**
+ * What the key reaches: `account` reads the whole directory, `workspaces` is a
+ * key limited to some workspaces, which cat-factory lists no users to.
+ */
+export const directoryReachSchema = v.picklist(['account', 'workspaces'])
+export type DirectoryReach = v.InferOutput<typeof directoryReachSchema>
+
+/**
  * How this org's repository list is kept in step with cat-factory's directory.
  * Times are epoch ms; null until the first time each one happened.
  */
@@ -61,6 +68,8 @@ export const repositorySyncSchema = v.object({
   error: v.nullable(v.string()),
   /** The people and teams the same directory keeps in step. Null until a sync has read them. */
   people: v.optional(v.nullable(peopleSyncSchema), null),
+  /** What the key reached at the last full snapshot walk. Null until one has run. */
+  reach: v.optional(v.nullable(directoryReachSchema), null),
 })
 export type RepositorySync = v.InferOutput<typeof repositorySyncSchema>
 

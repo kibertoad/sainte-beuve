@@ -1,5 +1,6 @@
 import { type DirectoryStore, DirectorySyncer, type SyncResult } from '@cat-factory/directory-sync'
 import { CatFactoryClient } from '@cat-factory/sdk'
+import type { DirectoryReach } from '@sainte-beuve/contracts'
 import {
   type CatFactoryAccess,
   type DirectoryDeliveryOutcome,
@@ -39,14 +40,14 @@ export class CatFactoryDirectoryGateway implements RepositoryDirectoryGateway {
   }
 
   catchUp(store: DirectoryMirrorStore): Promise<DirectorySyncReport> {
-    return this.relay('follow the directory change feed', () =>
-      this.syncer(store).catchUp().then(reportOf),
+    return this.relay('follow the directory change feed', async () =>
+      this.reportOf(await this.syncer(store).catchUp()),
     )
   }
 
   reconcile(store: DirectoryMirrorStore): Promise<DirectorySyncReport> {
-    return this.relay('read the directory snapshots', () =>
-      this.syncer(store).reconcile().then(reportOf),
+    return this.relay('read the directory snapshots', async () =>
+      this.reportOf(await this.syncer(store).reconcile()),
     )
   }
 
@@ -54,10 +55,15 @@ export class CatFactoryDirectoryGateway implements RepositoryDirectoryGateway {
     store: DirectoryMirrorStore,
     delivery: { headers: Headers; rawBody: string; secret: string },
   ): Promise<DirectoryDeliveryOutcome> {
-    const result = await this.relay('apply a directory push', () =>
-      this.syncer(store, delivery.secret).handleDelivery(delivery.headers, delivery.rawBody),
-    )
-    return result.ok ? { ok: true, event: result.event, sync: reportOf(result.sync) } : result
+    return this.relay('apply a directory push', async () => {
+      const result = await this.syncer(store, delivery.secret).handleDelivery(
+        delivery.headers,
+        delivery.rawBody,
+      )
+      return result.ok
+        ? { ok: true, event: result.event, sync: await this.reportOf(result.sync) }
+        : result
+    })
   }
 
   async registerWebhook(input: { webhookId: string; url: string; secret: string }): Promise<void> {
@@ -81,6 +87,20 @@ export class CatFactoryDirectoryGateway implements RepositoryDirectoryGateway {
     )
   }
 
+  /**
+   * The report, with the key's reach after a snapshot walk. The syncer skips the
+   * account-wide snapshots a key limited to some workspaces is refused, so the
+   * reach is what tells "no users" apart from "users this key may not read".
+   */
+  private async reportOf(result: SyncResult): Promise<DirectorySyncReport> {
+    const reach: DirectoryReach | null = result.reconciled
+      ? (await this.client.me.get()).workspaceIds === null
+        ? 'account'
+        : 'workspaces'
+      : null
+    return { cursor: result.cursor, reconciled: result.reconciled, reach }
+  }
+
   private syncer(store: DirectoryMirrorStore, webhookSecret?: string): DirectorySyncer {
     return new DirectorySyncer({
       client: this.client,
@@ -101,10 +121,6 @@ export class CatFactoryDirectoryGateway implements RepositoryDirectoryGateway {
       throw refusalFor(err, what, scope)
     }
   }
-}
-
-function reportOf(result: SyncResult): DirectorySyncReport {
-  return { cursor: result.cursor, reconciled: result.reconciled }
 }
 
 /** The directory store the syncer writes to: the mirror's two lists behind one cursor. */
