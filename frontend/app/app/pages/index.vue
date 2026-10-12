@@ -25,7 +25,7 @@ const { data, pending, error, refresh } = useAsyncData(
   { lazy: true },
 )
 
-const attention = useAttentionStream()
+const attention = useAttentionStream(() => data.value?.workspace.viewer.reviewer.id ?? null)
 
 /**
  * Both reads, as one button.
@@ -85,9 +85,9 @@ async function commit(attentionId: string) {
   await refresh()
 }
 
-async function decline(attentionId: string) {
+async function decline(attentionId: string, reason: string | null) {
   await runAsk(
-    () => api.declineAttention(attentionId),
+    () => api.declineAttention(attentionId, reason),
     'Could not decline the request',
     attentionId,
   )

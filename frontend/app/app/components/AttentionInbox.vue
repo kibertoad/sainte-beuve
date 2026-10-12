@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { AttentionRequest } from '@sainte-beuve/contracts'
-import { formatPullRequestRef } from '@sainte-beuve/contracts'
+import {
+  formatPullRequestRef,
+  outstandingCommitments,
+  recipientShortfall,
+} from '@sainte-beuve/contracts'
+import { declinedBy } from '../utils/attentionOrder'
 
 // The asks addressed to you, and the ones you raised.
 //
@@ -33,27 +38,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   commit: [id: string]
-  decline: [id: string]
+  decline: [id: string, reason: string | null]
   askMore: [id: string]
   cancel: [id: string]
 }>()
 
-// An ask the viewer declined stays open for everybody else, and a live event
-// can still carry it here, so it is left out by the viewer's own decline.
+// An event that reached this page before it knew who is looking can still
+// carry an ask the viewer declined, so the inbox leaves those out as well.
 const visible = computed(() =>
-  props.requests.filter(
-    (request) =>
-      mine(request) || !request.declines.some((entry) => entry.reviewerId === props.viewerId),
-  ),
+  props.requests.filter((request) => !declinedBy(request, props.viewerId)),
 )
-
-function outstanding(request: AttentionRequest): number {
-  return Math.max(0, request.neededCommitments - request.commitments.length)
-}
 
 /** What the ask is still waiting for, said as a person would say it. */
 function waitingFor(request: AttentionRequest): string {
-  const left = outstanding(request)
+  const left = outstandingCommitments(request)
   const committed = request.commitments.map((entry) => entry.displayName).join(', ')
   const taken = committed.length === 0 ? '' : ` (${committed} so far)`
   return left === 1 ? `one reviewer${taken}` : `${left} reviewers${taken}`
@@ -72,19 +70,9 @@ function declinedLine(request: AttentionRequest): string {
     .join(', ')
 }
 
-/**
- * Whether a named ask can no longer fill from the people it names: fewer of
- * them are left to answer than it still waits for. The same rule as
- * `recipientShortfall` in @sainte-beuve/reviewers, which the SPA cannot import.
- */
+/** Whether a named ask can no longer fill from the people it names. */
 function isShort(request: AttentionRequest): boolean {
-  if (request.recipients.length === 0) return false
-  const answered = new Set([
-    ...request.commitments.map((entry) => entry.reviewerId),
-    ...request.declines.map((entry) => entry.reviewerId),
-  ])
-  const pending = request.recipients.filter((entry) => !answered.has(entry.reviewerId)).length
-  return pending < outstanding(request)
+  return recipientShortfall(request) > 0
 }
 
 /** Who an ask named, with the viewer said as "you". Empty for an ask sent by skill. */
@@ -207,15 +195,10 @@ function askedLine(request: AttentionRequest): string {
             >
               I will review it
             </UButton>
-            <UButton
-              size="sm"
-              variant="ghost"
-              color="neutral"
+            <DeclineAskButton
               :loading="busy === request.id"
-              @click="emit('decline', request.id)"
-            >
-              Not me
-            </UButton>
+              @decline="(reason) => emit('decline', request.id, reason)"
+            />
           </template>
           <UButton
             :to="safeHref(request.pullRequest.url)"

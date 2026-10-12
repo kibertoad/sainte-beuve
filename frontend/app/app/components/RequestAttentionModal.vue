@@ -210,7 +210,7 @@ function submit() {
           label="Only my team"
           :description="
             named
-              ? 'Lists only your own team above. Nobody without a team recorded is in it.'
+              ? 'Lists only your own team above, which is where a next best match comes from too. Nobody without a team recorded is in it.'
               : 'Keeps the ask, and the list above, inside your own team. Nobody without a team recorded is in it.'
           "
         />
