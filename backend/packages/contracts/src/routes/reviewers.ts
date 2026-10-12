@@ -1,5 +1,6 @@
 import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
+import { recommendReviewersSchema, reviewerRecommendationsSchema } from '../recommendations.js'
 import { createReviewerSchema, reviewerSchema, updateReviewerSchema } from '../reviewers.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -30,4 +31,15 @@ export const updateReviewerContract = defineApiContract({
   pathResolver: ({ reviewerId }) => `/reviewers/${reviewerId}`,
   requestBodySchema: updateReviewerSchema,
   responsesByStatusCode: { 200: reviewerSchema, ...errorResponses },
+})
+
+/**
+ * Who fits a pull request best, ranked. A POST because the question carries a
+ * pull request and a skill list, not because it writes anything.
+ */
+export const recommendReviewersContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/reviewers/recommendations',
+  requestBodySchema: recommendReviewersSchema,
+  responsesByStatusCode: { 200: reviewerRecommendationsSchema, ...errorResponses },
 })
