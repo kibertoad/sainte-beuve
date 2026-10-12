@@ -31,9 +31,9 @@ const catFactoryIdSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLen
 export const catFactoryConfigSchema = v.object({
   baseUrl: baseUrlSchema,
   /**
-   * The service (repository frame) AI reviews are filed under. Null leaves the
-   * AI reviewer off while the guided reviewer still works, because cat-factory
-   * finds a guided review's repository from the pull request itself.
+   * The service (repository frame) an AI review goes under when no service
+   * backs its repository in cat-factory, a monorepo for one. A review normally
+   * goes under its own repository's service. Null files only there.
    */
   serviceId: v.nullable(catFactoryIdSchema),
   /** The pipeline AI reviews run on. Null runs the task's own pinned pipeline. */

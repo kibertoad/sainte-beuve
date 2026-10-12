@@ -10,14 +10,17 @@ import { hasAllSkills } from './selection.js'
  * it. Three code paths reading three different rules is how somebody comes to
  * be pinged about work they are then refused.
  *
- * Unlike reviewer selection, which scores skills, this is a gate: a request is
- * a broadcast to everyone it names, so there is no ranking to put a partial
- * match lower in, and the gate is what keeps a `payments` ping off the screens
- * of people who hold none of it.
+ * A request either names its audience or derives it. Named recipients are
+ * the audience exactly: the requester picked them, usually off the ranked
+ * recommendations, and a skill list is not in a position to overrule that.
+ * Without names the request is a broadcast, and the skill and team gate is what
+ * keeps a `payments` ping off the screens of people who hold none of it.
  */
 
-/** The gate, without the "who is asking" part that only a request carries. */
+/** Who a request is addressed to: by name, or by the gate. */
 export interface AttentionAudienceRule {
+  /** Reviewer ids asked by name. Non-empty replaces the skill and team gate. */
+  recipientIds: readonly string[]
   /** Skills a person must ALL have. Empty addresses everybody who is available. */
   requiredSkills: readonly string[]
   /** Whether the ask stays inside one team. */
@@ -30,6 +33,7 @@ export interface AttentionAudienceRule {
 
 export function audienceRuleOf(request: AttentionRequest): AttentionAudienceRule {
   return {
+    recipientIds: request.recipients.map((recipient) => recipient.reviewerId),
     requiredSkills: request.requiredSkills,
     sameTeamOnly: request.sameTeamOnly,
     team: request.team,
@@ -44,17 +48,31 @@ function isSameTeam(left: string | null, right: string | null): boolean {
 }
 
 /**
+ * Why this person cannot be asked by anybody's ask, whoever it names or gates
+ * on, or null when they can be: the requester never reaches themselves, and
+ * somebody paused has said they cannot review right now.
+ */
+export function unaskableReason(
+  reviewer: Reviewer,
+  requestedById: string,
+): 'requester' | 'paused' | null {
+  if (reviewer.id === requestedById) return 'requester'
+  if (reviewer.availability !== 'available') return 'paused'
+  return null
+}
+
+/**
  * Whether this person should be asked.
  *
  * `availability` is the only load-shaped gate applied, and `weight` deliberately
  * is not: a weight of 0 says "do not route work to me automatically", which is a
  * statement about the router's draw and not a refusal to be asked. Someone
  * paused, on the other hand, has said they cannot review right now, and a ping
- * is exactly what they asked not to receive.
+ * is exactly what they asked not to receive, even on an ask that names them.
  */
 export function isInAttentionAudience(reviewer: Reviewer, rule: AttentionAudienceRule): boolean {
-  if (reviewer.id === rule.requestedById) return false
-  if (reviewer.availability !== 'available') return false
+  if (unaskableReason(reviewer, rule.requestedById) !== null) return false
+  if (rule.recipientIds.length > 0) return rule.recipientIds.includes(reviewer.id)
   if (rule.sameTeamOnly && !isSameTeam(reviewer.team, rule.team)) return false
   return hasAllSkills(reviewer, rule.requiredSkills)
 }

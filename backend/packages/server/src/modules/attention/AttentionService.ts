@@ -1,6 +1,7 @@
 import type {
   AttentionEvent,
   AttentionEventKind,
+  AttentionRecipient,
   AttentionRequest,
   CreateAttentionRequest,
   CreateReviewCommitment,
@@ -8,13 +9,20 @@ import type {
   Reviewer,
   ReviewCommitment,
 } from '@sainte-beuve/contracts'
-import { ConflictError, ForbiddenError, assertFound } from '@sainte-beuve/kernel'
+import { ConflictError, ForbiddenError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
+  type RecipientRefusal,
   audienceRuleOf,
   isAttentionSatisfied,
   isInAttentionAudience,
+  resolveAttentionRecipients,
+  reviewersWithHandles,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import {
+  requestCommittedReviewer,
+  withdrawCommittedReviewer,
+} from '../../integrations/reviewRequests.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -44,6 +52,7 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
+    const recipients = await this.resolveRecipients(viewer, input)
     const now = clock.now()
     const request = await repositories.attention.create({
       id: ids.next(),
@@ -51,6 +60,7 @@ export class AttentionService {
       title: input.title,
       requestedById: viewer.id,
       requestedByName: viewer.displayName,
+      recipients,
       requiredSkills: input.requiredSkills,
       sameTeamOnly: input.sameTeamOnly,
       // The requester's team is captured HERE rather than read at delivery
@@ -152,7 +162,8 @@ export class AttentionService {
 
   /**
    * Hand it back. Returns what is left rather than an acknowledgement, because
-   * the third workspace column is what the caller is about to redraw.
+   * the third workspace column is what the caller is about to redraw. The host
+   * request goes with it only when this commitment made it.
    */
   async release(viewer: Reviewer, commitmentId: string): Promise<ReviewCommitment[]> {
     const { repositories } = this.container
@@ -164,6 +175,7 @@ export class AttentionService {
       throw new ForbiddenError('A commitment can only be released by the person who made it')
     }
     await repositories.commitments.delete(commitmentId)
+    await withdrawCommittedReviewer(this.container, commitment)
     return repositories.commitments.listByReviewer(viewer.id)
   }
 
@@ -172,6 +184,9 @@ export class AttentionService {
    * `(reviewer, pull request)` so a second click, or committing to a pull
    * request twice through two different asks, does not double-count the
    * promise in the workspace.
+   *
+   * The row is written before the host is asked, so a second click finds it
+   * while the host call is still in flight.
    */
   private async recordCommitment(
     viewer: Reviewer,
@@ -182,14 +197,47 @@ export class AttentionService {
     const { repositories, clock, ids } = this.container
     const existing = await repositories.commitments.find(viewer.id, pullRequest)
     if (existing !== null) return existing
-    return repositories.commitments.create({
+    const commitment = await repositories.commitments.create({
       id: ids.next(),
       reviewerId: viewer.id,
       pullRequest,
       title,
       attentionRequestId,
+      requestedHandle: null,
       createdAt: clock.now(),
     })
+    return requestCommittedReviewer(this.container, commitment, viewer)
+  }
+
+  /**
+   * The people an ask names, checked against the directory as it stands now.
+   * The pull request's author is known from its board row, when it has one.
+   */
+  private async resolveRecipients(
+    viewer: Reviewer,
+    input: CreateAttentionRequest,
+  ): Promise<AttentionRecipient[]> {
+    if (input.recipientIds.length === 0) return []
+    const { repositories } = this.container
+    const [directory, boardRow] = await Promise.all([
+      repositories.reviewers.list(),
+      repositories.reviews.getByPullRequest(input.pullRequest),
+    ])
+    // The board looks a row up by owner, repo and number alone, so a row from
+    // the other host under the same names is not this pull request.
+    const authorIds =
+      boardRow?.pullRequest.provider === input.pullRequest.provider
+        ? reviewersWithHandles(directory, input.pullRequest.provider, [boardRow.authorLogin])
+        : []
+    const resolution = resolveAttentionRecipients({
+      directory,
+      requestedById: viewer.id,
+      recipientIds: input.recipientIds,
+      neededCommitments: input.neededCommitments,
+      authorIds,
+    })
+    if (resolution.ok) return resolution.recipients
+    throw refusalError(resolution.refusal, input.neededCommitments)
   }
 
   private async require(attentionId: string): Promise<AttentionRequest> {
@@ -201,6 +249,33 @@ export class AttentionService {
 
   private publish(kind: AttentionEventKind, request: AttentionRequest): void {
     this.container.bus.publish({ kind, request })
+  }
+}
+
+function refusalError(refusal: RecipientRefusal, neededCommitments: number): ValidationError {
+  switch (refusal.reason) {
+    case 'too_few':
+      return new ValidationError(
+        `This ask waits for ${neededCommitments} reviewers but names only ${refusal.named}`,
+        { neededCommitments, recipients: refusal.named },
+      )
+    case 'unknown':
+      return new ValidationError(`No reviewer ${refusal.reviewerId} to ask`, {
+        reviewerId: refusal.reviewerId,
+      })
+    case 'requester':
+      return new ValidationError('You cannot ask yourself to review your own request', {
+        reviewerId: refusal.reviewer.id,
+      })
+    case 'paused':
+      return new ValidationError(`${refusal.reviewer.displayName} is paused and cannot be asked`, {
+        reviewerId: refusal.reviewer.id,
+      })
+    case 'author':
+      return new ValidationError(
+        `${refusal.reviewer.displayName} wrote this pull request and cannot be asked to review it`,
+        { reviewerId: refusal.reviewer.id },
+      )
   }
 }
 
