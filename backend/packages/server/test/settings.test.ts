@@ -282,8 +282,9 @@ describe('a pasted GitHub credential', () => {
       secrets: cipherFor(KEY),
       gateways: stubGateways({
         vcsFromToken: () => ({
-          requestReviewers: async () => {},
+          requestReviewers: async () => [],
           removeRequestedReviewers: async () => {},
+          pendingReviewers: async () => [],
           comment: async () => {},
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
@@ -313,8 +314,9 @@ describe('a pasted GitHub credential', () => {
       secrets: cipherFor(KEY),
       gateways: stubGateways({
         vcsFromToken: () => ({
-          requestReviewers: async () => {},
+          requestReviewers: async () => [],
           removeRequestedReviewers: async () => {},
+          pendingReviewers: async () => [],
           comment: async () => {},
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
