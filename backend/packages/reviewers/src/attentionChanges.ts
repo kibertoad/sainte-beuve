@@ -18,9 +18,9 @@ import {
  * What one answer changes on an ask, worked out from the ask as stored.
  *
  * Each function reads only the stored ask and what the caller hands it, and
- * names only the fields it changes. Two answers landing together then each
- * build on the row as the store holds it rather than on a read taken before
- * the other landed, and the store can rerun a decision against a fresher row.
+ * names only the fields it changes. The store's `change` reruns it against the
+ * row another answer left when one landed in between, so two answers landing
+ * together each build on the other. Null means the answer changes nothing.
  */
 
 export type AttentionPatch = Partial<AttentionRequest>
@@ -58,16 +58,15 @@ export function nextToAsk(
 /**
  * One more commitment. It resolves an ask that is still open once the count
  * is reached, and clears the person's decline when they changed their mind.
- * A commitment already on the ask is kept once.
+ * Null when their commitment is already on the ask, so a second click keeps
+ * the first one as it was.
  */
 export function commitmentChange(
   request: AttentionRequest,
   commitment: AttentionCommitment,
-): AttentionPatch {
-  const commitments = [
-    ...request.commitments.filter((entry) => entry.reviewerId !== commitment.reviewerId),
-    commitment,
-  ]
+): AttentionPatch | null {
+  if (request.commitments.some((entry) => entry.reviewerId === commitment.reviewerId)) return null
+  const commitments = [...request.commitments, commitment]
   const resolves = request.status === 'open' && isAttentionSatisfied({ ...request, commitments })
   return {
     commitments,
@@ -111,6 +110,12 @@ export function askMoreChange(
 ): AttentionChange {
   const asked = nextToAsk(request, candidates, count)
   return { patch: { updatedAt: at, ...recipientsAdded(request, asked) }, asked }
+}
+
+/** The requester withdrawing. Only an open ask changes. */
+export function cancelChange(request: AttentionRequest, at: number): AttentionPatch | null {
+  if (request.status !== 'open') return null
+  return { status: 'cancelled', updatedAt: at }
 }
 
 /** Where the DMs to the people just asked landed, kept alongside the ones already sent. */

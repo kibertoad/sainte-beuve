@@ -28,6 +28,7 @@ import { aiReviewCases, integrationTokenCases, reviewCases } from './board-cases
 import { reviewHistoryCases } from './history-cases.js'
 import { reminderCases } from './reminder-cases.js'
 import type { ConformanceCase } from './case.js'
+import { attentionChangeCases } from './attention-change-cases.js'
 import { integrationConfigCases, integrationConfigTenancyCases } from './config-cases.js'
 import {
   externalRepositoryCases,
@@ -50,6 +51,7 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
   ...projectCases,
   ...identityCases,
   ...attentionCases,
+  ...attentionChangeCases,
   ...commitmentCases,
   ...teamCases,
   ...externalRepositoryCases,
@@ -79,6 +81,7 @@ export {
 } from './stored-row-cases.js'
 export { apiKeyCases, sessionCases } from './auth-cases.js'
 export { aiReviewCases, integrationTokenCases, reviewCases } from './board-cases.js'
+export { attentionChangeCases } from './attention-change-cases.js'
 export { integrationConfigCases, integrationConfigTenancyCases } from './config-cases.js'
 export { teamCases, teamTenancyCases } from './teams-cases.js'
 export {

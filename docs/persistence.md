@@ -53,7 +53,7 @@ org gets there — no port method takes one, and no service passes one.
 | `projects`              | `(org_id, id)`                | `ref_key` (UNIQUE per org), `created_at`                                                                                        |
 | `external_repositories` | `(org_id, source, key)`       | `seq`                                                                                                                           |
 | `identities`            | `(org_id, provider, subject)` | `reviewer_id`                                                                                                                   |
-| `attention_requests`    | `(org_id, id)`                | `status`, `created_at`                                                                                                          |
+| `attention_requests`    | `(org_id, id)`                | `status`, `created_at`, `revision` (moved on by every write, so an answer writes only over the row it read)                     |
 | `review_commitments`    | `(org_id, id)`                | `reviewer_id`, `pull_request_key`, `created_at`                                                                                 |
 | `sessions`              | `(org_id, id)`                | `token_digest` (UNIQUE globally), `reviewer_id`, `provider`, `subject`, `created_at`, `last_seen_at`, `expires_at` (no payload) |
 | `api_keys`              | `(org_id, id)`                | `token_digest` (UNIQUE globally), `label`, `role`, `hint`, `created_by`, `created_at`, `last_used_at` (no payload)              |

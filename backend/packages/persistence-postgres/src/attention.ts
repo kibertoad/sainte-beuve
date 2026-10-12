@@ -1,9 +1,9 @@
 import type { AttentionRequest, AttentionStatus, ReviewCommitment } from '@sainte-beuve/contracts'
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
-import { pullRequestKey } from '@sainte-beuve/kernel'
+import { pullRequestKey, writeAtRevision } from '@sainte-beuve/kernel'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
-import { firstOr } from './rows.js'
+import { firstOr, patched } from './rows.js'
 import { attentionRequests, reviewCommitments } from './schema.js'
 
 /** The asks in flight, and the promises people made against pull requests. */
@@ -42,26 +42,36 @@ export class PostgresAttentionRepository implements AttentionRepository {
     return request
   }
 
-  /**
-   * One statement that merges the patch into the stored payload, so an update
-   * never writes back fields it did not name from a read another writer has
-   * since overtaken. `RETURNING` answers with the row both writes left.
-   */
-  async update(
+  async change(
     attentionId: string,
-    patch: Partial<AttentionRequest>,
+    change: (current: AttentionRequest) => Partial<AttentionRequest> | null,
   ): Promise<AttentionRequest | null> {
-    const { id: _id, ...fields } = patch
-    const rows = await this.db
-      .update(attentionRequests)
-      .set({
-        data: sql`${attentionRequests.data} || ${JSON.stringify(fields)}::jsonb`,
-        ...(fields.status === undefined ? {} : { status: fields.status }),
-        ...(fields.createdAt === undefined ? {} : { createdAt: fields.createdAt }),
-      })
-      .where(and(eq(attentionRequests.orgId, this.orgId), eq(attentionRequests.id, attentionId)))
-      .returning({ data: attentionRequests.data })
-    return firstOr(rows)?.data ?? null
+    const row = and(eq(attentionRequests.orgId, this.orgId), eq(attentionRequests.id, attentionId))
+    return writeAtRevision({
+      describe: `Attention request ${attentionId}`,
+      read: async () => {
+        const rows = await this.db.select().from(attentionRequests).where(row)
+        const found = firstOr(rows)
+        return found === null ? null : { value: found.data, revision: found.revision }
+      },
+      change: (current) => {
+        const patch = change(current)
+        return patch === null ? null : patched(current, patch)
+      },
+      writeIf: async (next, expected) => {
+        const written = await this.db
+          .update(attentionRequests)
+          .set({
+            status: next.status,
+            createdAt: next.createdAt,
+            data: next,
+            revision: expected + 1,
+          })
+          .where(and(row, eq(attentionRequests.revision, expected)))
+          .returning({ id: attentionRequests.id })
+        return written.length > 0
+      },
+    })
   }
 
   private async write(request: AttentionRequest): Promise<void> {
@@ -72,10 +82,15 @@ export class PostgresAttentionRepository implements AttentionRepository {
       createdAt: request.createdAt,
       data: request,
     }
+    // A create over an existing id moves the revision on as well, so a change
+    // that read the row before it loses its race instead of writing over it.
     await this.db
       .insert(attentionRequests)
       .values(row)
-      .onConflictDoUpdate({ target: [attentionRequests.orgId, attentionRequests.id], set: row })
+      .onConflictDoUpdate({
+        target: [attentionRequests.orgId, attentionRequests.id],
+        set: { ...row, revision: sql`${attentionRequests.revision} + 1` },
+      })
   }
 }
 

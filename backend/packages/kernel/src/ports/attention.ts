@@ -7,12 +7,20 @@ export interface AttentionRepository {
   getById(attentionId: string): Promise<AttentionRequest | null>
   create(request: AttentionRequest): Promise<AttentionRequest>
   /**
-   * Merge the patch into the stored ask and answer with the row as it now
-   * stands. Atomic per call: two updates naming different fields both survive
-   * however they interleave, which is what lets an ask record its DMs while
-   * somebody commits to it.
+   * Change one request atomically. `change` is given the request as stored and
+   * answers the fields to write, or null to leave it as it is. When another
+   * write lands between the read and this one, the store reads again and calls
+   * `change` again, so it must depend on nothing but the request it is given;
+   * it may throw to refuse. Answers the request as it now stands, or null when
+   * there is no such request.
+   *
+   * There is no plain update on purpose: every answer to an ask is a change to
+   * what is already there, and two answering at once must both land.
    */
-  update(attentionId: string, patch: Partial<AttentionRequest>): Promise<AttentionRequest | null>
+  change(
+    attentionId: string,
+    change: (current: AttentionRequest) => Partial<AttentionRequest> | null,
+  ): Promise<AttentionRequest | null>
 }
 
 export interface ReviewCommitmentRepository {
