@@ -3,6 +3,7 @@ import {
   clearCatFactoryConfigContract,
   disconnectVcsSignInContract,
   getConnectionsContract,
+  getSlackAppManifestContract,
   setCatFactoryConfigContract,
   syncCatFactoryRepositoriesContract,
   startGitHubAppInstallContract,
@@ -16,6 +17,7 @@ import { writeFlowCookie } from '../auth/cookies.js'
 import { requireAdmin } from '../auth/principal.js'
 import { CatFactoryConnectionService } from './CatFactoryConnectionService.js'
 import { ConnectionsService } from './ConnectionsService.js'
+import { slackManifest } from './slackManifest.js'
 
 /**
  * The connection API behind the Configuration screen's host and Slack cards.
@@ -69,6 +71,11 @@ export function connectionsController(): Hono<AppEnv> {
     // The whole connection, not an acknowledgement: dropping this credential can
     // change which one is in force, and the screen has to show what took over.
     return c.json(await service.read(), 200)
+  })
+
+  buildHonoRoute(app, getSlackAppManifestContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
+    return c.json(await slackManifest(c.get('container')), 200)
   })
 
   mountCatFactory(app)

@@ -19,23 +19,24 @@ pull request is merged with its review findings fixed.
 
 ## Tracker
 
-| #   | Gap                                                           | Step | Depends on | Status | PR                                                       |
-| --- | ------------------------------------------------------------- | ---- | ---------- | ------ | -------------------------------------------------------- |
-| 1   | Ranked reviewer recommendations, with the reason for each     | 2    |            | Merged | [#31](https://github.com/kibertoad/sainte-beuve/pull/31) |
-| 2   | Pick recommended reviewers and send each a named ask          | 3    | 1          | Merged | [#34](https://github.com/kibertoad/sainte-beuve/pull/34) |
-| 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | Merged | [#36](https://github.com/kibertoad/sainte-beuve/pull/36) |
-| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | Merged | [#35](https://github.com/kibertoad/sainte-beuve/pull/35) |
-| 5   | An AI review files under its repository's cat-factory service | 5    |            | Merged | [#33](https://github.com/kibertoad/sainte-beuve/pull/33) |
-| 6   | Start an AI review from any pull request row                  | 5    |            | Merged | [#32](https://github.com/kibertoad/sainte-beuve/pull/32) |
-| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Merged | [#38](https://github.com/kibertoad/sainte-beuve/pull/38) |
-| 8   | A commitment requests the reviewer on the host                | 3, 4 |            | Merged | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
-| 9   | One matching rule for assignment and asks                     | 2    | 2          | Merged | [#43](https://github.com/kibertoad/sainte-beuve/pull/43) |
-| 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Merged | [#42](https://github.com/kibertoad/sainte-beuve/pull/42) |
-| 11  | GitLab webhook intake                                         | 5    |            | Merged | [#40](https://github.com/kibertoad/sainte-beuve/pull/40) |
-| 12  | Challenge an AI review finding                                | 5    |            | Merged | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
-| 13  | A guided review names its cat-factory workspace               | 5    | 5          | Merged | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
-| 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | Merged | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
-| 15  | Attention answers are written atomically                      | 3    |            | Merged | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
+| #   | Gap                                                           | Step | Depends on | Status    | PR                                                       |
+| --- | ------------------------------------------------------------- | ---- | ---------- | --------- | -------------------------------------------------------- |
+| 1   | Ranked reviewer recommendations, with the reason for each     | 2    |            | Merged    | [#31](https://github.com/kibertoad/sainte-beuve/pull/31) |
+| 2   | Pick recommended reviewers and send each a named ask          | 3    | 1          | Merged    | [#34](https://github.com/kibertoad/sainte-beuve/pull/34) |
+| 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | Merged    | [#36](https://github.com/kibertoad/sainte-beuve/pull/36) |
+| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | Merged    | [#35](https://github.com/kibertoad/sainte-beuve/pull/35) |
+| 5   | An AI review files under its repository's cat-factory service | 5    |            | Merged    | [#33](https://github.com/kibertoad/sainte-beuve/pull/33) |
+| 6   | Start an AI review from any pull request row                  | 5    |            | Merged    | [#32](https://github.com/kibertoad/sainte-beuve/pull/32) |
+| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Merged    | [#38](https://github.com/kibertoad/sainte-beuve/pull/38) |
+| 8   | A commitment requests the reviewer on the host                | 3, 4 |            | Merged    | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
+| 9   | One matching rule for assignment and asks                     | 2    | 2          | Merged    | [#43](https://github.com/kibertoad/sainte-beuve/pull/43) |
+| 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Merged    | [#42](https://github.com/kibertoad/sainte-beuve/pull/42) |
+| 11  | GitLab webhook intake                                         | 5    |            | Merged    | [#40](https://github.com/kibertoad/sainte-beuve/pull/40) |
+| 12  | Challenge an AI review finding                                | 5    |            | Merged    | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
+| 13  | A guided review names its cat-factory workspace               | 5    | 5          | Merged    | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
+| 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | Merged    | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
+| 15  | Attention answers are written atomically                      | 3    |            | Merged    | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
+| 17  | Slack app setup from a generated manifest                     | 3    |            | In review |                                                          |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -149,3 +150,15 @@ remakes the decision when another write landed in between: a `revision` column
 in Postgres and D1, and a read and write with nothing awaited between them in
 memory. Two answers at the same moment both land, so no commitment, decline,
 added person or recorded DM is dropped.
+
+### 17. Slack app setup from a generated manifest
+
+The Slack Configuration screen shows a Slack app manifest for the viewing org,
+with a copy button, built by `slackAppManifest` in
+`@sainte-beuve/integrations`: the `/review` command and interactivity point at
+the org's `/webhooks/slack/<slug>` on `API_BASE_URL`, the Messages tab is on, and
+the bot scopes are the three the code calls on (`chat:write`,
+`chat:write.public`, `commands`). An admin creates the app from it and pastes
+the bot token and signing secret back. A deployment with no https
+`API_BASE_URL` is told what to set instead of being handed a URL Slack cannot
+reach.

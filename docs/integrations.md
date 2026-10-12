@@ -550,27 +550,45 @@ the failure everybody meets first.
 
 ### A Slack app
 
-1. **api.slack.com/apps → Create New App → From scratch.**
-2. **OAuth & Permissions**: bot scopes `chat:write` (and
-   `chat:write.public` to post in a channel the bot has not been invited to).
-   Install it, and put the `xoxb-…` token on the Configuration screen or in
-   `SLACK_BOT_TOKEN`. A DM (a personal reminder, an attention ask) is posted to
-   the person's user id, which `chat:write` covers: the app never opens a
-   conversation itself, so it needs no `im:write`.
-3. **App Home**: keep **Messages Tab** on. That tab is where the app's DMs
-   land, so with it off a person is never shown the attention asks and
-   reminders sent to them.
-4. **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
-   shows it: `https://<your-api>/webhooks/slack` for the default org, and
-   `https://<your-api>/webhooks/slack/<org-slug>` for any other.
-5. **Slash Commands**: `/review`, same URL.
-6. Copy the **Signing Secret** from Basic Information onto the Configuration
-   screen, beside the bot token. The default org may set `SLACK_SIGNING_SECRET`
-   on the deployment instead; a second org has to store it, because the
-   deployment's own secret is not lent across the boundary.
-7. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
+The Slack Configuration screen shows a manifest for the org you are signed in
+to, with its Request URL, the `/review` command and the bot scopes already in
+it:
+
+1. Copy the manifest from the screen.
+2. **api.slack.com/apps → Create New App → From a manifest**, pick the
+   workspace, paste it, and create the app.
+3. **Install to Workspace**, then paste the `xoxb-…` bot token (OAuth &
+   Permissions) and the **Signing Secret** (Basic Information) back onto the
+   same screen.
+4. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
    **default org's** channel, like the two credentials above it; a second org has
    no announcement channel yet.
+
+The manifest is built on `API_BASE_URL`, because Slack keeps the URL and posts
+to it from then on. Slack only accepts an https URL, so a deployment without
+`API_BASE_URL`, or with an `http` one, gets a line on the screen naming what to
+set instead of a manifest. Locally that means a tunnel (see below).
+
+The manifest sets the following, which is also the reference for an app made
+by hand or for checking one that already exists:
+
+- **OAuth & Permissions**: bot scopes `chat:write`, `chat:write.public` and
+  `commands`. `chat:write` covers every message the app posts or updates. A DM
+  (a personal reminder, an attention ask) is posted to the person's user id,
+  which `chat:write` covers: the app never opens a conversation itself, so it
+  needs no `im:write`. `chat:write.public` lets the announcement reach a channel
+  the bot has not been invited to, and `commands` is what a slash command needs.
+- **App Home**: **Messages Tab** on and read-only. That tab is where the app's
+  DMs land, so with it off a person is never shown the attention asks and
+  reminders sent to them. Nothing reads a reply, so it does not take one.
+- **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
+  shows it: `https://<your-api>/webhooks/slack/<org-slug>`. The default org's
+  slug is `default`, and it also answers on `https://<your-api>/webhooks/slack`.
+- **Slash Commands**: `/review`, same URL.
+
+The default org may set `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` on the
+deployment instead of storing them; a second org has to store both, because the
+deployment's own credentials are not lent across the boundary.
 
 ### Locally
 
