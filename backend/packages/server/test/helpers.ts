@@ -1,4 +1,5 @@
 import type {
+  AttentionRequest,
   CreateReviewerInput,
   CreateReviewRequestInput,
   OpenPullRequest,
@@ -209,10 +210,14 @@ export function noMerging(): Pick<VcsGateway, 'pullRequestStatus' | 'merge'> {
 }
 
 /** The attention-ask half of the chat port, for a fake that is never asked to DM one. */
-export function noAttentionDms(): Pick<ChatGateway, 'sendAttentionAsk' | 'updateAttentionAsk'> {
+export function noAttentionDms(): Pick<
+  ChatGateway,
+  'sendAttentionAsk' | 'updateAttentionAsk' | 'sendAttentionShort'
+> {
   return {
     sendAttentionAsk: () => Promise.reject(new Error('sendAttentionAsk is not stubbed')),
     updateAttentionAsk: () => Promise.reject(new Error('updateAttentionAsk is not stubbed')),
+    sendAttentionShort: () => Promise.reject(new Error('sendAttentionShort is not stubbed')),
   }
 }
 
@@ -227,14 +232,17 @@ export function recordingChat(): ChatGateway & {
   posted: { target: string; kind: string }[]
   asks: RecordedAsk[]
   askUpdates: RecordedAsk[]
+  shortNotices: { target: string; request: AttentionRequest }[]
 } {
   const posted: { target: string; kind: string }[] = []
   const asks: RecordedAsk[] = []
   const askUpdates: RecordedAsk[] = []
+  const shortNotices: { target: string; request: AttentionRequest }[] = []
   return {
     posted,
     asks,
     askUpdates,
+    shortNotices,
     announceReview: async (_review, channelId) => {
       posted.push({ target: channelId, kind: 'announcement' })
       return { messageId: 'ts-1' }
@@ -249,6 +257,9 @@ export function recordingChat(): ChatGateway & {
     },
     updateAttentionAsk: async (notice, message) => {
       askUpdates.push({ target: message.conversationId, notice })
+    },
+    sendAttentionShort: async (request, target) => {
+      shortNotices.push({ target, request })
     },
   }
 }

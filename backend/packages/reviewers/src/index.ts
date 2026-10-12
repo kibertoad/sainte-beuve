@@ -59,12 +59,10 @@ export {
   type AttentionAudienceRule,
   askedOrAnsweredIds,
   audienceRuleOf,
+  declineRefusal,
   hasDeclined,
   isAttentionSatisfied,
   isInAttentionAudience,
-  outstandingCommitments,
-  pendingRecipientIds,
-  recipientShortfall,
   selectAttentionAudience,
   unaskableReason,
 } from './attention.js'

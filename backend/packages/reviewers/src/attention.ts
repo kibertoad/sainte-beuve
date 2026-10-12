@@ -103,39 +103,6 @@ export function isAttentionSatisfied(request: {
   return request.commitments.length >= request.neededCommitments
 }
 
-/** How many more people the request is still waiting for. Never negative. */
-export function outstandingCommitments(request: {
-  neededCommitments: number
-  commitments: readonly unknown[]
-}): number {
-  return Math.max(0, request.neededCommitments - request.commitments.length)
-}
-
-/**
- * The named recipients who could still answer: neither committed nor declined.
- * Empty for an ask sent by skill, which names nobody.
- */
-export function pendingRecipientIds(request: AttentionRequest): string[] {
-  const answered = new Set([
-    ...request.commitments.map((entry) => entry.reviewerId),
-    ...request.declines.map((entry) => entry.reviewerId),
-  ])
-  return request.recipients
-    .map((recipient) => recipient.reviewerId)
-    .filter((reviewerId) => !answered.has(reviewerId))
-}
-
-/**
- * How many more people a NAMED ask has to ask before it can resolve at all:
- * what it still waits for, less the recipients who have not answered yet.
- * Zero for an ask sent by skill, whose audience is whoever holds the skills,
- * and zero while enough named people are still to answer.
- */
-export function recipientShortfall(request: AttentionRequest): number {
-  if (request.recipients.length === 0) return 0
-  return Math.max(0, outstandingCommitments(request) - pendingRecipientIds(request).length)
-}
-
 /**
  * Everybody the ask has already been to, one way or another: the requester,
  * every named recipient, whoever committed and whoever declined. Asking on
@@ -153,6 +120,25 @@ export function askedOrAnsweredIds(request: AttentionRequest): Set<string> {
 /** Whether this person has turned the ask down. */
 export function hasDeclined(request: AttentionRequest, reviewerId: string): boolean {
   return request.declines.some((entry) => entry.reviewerId === reviewerId)
+}
+
+/**
+ * Why this person cannot decline the ask, or null when they can: anybody it
+ * reached, and anybody declining again with a new reason. Being named is
+ * enough on its own, so somebody who paused after the ask went out can still
+ * say no, and that no is what lets the ask move on.
+ */
+export function declineRefusal(
+  request: AttentionRequest,
+  reviewer: Reviewer,
+): 'requester' | 'committed' | 'not_addressed' | null {
+  if (request.requestedById === reviewer.id) return 'requester'
+  if (request.commitments.some((entry) => entry.reviewerId === reviewer.id)) return 'committed'
+  const reached =
+    request.recipients.some((entry) => entry.reviewerId === reviewer.id) ||
+    isInAttentionAudience(reviewer, audienceRuleOf(request)) ||
+    hasDeclined(request, reviewer.id)
+  return reached ? null : 'not_addressed'
 }
 
 /**

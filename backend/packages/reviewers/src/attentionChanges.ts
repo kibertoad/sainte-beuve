@@ -5,12 +5,11 @@ import type {
   AttentionRequest,
   Reviewer,
 } from '@sainte-beuve/contracts'
-import { MAX_ATTENTION_RECIPIENTS } from '@sainte-beuve/contracts'
+import { MAX_ATTENTION_RECIPIENTS, recipientShortfall } from '@sainte-beuve/contracts'
 import {
   askedOrAnsweredIds,
   hasDeclined,
   isAttentionSatisfied,
-  recipientShortfall,
   withDecline,
   withoutDecline,
 } from './attention.js'
@@ -34,22 +33,26 @@ export interface AttentionChange {
 
 /**
  * Up to `count` of `candidates`, in their order, that the ask has not been to
- * yet, and never more than it still has room to name.
+ * yet, and never more than it still has room to name. Nobody on an ask that
+ * closed while the change was worked out, so nobody is DMed about one.
  */
 export function nextToAsk(
   request: AttentionRequest,
   candidates: readonly Reviewer[],
   count: number,
 ): Reviewer[] {
+  if (request.status !== 'open') return []
   const room = Math.min(count, MAX_ATTENTION_RECIPIENTS - request.recipients.length)
   if (room <= 0) return []
   const taken = askedOrAnsweredIds(request)
-  const fresh = candidates.filter(
-    (reviewer, index) =>
-      !taken.has(reviewer.id) &&
-      candidates.findIndex((entry) => entry.id === reviewer.id) === index,
-  )
-  return fresh.slice(0, room)
+  const fresh: Reviewer[] = []
+  for (const reviewer of candidates) {
+    if (fresh.length === room) break
+    if (taken.has(reviewer.id)) continue
+    taken.add(reviewer.id)
+    fresh.push(reviewer)
+  }
+  return fresh
 }
 
 /**

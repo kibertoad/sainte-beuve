@@ -141,6 +141,17 @@ describe('SlackChatGateway', () => {
     expect(calls[0]?.payload.text).toContain('withdrew')
   })
 
+  it('DMs the requester of a short ask to their user id', async () => {
+    const { impl, calls } = stubFetch({ ok: true, channel: 'D888', ts: '1700000000.000300' })
+    const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
+
+    await gateway.sendAttentionShort(ask, 'U-igor')
+
+    expect(calls[0]?.url).toBe('https://slack.com/api/chat.postMessage')
+    expect(calls[0]?.payload).toMatchObject({ channel: 'U-igor' })
+    expect(calls[0]?.payload.text).toContain('are left to answer')
+  })
+
   it('treats an ok:false 200 as a failure, carrying the slug an operator can act on', async () => {
     const { impl } = stubFetch({ ok: false, error: 'channel_not_found' })
     const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })

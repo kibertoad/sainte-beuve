@@ -43,6 +43,26 @@ export function attentionAskMessage(
   return openAsk(notice, link, appBaseUrl)
 }
 
+/**
+ * The DM a requester gets when declines leave their named ask without enough
+ * people to answer it: who passed and why, and where to ask the next best match.
+ */
+export function attentionShortMessage(
+  request: AttentionRequest,
+  appBaseUrl: string | undefined,
+): SlackMessage {
+  const passed = request.declines
+    .map((entry) =>
+      entry.reason === null ? entry.displayName : `${entry.displayName} (${entry.reason})`,
+    )
+    .join(', ')
+  const text =
+    `Not enough of the people you asked to review ${pullRequestLink(request)} are left to ` +
+    `answer. Passed: ${escapeSlackText(passed)}.`
+  if (appBaseUrl === undefined) return closed(text)
+  return closed(`${text} ${slackLink(appBaseUrl, 'Ask the next best match')} from your inbox.`)
+}
+
 /** The ask itself, with the button that answers it. */
 function openAsk(
   notice: AttentionAskNotice,

@@ -84,18 +84,19 @@ export async function rankedCandidates(
   container: AppContainer,
   request: AttentionRequest,
 ): Promise<Reviewer[]> {
-  const directory = await container.repositories.reviewers.list()
-  const requester = directory.find((entry) => entry.id === request.requestedById)
-  if (requester === undefined) return []
-  const { recommendations } = await new RecommendationService(container).recommend(requester, {
+  const requester = await container.repositories.reviewers.getById(request.requestedById)
+  if (requester === null) return []
+  // The team captured when the ask was raised, as the gate uses, so a requester
+  // who changed team since does not move the ask to another team's list.
+  const asRaised = { ...requester, team: request.team }
+  const { ranked } = await new RecommendationService(container).rank(asRaised, {
     pullRequest: request.pullRequest,
     requiredSkills: request.requiredSkills,
     sameTeamOnly: request.sameTeamOnly,
     people: request.people,
     limit: MAX_RECOMMENDATIONS,
   })
-  const byId = new Map(directory.map((entry) => [entry.id, entry]))
-  return recommendations.flatMap((entry) => byId.get(entry.reviewerId) ?? [])
+  return ranked.map((candidate) => candidate.reviewer)
 }
 
 /**

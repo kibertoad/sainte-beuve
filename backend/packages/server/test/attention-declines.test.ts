@@ -70,7 +70,11 @@ describe('declining an ask', () => {
   beforeEach(async () => {
     chat = recordingChat()
     asker = buildHarness({ chat, vcs: environmentVcs(viewerVcs('kibertoad')) })
-    await addReviewer(asker, { displayName: 'Igor', handles: { github: 'kibertoad' } })
+    await addReviewer(asker, {
+      displayName: 'Igor',
+      handles: { github: 'kibertoad' },
+      slackUserId: 'U-igor',
+    })
     ada = await addReviewer(asker, {
       displayName: 'Ada',
       handles: { github: 'ada' },
@@ -148,11 +152,65 @@ describe('declining an ask', () => {
     expect((await inbox(as(asker, 'cy'))).map((entry) => entry.id)).toStrictEqual([request.id])
   })
 
+  it('never moves on to the author the host listed, though the board has no row', async () => {
+    const request = await raise(asker, {
+      recipientIds: [ada.id],
+      requiredSkills: ['Backend'],
+      keepAsking: true,
+      people: { authorLogin: 'cy', requestedReviewerLogins: [] },
+    })
+
+    const declined = await body(await decline(as(asker, 'ada'), request.id))
+
+    expect(declined.recipients.map((entry) => entry.reviewerId)).not.toContain(cy.id)
+    expect(chat.asks.map((ask) => ask.target)).toStrictEqual(['U-ada'])
+  })
+
+  it('refuses to name the author the host listed', async () => {
+    const res = await asker.app.fetch(
+      post(ATTENTION, {
+        pullRequest: PR,
+        title: 'Add a health check',
+        recipientIds: [cy.id],
+        people: { authorLogin: 'cy', requestedReviewerLogins: [] },
+      }),
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('lets somebody named and paused since say no', async () => {
+    const request = await raise(asker, { recipientIds: [ada.id, bo.id] })
+    await asker.container.repositories.reviewers.update(ada.id, { availability: 'paused' })
+    expect((await decline(as(asker, 'ada'), request.id)).status).toBe(200)
+  })
+
+  it('stores a blank reason as no reason', async () => {
+    const request = await raise(asker, { recipientIds: [ada.id, bo.id] })
+    const declined = await body(await decline(as(asker, 'ada'), request.id, '   '))
+    expect(declined.declines.at(0)?.reason).toBeNull()
+  })
+
   it('leaves a short ask to the requester when they did not choose to keep asking', async () => {
     const request = await raise(asker, { recipientIds: [ada.id], requiredSkills: ['Backend'] })
     const declined = await body(await decline(as(asker, 'ada'), request.id))
     expect(declined.recipients.map((entry) => entry.reviewerId)).toStrictEqual([ada.id])
     expect(await inbox(as(asker, 'cy'))).toStrictEqual([])
+    // The requester is told once, by the decline that left the ask short.
+    expect(chat.shortNotices.map((notice) => notice.target)).toStrictEqual(['U-igor'])
+    await decline(as(asker, 'ada'), request.id, 'Still away')
+    expect(chat.shortNotices).toHaveLength(1)
+  })
+
+  it('does not tell the requester while the ask can still fill or has asked on', async () => {
+    const request = await raise(asker, { recipientIds: [ada.id, bo.id] })
+    await decline(as(asker, 'ada'), request.id)
+    const kept = await raise(asker, {
+      recipientIds: [ada.id],
+      requiredSkills: ['Backend'],
+      keepAsking: true,
+    })
+    await decline(as(asker, 'ada'), kept.id)
+    expect(chat.shortNotices).toStrictEqual([])
   })
 })
 
@@ -189,6 +247,17 @@ describe('asking more people on an ask', () => {
   it('asks the people the requester names, passing over anybody already asked', async () => {
     const request = await raise(asker, { recipientIds: [ada.id] })
     const res = await askMore(asker, request.id, [ada.id, bo.id])
+    expect(res.status).toBe(200)
+    expect((await body(res)).recipients.map((entry) => entry.reviewerId)).toStrictEqual([
+      ada.id,
+      bo.id,
+    ])
+  })
+
+  it('answers a repeated click as the ask stands', async () => {
+    const request = await raise(asker, { recipientIds: [ada.id] })
+    await askMore(asker, request.id, [bo.id])
+    const res = await askMore(asker, request.id, [bo.id])
     expect(res.status).toBe(200)
     expect((await body(res)).recipients.map((entry) => entry.reviewerId)).toStrictEqual([
       ada.id,

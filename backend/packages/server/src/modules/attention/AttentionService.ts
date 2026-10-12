@@ -8,6 +8,7 @@ import type {
   Reviewer,
   ReviewCommitment,
 } from '@sainte-beuve/contracts'
+import { recipientShortfall } from '@sainte-beuve/contracts'
 import { ConflictError, ForbiddenError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
   type AttentionChange,
@@ -15,16 +16,16 @@ import {
   audienceRuleOf,
   commitmentChange,
   declineChange,
+  declineRefusal,
   hasDeclined,
   isInAttentionAudience,
-  recipientShortfall,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import {
   requestCommittedReviewer,
   withdrawCommittedReviewer,
 } from '../../integrations/reviewRequests.js'
-import { refreshAskDeliveries, sendAskDms } from './askDeliveries.js'
+import { refreshAskDeliveries, sendAskDms, tellRequesterShort } from './askDeliveries.js'
 import { changeAsk } from './changeAsk.js'
 import { namedAdditions, namedRecipients, rankedCandidates } from './recipients.js'
 
@@ -156,16 +157,8 @@ export class AttentionService {
     reason: string | null,
   ): Promise<AttentionRequest> {
     const request = await this.requireOpen(attentionId)
-    if (request.requestedById === viewer.id) {
-      throw new ForbiddenError('You asked for this review, so there is nothing to decline')
-    }
-    if (request.commitments.some((entry) => entry.reviewerId === viewer.id)) {
-      throw new ConflictError('You already said you will review this', { attentionId })
-    }
-    const reached = isInAttentionAudience(viewer, audienceRuleOf(request))
-    if (!reached && !hasDeclined(request, viewer.id)) {
-      throw new ForbiddenError('This request was not addressed to you')
-    }
+    const refusal = declineRefusal(request, viewer)
+    if (refusal !== null) throw declineError(refusal, attentionId)
     const decline = {
       reviewerId: viewer.id,
       displayName: viewer.displayName,
@@ -181,6 +174,7 @@ export class AttentionService {
     )
     this.publish('declined', updated.request)
     await refreshAskDeliveries(this.container, updated.request, viewer.id)
+    await tellRequesterShort(this.container, request, updated.request)
     return sendAskDms(this.container, updated.request, updated.asked)
   }
 
@@ -209,6 +203,8 @@ export class AttentionService {
     const candidates = named
       ? await namedAdditions(this.container, request, recipientIds)
       : await rankedCandidates(this.container, request)
+    // Everybody named was asked already: a repeated click, answered as it stands.
+    if (named && candidates.length === 0) return request
     const now = this.container.clock.now()
     const count = (ask: AttentionRequest) =>
       named ? candidates.length : Math.max(1, recipientShortfall(ask))
@@ -332,6 +328,20 @@ export class AttentionService {
 
   private publish(kind: AttentionEventKind, request: AttentionRequest): void {
     this.container.bus.publish({ kind, request })
+  }
+}
+
+function declineError(
+  refusal: 'requester' | 'committed' | 'not_addressed',
+  attentionId: string,
+): Error {
+  switch (refusal) {
+    case 'requester':
+      return new ForbiddenError('You asked for this review, so there is nothing to decline')
+    case 'committed':
+      return new ConflictError('You already said you will review this', { attentionId })
+    case 'not_addressed':
+      return new ForbiddenError('This request was not addressed to you')
   }
 }
 

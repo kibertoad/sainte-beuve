@@ -136,6 +136,43 @@ export const attentionRequestSchema = v.object({
 })
 export type AttentionRequest = v.InferOutput<typeof attentionRequestSchema>
 
+// How far an ask is from answered. Here beside the model rather than in
+// @sainte-beuve/reviewers because the SPA says the same thing about the same
+// ask, and two copies of the rule are how its button and the server disagree.
+
+/** How many more people the request is still waiting for. Never negative. */
+export function outstandingCommitments(request: {
+  neededCommitments: number
+  commitments: readonly unknown[]
+}): number {
+  return Math.max(0, request.neededCommitments - request.commitments.length)
+}
+
+/**
+ * The named recipients who could still answer: neither committed nor declined.
+ * Empty for an ask sent by skill, which names nobody.
+ */
+export function pendingRecipientIds(request: AttentionRequest): string[] {
+  const answered = new Set([
+    ...request.commitments.map((entry) => entry.reviewerId),
+    ...request.declines.map((entry) => entry.reviewerId),
+  ])
+  return request.recipients
+    .map((recipient) => recipient.reviewerId)
+    .filter((reviewerId) => !answered.has(reviewerId))
+}
+
+/**
+ * How many more people a NAMED ask has to ask before it can resolve at all:
+ * what it still waits for, less the recipients who have not answered yet.
+ * Zero for an ask sent by skill, whose audience is whoever holds the skills,
+ * and zero while enough named people are still to answer.
+ */
+export function recipientShortfall(request: AttentionRequest): number {
+  if (request.recipients.length === 0) return 0
+  return Math.max(0, outstandingCommitments(request) - pendingRecipientIds(request).length)
+}
+
 export const createAttentionRequestSchema = v.object({
   pullRequest: pullRequestRefSchema,
   title: attentionRequestSchema.entries.title,
@@ -164,9 +201,22 @@ export type CreateAttentionRequest = v.InferOutput<typeof createAttentionRequest
 /** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
 export type CreateAttentionRequestInput = v.InferInput<typeof createAttentionRequestSchema>
 
-/** Turning an ask down. The reason is optional and shown to the requester. */
+/**
+ * Turning an ask down. The reason is optional and shown to the requester; a
+ * blank one is no reason, so it reads as null.
+ */
 export const declineAttentionRequestSchema = v.object({
-  reason: v.optional(attentionDeclineSchema.entries.reason, null),
+  reason: v.optional(
+    v.nullable(
+      v.pipe(
+        v.string(),
+        v.trim(),
+        v.maxLength(300),
+        v.transform((reason) => (reason === '' ? null : reason)),
+      ),
+    ),
+    null,
+  ),
 })
 export type DeclineAttentionRequest = v.InferOutput<typeof declineAttentionRequestSchema>
 

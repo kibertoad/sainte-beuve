@@ -1,7 +1,7 @@
 import type { AttentionRequest } from '@sainte-beuve/contracts'
 import type { AttentionAskNotice } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
-import { attentionAskMessage } from './attentionMessage.js'
+import { attentionAskMessage, attentionShortMessage } from './attentionMessage.js'
 import { SLACK_ACTIONS } from './commands.js'
 
 // The DM a named ask arrives as, in each state the ask passes through. A button
@@ -151,5 +151,26 @@ describe('attentionAskMessage', () => {
     )
     expect(message.text).toBe(`Igor withdrew the ask to review ${LINK}.`)
     expect(buttons(message)).toStrictEqual([])
+  })
+})
+
+describe('attentionShortMessage', () => {
+  const declines = [
+    { reviewerId: 'rev-ada', displayName: 'Ada', reason: 'On <leave>', declinedAt: 2 },
+    { reviewerId: 'rev-bo', displayName: 'Bo', reason: null, declinedAt: 3 },
+  ]
+
+  it('says who passed and why, and points at the inbox to ask on', () => {
+    const message = attentionShortMessage(request({ declines }), 'https://sainte-beuve.example')
+    expect(message.text).toBe(
+      `Not enough of the people you asked to review ${LINK} are left to answer. ` +
+        'Passed: Ada (On &lt;leave&gt;), Bo. ' +
+        '<https://sainte-beuve.example|Ask the next best match> from your inbox.',
+    )
+    expect(buttons(message)).toStrictEqual([])
+  })
+
+  it('leaves the link out when the deployment has no address for the app', () => {
+    expect(attentionShortMessage(request({ declines }), undefined).text).not.toContain('inbox')
   })
 })

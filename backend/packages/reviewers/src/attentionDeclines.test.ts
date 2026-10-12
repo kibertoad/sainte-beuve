@@ -1,13 +1,19 @@
-import type { AttentionRequest } from '@sainte-beuve/contracts'
+import type { AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   askedOrAnsweredIds,
+  declineRefusal,
   hasDeclined,
-  pendingRecipientIds,
-  recipientShortfall,
   withDecline,
   withoutDecline,
 } from './attention.js'
+import {
+  askMoreChange,
+  commitmentChange,
+  declineChange,
+  deliveriesChange,
+  nextToAsk,
+} from './attentionChanges.js'
 
 function ask(overrides: Partial<AttentionRequest> = {}): AttentionRequest {
   return {
@@ -51,51 +57,6 @@ const declined = (reviewerId: string, declinedAt = 1) => ({
 })
 const committed = (reviewerId: string) => ({ reviewerId, displayName: reviewerId, committedAt: 1 })
 
-describe('pendingRecipientIds', () => {
-  it('keeps the named people who have neither committed nor declined', () => {
-    const request = ask({
-      recipients: named('ada', 'bo', 'cy'),
-      commitments: [committed('ada')],
-      declines: [declined('bo')],
-    })
-    expect(pendingRecipientIds(request)).toEqual(['cy'])
-  })
-})
-
-describe('recipientShortfall', () => {
-  it('is zero for an ask sent by skill, whatever has been declined', () => {
-    expect(recipientShortfall(ask({ declines: [declined('ada')] }))).toBe(0)
-  })
-
-  it('is zero while enough named people are still to answer', () => {
-    const request = ask({
-      recipients: named('ada', 'bo', 'cy'),
-      neededCommitments: 2,
-      declines: [declined('ada')],
-    })
-    expect(recipientShortfall(request)).toBe(0)
-  })
-
-  it('counts the people a named ask still has to ask once declines leave it short', () => {
-    const request = ask({
-      recipients: named('ada', 'bo'),
-      neededCommitments: 2,
-      commitments: [committed('ada')],
-      declines: [declined('bo')],
-    })
-    expect(recipientShortfall(request)).toBe(1)
-  })
-
-  it('is zero once the ask has what it waits for', () => {
-    const request = ask({
-      recipients: named('ada', 'bo'),
-      commitments: [committed('ada')],
-      declines: [declined('bo')],
-    })
-    expect(recipientShortfall(request)).toBe(0)
-  })
-})
-
 describe('askedOrAnsweredIds', () => {
   it('holds the requester, every recipient, and whoever committed or declined', () => {
     const request = ask({
@@ -125,5 +86,113 @@ describe('declines', () => {
     const request = ask({ declines: withoutDecline([declined('ada'), declined('bo')], 'ada') })
     expect(hasDeclined(request, 'ada')).toBe(false)
     expect(hasDeclined(request, 'bo')).toBe(true)
+  })
+})
+
+function person(id: string, overrides: Partial<Reviewer> = {}): Reviewer {
+  return {
+    id,
+    displayName: id,
+    handles: { github: id, gitlab: null },
+    slackUserId: null,
+    team: null,
+    skills: [],
+    domains: [],
+    availability: 'available',
+    role: 'member',
+    weight: 1,
+    outstandingReviews: 0,
+    createdAt: 0,
+    ...overrides,
+  }
+}
+
+describe('declineRefusal', () => {
+  it('lets somebody named decline though they paused since', () => {
+    const request = ask({ recipients: named('ada') })
+    expect(declineRefusal(request, person('ada', { availability: 'paused' }))).toBeNull()
+  })
+
+  it('refuses the requester, a committer and anybody the ask never reached', () => {
+    const request = ask({ recipients: named('ada', 'bo'), commitments: [committed('bo')] })
+    expect(declineRefusal(request, person('asker'))).toBe('requester')
+    expect(declineRefusal(request, person('bo'))).toBe('committed')
+    expect(declineRefusal(request, person('cy'))).toBe('not_addressed')
+  })
+
+  it('lets somebody who declined decline again with a new reason', () => {
+    const request = ask({ recipients: named('bo'), declines: [declined('ada')] })
+    expect(declineRefusal(request, person('ada'))).toBeNull()
+  })
+})
+
+describe('nextToAsk', () => {
+  const candidates = ['ada', 'bo', 'bo', 'cy', 'dee'].map((id) => person(id))
+
+  it('takes candidates in order, once each, passing over everybody the ask has been to', () => {
+    const request = ask({ recipients: named('ada'), declines: [declined('cy')] })
+    expect(nextToAsk(request, candidates, 5).map((entry) => entry.id)).toEqual(['bo', 'dee'])
+  })
+
+  it('asks nobody on an ask that closed meanwhile', () => {
+    expect(nextToAsk(ask({ status: 'cancelled' }), candidates, 1)).toEqual([])
+  })
+
+  it('stops at the most people an ask can name', () => {
+    const full = named(...Array.from({ length: 10 }, (_, index) => `n${index}`))
+    expect(nextToAsk(ask({ recipients: full }), candidates, 1)).toEqual([])
+  })
+})
+
+describe('the changes an answer makes', () => {
+  it('resolves an open ask on the commitment that completes it, and clears that decline', () => {
+    const request = ask({ recipients: named('ada'), declines: [declined('ada')] })
+    const patch = commitmentChange(request, committed('ada'))
+    expect(patch).toMatchObject({ status: 'resolved', resolvedAt: 1, declines: [] })
+  })
+
+  it('leaves the status of an ask that closed meanwhile alone, and names no field it keeps', () => {
+    const patch = commitmentChange(ask({ status: 'cancelled' }), committed('ada'))
+    expect(patch).not.toHaveProperty('status')
+    expect(patch).not.toHaveProperty('declines')
+  })
+
+  it('asks as many as a decline leaves a keep-asking ask short, from the stored ask', () => {
+    const request = ask({ recipients: named('ada', 'bo'), keepAsking: true })
+    const unaffected = declineChange(request, declined('ada'), [person('cy')])
+    expect(unaffected.asked).toEqual([])
+    expect(unaffected.patch).not.toHaveProperty('recipients')
+
+    const short = declineChange({ ...request, declines: [declined('bo')] }, declined('ada', 2), [
+      person('cy'),
+      person('dee'),
+    ])
+    expect(short.asked.map((entry) => entry.id)).toEqual(['cy'])
+    expect(short.patch.recipients?.map((entry) => entry.reviewerId)).toEqual(['ada', 'bo', 'cy'])
+    expect(short.patch.declines?.map((entry) => entry.reviewerId)).toEqual(['bo', 'ada'])
+  })
+
+  it('asks nobody on a decline when the requester did not choose to keep asking', () => {
+    const change = declineChange(ask({ recipients: named('ada') }), declined('ada'), [person('cy')])
+    expect(change.asked).toEqual([])
+  })
+
+  it('adds the people asked after the ones already named', () => {
+    const change = askMoreChange(ask({ recipients: named('ada') }), [person('bo')], 1, 5)
+    expect(change.patch).toEqual({
+      updatedAt: 5,
+      recipients: [
+        { reviewerId: 'ada', displayName: 'ada' },
+        { reviewerId: 'bo', displayName: 'bo' },
+      ],
+    })
+  })
+
+  it('keeps the DMs already recorded beside the new ones', () => {
+    const sent = { reviewerId: 'ada', conversationId: 'D1', messageId: '1' }
+    const fresh = { reviewerId: 'bo', conversationId: 'D2', messageId: '2' }
+    expect(deliveriesChange(ask({ chatDeliveries: [sent] }), [fresh])).toEqual({
+      chatDeliveries: [sent, fresh],
+    })
   })
 })

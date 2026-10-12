@@ -1,4 +1,5 @@
 import type { AttentionDelivery, AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
+import { recipientShortfall } from '@sainte-beuve/contracts'
 import { deliveriesChange, hasDeclined, matchTargetFor, matchesOf } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveChat } from '../../integrations/resolve.js'
@@ -133,6 +134,37 @@ async function refreshDeliveries(
       'could not update the DM of an attention ask',
     )
   })
+}
+
+/**
+ * DM the requester that their named ask can no longer fill from the people it
+ * names, when the decline that answered `before` made it shorter and nobody
+ * was asked on. Only the decline that moves the shortfall tells them, so each
+ * person they lose is one message and a repeated decline is none.
+ */
+export async function tellRequesterShort(
+  container: AppContainer,
+  before: AttentionRequest,
+  after: AttentionRequest,
+): Promise<void> {
+  if (after.status !== 'open' || recipientShortfall(after) <= recipientShortfall(before)) return
+  const reached = await quietly(container, after, async () => {
+    const [chat, requester] = await Promise.all([
+      resolveChat(container),
+      container.repositories.reviewers.getById(after.requestedById),
+    ])
+    const target = requester?.slackUserId ?? null
+    return chat === null || target === null ? null : { chat, target }
+  })
+  if (reached === null) return
+  try {
+    await reached.chat.gateway.sendAttentionShort(after, reached.target)
+  } catch (err) {
+    container.logger.warn(
+      { err, attentionId: after.id },
+      'could not DM the requester of a short ask',
+    )
+  }
 }
 
 /** `read`'s answer, or null with a warning when it throws. */

@@ -1,10 +1,10 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
+import { outstandingCommitments } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   type AttentionAudienceRule,
   isAttentionSatisfied,
   isInAttentionAudience,
-  outstandingCommitments,
   selectAttentionAudience,
 } from './attention.js'
 
