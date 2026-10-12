@@ -37,6 +37,7 @@ pull request is merged with its review findings fixed.
 | 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | Merged    | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
 | 15  | Attention answers are written atomically                      | 3    |            | Merged    | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
 | 16  | One commitment per reviewer and pull request                  | 3    |            | In review | [#48](https://github.com/kibertoad/sainte-beuve/pull/48) |
+| 17  | Slack app setup from a generated manifest                     | 3    |            | In review | [#47](https://github.com/kibertoad/sainte-beuve/pull/47) |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -161,3 +162,15 @@ durable stores enforce it with a unique index on the org, the reviewer and the
 without case; the memory store checks and writes with nothing awaited between
 them. Two clicks at the same moment leave one row, and only the call that wrote
 it requests the reviewer on the host.
+
+### 17. Slack app setup from a generated manifest
+
+The Slack Configuration screen shows a Slack app manifest for the viewing org,
+with a copy button, built by `slackAppManifest` in
+`@sainte-beuve/integrations`: the `/review` command and interactivity point at
+the org's `/webhooks/slack/<slug>` on `API_BASE_URL`, the Messages tab is on, and
+the bot scopes are the three the code calls on (`chat:write`,
+`chat:write.public`, `commands`). An admin creates the app from it and pastes
+the bot token and signing secret back. A deployment with no https
+`API_BASE_URL` is told what to set instead of being handed a URL Slack cannot
+reach.

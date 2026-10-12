@@ -37,7 +37,8 @@ export function hasCallbackOrigin(container: AppContainer, requestUrl: string): 
   return container.apiBaseUrl !== null || isLoopback(new URL(requestUrl).hostname)
 }
 
-function configuredOrigin(value: string): string {
+/** `API_BASE_URL` as an origin, refused as misconfigured when it is anything else. */
+export function configuredOrigin(value: string): string {
   let url: URL
   try {
     url = new URL(value)

@@ -79,6 +79,7 @@ export {
   type SlackMessage,
 } from './slack/message.js'
 export { attentionAskMessage } from './slack/attentionMessage.js'
+export { SLACK_BOT_SCOPES, slackAppManifest, type SlackManifestInput } from './slack/manifest.js'
 export { postSlackResponse, type SlackResponseMessage } from './slack/respond.js'
 export { SlackChatGateway, type SlackGatewayOptions } from './slack/SlackChatGateway.js'
 export {
