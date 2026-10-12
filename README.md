@@ -102,9 +102,11 @@ There is one guided review per pull request on a deployment, and everybody who
 opens it sees the same threads. Opening the page reads; only **Start a guided
 review** spends model budget. It needs the same cat-factory key as the AI
 review (the `write` scope is enough) and a base URL, both set per org on the
-Configuration screen, but no service id: the repository has to be linked in the
+Configuration screen, but no service id: the repository has to be linked in a
 cat-factory workspace, which with cat-factory configured is also what registers
-it here (see [docs/integrations.md](./docs/integrations.md)).
+it here (see [docs/integrations.md](./docs/integrations.md)). A key that reaches
+several workspaces works too: the review opens in the workspace that links the
+repository.
 
 ## Asking for attention
 
@@ -142,6 +144,13 @@ The ask is delivered two ways at once. A page already open is pushed the
 request over server-sent events; a page opened an hour later fetches the same
 thing over REST. Neither is a fallback for the other, and both carry the same
 payload.
+
+A named ask also reaches each recipient who has a Slack id as a DM from the
+org's Slack app: who asks, for which pull request, what of the ask they match,
+and an **I will review it** button that commits exactly as the inbox does. The
+DM follows the ask, so it says when you committed and closes when the ask is
+answered or withdrawn, rather than leave a button on an ask that is over. An ask
+the skill gate addresses is not sent as DMs, since it can reach the whole pool.
 
 The ask ANSWERS ITSELF. Once enough people have said they will review, it is
 resolved and disappears from everybody's inbox, including the people who never

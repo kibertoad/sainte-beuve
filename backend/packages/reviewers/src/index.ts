@@ -104,6 +104,7 @@ export {
   normalizeSkill,
   reviewersWithHandles,
   type ScoredCandidate,
+  matchesOf,
   scoreCandidate,
   scoreCandidates,
   type ScoringTarget,

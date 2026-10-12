@@ -39,10 +39,10 @@ export type {
   CatFactoryProbe,
   CatFactoryProbeReport,
   CatFactoryReviewTarget,
+  AttentionAskNotice,
   ChatGateway,
+  ChatMessageRef,
   GatewayFactory,
-  GuidedReviewGateway,
-  GuidedReviewWatchEvent,
 } from './ports/gateways.js'
 export type {
   PullRequestAddress,
@@ -53,6 +53,11 @@ export type {
   VcsGateway,
   VcsIdentityGateway,
 } from './ports/vcs.js'
+export type {
+  GuidedReviewGateway,
+  GuidedReviewSessionRef,
+  GuidedReviewWatchEvent,
+} from './ports/guided-review.js'
 export type {
   IntegrationConfigRepository,
   StoredIntegrationConfig,

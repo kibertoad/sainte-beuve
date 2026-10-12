@@ -264,6 +264,7 @@ function requestFor(id: string): AttentionRequest {
     requestedById: 'reviewer-1',
     requestedByName: 'kibertoad',
     recipients: [],
+    chatDeliveries: [],
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,

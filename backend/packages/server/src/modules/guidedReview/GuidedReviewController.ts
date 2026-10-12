@@ -33,48 +33,74 @@ export function guidedReviewController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getGuidedReviewContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
-    return c.json(await service.get(c.req.valid('param').sessionId), 200)
+    return c.json(await service.get({ ...c.req.valid('param'), target: c.req.valid('query') }), 200)
   })
 
   // The live half. A page that cannot hold it re-reads the session instead.
   buildHonoRoute(app, streamGuidedReviewContract, async (c) => {
     const container = c.get('container')
-    const watched = await new GuidedReviewService(container).watch(c.req.valid('param').sessionId)
+    const watched = await new GuidedReviewService(container).watch({
+      ...c.req.valid('param'),
+      target: c.req.valid('query'),
+    })
     return guidedReviewStream(watched, container.logger)
   })
 
   buildHonoRoute(app, refreshGuidedReviewContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
-    return c.json(await service.refresh(c.req.valid('param').sessionId), 200)
+    return c.json(
+      await service.refresh({ ...c.req.valid('param'), target: c.req.valid('query') }),
+      200,
+    )
   })
 
+  mountThreadRoutes(app)
+  mountDraftRoutes(app)
+
+  return app
+}
+
+/** Threads: opening one, reading it, and asking in it. */
+function mountThreadRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, openGuidedReviewThreadContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
     const { sessionId } = c.req.valid('param')
-    return c.json(await service.openThread(sessionId, c.req.valid('json')), 200)
+    return c.json(
+      await service.openThread({ sessionId, target: c.req.valid('query') }, c.req.valid('json')),
+      200,
+    )
   })
 
   buildHonoRoute(app, getGuidedReviewThreadContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
     const { sessionId, threadId } = c.req.valid('param')
-    return c.json(await service.getThread(sessionId, threadId), 200)
+    return c.json(
+      await service.getThread({ sessionId, target: c.req.valid('query') }, threadId),
+      200,
+    )
   })
 
   buildHonoRoute(app, askGuidedReviewContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
     const { sessionId, threadId } = c.req.valid('param')
-    return c.json(await service.ask(sessionId, threadId, c.req.valid('json')), 200)
+    return c.json(
+      await service.ask({ sessionId, target: c.req.valid('query') }, threadId, c.req.valid('json')),
+      200,
+    )
   })
 
   buildHonoRoute(app, requestGuidedReviewDraftsContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
     const { sessionId, threadId } = c.req.valid('param')
-    return c.json(await service.requestDrafts(sessionId, threadId, c.req.valid('json')), 200)
+    return c.json(
+      await service.requestDrafts(
+        { sessionId, target: c.req.valid('query') },
+        threadId,
+        c.req.valid('json'),
+      ),
+      200,
+    )
   })
-
-  mountDraftRoutes(app)
-
-  return app
 }
 
 /** Editing and posting comment drafts: the half of the surface that reaches the pull request. */
@@ -82,12 +108,22 @@ function mountDraftRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, editGuidedReviewDraftContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
     const { sessionId, draftId } = c.req.valid('param')
-    return c.json(await service.editDraft(sessionId, draftId, c.req.valid('json')), 200)
+    return c.json(
+      await service.editDraft(
+        { sessionId, target: c.req.valid('query') },
+        draftId,
+        c.req.valid('json'),
+      ),
+      200,
+    )
   })
 
   buildHonoRoute(app, postGuidedReviewDraftsContract, async (c) => {
     const service = new GuidedReviewService(c.get('container'))
     const { sessionId } = c.req.valid('param')
-    return c.json(await service.postDrafts(sessionId, c.req.valid('json')), 200)
+    return c.json(
+      await service.postDrafts({ sessionId, target: c.req.valid('query') }, c.req.valid('json')),
+      200,
+    )
   })
 }

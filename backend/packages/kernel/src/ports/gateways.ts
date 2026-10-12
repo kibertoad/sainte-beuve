@@ -1,23 +1,13 @@
 import type {
   AiReviewCuration,
   AiReviewResolution,
-  AskGuidedReviewInput,
-  EditGuidedReviewDraftInput,
-  GuidedReviewCommentDraft,
-  GuidedReviewExchange,
-  GuidedReviewPostResult,
-  GuidedReviewSessionView,
-  GuidedReviewStreamEvent,
-  GuidedReviewTarget,
-  GuidedReviewThreadView,
-  OpenGuidedReviewThreadInput,
-  PostGuidedReviewDraftsInput,
+  AttentionRequest,
   PullRequestRef,
   Reminder,
-  RequestGuidedReviewDraftsInput,
   ReviewRequest,
   VcsProvider,
 } from '@sainte-beuve/contracts'
+import type { GuidedReviewGateway } from './guided-review.js'
 import type { RepositoryDirectoryGateway } from './repository-directory.js'
 import type { VcsGateway, VcsIdentityGateway } from './vcs.js'
 
@@ -28,12 +18,34 @@ import type { VcsGateway, VcsIdentityGateway } from './vcs.js'
  * deep inside a service with a null read.
  */
 
+/** Where a chat message landed: the conversation (a DM's own id, not the user's) and the message in it. */
+export interface ChatMessageRef {
+  conversationId: string
+  messageId: string
+}
+
+/**
+ * An attention ask as one recipient sees it. The matched skills and domains say
+ * why they were asked; they are empty when the message is re-rendered after the
+ * ask has moved on, because a closed ask has nothing left to persuade anybody of.
+ */
+export interface AttentionAskNotice {
+  request: AttentionRequest
+  recipientId: string
+  matchedSkills: readonly string[]
+  matchedDomains: readonly string[]
+}
+
 /** Chat delivery (Slack today). */
 export interface ChatGateway {
   /** Announce a new review request to the team channel. Returns the message id, for threading. */
   announceReview(review: ReviewRequest, channelId: string): Promise<{ messageId: string }>
   /** Deliver one scheduled nudge. `target` is a Slack user id for a DM, a channel id otherwise. */
   sendReminder(reminder: Reminder, review: ReviewRequest, target: string): Promise<void>
+  /** DM one person an ask addressed to them. `target` is their Slack user id. */
+  sendAttentionAsk(notice: AttentionAskNotice, target: string): Promise<ChatMessageRef>
+  /** Re-render a delivered ask in the state its request is in now. */
+  updateAttentionAsk(notice: AttentionAskNotice, message: ChatMessageRef): Promise<void>
 }
 
 /** The handle a delegated AI review is tracked by. */
@@ -136,58 +148,6 @@ export interface AiReviewGateway {
   challengeFinding(
     input: { runId: string; findingId: string; question: string | null } & AiReviewWorkspace,
   ): Promise<void>
-}
-
-/**
- * What a guided review's upstream stream yields: the frames a screen receives,
- * and `timeout` when cat-factory capped the connection and expects a reconnect.
- */
-export type GuidedReviewWatchEvent = GuidedReviewStreamEvent | { kind: 'timeout' }
-
-/**
- * cat-factory's guided review of one pull request, over the published SDK.
- *
- * Every session belongs to the API key this deployment holds, so a pull request
- * has ONE guided review per deployment, shared by everybody who opens it. That
- * is the board's model too: a review row is the team's, not one person's.
- *
- * Every write resolves with what cat-factory persisted, before the overview or
- * the answer exists. The caller re-reads until nothing is pending. Posting
- * drafts is the one call that reaches the pull request, and it posts on the
- * cat-factory workspace's credentials, because the key belongs to no person.
- */
-export interface GuidedReviewGateway {
-  /** The session this deployment holds for a pull request, or null. Spends nothing. */
-  find(target: GuidedReviewTarget): Promise<GuidedReviewSessionView | null>
-  /** Open a session, or answer with the one already open. Spends model budget when new. */
-  open(target: GuidedReviewTarget): Promise<GuidedReviewSessionView>
-  get(sessionId: string): Promise<GuidedReviewSessionView>
-  /** Regenerate the overview at the pull request's current head. */
-  refresh(sessionId: string): Promise<GuidedReviewSessionView>
-  openThread(sessionId: string, input: OpenGuidedReviewThreadInput): Promise<GuidedReviewThreadView>
-  getThread(sessionId: string, threadId: string): Promise<GuidedReviewThreadView>
-  ask(
-    sessionId: string,
-    threadId: string,
-    input: AskGuidedReviewInput,
-  ): Promise<GuidedReviewExchange>
-  requestDrafts(
-    sessionId: string,
-    threadId: string,
-    input: RequestGuidedReviewDraftsInput,
-  ): Promise<GuidedReviewExchange>
-  editDraft(
-    sessionId: string,
-    draftId: string,
-    input: EditGuidedReviewDraftInput,
-  ): Promise<GuidedReviewCommentDraft>
-  postDrafts(sessionId: string, input: PostGuidedReviewDraftsInput): Promise<GuidedReviewPostResult>
-  /**
-   * The session's changes as cat-factory pushes them, until it caps the
-   * connection or `signal` aborts. Rejects on the first iteration if the stream
-   * cannot be opened.
-   */
-  watch(sessionId: string, signal: AbortSignal): AsyncIterable<GuidedReviewWatchEvent>
 }
 
 /** Where an org's cat-factory is, and the key it reaches it with. */

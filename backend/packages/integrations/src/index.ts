@@ -65,6 +65,7 @@ export {
   slackLink,
   type SlackMessage,
 } from './slack/message.js'
+export { attentionAskMessage } from './slack/attentionMessage.js'
 export { postSlackResponse, type SlackResponseMessage } from './slack/respond.js'
 export { SlackChatGateway, type SlackGatewayOptions } from './slack/SlackChatGateway.js'
 export {
