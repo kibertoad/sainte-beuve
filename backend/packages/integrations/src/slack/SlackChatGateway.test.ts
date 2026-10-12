@@ -117,6 +117,13 @@ describe('SlackChatGateway', () => {
     expect(calls[0]?.payload.text).toContain('Igor asks you to review')
   })
 
+  it('refuses a DM reply that does not say where it landed, as it could never be updated', async () => {
+    const { impl } = stubFetch({ ok: true, ts: '1700000000.000200' })
+    const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
+
+    await expect(gateway.sendAttentionAsk(notice, 'U123')).rejects.toThrow('did not say where')
+  })
+
   it('updates a delivered ask in place, by its conversation and timestamp', async () => {
     const { impl, calls } = stubFetch({ ok: true })
     const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })

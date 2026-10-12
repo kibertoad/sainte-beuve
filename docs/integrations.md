@@ -405,16 +405,21 @@ the failure everybody meets first.
 2. **OAuth & Permissions**: bot scopes `chat:write` (and
    `chat:write.public` to post in a channel the bot has not been invited to).
    Install it, and put the `xoxb-…` token on the Configuration screen or in
-   `SLACK_BOT_TOKEN`.
-3. **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
-   shows it — `https://<your-api>/webhooks/slack` for the default org, and
+   `SLACK_BOT_TOKEN`. A DM (a personal reminder, an attention ask) is posted to
+   the person's user id, which `chat:write` covers: the app never opens a
+   conversation itself, so it needs no `im:write`.
+3. **App Home**: keep **Messages Tab** on. That tab is where the app's DMs
+   land, so with it off a person is never shown the attention asks and
+   reminders sent to them.
+4. **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
+   shows it: `https://<your-api>/webhooks/slack` for the default org, and
    `https://<your-api>/webhooks/slack/<org-slug>` for any other.
-4. **Slash Commands**: `/review`, same URL.
-5. Copy the **Signing Secret** from Basic Information onto the Configuration
+5. **Slash Commands**: `/review`, same URL.
+6. Copy the **Signing Secret** from Basic Information onto the Configuration
    screen, beside the bot token. The default org may set `SLACK_SIGNING_SECRET`
    on the deployment instead; a second org has to store it, because the
    deployment's own secret is not lent across the boundary.
-6. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
+7. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
    **default org's** channel, like the two credentials above it; a second org has
    no announcement channel yet.
 
