@@ -23,17 +23,29 @@ function byKey(entries: readonly ExternalRepository[]): ExternalRepository[] {
 export const externalRepositoryCases: readonly ConformanceCase[] = [
   conformanceCase('an external repository round-trips whole', async (repos) => {
     const entry = listed('cat-factory', 'ws_1/101', 7)
-    await repos.externalRepositories.put(entry)
+    await repos.externalRepositories.apply(entry)
     assert.deepStrictEqual(await repos.externalRepositories.get('cat-factory', 'ws_1/101'), entry)
     assert.strictEqual(await repos.externalRepositories.get('cat-factory', 'ws_1/999'), null)
     assert.strictEqual(await repos.externalRepositories.get('other', 'ws_1/101'), null)
   }),
 
-  conformanceCase('a put replaces the entry, a dropped state included', async (repos) => {
-    await repos.externalRepositories.put(listed('cat-factory', 'ws_1/101', 7))
-    await repos.externalRepositories.put(dropped('cat-factory', 'ws_1/101', 9))
+  conformanceCase('an apply replaces the entry, a dropped state included', async (repos) => {
+    await repos.externalRepositories.apply(listed('cat-factory', 'ws_1/101', 7))
+    await repos.externalRepositories.apply(dropped('cat-factory', 'ws_1/101', 9))
     assert.deepStrictEqual(await repos.externalRepositories.list('cat-factory'), [
       dropped('cat-factory', 'ws_1/101', 9),
+    ])
+  }),
+
+  conformanceCase('an apply keeps a newer entry and replaces an equal one', async (repos) => {
+    await repos.externalRepositories.apply(dropped('cat-factory', 'ws_1/101', 9))
+    await repos.externalRepositories.apply(listed('cat-factory', 'ws_1/101', 7))
+    assert.deepStrictEqual(await repos.externalRepositories.list('cat-factory'), [
+      dropped('cat-factory', 'ws_1/101', 9),
+    ])
+    await repos.externalRepositories.apply(listed('cat-factory', 'ws_1/101', 9, 'billing'))
+    assert.deepStrictEqual(await repos.externalRepositories.list('cat-factory'), [
+      listed('cat-factory', 'ws_1/101', 9, 'billing'),
     ])
   }),
 
@@ -44,7 +56,7 @@ export const externalRepositoryCases: readonly ConformanceCase[] = [
       dropped('cat-factory', 'ws_1/7', 2),
     ]
     const theirs = listed('other', 'ws_1/101', 4, 'billing')
-    for (const entry of [...mine, theirs]) await repos.externalRepositories.put(entry)
+    for (const entry of [...mine, theirs]) await repos.externalRepositories.apply(entry)
     assert.deepStrictEqual(byKey(await repos.externalRepositories.list('cat-factory')), byKey(mine))
     await repos.externalRepositories.clear('cat-factory')
     assert.deepStrictEqual(await repos.externalRepositories.list('cat-factory'), [])
@@ -54,10 +66,10 @@ export const externalRepositoryCases: readonly ConformanceCase[] = [
 
 export const externalRepositoryTenancyCases: readonly TenancyCase[] = [
   tenancyCase('external repositories belong to one org', async (stores) => {
-    await stores.forOrg('org-a').externalRepositories.put(listed('cat-factory', 'ws_1/101', 7))
+    await stores.forOrg('org-a').externalRepositories.apply(listed('cat-factory', 'ws_1/101', 7))
     await stores
       .forOrg('org-b')
-      .externalRepositories.put(listed('cat-factory', 'ws_1/101', 8, 'billing'))
+      .externalRepositories.apply(listed('cat-factory', 'ws_1/101', 8, 'billing'))
     await stores.forOrg('org-a').externalRepositories.clear('cat-factory')
     assert.deepStrictEqual(
       await stores.forOrg('org-a').externalRepositories.list('cat-factory'),

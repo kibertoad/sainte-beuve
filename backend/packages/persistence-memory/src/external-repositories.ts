@@ -15,8 +15,11 @@ export class InMemoryExternalRepositoryRepository implements ExternalRepositoryR
     return row === undefined ? null : clone(row)
   }
 
-  async put(entry: ExternalRepository): Promise<void> {
-    this.rows.set(rowKey(entry.source, entry.key), clone(entry))
+  async apply(entry: ExternalRepository): Promise<void> {
+    const key = rowKey(entry.source, entry.key)
+    const held = this.rows.get(key)
+    if (held !== undefined && held.seq > entry.seq) return
+    this.rows.set(key, clone(entry))
   }
 
   async clear(source: string): Promise<void> {

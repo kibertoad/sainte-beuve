@@ -9,8 +9,11 @@ export interface ExternalRepositoryRepository {
   /** Every entry from one source, dropped ones included, in no particular order. */
   list(source: string): Promise<ExternalRepository[]>
   get(source: string, key: string): Promise<ExternalRepository | null>
-  /** Store or replace one entry. Whether it is newer is the caller's question. */
-  put(entry: ExternalRepository): Promise<void>
+  /**
+   * Store one entry unless the store holds a strictly newer `seq` for its key,
+   * decided in one statement so two syncs racing on a key keep the newer state.
+   */
+  apply(entry: ExternalRepository): Promise<void>
   /** Forget everything from one source, for an org that stopped syncing from it. */
   clear(source: string): Promise<void>
 }

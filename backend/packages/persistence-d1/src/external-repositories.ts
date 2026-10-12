@@ -28,13 +28,14 @@ export class SqlExternalRepositoryRepository implements ExternalRepositoryReposi
     return row === null ? null : decodeData(externalRepositorySchema, TABLE, row.data)
   }
 
-  async put(entry: ExternalRepository): Promise<void> {
+  async apply(entry: ExternalRepository): Promise<void> {
     await this.db.run(
       `INSERT INTO ${TABLE} (org_id, source, key, seq, data)
 VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (org_id, source, key) DO UPDATE SET
   seq = excluded.seq,
-  data = excluded.data`,
+  data = excluded.data
+WHERE excluded.seq >= ${TABLE}.seq`,
       [this.orgId, entry.source, entry.key, entry.seq, encodeData(entry)],
     )
   }

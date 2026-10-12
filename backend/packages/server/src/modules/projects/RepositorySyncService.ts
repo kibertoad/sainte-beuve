@@ -213,11 +213,7 @@ export class RepositorySyncService {
       setCursor: async (seq) => {
         await this.record({ cursor: seq })
       },
-      apply: async (entry) => {
-        const held = await externalRepositories.get(CAT_FACTORY_SOURCE, entry.key)
-        if (held !== null && held.seq > entry.seq) return
-        await externalRepositories.put({ ...entry, source: CAT_FACTORY_SOURCE })
-      },
+      apply: (entry) => externalRepositories.apply({ ...entry, source: CAT_FACTORY_SOURCE }),
       liveKeys: async () =>
         (await externalRepositories.list(CAT_FACTORY_SOURCE))
           .filter((entry) => entry.repository !== null)

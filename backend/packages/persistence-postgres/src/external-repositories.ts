@@ -1,6 +1,6 @@
 import type { ExternalRepository } from '@sainte-beuve/contracts'
 import type { ExternalRepositoryRepository } from '@sainte-beuve/kernel'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, lte } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr } from './rows.js'
 import { externalRepositories } from './schema.js'
@@ -28,7 +28,7 @@ export class PostgresExternalRepositoryRepository implements ExternalRepositoryR
     return firstOr(rows)?.data ?? null
   }
 
-  async put(entry: ExternalRepository): Promise<void> {
+  async apply(entry: ExternalRepository): Promise<void> {
     await this.db
       .insert(externalRepositories)
       .values({
@@ -41,6 +41,7 @@ export class PostgresExternalRepositoryRepository implements ExternalRepositoryR
       .onConflictDoUpdate({
         target: [externalRepositories.orgId, externalRepositories.source, externalRepositories.key],
         set: { seq: entry.seq, data: entry },
+        setWhere: lte(externalRepositories.seq, entry.seq),
       })
   }
 
