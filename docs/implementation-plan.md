@@ -279,8 +279,8 @@ slice decided, in short:
   withdraws it from every inbox, including the people who never answered. The
   alternative, leaving it up until somebody tidies it away, is how a team
   learns to ignore the next one.
-- **Committing is open to anybody, being ASKED is gated.** The skill gate
-  decides who the request reaches; somebody who wants to help anyway has made a
+- **Committing is open to anybody, being ASKED is gated.** The fit floor
+  decides who a request nobody was named on reaches; somebody who wants to help anyway has made a
   judgement about their own competence that a label list is not in a position
   to overrule. `ReviewService.claim` already made that call for the board.
 - **Two delivery paths, one payload.** The stream is not a faster inbox and the
@@ -735,7 +735,9 @@ ask nobody was named on, which reaches whoever holds at least half
 (`ATTENTION_FIT_FLOOR`). A gate on every skill would leave a review unassigned
 whenever the one person holding a rare skill is busy, and would let the list an
 author picks from disagree with the people the same ask reaches. The floor is what
-keeps a `payments` ping off the screens of people who hold none of it.
+keeps a `payments` ping off the screens of people who hold none of it. An ask stores
+the mix it was raised with, so its audience, the next best match it moves on to and
+what its DMs say a person holds stay put when the repository's vocabulary is edited.
 
 **cat-factory over its published SDK.** The SDK's operations are generated from
 cat-factory's own OpenAPI spec, so a deployment bumping cat-factory cannot silently
