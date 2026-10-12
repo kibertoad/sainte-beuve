@@ -3,6 +3,7 @@ import type {
   MyReviewCommitment,
   MyReviewsQuery,
   OpenPullRequest,
+  PlacedCommitment,
   Project,
   ReviewCommitment,
 } from '@sainte-beuve/contracts'
@@ -51,11 +52,24 @@ export function assembleReviewLists(input: ReviewListsInput, query: MyReviewsQue
   )
   return {
     requested: byRecency(requested.filter((pr) => inScope(pr.pullRequest))).map(toRow),
-    committed: input.commitments
-      .filter((commitment) => inScope(commitment.pullRequest))
-      .map((commitment) => ({ ...commitment, projectId: projectIdOf(commitment.pullRequest) })),
+    committed: placeCommitments(
+      input.commitments.filter((commitment) => inScope(commitment.pullRequest)),
+      input.projects,
+    ),
     reviewed: byRecency(reviewed.filter((pr) => inScope(pr.pullRequest))).map(toRow),
   }
+}
+
+/** Each commitment with the registered project its repository is in, or null for none. */
+export function placeCommitments(
+  commitments: readonly ReviewCommitment[],
+  projects: readonly Project[],
+): PlacedCommitment[] {
+  const projectIdOf = projectIndex(projects)
+  return commitments.map((commitment) => ({
+    ...commitment,
+    projectId: projectIdOf(commitment.pullRequest),
+  }))
 }
 
 function projectIndex(projects: readonly Project[]) {

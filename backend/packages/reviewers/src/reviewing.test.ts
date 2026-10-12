@@ -1,6 +1,6 @@
 import type { OpenPullRequest, Project, ReviewCommitment } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
-import { assembleReviewLists, type ReviewListsInput } from './reviewing.js'
+import { assembleReviewLists, placeCommitments, type ReviewListsInput } from './reviewing.js'
 
 function pr(repo: string, number: number, owner = 'acme'): OpenPullRequest {
   return {
@@ -89,5 +89,25 @@ describe('assembleReviewLists', () => {
     const byOwner = assembleReviewLists(found, { owner: 'ACME' })
     expect(numbers(byOwner.requested)).toStrictEqual([2, 1])
     expect(byOwner.committed).toMatchObject([{ id: 'c1', projectId: null }])
+  })
+})
+
+describe('placeCommitments', () => {
+  it('names the registered project whatever the case of its owner and name', () => {
+    const commitment = (id: string, repo: string): ReviewCommitment => ({
+      id,
+      reviewerId: 'r1',
+      pullRequest: pr(repo, 4).pullRequest,
+      title: 'A change',
+      attentionRequestId: null,
+      createdAt: 0,
+    })
+
+    const placed = placeCommitments([commitment('c1', 'api'), commitment('c2', 'web')], [API])
+
+    expect(placed).toMatchObject([
+      { id: 'c1', projectId: 'p-api' },
+      { id: 'c2', projectId: null },
+    ])
   })
 })
