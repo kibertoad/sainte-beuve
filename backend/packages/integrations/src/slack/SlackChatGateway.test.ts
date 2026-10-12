@@ -49,6 +49,7 @@ const ask: AttentionRequest = {
   chatDeliveries: [],
   declines: [],
   keepAsking: false,
+  people: null,
   requiredSkills: [],
   sameTeamOnly: false,
   team: null,
@@ -117,6 +118,13 @@ describe('SlackChatGateway', () => {
     expect(calls[0]?.url).toBe('https://slack.com/api/chat.postMessage')
     expect(calls[0]?.payload.channel).toBe('U123')
     expect(calls[0]?.payload.text).toContain('Igor asks you to review')
+  })
+
+  it('refuses a DM reply that does not say where it landed, as it could never be updated', async () => {
+    const { impl } = stubFetch({ ok: true, ts: '1700000000.000200' })
+    const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
+
+    await expect(gateway.sendAttentionAsk(notice, 'U123')).rejects.toThrow('did not say where')
   })
 
   it('updates a delivered ask in place, by its conversation and timestamp', async () => {

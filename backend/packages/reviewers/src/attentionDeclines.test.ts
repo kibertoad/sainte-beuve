@@ -26,6 +26,7 @@ function ask(overrides: Partial<AttentionRequest> = {}): AttentionRequest {
     chatDeliveries: [],
     declines: [],
     keepAsking: false,
+    people: null,
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,

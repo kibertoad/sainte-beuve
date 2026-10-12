@@ -3,7 +3,7 @@ import { attentionRequestSchema, reviewCommitmentSchema } from '@sainte-beuve/co
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
 import { pullRequestKey } from '@sainte-beuve/kernel'
 import type { SqlDriver } from './driver.js'
-import { decodeData, decodeRows, encodeData, patched, placeholders } from './rows.js'
+import { decodeData, decodeRows, encodeData, placeholders } from './rows.js'
 
 /** The asks in flight, and the promises people made against pull requests. */
 
@@ -44,15 +44,33 @@ export class SqlAttentionRepository implements AttentionRepository {
     return request
   }
 
+  /**
+   * One statement that sets each patched field inside the stored payload, so an
+   * update never writes back fields it did not name from a read another writer
+   * has since overtaken. `RETURNING` answers with the row both writes left.
+   */
   async update(
     attentionId: string,
     patch: Partial<AttentionRequest>,
   ): Promise<AttentionRequest | null> {
-    const current = await this.getById(attentionId)
-    if (current === null) return null
-    const next = patched(current, patch)
-    await this.write(next)
-    return next
+    const fields = Object.entries(patch).filter(
+      ([key, value]) => key !== 'id' && value !== undefined,
+    )
+    if (fields.length === 0) return this.getById(attentionId)
+    const sets = fields.map(() => '?, json(?)').join(', ')
+    const row = await this.db.first(
+      `UPDATE attention_requests SET data = json_set(data, ${sets}),
+  status = COALESCE(?, status), created_at = COALESCE(?, created_at)
+WHERE org_id = ? AND id = ? RETURNING data`,
+      [
+        ...fields.flatMap(([key, value]) => [`$.${key}`, encodeData(value)]),
+        patch.status ?? null,
+        patch.createdAt ?? null,
+        this.orgId,
+        attentionId,
+      ],
+    )
+    return row === null ? null : decodeData(attentionRequestSchema, 'attention_requests', row.data)
   }
 
   private async write(request: AttentionRequest): Promise<void> {
@@ -121,6 +139,21 @@ export class SqlReviewCommitmentRepository implements ReviewCommitmentRepository
       encodeData(commitment),
     ])
     return commitment
+  }
+
+  /** An UPDATE rather than the upsert, so a row released since the read stays gone. */
+  async setRequestedHandle(
+    commitmentId: string,
+    requestedHandle: string | null,
+  ): Promise<ReviewCommitment | null> {
+    const current = await this.getById(commitmentId)
+    if (current === null) return null
+    const next = { ...current, requestedHandle }
+    const row = await this.db.first(
+      'UPDATE review_commitments SET data = ? WHERE org_id = ? AND id = ? RETURNING id',
+      [encodeData(next), this.orgId, commitmentId],
+    )
+    return row === null ? null : next
   }
 
   async delete(commitmentId: string): Promise<void> {

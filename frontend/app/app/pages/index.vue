@@ -60,7 +60,16 @@ async function ask(request: {
   const pr = asking.value
   if (pr === null) return
   const raised = await runAsk(
-    () => api.requestAttention({ pullRequest: pr.pullRequest, title: pr.title, ...request }),
+    () =>
+      api.requestAttention({
+        pullRequest: pr.pullRequest,
+        title: pr.title,
+        people: {
+          authorLogin: pr.authorLogin,
+          requestedReviewerLogins: [...pr.requestedReviewerLogins],
+        },
+        ...request,
+      }),
     'Could not ask for attention',
     pr.pullRequest.url,
   )
@@ -227,6 +236,11 @@ async function release(commitmentId: string) {
               >
                 Hand back
               </UButton>
+              <AiReviewButton
+                v-if="commitment.projectId !== null"
+                :pull-request="commitment.pullRequest"
+                :title="commitment.title"
+              />
               <UButton
                 :to="guidedReviewRoute(commitment.pullRequest)"
                 size="sm"

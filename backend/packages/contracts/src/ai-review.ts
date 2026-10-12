@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { webUrlSchema } from './vcs.js'
+import { pullRequestRefSchema, webUrlSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // AI-review wire contracts.
@@ -205,6 +205,13 @@ export const aiReviewRunSchema = v.object({
   catFactoryRunId: v.nullable(v.string()),
   /** Deep link into the cat-factory instance that ran it. */
   catFactoryUrl: v.nullable(webUrlSchema),
+  /**
+   * The cat-factory workspace the task was filed in, which every later call
+   * about it names. Null for a task filed in the key's only workspace. It has a
+   * default for the reason `parkedAt` gives: a run stored before the field
+   * existed has no key for it.
+   */
+  catFactoryWorkspaceId: v.optional(v.nullable(v.string()), null),
   /** Short verdict text once the run completes. The full output lives in cat-factory. */
   summary: v.nullable(v.string()),
   failureReason: v.nullable(v.string()),
@@ -262,6 +269,22 @@ export const requestAiReviewSchema = v.object({
   instructions: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(2000))), null),
 })
 export type RequestAiReview = v.InferOutput<typeof requestAiReviewSchema>
+
+/**
+ * An AI review asked for by pull request rather than by board row: what the
+ * workspace, My PRs and My Reviews send. The board row is found, or opened
+ * when the pull request is not tracked yet, because a run belongs to one.
+ */
+export const requestPullRequestAiReviewSchema = v.object({
+  ...requestAiReviewSchema.entries,
+  pullRequest: pullRequestRefSchema,
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300)),
+  /** Null when the row that asked does not know it (a commitment): the host is asked instead. */
+  authorLogin: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
+})
+export type RequestPullRequestAiReview = v.InferOutput<typeof requestPullRequestAiReviewSchema>
+/** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
+export type RequestPullRequestAiReviewInput = v.InferInput<typeof requestPullRequestAiReviewSchema>
 
 /**
  * What to do with the curated selection.

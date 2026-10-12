@@ -267,6 +267,7 @@ function requestFor(id: string): AttentionRequest {
     chatDeliveries: [],
     declines: [],
     keepAsking: false,
+    people: null,
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,

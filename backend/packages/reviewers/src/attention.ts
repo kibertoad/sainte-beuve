@@ -51,6 +51,20 @@ function isSameTeam(left: string | null, right: string | null): boolean {
 }
 
 /**
+ * Why this person cannot be asked by anybody's ask, whoever it names or gates
+ * on, or null when they can be: the requester never reaches themselves, and
+ * somebody paused has said they cannot review right now.
+ */
+export function unaskableReason(
+  reviewer: Reviewer,
+  requestedById: string,
+): 'requester' | 'paused' | null {
+  if (reviewer.id === requestedById) return 'requester'
+  if (reviewer.availability !== 'available') return 'paused'
+  return null
+}
+
+/**
  * Whether this person should be asked.
  *
  * `availability` is the only load-shaped gate applied, and `weight` deliberately
@@ -60,8 +74,7 @@ function isSameTeam(left: string | null, right: string | null): boolean {
  * is exactly what they asked not to receive, even on an ask that names them.
  */
 export function isInAttentionAudience(reviewer: Reviewer, rule: AttentionAudienceRule): boolean {
-  if (reviewer.id === rule.requestedById) return false
-  if (reviewer.availability !== 'available') return false
+  if (unaskableReason(reviewer, rule.requestedById) !== null) return false
   if (rule.declinedIds.includes(reviewer.id)) return false
   if (rule.recipientIds.length > 0) return rule.recipientIds.includes(reviewer.id)
   if (rule.sameTeamOnly && !isSameTeam(reviewer.team, rule.team)) return false

@@ -1,87 +1,57 @@
-import type { AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
+import type {
+  AttentionRequest,
+  PullRequestPeople,
+  PullRequestRef,
+  Reviewer,
+} from '@sainte-beuve/contracts'
 import { MAX_ATTENTION_RECIPIENTS, MAX_RECOMMENDATIONS } from '@sainte-beuve/contracts'
-import { ValidationError, assertFound } from '@sainte-beuve/kernel'
-import { askedOrAnsweredIds } from '@sainte-beuve/reviewers'
+import { ValidationError } from '@sainte-beuve/kernel'
+import {
+  type RecipientRefusal,
+  type RecipientsResolution,
+  askableRecipients,
+  askedOrAnsweredIds,
+  resolveAttentionRecipients,
+  reviewersWithHandles,
+} from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { RecommendationService } from '../reviewers/RecommendationService.js'
-import { deliverAsk } from './askDeliveries.js'
 
 /**
  * Who an ask is addressed to by name: the people a requester picks, checked
- * against the directory, and the next best matches when an ask has to go on.
+ * against the directory as it stands now, and the ranked matches an ask moves
+ * on to when it has to.
  */
 
-/**
- * The people a requester named, checked against the directory as it stands
- * now. Each has to be somebody who could answer: in the directory, not paused,
- * and not the requester. Duplicates count once.
- */
-export async function checkRecipients(
+interface NamedAsk {
+  pullRequest: PullRequestRef
+  people: PullRequestPeople | null
+}
+
+/** The people a requester names when raising an ask. */
+export async function namedRecipients(
   container: AppContainer,
   requester: Reviewer,
-  reviewerIds: readonly string[],
+  input: NamedAsk & { recipientIds: readonly string[]; neededCommitments: number },
 ): Promise<Reviewer[]> {
-  const wanted = [...new Set(reviewerIds)]
-  if (wanted.length === 0) return []
-  const directory = new Map(
-    (await container.repositories.reviewers.list()).map((entry) => [entry.id, entry]),
-  )
-  return wanted.map((reviewerId) => {
-    const reviewer = directory.get(reviewerId)
-    if (reviewer === undefined) {
-      throw new ValidationError(`No reviewer ${reviewerId} to ask`, { reviewerId })
-    }
-    if (reviewer.id === requester.id) {
-      throw new ValidationError('You cannot ask yourself to review your own request', {
-        reviewerId,
-      })
-    }
-    if (reviewer.availability !== 'available') {
-      throw new ValidationError(`${reviewer.displayName} is paused and cannot be asked`, {
-        reviewerId,
-      })
-    }
-    return reviewer
+  if (input.recipientIds.length === 0) return []
+  const { directory, authorIds } = await directoryFor(container, input)
+  const resolution = resolveAttentionRecipients({
+    directory,
+    requestedById: requester.id,
+    recipientIds: input.recipientIds,
+    neededCommitments: input.neededCommitments,
+    authorIds,
   })
+  return accepted(resolution, input.neededCommitments)
 }
 
 /**
- * The next `count` best matches for an ask, best first, leaving out everybody
- * it has already been to. The ranking is the recommendations' own, read as the
- * requester would have read it, so the people an ask moves on to are the ones
- * the requester would have seen next on the list. Never more than the ask has
- * room to name.
- */
-export async function nextRecipients(
-  container: AppContainer,
-  request: AttentionRequest,
-  count: number,
-): Promise<Reviewer[]> {
-  const room = Math.min(count, MAX_ATTENTION_RECIPIENTS - request.recipients.length)
-  if (room <= 0) return []
-  const directory = await container.repositories.reviewers.list()
-  const requester = directory.find((entry) => entry.id === request.requestedById)
-  if (requester === undefined) return []
-  const { recommendations } = await new RecommendationService(container).recommend(requester, {
-    pullRequest: request.pullRequest,
-    requiredSkills: request.requiredSkills,
-    limit: MAX_RECOMMENDATIONS,
-  })
-  const taken = askedOrAnsweredIds(request)
-  const byId = new Map(directory.map((entry) => [entry.id, entry]))
-  return recommendations
-    .filter((entry) => !taken.has(entry.reviewerId))
-    .flatMap((entry) => byId.get(entry.reviewerId) ?? [])
-    .slice(0, room)
-}
-
-/**
- * People a requester names to add to an ask. Anybody it has already been to
- * is passed over rather than refused, so a repeated click adds nobody twice.
+ * People a requester names to add to an open ask. Anybody it has already been
+ * to is passed over rather than refused, so a repeated click adds nobody twice.
  */
 export async function namedAdditions(
   container: AppContainer,
-  requester: Reviewer,
   request: AttentionRequest,
   reviewerIds: readonly string[],
 ): Promise<Reviewer[]> {
@@ -92,34 +62,93 @@ export async function namedAdditions(
       recipients: request.recipients.length + fresh.length,
     })
   }
-  return checkRecipients(container, requester, fresh)
+  if (fresh.length === 0) return []
+  const { directory, authorIds } = await directoryFor(container, request)
+  const resolution = askableRecipients({
+    directory,
+    requestedById: request.requestedById,
+    recipientIds: fresh,
+    authorIds,
+  })
+  return accepted(resolution, request.neededCommitments)
 }
 
 /**
- * One write for a change to an ask that may add recipients. Their DMs go out
- * first, so the write carries where they landed: stored first and patched
- * after, a commit landing between the two writes would be overwritten.
+ * The best matches for an ask, best first, ranked as the recommendations rank
+ * them for the requester: the same skills, the same team filter and the same
+ * people left out. The people an ask moves on to are then the ones the
+ * requester would have seen next on the list. Whoever the ask has already been
+ * to is still in the list; `nextToAsk` passes over them against the stored ask.
  */
-export async function saveWithRecipients(
+export async function rankedCandidates(
   container: AppContainer,
   request: AttentionRequest,
-  added: readonly Reviewer[],
-  patch: Partial<AttentionRequest>,
-): Promise<AttentionRequest> {
-  const recipients = [
-    ...request.recipients,
-    ...added.map((reviewer) => ({ reviewerId: reviewer.id, displayName: reviewer.displayName })),
+): Promise<Reviewer[]> {
+  const directory = await container.repositories.reviewers.list()
+  const requester = directory.find((entry) => entry.id === request.requestedById)
+  if (requester === undefined) return []
+  const { recommendations } = await new RecommendationService(container).recommend(requester, {
+    pullRequest: request.pullRequest,
+    requiredSkills: request.requiredSkills,
+    sameTeamOnly: request.sameTeamOnly,
+    people: request.people,
+    limit: MAX_RECOMMENDATIONS,
+  })
+  const byId = new Map(directory.map((entry) => [entry.id, entry]))
+  return recommendations.flatMap((entry) => byId.get(entry.reviewerId) ?? [])
+}
+
+/**
+ * The directory, and who in it wrote the pull request: its board row's author
+ * when the board has it, and the author the host listed when the ask has that.
+ */
+async function directoryFor(
+  container: AppContainer,
+  ask: NamedAsk,
+): Promise<{ directory: Reviewer[]; authorIds: string[] }> {
+  const { repositories } = container
+  const { pullRequest } = ask
+  const [directory, boardRow] = await Promise.all([
+    repositories.reviewers.list(),
+    repositories.reviews.getByPullRequest(pullRequest),
+  ])
+  // The board looks a row up by owner, repo and number alone, so a row from
+  // the other host under the same names is not this pull request.
+  const logins = [
+    ...(boardRow?.pullRequest.provider === pullRequest.provider ? [boardRow.authorLogin] : []),
+    ...(ask.people === null ? [] : [ask.people.authorLogin]),
   ]
-  const delivered =
-    added.length === 0
-      ? []
-      : await deliverAsk(container, { ...request, ...patch, recipients }, added)
-  return assertFound(
-    await container.repositories.attention.update(request.id, {
-      ...patch,
-      recipients,
-      chatDeliveries: [...request.chatDeliveries, ...delivered],
-    }),
-    `No attention request ${request.id}`,
-  )
+  return { directory, authorIds: reviewersWithHandles(directory, pullRequest.provider, logins) }
+}
+
+function accepted(resolution: RecipientsResolution, neededCommitments: number): Reviewer[] {
+  if (resolution.ok) return resolution.reviewers
+  throw refusalError(resolution.refusal, neededCommitments)
+}
+
+function refusalError(refusal: RecipientRefusal, neededCommitments: number): ValidationError {
+  switch (refusal.reason) {
+    case 'too_few':
+      return new ValidationError(
+        `This ask waits for ${neededCommitments} reviewers but names only ${refusal.named}`,
+        { neededCommitments, recipients: refusal.named },
+      )
+    case 'unknown':
+      return new ValidationError(`No reviewer ${refusal.reviewerId} to ask`, {
+        reviewerId: refusal.reviewerId,
+      })
+    case 'requester':
+      return new ValidationError('You cannot ask yourself to review your own request', {
+        reviewerId: refusal.reviewer.id,
+      })
+    case 'paused':
+      return new ValidationError(`${refusal.reviewer.displayName} is paused and cannot be asked`, {
+        reviewerId: refusal.reviewer.id,
+      })
+    case 'author':
+      return new ValidationError(
+        `${refusal.reviewer.displayName} wrote this pull request and cannot be asked to review it`,
+        { reviewerId: refusal.reviewer.id },
+      )
+  }
 }

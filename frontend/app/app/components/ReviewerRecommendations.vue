@@ -2,14 +2,19 @@
 import type { ReviewerRecommendation, ReviewerRecommendations } from '@sainte-beuve/contracts'
 import { shortfallCause, shortfallRemedy } from '@sainte-beuve/contracts'
 
-// Who fits this pull request best, and why: the router's own ranking, so the
-// list agrees with whoever an automatic assignment would have drawn. Ticking
-// somebody names them on the ask.
+// Who fits this pull request best, and why. While a new ranking loads the
+// previous one stays, dimmed, so the dialog does not jump on every click.
+// Ticking somebody names them on the ask.
 const props = defineProps<{
   result: ReviewerRecommendations | null
   pending: boolean
   failure: string | null
+  sameTeamOnly: boolean
+  /** Whether a longer ranking could list more people than this one. */
+  canShowMore: boolean
 }>()
+
+const emit = defineEmits<{ more: [] }>()
 
 /** The reviewer ids ticked, in the order they were ticked. */
 const selected = defineModel<string[]>('selected', { required: true })
@@ -27,6 +32,9 @@ const wantedCount = computed(() => {
 const emptyMessage = computed(() => {
   const reason = props.result?.shortfallReason
   if (reason === null || reason === undefined) return 'Nobody to recommend.'
+  if (reason === 'all_excluded' && props.sameTeamOnly) {
+    return 'Nobody else on your team can be asked about this.'
+  }
   const remedy = shortfallRemedy(reason)
   return remedy === null ? `${shortfallCause(reason)}.` : `${shortfallCause(reason)}. ${remedy}`
 })
@@ -35,6 +43,11 @@ function matchLine(entry: ReviewerRecommendation): string {
   const matched = entry.reasons.matchedSkills.length + entry.reasons.matchedDomains.length
   if (wantedCount.value === 0) return 'Nothing in particular is wanted'
   return `Matches ${matched} of ${wantedCount.value}`
+}
+
+function historyLine(entry: ReviewerRecommendation): string {
+  const past = entry.reasons.pastReviews
+  return past === 1 ? 'Reviewed this repository once' : `Reviewed this repository ${past} times`
 }
 
 function loadLine(entry: ReviewerRecommendation): string {
@@ -46,9 +59,9 @@ function loadLine(entry: ReviewerRecommendation): string {
 
 <template>
   <div class="flex flex-col gap-2">
-    <LoadingSpinner v-if="pending" label="Ranking reviewers…" />
-    <p v-else-if="failure" class="text-sm text-error">{{ failure }}</p>
-    <template v-else-if="result">
+    <p v-if="failure" class="text-sm text-error">{{ failure }}</p>
+    <LoadingSpinner v-else-if="result === null" label="Ranking reviewers…" />
+    <div v-else :class="{ 'opacity-60': pending }">
       <p v-if="result.recommendations.length === 0" class="text-sm text-muted">
         {{ emptyMessage }}
       </p>
@@ -93,10 +106,21 @@ function loadLine(entry: ReviewerRecommendation): string {
           </div>
           <div class="flex flex-col text-xs text-muted sm:shrink-0 sm:text-right">
             <span>{{ matchLine(entry) }}</span>
+            <span v-if="entry.reasons.pastReviews > 0">{{ historyLine(entry) }}</span>
             <span>{{ loadLine(entry) }}</span>
           </div>
         </li>
       </ol>
-    </template>
+      <UButton
+        v-if="canShowMore && result.recommendations.length > 0"
+        variant="link"
+        color="neutral"
+        size="sm"
+        class="mt-1"
+        :disabled="pending"
+        @click="emit('more')"
+        >Show more</UButton
+      >
+    </div>
   </div>
 </template>

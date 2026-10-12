@@ -29,8 +29,9 @@ export function viewerVcs(
     listed,
     merged,
     comments,
-    requestReviewers: async () => {},
+    requestReviewers: async (_pr, logins) => logins,
     removeRequestedReviewers: async () => {},
+    pendingReviewers: async () => [],
     comment: async (pr, body) => {
       comments.push({ number: pr.number, body })
     },
@@ -59,6 +60,7 @@ export function viewerVcs(
     searchOpenPullRequests: async (search) =>
       pullRequests.filter((pr) => matchesSearch(pr, search, reviewed)),
     lookupRepositories: async (owner, query) => lookupIn(pullRequests, owner, query),
+    pastReviewers: async () => [],
     identify: async () => ({
       subject: `subject-${username}`,
       username,

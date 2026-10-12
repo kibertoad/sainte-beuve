@@ -47,6 +47,16 @@ export const hostSearchSchema = v.object({
 })
 export type HostSearch = v.InferOutput<typeof hostSearchSchema>
 
+/**
+ * A commitment, placed in the registered project its repository is in. Null for
+ * a repository nobody linked, which is a commitment the AI review cannot run on.
+ */
+export const placedCommitmentSchema = v.object({
+  ...reviewCommitmentSchema.entries,
+  projectId: v.nullable(v.string()),
+})
+export type PlacedCommitment = v.InferOutput<typeof placedCommitmentSchema>
+
 export const workspaceSchema = v.object({
   viewer: viewerSchema,
   /** Open pull requests the viewer opened. */
@@ -59,7 +69,7 @@ export const workspaceSchema = v.object({
    * promise to a person, and it survives nobody having pressed the button on
    * the host.
    */
-  committed: v.array(reviewCommitmentSchema),
+  committed: v.array(placedCommitmentSchema),
   sources: v.array(workspaceSourceSchema),
 })
 export type Workspace = v.InferOutput<typeof workspaceSchema>

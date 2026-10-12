@@ -79,7 +79,12 @@ export class SlackChatGateway implements ChatGateway {
       target,
       attentionAskMessage(notice, this.options.appBaseUrl),
     )
-    return { conversationId: result.channel ?? target, messageId: result.ts ?? '' }
+    // Both are what a later `chat.update` is addressed by, so a reply missing
+    // either is a DM that can never be closed: refused here rather than stored.
+    if (result.channel === undefined || result.ts === undefined) {
+      throw new UpstreamFailedError('Slack posted the DM but did not say where it landed')
+    }
+    return { conversationId: result.channel, messageId: result.ts }
   }
 
   async updateAttentionAsk(notice: AttentionAskNotice, message: ChatMessageRef): Promise<void> {

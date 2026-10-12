@@ -140,6 +140,7 @@ export function aiReviewRun(id: string, overrides: Partial<AiReviewRun> = {}): A
     catFactoryTaskId: 'task-1',
     catFactoryRunId: 'run-1',
     catFactoryUrl: 'https://cat-factory.example.com/runs/run-1',
+    catFactoryWorkspaceId: 'ws-1',
     summary: null,
     failureReason: null,
     curation: curation(),
@@ -199,6 +200,7 @@ export function attentionRequest(
     chatDeliveries: [],
     declines: [],
     keepAsking: false,
+    people: null,
     requiredSkills: ['typescript'],
     sameTeamOnly: false,
     team: 'platform',
@@ -223,6 +225,7 @@ export function commitment(
     pullRequest: pullRequest(),
     title: 'Ship the thing',
     attentionRequestId: null,
+    requestedHandle: null,
     createdAt: 1_000,
     ...overrides,
   }

@@ -71,6 +71,18 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
     assert.strictEqual((await stores.forOrg(ORG_B).reviews.getByPullRequest(ref))?.title, 'B')
   }),
 
+  tenancyCase("a repository's review history is its own org's", async (stores) => {
+    await stores.forOrg(ORG_A).reviews.create(review('rev1', { status: 'approved' }))
+    await stores.forOrg(ORG_B).reviews.create(review('rev2', { status: 'approved' }))
+    const repository = { provider: 'github', owner: 'platform', repo: 'api' }
+    const filter = { status: ['approved' as const], since: 0, limit: 10 }
+    const history = await stores.forOrg(ORG_A).reviews.listForRepository(repository, filter)
+    assert.deepStrictEqual(
+      history.map((row) => row.id),
+      ['rev1'],
+    )
+  }),
+
   tenancyCase('the reminder tick of one org does not see the other', async (stores) => {
     await stores.forOrg(ORG_A).reminders.create(reminder('n1', { dueAt: 500 }))
     await stores.forOrg(ORG_B).reminders.create(reminder('n1', { dueAt: 500 }))
@@ -163,6 +175,11 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
         repo: 'api',
         number: 12,
       }),
+      null,
+    )
+    assert.strictEqual(await stores.forOrg(ORG_B).commitments.setRequestedHandle('c1', 'x'), null)
+    assert.strictEqual(
+      (await stores.forOrg(ORG_A).commitments.getById('c1'))?.requestedHandle,
       null,
     )
   }),

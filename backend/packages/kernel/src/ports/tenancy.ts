@@ -1,5 +1,6 @@
 import type { Org } from '@sainte-beuve/contracts'
-import type { Repositories, StoredApiKey, StoredSession } from './repositories.js'
+import type { StoredApiKey, StoredSession } from './auth.js'
+import type { Repositories } from './repositories.js'
 
 /**
  * The org boundary, as a port.

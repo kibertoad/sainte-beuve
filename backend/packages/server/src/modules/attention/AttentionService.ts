@@ -10,22 +10,23 @@ import type {
 } from '@sainte-beuve/contracts'
 import { ConflictError, ForbiddenError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
+  type AttentionChange,
+  askMoreChange,
   audienceRuleOf,
+  commitmentChange,
+  declineChange,
   hasDeclined,
-  isAttentionSatisfied,
   isInAttentionAudience,
   recipientShortfall,
-  withDecline,
-  withoutDecline,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
-import { deliverAsk, refreshAskDeliveries } from './askDeliveries.js'
 import {
-  checkRecipients,
-  namedAdditions,
-  nextRecipients,
-  saveWithRecipients,
-} from './recipients.js'
+  requestCommittedReviewer,
+  withdrawCommittedReviewer,
+} from '../../integrations/reviewRequests.js'
+import { refreshAskDeliveries, sendAskDms } from './askDeliveries.js'
+import { changeAsk } from './changeAsk.js'
+import { namedAdditions, namedRecipients, rankedCandidates } from './recipients.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -55,13 +56,13 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
-    const named = await this.resolveRecipients(viewer, input)
+    const named = await namedRecipients(this.container, viewer, input)
     const recipients = named.map((reviewer) => ({
       reviewerId: reviewer.id,
       displayName: reviewer.displayName,
     }))
     const now = clock.now()
-    const draft: AttentionRequest = {
+    const request = await repositories.attention.create({
       id: ids.next(),
       pullRequest: input.pullRequest,
       title: input.title,
@@ -86,14 +87,10 @@ export class AttentionService {
       // Asking on means asking the next named person, which an ask sent by
       // skill has no use for: it already reaches everybody who matches.
       keepAsking: input.keepAsking && recipients.length > 0,
-    }
-    // The DMs go out BEFORE the row is stored, so the one write carries where
-    // they landed. Stored first and patched after, a commit landing between
-    // the two writes would be overwritten by the patch, or overwrite it.
-    const chatDeliveries = await deliverAsk(this.container, draft, named)
-    const request = await repositories.attention.create({ ...draft, chatDeliveries })
+      people: input.people,
+    })
     this.publish('opened', request)
-    return request
+    return sendAskDms(this.container, request, named)
   }
 
   /**
@@ -125,12 +122,11 @@ export class AttentionService {
       throw new ConflictError(`This request is already ${request.status}`, { attentionId })
     }
 
-    const now = this.container.clock.now()
-    const commitments = [
-      ...request.commitments,
-      { reviewerId: viewer.id, displayName: viewer.displayName, committedAt: now },
-    ]
-    const satisfied = isAttentionSatisfied({ ...request, commitments })
+    const commitment = {
+      reviewerId: viewer.id,
+      displayName: viewer.displayName,
+      committedAt: this.container.clock.now(),
+    }
     // The commitment row FIRST, then the ask, then the event. Both writes are
     // needed and there is no transaction across them, so the order decides what
     // a failure between them leaves behind: this way a refused second write
@@ -138,19 +134,12 @@ export class AttentionService {
     // that row and is a no-op. The other way round resolves the ask, drops the
     // promise, and tells nobody.
     await this.recordCommitment(viewer, request.pullRequest, request.title, attentionId)
-    const updated = assertFound(
-      await this.container.repositories.attention.update(attentionId, {
-        commitments,
-        status: satisfied ? 'resolved' : 'open',
-        updatedAt: now,
-        resolvedAt: satisfied ? now : null,
-        // Somebody who declined and then volunteered changed their mind.
-        declines: withoutDecline(request.declines, viewer.id),
-      }),
-      `No attention request ${attentionId}`,
+    const updated = await changeAsk(this.container, attentionId, (stored) =>
+      commitmentChange(stored, commitment),
     )
-    this.publish(satisfied ? 'resolved' : 'committed', updated)
-    await refreshAskDeliveries(this.container, updated, satisfied ? null : viewer.id)
+    const resolved = updated.status === 'resolved'
+    this.publish(resolved ? 'resolved' : 'committed', updated)
+    await refreshAskDeliveries(this.container, updated, resolved ? null : viewer.id)
     return updated
   }
 
@@ -177,24 +166,22 @@ export class AttentionService {
     if (!reached && !hasDeclined(request, viewer.id)) {
       throw new ForbiddenError('This request was not addressed to you')
     }
-    const now = this.container.clock.now()
     const decline = {
       reviewerId: viewer.id,
       displayName: viewer.displayName,
       reason,
-      declinedAt: now,
+      declinedAt: this.container.clock.now(),
     }
-    const declined = { ...request, declines: withDecline(request.declines, decline) }
-    const added = declined.keepAsking
-      ? await nextRecipients(this.container, declined, recipientShortfall(declined))
-      : []
-    const updated = await saveWithRecipients(this.container, declined, added, {
-      declines: declined.declines,
-      updatedAt: now,
-    })
-    this.publish('declined', updated)
-    await refreshAskDeliveries(this.container, updated, viewer.id)
-    return updated
+    // Ranked whenever the ask keeps asking, not only when this read shows it
+    // short: a decline landing alongside this one can leave it short by the
+    // time the change is worked out against the stored ask.
+    const candidates = request.keepAsking ? await rankedCandidates(this.container, request) : []
+    const updated = await this.applyChange(attentionId, (stored) =>
+      declineChange(stored, decline, candidates),
+    )
+    this.publish('declined', updated.request)
+    await refreshAskDeliveries(this.container, updated.request, viewer.id)
+    return sendAskDms(this.container, updated.request, updated.asked)
   }
 
   /**
@@ -218,18 +205,21 @@ export class AttentionService {
         { attentionId },
       )
     }
-    const added =
-      recipientIds.length > 0
-        ? await namedAdditions(this.container, viewer, request, recipientIds)
-        : await nextRecipients(this.container, request, Math.max(1, recipientShortfall(request)))
-    if (added.length === 0) {
+    const named = recipientIds.length > 0
+    const candidates = named
+      ? await namedAdditions(this.container, request, recipientIds)
+      : await rankedCandidates(this.container, request)
+    const now = this.container.clock.now()
+    const count = (ask: AttentionRequest) =>
+      named ? candidates.length : Math.max(1, recipientShortfall(ask))
+    if (askMoreChange(request, candidates, count(request), now).asked.length === 0) {
       throw new ConflictError('Nobody else is available to ask', { attentionId })
     }
-    const updated = await saveWithRecipients(this.container, request, added, {
-      updatedAt: this.container.clock.now(),
-    })
-    this.publish('asked', updated)
-    return updated
+    const updated = await this.applyChange(attentionId, (stored) =>
+      askMoreChange(stored, candidates, count(stored), now),
+    )
+    this.publish('asked', updated.request)
+    return sendAskDms(this.container, updated.request, updated.asked)
   }
 
   /** The requester withdrawing. Nobody else can: it is their ask to end. */
@@ -261,7 +251,8 @@ export class AttentionService {
 
   /**
    * Hand it back. Returns what is left rather than an acknowledgement, because
-   * the third workspace column is what the caller is about to redraw.
+   * the third workspace column is what the caller is about to redraw. The host
+   * request goes with it only when this commitment made it.
    */
   async release(viewer: Reviewer, commitmentId: string): Promise<ReviewCommitment[]> {
     const { repositories } = this.container
@@ -273,6 +264,7 @@ export class AttentionService {
       throw new ForbiddenError('A commitment can only be released by the person who made it')
     }
     await repositories.commitments.delete(commitmentId)
+    await withdrawCommittedReviewer(this.container, commitment)
     return repositories.commitments.listByReviewer(viewer.id)
   }
 
@@ -281,6 +273,9 @@ export class AttentionService {
    * `(reviewer, pull request)` so a second click, or committing to a pull
    * request twice through two different asks, does not double-count the
    * promise in the workspace.
+   *
+   * The row is written before the host is asked, so a second click finds it
+   * while the host call is still in flight.
    */
   private async recordCommitment(
     viewer: Reviewer,
@@ -291,33 +286,16 @@ export class AttentionService {
     const { repositories, clock, ids } = this.container
     const existing = await repositories.commitments.find(viewer.id, pullRequest)
     if (existing !== null) return existing
-    return repositories.commitments.create({
+    const commitment = await repositories.commitments.create({
       id: ids.next(),
       reviewerId: viewer.id,
       pullRequest,
       title,
       attentionRequestId,
+      requestedHandle: null,
       createdAt: clock.now(),
     })
-  }
-
-  /**
-   * The people an ask names. An ask naming fewer people than it waits for
-   * could never resolve, so that is refused along with anybody who could not
-   * answer (see `checkRecipients`).
-   */
-  private async resolveRecipients(
-    viewer: Reviewer,
-    input: CreateAttentionRequest,
-  ): Promise<Reviewer[]> {
-    const wanted = new Set(input.recipientIds)
-    if (wanted.size > 0 && wanted.size < input.neededCommitments) {
-      throw new ValidationError(
-        `This ask waits for ${input.neededCommitments} reviewers but names only ${wanted.size}`,
-        { neededCommitments: input.neededCommitments, recipients: wanted.size },
-      )
-    }
-    return checkRecipients(this.container, viewer, [...wanted])
+    return requestCommittedReviewer(this.container, commitment, viewer)
   }
 
   private async requireOpen(attentionId: string): Promise<AttentionRequest> {
@@ -326,6 +304,23 @@ export class AttentionService {
       throw new ConflictError(`This request is already ${request.status}`, { attentionId })
     }
     return request
+  }
+
+  /**
+   * A change that may ask more people, applied to the stored ask, and whoever
+   * it asked as the change was last worked out.
+   */
+  private async applyChange(
+    attentionId: string,
+    decide: (stored: AttentionRequest) => AttentionChange,
+  ): Promise<{ request: AttentionRequest; asked: Reviewer[] }> {
+    let asked: Reviewer[] = []
+    const request = await changeAsk(this.container, attentionId, (stored) => {
+      const change = decide(stored)
+      asked = change.asked
+      return change.patch
+    })
+    return { request, asked }
   }
 
   private async require(attentionId: string): Promise<AttentionRequest> {

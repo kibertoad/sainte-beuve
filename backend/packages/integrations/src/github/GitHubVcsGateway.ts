@@ -6,15 +6,18 @@ import type {
   RepositoryLookup,
 } from '@sainte-beuve/contracts'
 import type {
+  EpochMs,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewerTally,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
+import { pastGitHubReviewers } from './history.js'
 import { lookupGitHubRepositories } from './lookup.js'
 import {
   type GitHubPullRequestDetail,
@@ -193,13 +196,18 @@ export class GitHubVcsGateway implements VcsGateway {
     }
   }
 
-  async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
-    if (logins.length === 0) return
+  /**
+   * GitHub refuses the whole call over a login it cannot request, and requests
+   * again somebody who has already reviewed, so a success requested everyone named.
+   */
+  async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<string[]> {
+    if (logins.length === 0) return []
     await this.call(pr, {
       method: 'POST',
       path: repoPath(pr, `/pulls/${pr.number}/requested_reviewers`),
       body: { reviewers: logins },
     })
+    return logins
   }
 
   async removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
@@ -212,6 +220,16 @@ export class GitHubVcsGateway implements VcsGateway {
       path: repoPath(pr, `/pulls/${pr.number}/requested_reviewers`),
       body: { reviewers: logins },
     })
+  }
+
+  /** GitHub drops a reviewer from this list when they submit a review, so it is pending by construction. */
+  async pendingReviewers(pr: PullRequestRef): Promise<string[]> {
+    const token = await this.options.tokens.tokenFor(pr.owner, pr.repo)
+    const requested = await this.get<{ users?: { login: string }[] | null }>(
+      repoPath(pr, `/pulls/${pr.number}/requested_reviewers`),
+      token,
+    )
+    return (requested.users ?? []).map((user) => user.login)
   }
 
   async comment(pr: PullRequestRef, body: string): Promise<void> {
@@ -246,6 +264,14 @@ export class GitHubVcsGateway implements VcsGateway {
       throw err
     })
     return this.identity
+  }
+
+  async pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]> {
+    return pastGitHubReviewers(project, since, {
+      token: await this.options.tokens.tokenFor(project.owner, project.repo),
+      baseUrl: this.options.baseUrl,
+      fetchImpl: this.options.fetchImpl,
+    })
   }
 
   private async readViewer(): Promise<VcsAccount | null> {

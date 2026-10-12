@@ -588,6 +588,7 @@ describe('an attention ask answered from Slack', () => {
       neededCommitments: 1,
       note: null,
       keepAsking: false,
+      people: null,
     })
   }
 

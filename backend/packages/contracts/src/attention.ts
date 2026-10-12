@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { pullRequestPeopleSchema } from './recommendations.js'
 import { skillSchema } from './reviewers.js'
 import { pullRequestRefSchema } from './vcs.js'
 
@@ -96,11 +97,21 @@ export const attentionRequestSchema = v.object({
    */
   keepAsking: v.optional(v.boolean(), false),
   /**
+   * The pull request's author and requested reviewers as the host listed them
+   * when the ask was raised, so the people it moves on to leave them out even
+   * when the board has no row for it. Null when the requester did not send them.
+   */
+  people: v.optional(v.nullable(pullRequestPeopleSchema), null),
+  /**
    * Skills a person must ALL have to be in the audience. Empty means everybody
    * available. Kept on a named ask as what the requester was looking for.
    */
   requiredSkills: v.array(skillSchema),
-  /** Whether the ask stays inside one team. Ignored when recipients are named. */
+  /**
+   * Whether the ask stays inside one team. On a named ask it gates nobody: it
+   * says the ranked list the names came from was kept to the team, and the
+   * next best match an ask moves on to is drawn from the same list.
+   */
   sameTeamOnly: v.boolean(),
   /**
    * The team the gate is against, captured when the request was raised. Stored
@@ -143,6 +154,11 @@ export const createAttentionRequestSchema = v.object({
   neededCommitments: v.optional(attentionRequestSchema.entries.neededCommitments, 1),
   note: v.optional(v.nullable(attentionRequestSchema.entries.note), null),
   keepAsking: v.optional(v.boolean(), false),
+  /**
+   * What the host lists for the pull request, as the recommendations take it.
+   * Its author cannot be named, and asking on leaves out everybody it lists.
+   */
+  people: v.optional(v.nullable(pullRequestPeopleSchema), null),
 })
 export type CreateAttentionRequest = v.InferOutput<typeof createAttentionRequestSchema>
 /** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
@@ -217,6 +233,12 @@ export const reviewCommitmentSchema = v.object({
   title: v.string(),
   /** The ask this answered, when it answered one. */
   attentionRequestId: v.nullable(v.string()),
+  /**
+   * The handle this commitment requested on the host, or null when the request
+   * there is somebody else's or was never made. Releasing the commitment takes
+   * back only this request. Absent on rows stored before the host was told.
+   */
+  requestedHandle: v.optional(v.nullable(v.string()), null),
   createdAt: v.number(),
 })
 export type ReviewCommitment = v.InferOutput<typeof reviewCommitmentSchema>

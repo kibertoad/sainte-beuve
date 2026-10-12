@@ -689,6 +689,7 @@ function attentionIn(id: string) {
     chatDeliveries: [],
     declines: [],
     keepAsking: false,
+    people: null,
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,

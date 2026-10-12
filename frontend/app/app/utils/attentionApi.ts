@@ -1,7 +1,7 @@
 import type {
   CreateAttentionRequestInput,
   PullRequestRef,
-  RecommendReviewers,
+  RecommendReviewersInput,
 } from '@sainte-beuve/contracts'
 import {
   askMoreAttentionContract,
@@ -19,7 +19,7 @@ import type { ContractCaller } from './contractCall'
 // Asking for attention: who fits best, the ask itself, and the answers to it.
 export function attentionCalls(call: ContractCaller) {
   return {
-    recommendReviewers: (request: RecommendReviewers) =>
+    recommendReviewers: (request: RecommendReviewersInput) =>
       call(recommendReviewersContract, { body: request }),
     listAttention: () => call(listAttentionContract, {}),
     requestAttention: (request: CreateAttentionRequestInput) =>

@@ -42,7 +42,12 @@ export {
   searchesBeyondProjects,
   unlinkedPullRequests,
 } from './merging.js'
-export { assembleReviewLists, type ReviewLists, type ReviewListsInput } from './reviewing.js'
+export {
+  assembleReviewLists,
+  placeCommitments,
+  type ReviewLists,
+  type ReviewListsInput,
+} from './reviewing.js'
 export {
   decideTeamAction,
   ownerOfNewTeam,
@@ -61,22 +66,55 @@ export {
   pendingRecipientIds,
   recipientShortfall,
   selectAttentionAudience,
-  withDecline,
-  withoutDecline,
+  unaskableReason,
 } from './attention.js'
 export {
+  type RecipientRefusal,
+  type RecipientsInput,
+  type RecipientsResolution,
+  askableRecipients,
+  resolveAttentionRecipients,
+} from './recipients.js'
+export {
+  type AttentionChange,
+  type AttentionPatch,
+  askMoreChange,
+  commitmentChange,
+  declineChange,
+  deliveriesChange,
+  nextToAsk,
+} from './attentionChanges.js'
+export {
+  countPastReviews,
+  familiarityBonus,
+  NO_PAST_REVIEWS,
+  PAST_REVIEW_HALF_POINT,
+  PAST_REVIEW_PREFERENCE,
+  PAST_REVIEW_READ_LIMIT,
+  PAST_REVIEW_STATUSES,
+  PAST_REVIEW_WINDOW_MS,
+  type PastReviewCounts,
+} from './familiarity.js'
+export { type HostReviewTally, pastReviewCounts, type ReviewHistory } from './history.js'
+export {
   diagnoseShortfall,
+  distinctAsSpelled,
   drawWeight,
+  excludedFromReview,
   hasAllSkills,
   isEligible,
   isSameHandle,
   MATCH_PREFERENCE,
+  matchPreference,
   type MatchTarget,
   matchTargetFor,
   normalizeSkill,
+  reviewersWithHandles,
   type ScoredCandidate,
+  matchesOf,
   scoreCandidate,
   scoreCandidates,
+  type ScoringTarget,
   type SelectionInput,
   type SelectionResult,
   selectReviewers,

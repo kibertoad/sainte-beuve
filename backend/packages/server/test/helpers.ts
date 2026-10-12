@@ -174,11 +174,13 @@ export function recordingVcs(): VcsGateway & {
     requestReviewers: async (pr, logins) => {
       requested.push(logins)
       void pr
+      return logins
     },
     removeRequestedReviewers: async (pr, logins) => {
       withdrawn.push(logins)
       void pr
     },
+    pendingReviewers: async () => [],
     comment: async (pr, body) => {
       comments.push({ body, number: pr.number })
     },
@@ -191,6 +193,7 @@ export function recordingVcs(): VcsGateway & {
     listOpenPullRequests: async () => [],
     searchOpenPullRequests: async () => [],
     lookupRepositories: async () => null,
+    pastReviewers: async () => [],
     ...noMerging(),
   }
 }
