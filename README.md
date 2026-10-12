@@ -104,18 +104,18 @@ a team names its own), how many people you want, and whether the ask should stay
 inside your team.
 
 The dialog lists the five best matches as you pick, with what each one matched,
-how many reviews they finished in the same repository over the last six months,
-and how many they already have open beside their name. They are ranked on how
-much of those skills and the repository's domains a person holds, raised for
-those past reviews, and open reviews only order people who rank equally on
-those: you can see the load and weigh it yourself, and a busy expert still
-outranks an idle stranger. Past reviews count with diminishing returns and never
-outweigh the whole wanted mix, so the regular of a repository is preferred
-without being handed every review in it. An automatic assignment draws with the
-same preference, so the list and the router favour the same people. The list is
-the people an ask could reach, so it never names you, the author, anybody
-already on the pull request or paused, and it keeps to your team when the ask
-does.
+how many reviews they finished on pull requests opened in the same repository
+over the last six months, and how many they already have open beside their
+name. They are ranked on how much of those skills and the repository's domains a
+person holds, raised for those past reviews, and open reviews only order people
+who rank equally on those: you can see the load and weigh it yourself, and a
+busy expert still outranks an idle stranger. Past reviews count with diminishing
+returns and never outweigh the whole wanted mix, so the regular of a repository
+is preferred without being handed every review in it. An automatic assignment
+draws with the same preference, so the list and the router favour the same
+people. The list is the people an ask could reach, so it never names you, the
+author, anybody already on the pull request or paused, and it keeps to your team
+when the ask does.
 
 Everyone available who holds all of those skills is asked, two ways at once. A
 page already open is pushed the request over server-sent events; a page opened

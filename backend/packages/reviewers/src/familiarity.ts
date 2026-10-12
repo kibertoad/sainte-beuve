@@ -37,7 +37,11 @@ export const PAST_REVIEW_HALF_POINT = 3
  */
 export const PAST_REVIEW_STATUSES: readonly ReviewStatus[] = ['approved', 'changes_requested']
 
-/** How far back a past review still counts. People move on, and so does a codebase. */
+/**
+ * How far back a past review still counts, measured from when its pull request
+ * was tracked rather than when the verdict landed. People move on, and so does a
+ * codebase.
+ */
 export const PAST_REVIEW_WINDOW_MS = 180 * 24 * 60 * 60 * 1000
 
 /** The most finished reviews one repository's history read decodes. */

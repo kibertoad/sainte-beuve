@@ -6,10 +6,10 @@ import { pullRequestRefSchema } from './vcs.js'
 
 // Reviewer recommendations: who an author asking for attention should pick for
 // a pull request, best first, and why. The pool is the people an ask could
-// reach; the order is fit, raised for past reviews in the repository, first and
-// open reviews second. Each entry carries its
-// reasons as named fields, which is where a new reason is added without
-// breaking a client that reads the ones it knows.
+// reach; the order is fit raised for past reviews in the repository first, and
+// open reviews second. Each entry carries its reasons as named fields, which is
+// where a new reason is added without breaking a client that reads the ones it
+// knows.
 
 /** The most recommendations one read returns. */
 export const MAX_RECOMMENDATIONS = 25
