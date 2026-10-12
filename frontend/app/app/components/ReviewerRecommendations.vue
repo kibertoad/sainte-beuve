@@ -10,7 +10,11 @@ const props = defineProps<{
   pending: boolean
   failure: string | null
   sameTeamOnly: boolean
+  /** Whether a longer ranking could list more people than this one. */
+  canShowMore: boolean
 }>()
+
+const emit = defineEmits<{ more: [] }>()
 
 /** The reviewer ids ticked, in the order they were ticked. */
 const selected = defineModel<string[]>('selected', { required: true })
@@ -101,6 +105,16 @@ function loadLine(entry: ReviewerRecommendation): string {
           </div>
         </li>
       </ol>
+      <UButton
+        v-if="canShowMore && result.recommendations.length > 0"
+        variant="link"
+        color="neutral"
+        size="sm"
+        class="mt-1"
+        :disabled="pending"
+        @click="emit('more')"
+        >Show more</UButton
+      >
     </div>
   </div>
 </template>

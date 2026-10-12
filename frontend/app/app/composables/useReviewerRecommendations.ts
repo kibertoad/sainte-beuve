@@ -7,13 +7,12 @@ import type {
 /** How long the dialog's choices have to settle before the ranking is asked again. */
 const DEBOUNCE_MS = 250
 
-/** How many recommendations the dialog shows. */
-const SHOWN = 5
-
 export interface RecommendationQuery {
   pullRequest: Readonly<Ref<OpenPullRequest | null>>
   requiredSkills: Readonly<Ref<string[]>>
   sameTeamOnly: Readonly<Ref<boolean>>
+  /** How many to rank. */
+  limit: Readonly<Ref<number>>
 }
 
 /**
@@ -35,7 +34,7 @@ export function useReviewerRecommendations(input: RecommendationQuery) {
           authorLogin: open.authorLogin,
           requestedReviewerLogins: [...open.requestedReviewerLogins],
         },
-        limit: SHOWN,
+        limit: input.limit.value,
       }
     },
     (query) => api.recommendReviewers(query),
