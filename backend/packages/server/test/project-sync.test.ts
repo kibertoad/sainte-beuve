@@ -62,6 +62,49 @@ describe('planProjectSync', () => {
     expect(plan).toEqual({ remove: [], rename: [], adopt: [], create: [] })
   })
 
+  it('swaps two names through a parking name, so no step lands on a held name', () => {
+    const plan = planProjectSync(
+      'cat-factory',
+      [
+        project('p1', 'api', { source: 'cat-factory', id: '1' }),
+        project('p2', 'web', { source: 'cat-factory', id: '2' }),
+      ],
+      [listed('ws_1/1', 'web', '1'), listed('ws_1/2', 'api', '2')],
+    )
+    expect(plan.rename).toEqual([
+      { projectId: 'p1', owner: 'acme', repo: 'sainte-beuve-renaming-p1' },
+      { projectId: 'p2', owner: 'acme', repo: 'api' },
+      { projectId: 'p1', owner: 'acme', repo: 'web' },
+    ])
+  })
+
+  it('renames after the project whose name it takes has moved away', () => {
+    const plan = planProjectSync(
+      'cat-factory',
+      [
+        project('p1', 'api', { source: 'cat-factory', id: '1' }),
+        project('p2', 'core', { source: 'cat-factory', id: '2' }),
+      ],
+      [listed('ws_1/1', 'core', '1'), listed('ws_1/2', 'core-v2', '2')],
+    )
+    expect(plan.rename).toEqual([
+      { projectId: 'p2', owner: 'acme', repo: 'core-v2' },
+      { projectId: 'p1', owner: 'acme', repo: 'core' },
+    ])
+  })
+
+  it('does not rename onto a name a kept project holds', () => {
+    const plan = planProjectSync(
+      'cat-factory',
+      [
+        project('p1', 'old-payments', { source: 'cat-factory', id: '7' }),
+        project('p2', 'payments', { source: 'cat-factory', id: '9' }),
+      ],
+      [listed('ws_1/7', 'payments', '7'), listed('ws_2/9', 'payments', '9')],
+    )
+    expect(plan).toEqual({ remove: [], rename: [], adopt: [], create: [] })
+  })
+
   it('ignores a dropped entry, and a case-only difference in the name', () => {
     const plan = planProjectSync(
       'cat-factory',
