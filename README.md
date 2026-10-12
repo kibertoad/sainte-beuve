@@ -24,10 +24,13 @@ to be registered where, is [docs/integrations.md](./docs/integrations.md).
 
 ## The AI review is a loop, not a button
 
-Press **AI review** on a board row and the pull request goes to cat-factory,
-which fans the diff out across parallel reviewers. It posts nothing. It comes
-back and waits, and the row opens on what it found: each finding with its
-severity, the file and line it is about, and the fix it suggests.
+Press **AI review** on a pull request and it goes to cat-factory, which fans
+the diff out across parallel reviewers. The button is on every board row, and on
+the workspace, My PRs and My Reviews for any repository that is linked. A pull
+request that is not on the board yet is put there, because its board row is
+where the review is curated, and the button takes you to it. It posts nothing.
+It comes back and waits, and the row opens on what it found: each finding with
+its severity, the file and line it is about, and the fix it suggests.
 
 You are the gate. Tick the ones worth saying out loud (the blockers and the highs
 start ticked), **Dismiss** the noise, and then choose:
