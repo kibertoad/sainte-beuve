@@ -1,10 +1,18 @@
-import type { Reminder, ReminderStatus, ReviewRequest, ReviewStatus } from '@sainte-beuve/contracts'
+import type {
+  ProjectRef,
+  Reminder,
+  ReminderStatus,
+  ReviewRequest,
+  ReviewStatus,
+} from '@sainte-beuve/contracts'
 import type {
   EpochMs,
+  PullRequestAddress,
   ReminderRepository,
   ReviewListOrder,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
+import { projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
@@ -66,44 +74,33 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
     return firstOr(rows)?.data ?? null
   }
 
-  async getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null> {
+  async getByPullRequest(ref: PullRequestAddress): Promise<ReviewRequest | null> {
     const rows = await this.db
       .select()
       .from(reviewRequests)
       .where(
         and(
           eq(reviewRequests.orgId, this.orgId),
-          eq(reviewRequests.prOwner, ref.owner),
-          eq(reviewRequests.prRepo, ref.repo),
-          eq(reviewRequests.prNumber, ref.number),
+          eq(reviewRequests.pullRequestKey, pullRequestKey(ref)),
         ),
       )
     return firstOr(rows)?.data ?? null
   }
 
   async listForRepository(
-    repository: { provider: string; owner: string; repo: string },
+    repository: ProjectRef,
     filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
   ): Promise<ReviewRequest[]> {
     if (filter.status.length === 0) return []
-    // `review_requests_repo_idx` answers the owner, repo and date range in order;
-    // the host lives only in the payload, so it is checked on the rows that range
-    // already narrowed to one repository's.
     const rows = await this.db
       .select()
       .from(reviewRequests)
       .where(
         and(
           eq(reviewRequests.orgId, this.orgId),
-          eq(reviewRequests.prOwner, repository.owner),
-          eq(reviewRequests.prRepo, repository.repo),
+          eq(reviewRequests.repoKey, projectRefKey(repository)),
           gte(reviewRequests.createdAt, filter.since),
           inArray(reviewRequests.status, [...filter.status]),
-          sql`${reviewRequests.data}->'pullRequest'->>'provider' = ${repository.provider}`,
         ),
       )
       .orderBy(desc(reviewRequests.createdAt), desc(reviewRequests.id))
@@ -129,9 +126,8 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
       orgId: this.orgId,
       id: review.id,
       status: review.status,
-      prOwner: review.pullRequest.owner,
-      prRepo: review.pullRequest.repo,
-      prNumber: review.pullRequest.number,
+      pullRequestKey: pullRequestKey(review.pullRequest),
+      repoKey: projectRefKey(review.pullRequest),
       createdAt: review.createdAt,
       data: review,
     }
