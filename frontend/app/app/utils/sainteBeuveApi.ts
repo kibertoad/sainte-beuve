@@ -1,5 +1,6 @@
 import type {
   CreateProjectInput,
+  GuidedReviewSession,
   RepositoryLookupQuery,
   ReviewStatus,
   Role,
@@ -41,7 +42,7 @@ import type { RequestParams, SuccessBody } from './contractCall'
 import { attentionCalls } from './attentionApi'
 import { capabilityCalls } from './capabilitiesApi'
 import { aiReviewCalls } from './aiReviewApi'
-import { guidedReviewCalls } from './guidedReviewApi'
+import { guidedReviewCalls, sessionAddress } from './guidedReviewApi'
 import { myPullRequestCalls } from './myPullRequestsApi'
 import { myReviewCalls } from './myReviewsApi'
 import { organizationCalls } from './organizationApi'
@@ -247,9 +248,12 @@ export function createSainteBeuveApi(apiBase: string) {
      * live half survives a laptop closing. The contract still owns the path.
      */
     attentionStreamUrl: `${apiBase}${API_PREFIX}${mapApiContractToPath(streamAttentionContract)}`,
-    /** The same, for one guided review. */
-    guidedReviewStreamUrl: (sessionId: string) =>
-      `${apiBase}${API_PREFIX}${streamGuidedReviewContract.pathResolver({ sessionId })}`,
+    /** The same, for one guided review, naming its pull request the way every session call does. */
+    guidedReviewStreamUrl: (session: GuidedReviewSession) => {
+      const { pathParams, queryParams } = sessionAddress(session)
+      const path = streamGuidedReviewContract.pathResolver(pathParams)
+      return `${apiBase}${API_PREFIX}${path}?${new URLSearchParams(queryParams)}`
+    },
 
     // Who is calling, and whether this deployment cares. Never refused, in
     // either mode: a screen that had to be signed in to discover that it is not

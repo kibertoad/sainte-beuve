@@ -1,5 +1,7 @@
 import {
+  askMoreAttentionContract,
   cancelAttentionContract,
+  declineAttentionContract,
   commitToAttentionContract,
   commitToPullRequestContract,
   listAttentionContract,
@@ -53,19 +55,7 @@ export function attentionController(): Hono<AppEnv> {
     return c.json(request, 201)
   })
 
-  buildHonoRoute(app, commitToAttentionContract, async (c) => {
-    const container = c.get('container')
-    const viewer = await viewerOf(c)
-    const { attentionId } = c.req.valid('param')
-    return c.json(await new AttentionService(container).commit(viewer.reviewer, attentionId), 200)
-  })
-
-  buildHonoRoute(app, cancelAttentionContract, async (c) => {
-    const container = c.get('container')
-    const viewer = await viewerOf(c)
-    const { attentionId } = c.req.valid('param')
-    return c.json(await new AttentionService(container).cancel(viewer.reviewer, attentionId), 200)
-  })
+  mountAnswers(app)
 
   buildHonoRoute(app, commitToPullRequestContract, async (c) => {
     const container = c.get('container')
@@ -83,6 +73,44 @@ export function attentionController(): Hono<AppEnv> {
   })
 
   return app
+}
+
+/**
+ * The answers to an ask: taking it, turning it down, and the requester asking
+ * more people or withdrawing it.
+ */
+function mountAnswers(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, commitToAttentionContract, async (c) => {
+    const container = c.get('container')
+    const viewer = await viewerOf(c)
+    const { attentionId } = c.req.valid('param')
+    return c.json(await new AttentionService(container).commit(viewer.reviewer, attentionId), 200)
+  })
+
+  buildHonoRoute(app, declineAttentionContract, async (c) => {
+    const container = c.get('container')
+    const viewer = await viewerOf(c)
+    const { attentionId } = c.req.valid('param')
+    const { reason } = c.req.valid('json')
+    const service = new AttentionService(container)
+    return c.json(await service.decline(viewer.reviewer, attentionId, reason), 200)
+  })
+
+  buildHonoRoute(app, askMoreAttentionContract, async (c) => {
+    const container = c.get('container')
+    const viewer = await viewerOf(c)
+    const { attentionId } = c.req.valid('param')
+    const { recipientIds } = c.req.valid('json')
+    const service = new AttentionService(container)
+    return c.json(await service.askMore(viewer.reviewer, attentionId, recipientIds), 200)
+  })
+
+  buildHonoRoute(app, cancelAttentionContract, async (c) => {
+    const container = c.get('container')
+    const viewer = await viewerOf(c)
+    const { attentionId } = c.req.valid('param')
+    return c.json(await new AttentionService(container).cancel(viewer.reviewer, attentionId), 200)
+  })
 }
 
 /**

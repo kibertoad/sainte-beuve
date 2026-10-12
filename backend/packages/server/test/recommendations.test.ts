@@ -8,6 +8,7 @@ import {
   buildHarness,
   environmentVcs,
   openReview,
+  patch,
   post,
   viewerVcs,
 } from './helpers.js'
@@ -70,8 +71,63 @@ describe('reviewer recommendations', () => {
       matchedSkills: ['payments'],
       matchedDomains: ['billing'],
       outstandingReviews: 0,
+      pastReviews: 0,
     })
     expect(result.shortfallReason).toBeNull()
+  })
+
+  it('ranks somebody who reviewed the repository before above an equal stranger', async () => {
+    const h = buildHarness({ random: () => 0, vcs: environmentVcs(viewerVcs('me')) })
+    await addReviewer(h, { displayName: 'Rae', handles: { github: 'rae' } })
+    await addReviewer(h, { displayName: 'Alex', handles: { github: 'alex' } })
+    await addReviewer(h, { displayName: 'Me', handles: { github: 'me' } })
+    // An earlier pull request in the same repository, which Rae reviewed: the
+    // first draw goes to the first eligible reviewer in directory order.
+    const earlier = await openReview(h, { pullRequest: { ...PR, number: 3, url: `${PR.url}3` } })
+    expect((await assignReviewer(h, earlier.id)).status).toBe(200)
+    const approved = await h.app.fetch(
+      patch(`/api/v1/reviews/${earlier.id}/status`, { status: 'approved' }),
+    )
+    expect(approved.status).toBe(200)
+
+    const result = await recommend(h)
+
+    expect(names(result)).toStrictEqual(['Rae', 'Alex'])
+    expect(result.recommendations.map((entry) => entry.reasons.pastReviews)).toStrictEqual([1, 0])
+  })
+
+  it("counts the host's record of who reviewed the repository, credited by handle", async () => {
+    const vcs = viewerVcs('me')
+    const h = buildHarness({
+      vcs: environmentVcs({
+        ...vcs,
+        pastReviewers: async (project) =>
+          project.repo === PR.repo ? [{ login: 'RAE', reviews: 3 }] : [],
+      }),
+    })
+    await addReviewer(h, { displayName: 'Alex', handles: { github: 'alex' } })
+    await addReviewer(h, { displayName: 'Rae', handles: { github: 'rae' } })
+
+    const result = await recommend(h)
+
+    expect(names(result)).toStrictEqual(['Rae', 'Alex'])
+    expect(result.recommendations.map((entry) => entry.reasons.pastReviews)).toStrictEqual([3, 0])
+  })
+
+  it('still recommends when the host cannot say who reviewed before', async () => {
+    const vcs = viewerVcs('me')
+    const h = buildHarness({
+      vcs: environmentVcs({
+        ...vcs,
+        pastReviewers: () => Promise.reject(new Error('rate limited')),
+      }),
+    })
+    await addReviewer(h, { displayName: 'Alex', handles: { github: 'alex' } })
+
+    const result = await recommend(h)
+
+    expect(names(result)).toStrictEqual(['Alex'])
+    expect(result.recommendations[0]?.reasons.pastReviews).toBe(0)
   })
 
   it("wants the board row's skills, then the repository's, when the caller names none", async () => {

@@ -24,7 +24,11 @@ const RECONNECT_MAX_MS = 60_000
 /** A stream that lasted this long was working, so the next drop starts over at the floor. */
 const HEALTHY_MS = 30_000
 
-export function useAttentionStream() {
+/**
+ * `viewerId` answers who is looking, or null until the page knows: an ask they
+ * declined leaves their list, though the event saying so still reaches them.
+ */
+export function useAttentionStream(viewerId: () => string | null = () => null) {
   const api = useSainteBeuveApi()
   const requests = ref<AttentionRequest[]>([])
   /** Whether the live half is attached. False is not an error: the fetch still works. */
@@ -80,7 +84,7 @@ export function useAttentionStream() {
     if (ledger.isStale(incoming)) return
     ledger.remember(incoming)
     const rest = requests.value.filter((entry) => entry.id !== incoming.id)
-    requests.value = incoming.status === 'open' ? [incoming, ...rest] : rest
+    requests.value = listedFor(incoming, viewerId()) ? [incoming, ...rest] : rest
   }
 
   function read(event: Event): void {

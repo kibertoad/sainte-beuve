@@ -23,16 +23,17 @@ pull request is merged with its review findings fixed.
 | --- | ------------------------------------------------------------- | ---- | ---------- | ----------- | -------------------------------------------------------- |
 | 1   | Ranked reviewer recommendations, with the reason for each     | 2    |            | In review   | [#31](https://github.com/kibertoad/sainte-beuve/pull/31) |
 | 2   | Pick recommended reviewers and send each a named ask          | 3    | 1          | In review   | [#34](https://github.com/kibertoad/sainte-beuve/pull/34) |
-| 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | Not started |                                                          |
-| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | Not started |                                                          |
+| 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | In review   | [#36](https://github.com/kibertoad/sainte-beuve/pull/36) |
+| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | In review   | [#35](https://github.com/kibertoad/sainte-beuve/pull/35) |
 | 5   | An AI review files under its repository's cat-factory service | 5    |            | In review   | [#33](https://github.com/kibertoad/sainte-beuve/pull/33) |
 | 6   | Start an AI review from any pull request row                  | 5    |            | In review   | [#32](https://github.com/kibertoad/sainte-beuve/pull/32) |
-| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Not started |                                                          |
+| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | In review   | [#38](https://github.com/kibertoad/sainte-beuve/pull/38) |
 | 8   | A commitment requests the reviewer on the host                | 3, 4 |            | In review   | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
 | 9   | One matching rule for assignment and asks                     | 2    | 2          | Not started |                                                          |
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
-| 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
+| 12  | Challenge an AI review finding                                | 5    |            | In review   | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
+| 13  | A guided review names its cat-factory workspace               | 5    | 5          | In review   | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
 | 15  | Attention answers are written atomically                      | 3    |            | In review   | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
 
 Status is one of: Not started, In progress, In review, Merged.
@@ -105,9 +106,10 @@ when it is not there yet and files the review.
 "I will review it" is the only answer to an ask. The requester cannot tell a no
 from silence, and nothing moves on to the next candidate.
 
-A recipient can decline. A named ask that still needs commitments offers the
-next ranked candidate to the requester, or asks that candidate directly when the
-author opted into that.
+Anybody the ask reached can decline, with an optional reason, from the inbox or
+the Slack DM. A named ask the declines leave short asks the next ranked
+candidate by itself when the requester kept "ask the next best match" ticked,
+and otherwise shows the requester the shortfall with a one-click ask.
 
 ### 8. A commitment on the host
 
@@ -153,12 +155,22 @@ finding. The curation screen has no way to ask for it.
 A challenge action on a finding files the investigation and shows the verdict on
 the finding.
 
+### 13. A guided review names its workspace
+
+`CatFactoryGuidedReviewGateway` sends no workspace on any call. cat-factory
+refuses a workspace-scoped call that names none when the key reaches several
+workspaces, so the guided review fails for every repository of such an org.
+
+Opening and looking up a session use the workspaces the org's repository mirror
+links the repository in. A call about a session names its pull request too, and
+is made in the workspace those same keys name.
+
 ### 15. Atomic answers to an ask
 
-Answering an ask reads the request, changes it and writes it back whole, with no
-transaction. Two people committing at the same moment both read the ask before
-either writes, so the second write drops the first commitment. Declining and
-asking the next candidate (gap 7) write the same row the same way.
+An answer to an ask reads the request, works out its change from that read, and
+writes the fields it names. Two answers naming the same field in that gap both
+build on the same read, so the second write drops the first: two commitments,
+two declines, two people added, or two batches of recorded DMs.
 
 The attention store changes a request only through `change`, which re-reads and
 remakes the decision when another write landed in between: a `revision` column

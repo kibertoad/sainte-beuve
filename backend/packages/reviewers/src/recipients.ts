@@ -1,4 +1,4 @@
-import type { AttentionRecipient, Reviewer } from '@sainte-beuve/contracts'
+import type { Reviewer } from '@sainte-beuve/contracts'
 import { unaskableReason } from './attention.js'
 
 /**
@@ -26,7 +26,7 @@ export type RecipientRefusal =
   | { reason: 'requester' | 'paused' | 'author'; reviewer: Reviewer }
 
 export type RecipientsResolution =
-  | { ok: true; recipients: AttentionRecipient[] }
+  | { ok: true; reviewers: Reviewer[] }
   | { ok: false; refusal: RecipientRefusal }
 
 export function resolveAttentionRecipients(input: RecipientsInput): RecipientsResolution {
@@ -34,16 +34,26 @@ export function resolveAttentionRecipients(input: RecipientsInput): RecipientsRe
   if (wanted.length > 0 && wanted.length < input.neededCommitments) {
     return { ok: false, refusal: { reason: 'too_few', named: wanted.length } }
   }
+  return askableRecipients({ ...input, recipientIds: wanted })
+}
+
+/**
+ * The people named, each checked as `resolveAttentionRecipients` checks them,
+ * without the count: what an open ask is given when the requester names more.
+ */
+export function askableRecipients(
+  input: Omit<RecipientsInput, 'neededCommitments'>,
+): RecipientsResolution {
   const directory = new Map(input.directory.map((reviewer) => [reviewer.id, reviewer]))
   const authors = new Set(input.authorIds)
-  const recipients: AttentionRecipient[] = []
-  for (const reviewerId of wanted) {
+  const reviewers: Reviewer[] = []
+  for (const reviewerId of new Set(input.recipientIds)) {
     const reviewer = directory.get(reviewerId)
     if (reviewer === undefined) return { ok: false, refusal: { reason: 'unknown', reviewerId } }
     const reason =
       unaskableReason(reviewer, input.requestedById) ?? (authors.has(reviewerId) ? 'author' : null)
     if (reason !== null) return { ok: false, refusal: { reason, reviewer } }
-    recipients.push({ reviewerId, displayName: reviewer.displayName })
+    reviewers.push(reviewer)
   }
-  return { ok: true, recipients }
+  return { ok: true, reviewers }
 }

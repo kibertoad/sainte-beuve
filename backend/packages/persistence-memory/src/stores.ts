@@ -136,6 +136,26 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
     return null
   }
 
+  async listForRepository(
+    repository: { provider: string; owner: string; repo: string },
+    filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
+  ): Promise<ReviewRequest[]> {
+    return [...this.rows.values()]
+      .filter((row) => {
+        const pr = row.pullRequest
+        return (
+          pr.provider === repository.provider &&
+          pr.owner === repository.owner &&
+          pr.repo === repository.repo &&
+          filter.status.includes(row.status) &&
+          row.createdAt >= filter.since
+        )
+      })
+      .sort(newestFirst((row) => row.createdAt))
+      .slice(0, filter.limit)
+      .map(clone)
+  }
+
   async create(review: ReviewRequest): Promise<ReviewRequest> {
     this.rows.set(review.id, clone(review))
     return clone(review)

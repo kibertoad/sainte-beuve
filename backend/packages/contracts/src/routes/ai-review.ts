@@ -2,6 +2,7 @@ import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   aiReviewRunSchema,
+  challengeAiReviewFindingSchema,
   requestAiReviewSchema,
   requestPullRequestAiReviewSchema,
   resolveAiReviewSchema,
@@ -84,6 +85,23 @@ export const dismissAiReviewFindingContract = defineApiContract({
   pathResolver: ({ runId, findingId }) => `/ai-review/runs/${runId}/findings/${findingId}/dismiss`,
   requestBodySchema: v.object({}),
   responsesByStatusCode: { 200: aiReviewRunSchema, ...errorResponses },
+})
+
+/**
+ * Ask cat-factory's investigator to re-examine one finding.
+ *
+ * 202 for the reason `resolve` is: the investigator runs asynchronously, so
+ * what comes back is the review with the finding `investigating` (and the run
+ * back in flight), and the verdict arrives on a later read. A retracted finding
+ * is unticked by the verdict and never posted.
+ */
+export const challengeAiReviewFindingContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: stringParams('runId', 'findingId'),
+  pathResolver: ({ runId, findingId }) =>
+    `/ai-review/runs/${runId}/findings/${findingId}/challenge`,
+  requestBodySchema: challengeAiReviewFindingSchema,
+  responsesByStatusCode: { 202: aiReviewRunSchema, ...errorResponses },
 })
 
 /**
