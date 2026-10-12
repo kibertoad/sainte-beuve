@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { pullRequestPeopleSchema } from './recommendations.js'
 import { skillSchema } from './reviewers.js'
 import { pullRequestRefSchema } from './vcs.js'
 
@@ -50,6 +51,18 @@ export const attentionRecipientSchema = v.object({
 export type AttentionRecipient = v.InferOutput<typeof attentionRecipientSchema>
 
 /**
+ * Somebody the ask reached saying they will not take it. Recorded rather than
+ * inferred from silence, so the requester can tell a no from an unread ask.
+ */
+export const attentionDeclineSchema = v.object({
+  reviewerId: v.string(),
+  displayName: v.string(),
+  reason: v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(300))),
+  declinedAt: v.number(),
+})
+export type AttentionDecline = v.InferOutput<typeof attentionDeclineSchema>
+
+/**
  * A chat message an ask was delivered as, kept so the message can be updated
  * when the ask resolves or is withdrawn, rather than keep offering a button on
  * an ask that is closed. The conversation is the DM's own id, not the person's.
@@ -76,12 +89,29 @@ export const attentionRequestSchema = v.object({
   recipients: v.optional(v.array(attentionRecipientSchema), () => []),
   /** The chat DMs the named recipients were sent. A factory default, like `recipients`. */
   chatDeliveries: v.optional(v.array(attentionDeliverySchema), () => []),
+  /** Who said no, and why when they said. A factory default, like `recipients`. */
+  declines: v.optional(v.array(attentionDeclineSchema), () => []),
+  /**
+   * Whether a decline that leaves a named ask short asks the next best match
+   * by itself. Off, the requester is shown the shortfall and asks on.
+   */
+  keepAsking: v.optional(v.boolean(), false),
+  /**
+   * The pull request's author and requested reviewers as the host listed them
+   * when the ask was raised, so the people it moves on to leave them out even
+   * when the board has no row for it. Null when the requester did not send them.
+   */
+  people: v.optional(v.nullable(pullRequestPeopleSchema), null),
   /**
    * Skills a person must ALL have to be in the audience. Empty means everybody
    * available. Kept on a named ask as what the requester was looking for.
    */
   requiredSkills: v.array(skillSchema),
-  /** Whether the ask stays inside one team. Ignored when recipients are named. */
+  /**
+   * Whether the ask stays inside one team. On a named ask it gates nobody: it
+   * says the ranked list the names came from was kept to the team, and the
+   * next best match an ask moves on to is drawn from the same list.
+   */
   sameTeamOnly: v.boolean(),
   /**
    * The team the gate is against, captured when the request was raised. Stored
@@ -106,6 +136,43 @@ export const attentionRequestSchema = v.object({
 })
 export type AttentionRequest = v.InferOutput<typeof attentionRequestSchema>
 
+// How far an ask is from answered. Here beside the model rather than in
+// @sainte-beuve/reviewers because the SPA says the same thing about the same
+// ask, and two copies of the rule are how its button and the server disagree.
+
+/** How many more people the request is still waiting for. Never negative. */
+export function outstandingCommitments(request: {
+  neededCommitments: number
+  commitments: readonly unknown[]
+}): number {
+  return Math.max(0, request.neededCommitments - request.commitments.length)
+}
+
+/**
+ * The named recipients who could still answer: neither committed nor declined.
+ * Empty for an ask sent by skill, which names nobody.
+ */
+export function pendingRecipientIds(request: AttentionRequest): string[] {
+  const answered = new Set([
+    ...request.commitments.map((entry) => entry.reviewerId),
+    ...request.declines.map((entry) => entry.reviewerId),
+  ])
+  return request.recipients
+    .map((recipient) => recipient.reviewerId)
+    .filter((reviewerId) => !answered.has(reviewerId))
+}
+
+/**
+ * How many more people a NAMED ask has to ask before it can resolve at all:
+ * what it still waits for, less the recipients who have not answered yet.
+ * Zero for an ask sent by skill, whose audience is whoever holds the skills,
+ * and zero while enough named people are still to answer.
+ */
+export function recipientShortfall(request: AttentionRequest): number {
+  if (request.recipients.length === 0) return 0
+  return Math.max(0, outstandingCommitments(request) - pendingRecipientIds(request).length)
+}
+
 export const createAttentionRequestSchema = v.object({
   pullRequest: pullRequestRefSchema,
   title: attentionRequestSchema.entries.title,
@@ -123,10 +190,49 @@ export const createAttentionRequestSchema = v.object({
   sameTeamOnly: v.optional(v.boolean(), false),
   neededCommitments: v.optional(attentionRequestSchema.entries.neededCommitments, 1),
   note: v.optional(v.nullable(attentionRequestSchema.entries.note), null),
+  keepAsking: v.optional(v.boolean(), false),
+  /**
+   * What the host lists for the pull request, as the recommendations take it.
+   * Its author cannot be named, and asking on leaves out everybody it lists.
+   */
+  people: v.optional(v.nullable(pullRequestPeopleSchema), null),
 })
 export type CreateAttentionRequest = v.InferOutput<typeof createAttentionRequestSchema>
 /** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
 export type CreateAttentionRequestInput = v.InferInput<typeof createAttentionRequestSchema>
+
+/**
+ * Turning an ask down. The reason is optional and shown to the requester; a
+ * blank one is no reason, so it reads as null.
+ */
+export const declineAttentionRequestSchema = v.object({
+  reason: v.optional(
+    v.nullable(
+      v.pipe(
+        v.string(),
+        v.trim(),
+        v.maxLength(300),
+        v.transform((reason) => (reason === '' ? null : reason)),
+      ),
+    ),
+    null,
+  ),
+})
+export type DeclineAttentionRequest = v.InferOutput<typeof declineAttentionRequestSchema>
+
+/**
+ * The requester asking more people on an open ask. Named ids are asked as
+ * given; none asks the next best matches, as many as the ask is short.
+ */
+export const askMoreAttentionRequestSchema = v.object({
+  recipientIds: v.optional(
+    v.pipe(v.array(v.string()), v.maxLength(MAX_ATTENTION_RECIPIENTS)),
+    () => [],
+  ),
+})
+export type AskMoreAttentionRequest = v.InferOutput<typeof askMoreAttentionRequestSchema>
+/** What a CALLER sends. */
+export type AskMoreAttentionRequestInput = v.InferInput<typeof askMoreAttentionRequestSchema>
 
 /**
  * What the inbox holds, and what the stream pushes.
@@ -145,9 +251,18 @@ export type AttentionInbox = v.InferOutput<typeof attentionInboxSchema>
  * `resolved` and `cancelled` are pushed as well as `opened`, because the point
  * of the stream is that a request DISAPPEARS the moment it is answered. A stream
  * that only announced new asks would leave every other reader looking at a
- * queue of work somebody else already took.
+ * queue of work somebody else already took. `declined` takes it off the
+ * decliner's screen and tells the requester; `asked` puts it on the screens of
+ * the people added to it.
  */
-export const attentionEventKindSchema = v.picklist(['opened', 'committed', 'resolved', 'cancelled'])
+export const attentionEventKindSchema = v.picklist([
+  'opened',
+  'committed',
+  'declined',
+  'asked',
+  'resolved',
+  'cancelled',
+])
 export type AttentionEventKind = v.InferOutput<typeof attentionEventKindSchema>
 
 export const attentionEventSchema = v.object({

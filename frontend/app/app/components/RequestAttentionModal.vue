@@ -27,6 +27,7 @@ const emit = defineEmits<{
       sameTeamOnly: boolean
       neededCommitments: number
       note: string | null
+      keepAsking: boolean
     },
   ]
   close: []
@@ -41,6 +42,9 @@ const sameTeamOnly = ref(false)
 const chosenCommitments = ref(1)
 const note = ref('')
 const shown = ref(FIRST_SHOWN)
+// On by default: somebody who picks reviewers wants the review covered, and a
+// decline that leaves the ask short would otherwise stall it until they look.
+const keepAsking = ref(true)
 
 const open = computed({
   get: () => props.pullRequest !== null,
@@ -126,6 +130,7 @@ watch(
     chosenCommitments.value = 1
     note.value = ''
     shown.value = FIRST_SHOWN
+    keepAsking.value = true
   },
 )
 
@@ -133,9 +138,11 @@ function submit() {
   emit('submit', {
     recipientIds: recipientIds.value,
     requiredSkills: selectedSkills.value,
-    sameTeamOnly: named.value ? false : sameTeamOnly.value,
+    // On a named ask it gates nobody, and says which list the next best match comes from.
+    sameTeamOnly: sameTeamOnly.value,
     neededCommitments: neededCommitments.value,
     note: blankToNull(note.value),
+    keepAsking: named.value && keepAsking.value,
   })
 }
 </script>
@@ -192,11 +199,18 @@ function submit() {
         </UFormField>
 
         <UCheckbox
+          v-if="named"
+          v-model="keepAsking"
+          label="If somebody declines, ask the next best match"
+          description="Keeps the ask able to fill. Off, you are shown who declined and ask on yourself."
+        />
+
+        <UCheckbox
           v-model="sameTeamOnly"
           label="Only my team"
           :description="
             named
-              ? 'Lists only your own team above. Nobody without a team recorded is in it.'
+              ? 'Lists only your own team above, which is where a next best match comes from too. Nobody without a team recorded is in it.'
               : 'Keeps the ask, and the list above, inside your own team. Nobody without a team recorded is in it.'
           "
         />

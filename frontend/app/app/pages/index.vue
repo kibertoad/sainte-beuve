@@ -25,7 +25,7 @@ const { data, pending, error, refresh } = useAsyncData(
   { lazy: true },
 )
 
-const attention = useAttentionStream()
+const attention = useAttentionStream(() => data.value?.workspace.viewer.reviewer.id ?? null)
 
 /**
  * Both reads, as one button.
@@ -55,11 +55,21 @@ async function ask(request: {
   sameTeamOnly: boolean
   neededCommitments: number
   note: string | null
+  keepAsking: boolean
 }) {
   const pr = asking.value
   if (pr === null) return
   const raised = await runAsk(
-    () => api.requestAttention({ pullRequest: pr.pullRequest, title: pr.title, ...request }),
+    () =>
+      api.requestAttention({
+        pullRequest: pr.pullRequest,
+        title: pr.title,
+        people: {
+          authorLogin: pr.authorLogin,
+          requestedReviewerLogins: [...pr.requestedReviewerLogins],
+        },
+        ...request,
+      }),
     'Could not ask for attention',
     pr.pullRequest.url,
   )
@@ -73,6 +83,18 @@ async function commit(attentionId: string) {
     attentionId,
   )
   await refresh()
+}
+
+async function decline(attentionId: string, reason: string | null) {
+  await runAsk(
+    () => api.declineAttention(attentionId, reason),
+    'Could not decline the request',
+    attentionId,
+  )
+}
+
+async function askMore(attentionId: string) {
+  await runAsk(() => api.askMoreAttention(attentionId), 'Could not ask anybody else', attentionId)
 }
 
 async function withdraw(attentionId: string) {
@@ -150,6 +172,8 @@ async function release(commitmentId: string) {
         :error="attention.error.value"
         :busy="askBusy"
         @commit="commit"
+        @decline="decline"
+        @ask-more="askMore"
         @cancel="withdraw"
       />
 

@@ -15,9 +15,9 @@ import {
  * workspace.
  *
  * The same function renders the first delivery and every later update. While
- * the ask is open and this person has not answered, it carries the commit
- * button; once they have, or once the ask is resolved or withdrawn, it says so
- * and carries none, so a button is never offered on an ask that is over.
+ * the ask is open and this person has not answered, it carries the commit and
+ * decline buttons; once they have, or once the ask is resolved or withdrawn, it
+ * says so and carries none, so a button is never offered on an ask that is over.
  */
 export function attentionAskMessage(
   notice: AttentionAskNotice,
@@ -37,7 +37,30 @@ export function attentionAskMessage(
   if (committed) {
     return closed(`You said you will review ${link}. It is on your workspace.`)
   }
+  if (request.declines.some((entry) => entry.reviewerId === recipientId)) {
+    return closed(`You passed on reviewing ${link}.`)
+  }
   return openAsk(notice, link, appBaseUrl)
+}
+
+/**
+ * The DM a requester gets when declines leave their named ask without enough
+ * people to answer it: who passed and why, and where to ask the next best match.
+ */
+export function attentionShortMessage(
+  request: AttentionRequest,
+  appBaseUrl: string | undefined,
+): SlackMessage {
+  const passed = request.declines
+    .map((entry) =>
+      entry.reason === null ? entry.displayName : `${entry.displayName} (${entry.reason})`,
+    )
+    .join(', ')
+  const text =
+    `Not enough of the people you asked to review ${pullRequestLink(request)} are left to ` +
+    `answer. Passed: ${escapeSlackText(passed)}.`
+  if (appBaseUrl === undefined) return closed(text)
+  return closed(`${text} ${slackLink(appBaseUrl, 'Ask the next best match')} from your inbox.`)
 }
 
 /** The ask itself, with the button that answers it. */
@@ -62,12 +85,12 @@ function openAsk(
   return { text, blocks }
 }
 
-/**
- * The buttons an open ask offers. A list of one for now: a decline belongs
- * beside it, and goes here when the ask learns to record one.
- */
+/** The buttons an open ask offers: take it, or say no so the ask can move on. */
 function askButtons(request: AttentionRequest): Record<string, unknown>[] {
-  return [button('I will review it', SLACK_ACTIONS.attentionCommit, request.id, 'primary')]
+  return [
+    button('I will review it', SLACK_ACTIONS.attentionCommit, request.id, 'primary'),
+    button('Not me', SLACK_ACTIONS.attentionDecline, request.id),
+  ]
 }
 
 /** Why this person was asked, from what they matched of what the ask wants. */

@@ -27,7 +27,7 @@ pull request is merged with its review findings fixed.
 | 4   | Bonus for past reviews in the same repository                 | 2    | 1          | In review   | [#35](https://github.com/kibertoad/sainte-beuve/pull/35) |
 | 5   | An AI review files under its repository's cat-factory service | 5    |            | In review   | [#33](https://github.com/kibertoad/sainte-beuve/pull/33) |
 | 6   | Start an AI review from any pull request row                  | 5    |            | In review   | [#32](https://github.com/kibertoad/sainte-beuve/pull/32) |
-| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Not started |                                                          |
+| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | In review   | [#38](https://github.com/kibertoad/sainte-beuve/pull/38) |
 | 8   | A commitment requests the reviewer on the host                | 3, 4 |            | In review   | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
 | 9   | One matching rule for assignment and asks                     | 2    | 2          | Not started |                                                          |
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
@@ -105,9 +105,10 @@ when it is not there yet and files the review.
 "I will review it" is the only answer to an ask. The requester cannot tell a no
 from silence, and nothing moves on to the next candidate.
 
-A recipient can decline. A named ask that still needs commitments offers the
-next ranked candidate to the requester, or asks that candidate directly when the
-author opted into that.
+Anybody the ask reached can decline, with an optional reason, from the inbox or
+the Slack DM. A named ask the declines leave short asks the next ranked
+candidate by itself when the requester kept "ask the next best match" ticked,
+and otherwise shows the requester the shortfall with a one-click ask.
 
 ### 8. A commitment on the host
 
