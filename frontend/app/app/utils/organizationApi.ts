@@ -10,6 +10,7 @@ import {
   createReviewerContract,
   createTeamContract,
   deleteTeamContract,
+  getReviewerTeamChoicesContract,
   listOrgsContract,
   listReviewersContract,
   listTeamsContract,
@@ -32,6 +33,8 @@ export function organizationCalls(call: ContractCaller) {
       call(createReviewerContract, { body: reviewer }),
     updateReviewer: (reviewerId: string, patch: UpdateReviewer) =>
       call(updateReviewerContract, { pathParams: { reviewerId }, body: patch }),
+    reviewerTeamChoices: (reviewerId: string) =>
+      call(getReviewerTeamChoicesContract, { pathParams: { reviewerId } }),
 
     listTeams: () => call(listTeamsContract, {}),
     /** Owned by the caller unless `ownerId` names somebody, which only an admin may. */

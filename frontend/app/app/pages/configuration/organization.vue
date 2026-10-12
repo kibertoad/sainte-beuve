@@ -77,6 +77,7 @@ async function createOrg(org: Parameters<typeof api.createOrg>[0]) {
   const created = await run(() => api.createOrg(org), 'Could not create the organization', 'orgs')
   if (created) orgsCard.value?.clearDraft()
 }
+const capabilities = useCapabilities()
 </script>
 
 <template>
@@ -120,6 +121,7 @@ async function createOrg(org: Parameters<typeof api.createOrg>[0]) {
         :viewer-id="viewerId"
         :admin="auth.isAdmin.value"
         :busy="busy"
+        :managed="capabilities.confirmed('repositoryDirectory')"
         @create="createTeam($event)"
         @save="saveTeam"
         @remove="removeTeam($event)"

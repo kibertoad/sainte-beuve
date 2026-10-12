@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { externalRefSchema } from './external.js'
 import { domainSchema, roleSchema } from './orgs.js'
 import { NO_VCS_HANDLES, vcsHandlesSchema } from './vcs.js'
 
@@ -26,9 +27,11 @@ export type Skill = v.InferOutput<typeof skillSchema>
 export const reviewerAvailabilitySchema = v.picklist(['available', 'paused'])
 export type ReviewerAvailability = v.InferOutput<typeof reviewerAvailabilitySchema>
 
+export const REVIEWER_NAME_MAX_LENGTH = 120
+
 export const reviewerSchema = v.object({
   id: v.string(),
-  displayName: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  displayName: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(REVIEWER_NAME_MAX_LENGTH)),
   /** The person's handle on each host. Empty when they are only reachable in chat. */
   handles: vcsHandlesSchema,
   /** Slack user id (`U…`), the address reminders are delivered to. */
@@ -72,6 +75,12 @@ export const reviewerSchema = v.object({
   ),
   /** Reviews currently assigned and not yet resolved. Selection reads it; nothing else does. */
   outstandingReviews: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * The person an external directory lists, set on a reviewer that directory
+   * follows. While the sync is on, the directory owns the name, the handles and
+   * the team; skills, domains, weight, availability and Slack stay here.
+   */
+  external: v.optional(v.nullable(externalRefSchema)),
   createdAt: v.number(),
 })
 export type Reviewer = v.InferOutput<typeof reviewerSchema>
@@ -114,3 +123,15 @@ export const updateReviewerSchema = v.partial(
   }),
 )
 export type UpdateReviewer = v.InferOutput<typeof updateReviewerSchema>
+
+/**
+ * The teams a reviewer may be put in. Every team, unless a directory follows
+ * them: then the teams their groups there give them, and a team outside the
+ * list is refused.
+ */
+export const reviewerTeamChoicesSchema = v.object({
+  teams: v.array(v.string()),
+  /** Whether a directory narrows the list. */
+  managed: v.boolean(),
+})
+export type ReviewerTeamChoices = v.InferOutput<typeof reviewerTeamChoicesSchema>

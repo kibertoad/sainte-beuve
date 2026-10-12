@@ -1,20 +1,23 @@
 import { catFactoryWebhookPath, repositorySyncSecretKey } from '@sainte-beuve/contracts'
 import {
   type DirectoryDeliveryOutcome,
+  type DirectoryMirrorStore,
+  type DirectorySyncReport,
   type RepositoryDirectoryGateway,
-  type RepositoryDirectoryStore,
   base64url,
   getErrorMessage,
 } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { openCredential, repositoryDirectoryAccess } from '../../integrations/resolve.js'
 import {
+  DIRECTORY_MIRROR_VERSION,
   type RepositorySyncState,
   clearRepositorySyncState,
   readRepositorySyncState,
   writeRepositorySyncState,
 } from '../../integrations/repositorySyncState.js'
 import { OrgService } from '../orgs/OrgService.js'
+import { detachDirectory, syncDirectoryPeople } from '../reviewers/directorySync.js'
 import { planProjectSync } from './projectSync.js'
 import { ProjectService } from './ProjectService.js'
 
@@ -35,12 +38,17 @@ const NOTHING_LISTED =
 
 /**
  * Keeps an org's projects to the repositories linked in its cat-factory
- * workspaces, for as long as cat-factory is configured.
+ * workspaces, and its reviewers and teams to the people and workspaces of the
+ * same directory (`syncDirectoryPeople`), for as long as cat-factory is configured.
  *
  * The change feed is the guarantee and is followed on the clock; a push from
  * cat-factory only makes the next catch-up happen now. A full snapshot walk runs
  * on the first sync and daily after it, and that walk is also when the webhook
  * is (re)registered, so a key that may not register one is asked once a day.
+ *
+ * The projects, teams and reviewers are brought to the mirror (`settle`) after
+ * a sync that moved the feed position or walked the snapshots, and skipped
+ * when the feed had nothing new since the last settle that completed.
  */
 export class RepositorySyncService {
   constructor(private readonly container: AppContainer) {}
@@ -59,7 +67,11 @@ export class RepositorySyncService {
     if (gateway === null) return 0
     const state = await this.state()
     const now = this.container.clock.now()
-    if (state.reconciledAt === null || now - state.reconciledAt >= RECONCILE_EVERY_MS) {
+    if (
+      state.reconciledAt === null ||
+      now - state.reconciledAt >= RECONCILE_EVERY_MS ||
+      state.mirrorVersion !== DIRECTORY_MIRROR_VERSION
+    ) {
       const changed = await this.run(gateway, 'reconcile')
       if (await this.webhookStale(state)) await this.registerWebhook(gateway)
       return changed
@@ -76,18 +88,21 @@ export class RepositorySyncService {
     ])
     if (gateway === null || secret === null) return null
     const outcome = await gateway.receive(this.store(), { headers, rawBody, secret })
-    if (outcome.ok) await this.settle(outcome.sync.reconciled)
+    if (outcome.ok) await this.settleAfter(outcome.sync)
     return outcome
   }
 
   /**
    * Stop following cat-factory: drop the webhook while the key still opens, and
-   * the mirror with it. The projects stay, now the admins' to manage.
+   * the mirror with it. The projects stay, now the admins' to manage, and so do
+   * the teams and reviewers, which stop following it.
    */
   async forget(): Promise<void> {
     await this.removeWebhook((await this.state()).webhookUrl)
     const { repositories } = this.container
     await repositories.externalRepositories.clear(CAT_FACTORY_SOURCE)
+    await repositories.externalDirectory.clear(CAT_FACTORY_SOURCE)
+    await detachDirectory(this.container, CAT_FACTORY_SOURCE)
     await repositories.integrationTokens.delete(repositorySyncSecretKey(CAT_FACTORY_SOURCE))
     await clearRepositorySyncState(this.container, CAT_FACTORY_SOURCE)
   }
@@ -116,23 +131,43 @@ export class RepositorySyncService {
       const report = await (mode === 'reconcile'
         ? gateway.reconcile(this.store())
         : gateway.catchUp(this.store()))
-      return await this.settle(report.reconciled)
+      return await this.settleAfter(report)
     } catch (err) {
       await this.record({ error: getErrorMessage(err) })
       throw err
     }
   }
 
-  /** Bring the projects to what the mirror now lists, and note when that happened. */
-  private async settle(reconciled: boolean): Promise<number> {
+  /**
+   * Note a snapshot walk as soon as the mirror holds it, whether or not the
+   * settle after it completes: the walk is what the mirror version and the reach
+   * describe, and a settle that keeps failing must not walk again on every tick.
+   */
+  private async settleAfter(report: DirectorySyncReport): Promise<number> {
+    if (report.reconciled) {
+      await this.record({
+        reconciledAt: this.container.clock.now(),
+        mirrorVersion: DIRECTORY_MIRROR_VERSION,
+        reach: report.reach,
+      })
+    } else if (report.cursor === (await this.state()).settledCursor) {
+      await this.record({ syncedAt: this.container.clock.now() })
+      return 0
+    }
+    return this.settle(report.cursor)
+  }
+
+  /** Bring the projects, teams and reviewers to what the mirror now lists, and note when. */
+  private async settle(cursor: number): Promise<number> {
     const { changed, warning } = await this.applyPlan()
-    const now = this.container.clock.now()
+    const directory = await syncDirectoryPeople(this.container, CAT_FACTORY_SOURCE)
     await this.record({
-      syncedAt: now,
+      syncedAt: this.container.clock.now(),
+      settledCursor: cursor,
       error: warning,
-      ...(reconciled ? { reconciledAt: now } : {}),
+      people: directory.people,
     })
-    return changed
+    return changed + directory.changed
   }
 
   private async applyPlan(): Promise<{ changed: number; warning: string | null }> {
@@ -221,8 +256,8 @@ export class RepositorySyncService {
     })
   }
 
-  private store(): RepositoryDirectoryStore {
-    const { externalRepositories } = this.container.repositories
+  private store(): DirectoryMirrorStore {
+    const { externalRepositories, externalDirectory } = this.container.repositories
     return {
       getCursor: async () => (await this.state()).cursor,
       setCursor: async (seq) => {
@@ -232,6 +267,11 @@ export class RepositorySyncService {
       liveKeys: async () =>
         (await externalRepositories.list(CAT_FACTORY_SOURCE))
           .filter((entry) => entry.repository !== null)
+          .map((entry) => entry.key),
+      applyDirectory: (entry) => externalDirectory.apply({ ...entry, source: CAT_FACTORY_SOURCE }),
+      liveDirectoryKeys: async (kind) =>
+        (await externalDirectory.list(CAT_FACTORY_SOURCE, kind))
+          .filter((entry) => entry.record !== null)
           .map((entry) => entry.key),
     }
   }

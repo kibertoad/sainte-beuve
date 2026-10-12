@@ -13,6 +13,7 @@ import type {
 import type { EpochMs } from '../domain/types.js'
 import type { ApiKeyRepository, SessionRepository } from './auth.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
+import type { ExternalDirectoryRepository } from './external-directory.js'
 import type { ExternalRepositoryRepository } from './external-repositories.js'
 import type { TeamRepository } from './teams.js'
 import type { PullRequestAddress } from './vcs.js'
@@ -291,4 +292,5 @@ export interface Repositories {
   apiKeys: ApiKeyRepository
   teams: TeamRepository
   externalRepositories: ExternalRepositoryRepository
+  externalDirectory: ExternalDirectoryRepository
 }

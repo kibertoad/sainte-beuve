@@ -11,7 +11,14 @@ const props = defineProps<{
   viewerId: string | null
   admin: boolean
   busy: string | null
+  /** cat-factory is on, so a team it keeps is named and removed there. */
+  managed?: boolean
 }>()
+
+/** Whether cat-factory names and removes this team. */
+function followed(team: Team): boolean {
+  return props.managed === true && team.external != null
+}
 
 const emit = defineEmits<{
   create: [team: { name: string; ownerId?: string | null }]
@@ -115,7 +122,7 @@ function save(team: Team) {
         <div v-if="editing === team.id" class="flex flex-col gap-3">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
             <UFormField label="Name" class="sm:flex-1">
-              <UInput v-model="draftName" class="w-full" />
+              <UInput v-model="draftName" class="w-full" :disabled="followed(team)" />
             </UFormField>
             <UFormField label="Owner" class="sm:w-64">
               <USelect
@@ -145,7 +152,12 @@ function save(team: Team) {
         </div>
         <div v-else class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
-            <p class="font-medium truncate">{{ team.name }}</p>
+            <p class="flex items-center gap-2 font-medium min-w-0">
+              <span class="truncate">{{ team.name }}</span>
+              <UBadge v-if="followed(team)" variant="outline" color="neutral" size="sm">
+                cat-factory
+              </UBadge>
+            </p>
             <p class="text-sm text-muted">
               {{ ownerName(team) }}
               <template v-if="mergeCommentsNote(team)">
@@ -156,6 +168,7 @@ function save(team: Team) {
           <div v-if="canManage(team)" class="flex gap-2">
             <UButton icon="i-lucide-pencil" variant="ghost" @click="edit(team)">Edit</UButton>
             <UButton
+              v-if="!followed(team)"
               icon="i-lucide-trash-2"
               variant="ghost"
               color="error"

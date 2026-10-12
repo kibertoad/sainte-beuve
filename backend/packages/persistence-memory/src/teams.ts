@@ -1,5 +1,5 @@
 import type { Team } from '@sainte-beuve/contracts'
-import type { TeamRepository } from '@sainte-beuve/kernel'
+import type { TeamPatch, TeamRepository } from '@sainte-beuve/kernel'
 import { clone } from './clone.js'
 import { byText } from './order.js'
 
@@ -39,10 +39,7 @@ export class InMemoryTeamRepository implements TeamRepository {
     return clone(team)
   }
 
-  async update(
-    teamId: string,
-    patch: Partial<Pick<Team, 'name' | 'ownerId' | 'mergeComments'>>,
-  ): Promise<Team | null> {
+  async update(teamId: string, patch: TeamPatch): Promise<Team | null> {
     const row = this.rows.get(teamId)
     if (row === undefined) return null
     const next = clone({ ...row, ...patch, id: row.id })

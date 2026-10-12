@@ -1,5 +1,5 @@
-import type { ExternalRepository } from '@sainte-beuve/contracts'
-import { externalRepositorySchema } from '@sainte-beuve/contracts'
+import type { ExternalDirectoryEntry, ExternalRepository } from '@sainte-beuve/contracts'
+import { externalDirectoryEntrySchema, externalRepositorySchema } from '@sainte-beuve/contracts'
 import { bigint, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 import { orgId, payload } from './columns.js'
 
@@ -22,4 +22,26 @@ export const externalRepositories = pgTable(
     ).notNull(),
   },
   (table) => [primaryKey({ columns: [table.orgId, table.source, table.key] })],
+)
+
+/**
+ * The people, groups and memberships external systems list for an org, keyed by
+ * the source, the kind of entry and the source's own key for it. A dropped entry
+ * keeps its row with a null `record`, so its `seq` still refuses an older state.
+ */
+export const externalDirectory = pgTable(
+  'external_directory',
+  {
+    orgId: orgId(),
+    source: text('source').notNull(),
+    kind: text('kind').notNull(),
+    key: text('key').notNull(),
+    seq: bigint('seq', { mode: 'number' }).notNull(),
+    data: payload<ExternalDirectoryEntry>(
+      'data',
+      'external_directory',
+      externalDirectoryEntrySchema,
+    ).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.orgId, table.source, table.kind, table.key] })],
 )

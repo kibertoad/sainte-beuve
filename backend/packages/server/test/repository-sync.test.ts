@@ -3,7 +3,7 @@ import type {
   ExternalRepositoryEntry,
   GuidedReviewGateway,
   RepositoryDirectoryGateway,
-  RepositoryDirectoryStore,
+  DirectoryMirrorStore,
 } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import { runReminderTick } from '../src/reminders/tick.js'
@@ -36,7 +36,7 @@ function directory(listing: ExternalRepositoryEntry[]) {
   let seq = 0
   const registered: { webhookId: string; url: string; secret: string }[] = []
   const removed: string[] = []
-  const sync = async (store: RepositoryDirectoryStore, reconciled: boolean) => {
+  const sync = async (store: DirectoryMirrorStore, reconciled: boolean) => {
     seq += 1
     const listed = new Set(listing.map((entry) => entry.key))
     for (const key of await store.liveKeys()) {
@@ -44,7 +44,7 @@ function directory(listing: ExternalRepositoryEntry[]) {
     }
     for (const entry of listing) await store.apply({ ...entry, seq })
     await store.setCursor(seq)
-    return { cursor: seq, reconciled }
+    return { cursor: seq, reconciled, reach: reconciled ? ('account' as const) : null }
   }
   const gateway: RepositoryDirectoryGateway = {
     catchUp: (store) => sync(store, false),
@@ -115,6 +115,27 @@ describe('repositories from cat-factory', () => {
       source: 'cat-factory',
       id: '101',
     })
+  })
+
+  it('settles again only once the feed moves past what the last settle saw', async () => {
+    const fake = await syncing([linked('ws_1/101', 'payments')])
+    await runReminderTick(fake.harness.container)
+    const { externalRepositories } = fake.harness.container.repositories
+    const reads = { count: 0 }
+    const list = externalRepositories.list.bind(externalRepositories)
+    externalRepositories.list = (source) => {
+      reads.count += 1
+      return list(source)
+    }
+    const idle = async () => ({ cursor: 1, reconciled: false, reach: null })
+    Object.assign(fake.gateway, { catchUp: idle })
+    fake.harness.clock.advance(6 * 60_000)
+    await runReminderTick(fake.harness.container)
+    expect(reads.count).toBe(0)
+    Object.assign(fake.gateway, { catchUp: async () => ({ ...(await idle()), cursor: 2 }) })
+    fake.harness.clock.advance(6 * 60_000)
+    await runReminderTick(fake.harness.container)
+    expect(reads.count).toBe(1)
   })
 
   it('refuses adding or removing a repository here while cat-factory decides', async () => {

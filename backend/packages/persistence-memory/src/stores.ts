@@ -24,6 +24,7 @@ import { projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
 import { clone, patched } from './clone.js'
 import { InMemoryIntegrationConfigRepository } from './config-stores.js'
+import { InMemoryExternalDirectoryRepository } from './external-directory.js'
 import { InMemoryExternalRepositoryRepository } from './external-repositories.js'
 import { InMemoryTeamRepository } from './teams.js'
 import { byText, leastRecentlyPolledFirst, newestFirst, oldestFirst } from './order.js'
@@ -353,5 +354,6 @@ export function createInMemoryRepositories(): Repositories {
     apiKeys: new InMemoryApiKeyRepository(),
     teams: new InMemoryTeamRepository(),
     externalRepositories: new InMemoryExternalRepositoryRepository(),
+    externalDirectory: new InMemoryExternalDirectoryRepository(),
   }
 }

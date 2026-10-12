@@ -1,16 +1,23 @@
-import type { ExternalRepositoryEntry, RepositoryDirectoryStore } from '@sainte-beuve/kernel'
+import type {
+  DirectoryMirrorStore,
+  ExternalDirectoryEntryInput,
+  ExternalRepositoryEntry,
+} from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import { CatFactoryDirectoryGateway } from './CatFactoryDirectoryGateway.js'
 
 const NOW = 1_800_000_000_000
 
-function memoryStore(): RepositoryDirectoryStore & {
+function memoryStore(): DirectoryMirrorStore & {
   entries: Map<string, ExternalRepositoryEntry>
+  directory: Map<string, ExternalDirectoryEntryInput>
 } {
   const entries = new Map<string, ExternalRepositoryEntry>()
+  const directory = new Map<string, ExternalDirectoryEntryInput>()
   let cursor: number | null = null
   return {
     entries,
+    directory,
     getCursor: async () => cursor,
     setCursor: async (seq) => {
       cursor = seq
@@ -21,6 +28,13 @@ function memoryStore(): RepositoryDirectoryStore & {
     },
     liveKeys: async () =>
       [...entries.values()].filter((e) => e.repository !== null).map((e) => e.key),
+    applyDirectory: async (entry) => {
+      const key = `${entry.kind}:${entry.key}`
+      const held = directory.get(key)
+      if (held === undefined || held.seq <= entry.seq) directory.set(key, entry)
+    },
+    liveDirectoryKeys: async (kind) =>
+      [...directory.values()].filter((e) => e.kind === kind && e.record !== null).map((e) => e.key),
   }
 }
 
@@ -42,23 +56,57 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
-/** An account whose directory holds one workspace, one user and one linked repository. */
+/**
+ * An account whose directory holds one workspace, two users in it and one
+ * linked repository. Ada carries the host accounts newer instances publish;
+ * Grace comes from an instance that predates them.
+ */
 function directoryAnswering(changes: unknown[] = []): typeof globalThis.fetch {
   const page = (items: unknown[]) => json({ items, nextCursor: null, asOfSeq: 5 })
+  const ada = {
+    id: 'u1',
+    name: 'Ada',
+    email: null,
+    avatarUrl: null,
+    accounts: [
+      { provider: 'github', id: '583231', login: 'ada' },
+      { provider: 'bitbucket', id: '7', login: 'ada' },
+    ],
+  }
+  const grace = { id: 'u2', name: 'Grace', email: null, avatarUrl: null }
+  const membership = (userId: string) => ({
+    workspaceId: 'ws_1',
+    userId,
+    role: 'member',
+    createdAt: 1,
+  })
   const routes: Record<string, () => Response> = {
     '/api/v1/directory/workspaces': () =>
       page([{ id: 'ws_1', name: 'Core', description: null, accessMode: 'account' }]),
-    '/api/v1/directory/users': () =>
-      page([{ id: 'u1', name: 'Ada', email: null, avatarUrl: null }]),
+    '/api/v1/directory/users': () => page([ada, grace]),
     '/api/v1/directory/account-memberships': () => page([]),
-    '/api/v1/directory/workspace-memberships': () => page([]),
+    '/api/v1/directory/workspace-memberships': () => page([membership('u1'), membership('u2')]),
     '/api/v1/directory/repos': () => page([repo]),
+    '/api/v1/me': () => json(identity(null)),
     '/api/v1/directory/changes': () =>
       json({ changes, nextAfter: 5 + changes.length, headSeq: 5 + changes.length }),
   }
   return async (input) => {
     const path = new URL(input instanceof Request ? input.url : String(input)).pathname
     return routes[path]?.() ?? json({ error: { code: 'not_found', message: path } }, 404)
+  }
+}
+
+function identity(workspaceIds: string[] | null) {
+  return {
+    accountId: 'acc_1',
+    createdAt: 1,
+    externalIdentity: null,
+    keyId: 'key_1',
+    label: 'sainte-beuve',
+    scope: 'admin',
+    workspaceId: 'ws_1',
+    workspaceIds,
   }
 }
 
@@ -72,10 +120,10 @@ function gateway(fetch: typeof globalThis.fetch): CatFactoryDirectoryGateway {
 }
 
 describe('CatFactoryDirectoryGateway', () => {
-  it('keeps the linked repositories from a first sync, and nothing else', async () => {
+  it('keeps the linked repositories from a first sync', async () => {
     const store = memoryStore()
     const report = await gateway(directoryAnswering()).catchUp(store)
-    expect(report).toEqual({ cursor: 5, reconciled: true })
+    expect(report).toEqual({ cursor: 5, reconciled: true, reach: 'account' })
     expect([...store.entries.values()]).toEqual([
       {
         key: 'ws_1/101',
@@ -83,6 +131,53 @@ describe('CatFactoryDirectoryGateway', () => {
         repository: { provider: 'github', owner: 'acme', repo: 'payments', id: '101' },
       },
     ])
+  })
+
+  it('keeps users, workspaces and memberships as people, groups and memberships', async () => {
+    const store = memoryStore()
+    await gateway(directoryAnswering()).catchUp(store)
+    const entry = (key: string) => store.directory.get(key)
+    // A host this build does not know is skipped, never guessed onto one it does.
+    expect(entry('person:u1')?.record).toEqual({
+      id: 'u1',
+      name: 'Ada',
+      accounts: [{ provider: 'github', subject: '583231', username: 'ada' }],
+    })
+    expect(entry('person:u2')?.record).toEqual({ id: 'u2', name: 'Grace', accounts: [] })
+    expect(entry('group:ws_1')?.record).toEqual({ id: 'ws_1', name: 'Core' })
+    const memberships = [...store.directory.values()].filter((e) => e.kind === 'membership')
+    expect(memberships.map((e) => e.record)).toEqual([
+      { groupId: 'ws_1', personId: 'u1' },
+      { groupId: 'ws_1', personId: 'u2' },
+    ])
+  })
+
+  it('reports a key limited to some workspaces, which is listed no users', async () => {
+    const store = memoryStore()
+    const answering = directoryAnswering()
+    const restricted: typeof globalThis.fetch = async (input, init) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname
+      if (path === '/api/v1/me') return json(identity(['ws_1']))
+      if (path === '/api/v1/directory/users') {
+        const refusal = {
+          code: 'forbidden',
+          message: 'account-wide',
+          details: { reason: 'account_scope_required' },
+        }
+        return json({ error: refusal }, 403)
+      }
+      return answering(input, init)
+    }
+    const report = await gateway(restricted).reconcile(store)
+    expect(report.reach).toBe('workspaces')
+    expect([...store.directory.values()].filter((e) => e.kind === 'person')).toEqual([])
+    expect(store.directory.get('group:ws_1')?.record).toEqual({ id: 'ws_1', name: 'Core' })
+  })
+
+  it('reports no reach when it only followed the feed', async () => {
+    const store = memoryStore()
+    await store.setCursor(5)
+    expect((await gateway(directoryAnswering()).catchUp(store)).reach).toBeNull()
   })
 
   it('applies an unlink from the feed as a dropped entry', async () => {
