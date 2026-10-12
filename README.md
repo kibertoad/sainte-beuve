@@ -153,7 +153,7 @@ org's Slack app: who asks, for which pull request, what of the ask they match,
 and an **I will review it** button that commits exactly as the inbox does. The
 DM follows the ask, so it says when you committed and closes when the ask is
 answered or withdrawn, rather than leave a button on an ask that is over. An ask
-the skill gate addresses is not sent as DMs, since it can reach the whole pool.
+nobody was named on is not sent as DMs, since it can reach the whole pool.
 
 Anybody an ask reached can say **Not me**, in the inbox (with an optional
 reason) or on the DM. The ask leaves their inbox and the requester sees who
