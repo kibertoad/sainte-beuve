@@ -105,6 +105,14 @@ which skills (from the project's own vocabulary, `Backend` and `Frontend` until
 a team names its own), how many people you want, and whether the ask should stay
 inside your team.
 
+The dialog lists the five best matches as you pick, with what each one matched
+and how many reviews they already have open beside their name. They are ranked
+on how much of those skills and the repository's domains a person holds, and
+open reviews only order people who fit equally: you can see the load and weigh
+it yourself, and a busy expert still outranks an idle stranger. The list is the
+people an ask could reach, so it never names you, the author, anybody already
+on the pull request or paused, and it keeps to your team when the ask does.
+
 Everyone available who holds all of those skills is asked, two ways at once. A
 page already open is pushed the request over server-sent events; a page opened
 an hour later fetches the same thing over REST. Neither is a fallback for the

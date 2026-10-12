@@ -710,7 +710,8 @@ The placeholders above are the list. The loudest is now that a stored credential
 is never re-checked, so one revoked after it was entered reads as connected until
 a call fails; a probe would fix it. Beside it, a named org has no announcement
 channel it can store, so a second org that connected its own Slack app nudges by
-DM and announces nowhere.
+DM and announces nowhere. [review-flow-gaps.md](./review-flow-gaps.md) tracks what
+the review flow itself still lacks, in the order it blocks.
 
 ## Decisions worth recording
 

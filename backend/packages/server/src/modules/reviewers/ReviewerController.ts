@@ -1,12 +1,15 @@
 import {
   createReviewerContract,
   listReviewersContract,
+  recommendReviewersContract,
   updateReviewerContract,
 } from '@sainte-beuve/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireAdmin } from '../auth/principal.js'
+import { viewerOf } from '../identity/ViewerService.js'
+import { RecommendationService } from './RecommendationService.js'
 import { ReviewerService } from './ReviewerService.js'
 
 /**
@@ -20,9 +23,10 @@ import { ReviewerService } from './ReviewerService.js'
  *
  * The LIST is everybody's: the board shows who a review went to, and an
  * attention request is addressed by skill, so a member who could not read the
- * directory could not read either. The two WRITES are an admin's — they decide
+ * directory could not read either. The two WRITES are an admin's: they decide
  * who is in the pool, who holds which skills, and, since this slice, who else
- * may administer the org.
+ * may administer the org. The recommendation is everybody's for the same reason
+ * as the list: it ranks people the caller can already read.
  */
 export function reviewerController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -30,6 +34,13 @@ export function reviewerController(): Hono<AppEnv> {
   buildHonoRoute(app, listReviewersContract, async (c) => {
     const service = new ReviewerService(c.get('container'))
     return c.json({ reviewers: await service.list() }, 200)
+  })
+
+  buildHonoRoute(app, recommendReviewersContract, async (c) => {
+    const container = c.get('container')
+    const viewer = await viewerOf(c)
+    const service = new RecommendationService(container)
+    return c.json(await service.recommend(viewer.reviewer, c.req.valid('json')), 200)
   })
 
   buildHonoRoute(app, createReviewerContract, async (c) => {
