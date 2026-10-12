@@ -70,15 +70,68 @@ export const reviewCases: readonly ConformanceCase[] = [
       review('rev-1', { pullRequest: pullRequest({ owner: 'platform', repo: 'api', number: 12 }) }),
     )
     const found = await repos.reviews.getByPullRequest({
+      provider: 'github',
       owner: 'platform',
       repo: 'api',
       number: 12,
     })
     assert.strictEqual(found?.id, 'rev-1')
     assert.strictEqual(
-      await repos.reviews.getByPullRequest({ owner: 'platform', repo: 'api', number: 13 }),
+      await repos.reviews.getByPullRequest({
+        provider: 'github',
+        owner: 'platform',
+        repo: 'api',
+        number: 13,
+      }),
       null,
     )
+  }),
+
+  conformanceCase(
+    'a GitHub and a GitLab pull request under one name are two reviews',
+    async (repos) => {
+      // `platform/api#12` exists on both hosts and they are two different
+      // changes, so neither lookup may hand back the other's row.
+      const onGitHub = pullRequest({
+        provider: 'github',
+        owner: 'platform',
+        repo: 'api',
+        number: 12,
+      })
+      const onGitLab = pullRequest({
+        provider: 'gitlab',
+        owner: 'platform',
+        repo: 'api',
+        number: 12,
+        url: 'https://gitlab.com/platform/api/-/merge_requests/12',
+      })
+      await repos.reviews.create(review('rev-gh', { pullRequest: onGitHub }))
+      assert.strictEqual(await repos.reviews.getByPullRequest(onGitLab), null)
+
+      await repos.reviews.create(review('rev-gl', { pullRequest: onGitLab }))
+      assert.strictEqual((await repos.reviews.getByPullRequest(onGitHub))?.id, 'rev-gh')
+      assert.strictEqual((await repos.reviews.getByPullRequest(onGitLab))?.id, 'rev-gl')
+
+      // A rewrite of one row keeps its host, so the other lookup still misses it.
+      await repos.reviews.update('rev-gh', { status: 'assigned' })
+      assert.strictEqual((await repos.reviews.getByPullRequest(onGitLab))?.id, 'rev-gl')
+    },
+  ),
+
+  conformanceCase('a pull request is found whatever the case of its path', async (repos) => {
+    // Both hosts treat the path without case, so a webhook's `Platform/API` and
+    // a hand-entered `platform/api` are one pull request.
+    await repos.reviews.create(
+      review('rev-1', { pullRequest: pullRequest({ owner: 'Platform', repo: 'API' }) }),
+    )
+    const found = await repos.reviews.getByPullRequest({
+      provider: 'github',
+      owner: 'platform',
+      repo: 'api',
+      number: 12,
+    })
+    assert.strictEqual(found?.id, 'rev-1')
+    assert.strictEqual(found?.pullRequest.owner, 'Platform')
   }),
 
   conformanceCase('a review patch touches the fields it names', async (repos) => {
@@ -234,6 +287,18 @@ export const integrationTokenCases: readonly ConformanceCase[] = [
     await repos.integrationTokens.put(integrationToken('slack', { subject: 'U42' }))
     assert.strictEqual((await repos.integrationTokens.get('gitlab'))?.subject, null)
     assert.strictEqual((await repos.integrationTokens.get('slack'))?.subject, 'U42')
+  }),
+
+  conformanceCase('a credential records whether its account is a bot', async (repos) => {
+    await repos.integrationTokens.put(
+      integrationToken('gitlab-pat', { subject: 'review-bot', subjectIsBot: true }),
+    )
+    await repos.integrationTokens.put(integrationToken('github-pat', { subject: 'ada' }))
+    assert.strictEqual((await repos.integrationTokens.get('gitlab-pat'))?.subjectIsBot, true)
+    assert.strictEqual((await repos.integrationTokens.get('github-pat'))?.subjectIsBot, false)
+    // A replacement carries its own answer rather than keeping the old one.
+    await repos.integrationTokens.put(integrationToken('gitlab-pat', { subject: 'ada' }))
+    assert.strictEqual((await repos.integrationTokens.get('gitlab-pat'))?.subjectIsBot, false)
   }),
 
   conformanceCase('a credential that is not there reads as null', async (repos) => {

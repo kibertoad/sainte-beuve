@@ -1,11 +1,11 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
+import { outstandingCommitments } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   ATTENTION_FIT_FLOOR,
   type AttentionAudienceRule,
   isAttentionSatisfied,
   isInAttentionAudience,
-  outstandingCommitments,
   selectAttentionAudience,
 } from './attention.js'
 
@@ -38,6 +38,7 @@ function rule(overrides: Partial<AttentionAudienceRule> = {}): AttentionAudience
     sameTeamOnly: false,
     team: null,
     requestedById: 'asker',
+    declinedIds: [],
     ...overrides,
   }
 }
@@ -45,6 +46,13 @@ function rule(overrides: Partial<AttentionAudienceRule> = {}): AttentionAudience
 describe('isInAttentionAudience', () => {
   it('asks everybody available when the ask wants nothing in particular', () => {
     expect(isInAttentionAudience(reviewer(), rule())).toBe(true)
+  })
+
+  it('leaves out somebody who declined, even on an ask that names them', () => {
+    expect(isInAttentionAudience(reviewer(), rule({ declinedIds: ['r-1'] }))).toBe(false)
+    expect(
+      isInAttentionAudience(reviewer(), rule({ recipientIds: ['r-1'], declinedIds: ['r-1'] })),
+    ).toBe(false)
   })
 
   it('never asks the person who raised it', () => {

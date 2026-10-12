@@ -66,9 +66,21 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
   tenancyCase('two orgs can each hold a review of the same pull request', async (stores) => {
     await stores.forOrg(ORG_A).reviews.create(review('rev1', { title: 'A' }))
     await stores.forOrg(ORG_B).reviews.create(review('rev1', { title: 'B' }))
-    const ref = { owner: 'platform', repo: 'api', number: 12 }
+    const ref = { provider: 'github' as const, owner: 'platform', repo: 'api', number: 12 }
     assert.strictEqual((await stores.forOrg(ORG_A).reviews.getByPullRequest(ref))?.title, 'A')
     assert.strictEqual((await stores.forOrg(ORG_B).reviews.getByPullRequest(ref))?.title, 'B')
+  }),
+
+  tenancyCase("a repository's review history is its own org's", async (stores) => {
+    await stores.forOrg(ORG_A).reviews.create(review('rev1', { status: 'approved' }))
+    await stores.forOrg(ORG_B).reviews.create(review('rev2', { status: 'approved' }))
+    const repository = { provider: 'github' as const, owner: 'platform', repo: 'api' }
+    const filter = { status: ['approved' as const], since: 0, limit: 10 }
+    const history = await stores.forOrg(ORG_A).reviews.listForRepository(repository, filter)
+    assert.deepStrictEqual(
+      history.map((row) => row.id),
+      ['rev1'],
+    )
   }),
 
   tenancyCase('the reminder tick of one org does not see the other', async (stores) => {

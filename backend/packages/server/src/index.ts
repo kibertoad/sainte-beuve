@@ -7,7 +7,7 @@ export {
   type AuthWiring,
   type ContainerOptions,
   createContainer,
-  DEFAULT_GITHUB_LABELS,
+  DEFAULT_REVIEW_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
   type EnvironmentVcsGateways,
   type GitHubWiring,

@@ -1,5 +1,6 @@
 import type {
   AiReviewRun,
+  ProjectRef,
   Reminder,
   ReminderStatus,
   ReviewRequest,
@@ -14,10 +15,12 @@ import {
 import type {
   AiReviewRunRepository,
   EpochMs,
+  PullRequestAddress,
   ReminderRepository,
   ReviewListOrder,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
+import { projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import type { SqlDriver, SqlParam } from './driver.js'
 import { decodeData, decodeRows, encodeData, patched, placeholders } from './rows.js'
 
@@ -33,13 +36,12 @@ import { decodeData, decodeRows, encodeData, patched, placeholders } from './row
  * can follow.
  */
 
-const REVIEW_UPSERT = `INSERT INTO review_requests (org_id, id, status, pr_owner, pr_repo, pr_number, created_at, data)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+const REVIEW_UPSERT = `INSERT INTO review_requests (org_id, id, status, pull_request_key, repo_key, created_at, data)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (org_id, id) DO UPDATE SET
   status = excluded.status,
-  pr_owner = excluded.pr_owner,
-  pr_repo = excluded.pr_repo,
-  pr_number = excluded.pr_number,
+  pull_request_key = excluded.pull_request_key,
+  repo_key = excluded.repo_key,
   created_at = excluded.created_at,
   data = excluded.data`
 
@@ -83,16 +85,27 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
   }
 
-  async getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null> {
+  async getByPullRequest(ref: PullRequestAddress): Promise<ReviewRequest | null> {
     const row = await this.db.first(
-      'SELECT data FROM review_requests WHERE org_id = ? AND pr_owner = ? AND pr_repo = ? AND pr_number = ?',
-      [this.orgId, ref.owner, ref.repo, ref.number],
+      'SELECT data FROM review_requests WHERE org_id = ? AND pull_request_key = ?',
+      [this.orgId, pullRequestKey(ref)],
     )
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
+  }
+
+  async listForRepository(
+    repository: ProjectRef,
+    filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
+  ): Promise<ReviewRequest[]> {
+    if (filter.status.length === 0) return []
+    const rows = await this.db.all(
+      `SELECT data FROM review_requests
+WHERE org_id = ? AND repo_key = ? AND created_at >= ?
+  AND status IN (${placeholders(filter.status.length)})
+ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [this.orgId, projectRefKey(repository), filter.since, ...filter.status, filter.limit],
+    )
+    return decodeRows(reviewRequestSchema, 'review_requests', rows)
   }
 
   async create(review: ReviewRequest): Promise<ReviewRequest> {
@@ -109,14 +122,12 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
   }
 
   private async write(review: ReviewRequest): Promise<void> {
-    const pr = review.pullRequest
     await this.db.run(REVIEW_UPSERT, [
       this.orgId,
       review.id,
       review.status,
-      pr.owner,
-      pr.repo,
-      pr.number,
+      pullRequestKey(review.pullRequest),
+      projectRefKey(review.pullRequest),
       review.createdAt,
       encodeData(review),
     ])

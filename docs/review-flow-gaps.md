@@ -19,20 +19,22 @@ pull request is merged with its review findings fixed.
 
 ## Tracker
 
-| #   | Gap                                                           | Step | Depends on | Status      | PR                                                       |
-| --- | ------------------------------------------------------------- | ---- | ---------- | ----------- | -------------------------------------------------------- |
-| 1   | Ranked reviewer recommendations, with the reason for each     | 2    |            | Merged      | [#31](https://github.com/kibertoad/sainte-beuve/pull/31) |
-| 2   | Pick recommended reviewers and send each a named ask          | 3    | 1          | Merged      | [#34](https://github.com/kibertoad/sainte-beuve/pull/34) |
-| 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | Not started |                                                          |
-| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | Not started |                                                          |
-| 5   | An AI review files under its repository's cat-factory service | 5    |            | Not started |                                                          |
-| 6   | Start an AI review from any pull request row                  | 5    |            | Merged      | [#32](https://github.com/kibertoad/sainte-beuve/pull/32) |
-| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Not started |                                                          |
-| 8   | A commitment requests the reviewer on the host                | 3, 4 |            | Merged      | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
-| 9   | One matching rule for assignment and asks                     | 2    | 2          | In review   | [#43](https://github.com/kibertoad/sainte-beuve/pull/43) |
-| 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
-| 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
-| 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
+| #   | Gap                                                           | Step | Depends on | Status    | PR                                                       |
+| --- | ------------------------------------------------------------- | ---- | ---------- | --------- | -------------------------------------------------------- |
+| 1   | Ranked reviewer recommendations, with the reason for each     | 2    |            | Merged    | [#31](https://github.com/kibertoad/sainte-beuve/pull/31) |
+| 2   | Pick recommended reviewers and send each a named ask          | 3    | 1          | Merged    | [#34](https://github.com/kibertoad/sainte-beuve/pull/34) |
+| 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | Merged    | [#36](https://github.com/kibertoad/sainte-beuve/pull/36) |
+| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | Merged    | [#35](https://github.com/kibertoad/sainte-beuve/pull/35) |
+| 5   | An AI review files under its repository's cat-factory service | 5    |            | Merged    | [#33](https://github.com/kibertoad/sainte-beuve/pull/33) |
+| 6   | Start an AI review from any pull request row                  | 5    |            | Merged    | [#32](https://github.com/kibertoad/sainte-beuve/pull/32) |
+| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Merged    | [#38](https://github.com/kibertoad/sainte-beuve/pull/38) |
+| 8   | A commitment requests the reviewer on the host                | 3, 4 |            | Merged    | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
+| 9   | One matching rule for assignment and asks                     | 2    | 2          | In review | [#43](https://github.com/kibertoad/sainte-beuve/pull/43) |
+| 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | In review | [#42](https://github.com/kibertoad/sainte-beuve/pull/42) |
+| 11  | GitLab webhook intake                                         | 5    |            | Merged    | [#40](https://github.com/kibertoad/sainte-beuve/pull/40) |
+| 12  | Challenge an AI review finding                                | 5    |            | Merged    | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
+| 13  | A guided review names its cat-factory workspace               | 5    | 5          | Merged    | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
+| 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | Merged    | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -104,9 +106,10 @@ when it is not there yet and files the review.
 "I will review it" is the only answer to an ask. The requester cannot tell a no
 from silence, and nothing moves on to the next candidate.
 
-A recipient can decline. A named ask that still needs commitments offers the
-next ranked candidate to the requester, or asks that candidate directly when the
-author opted into that.
+Anybody the ask reached can decline, with an optional reason, from the inbox or
+the Slack DM. A named ask the declines leave short asks the next ranked
+candidate by itself when the requester kept "ask the next best match" ticked,
+and otherwise shows the requester the shortfall with a one-click ask.
 
 ### 8. A commitment on the host
 
@@ -141,8 +144,9 @@ already do.
 No GitLab webhook lands here, so a merge request never opens a board row by
 itself, and the label rules (`GitHubLabelRules`) are read for GitHub only.
 
-A signed GitLab webhook opens, labels and closes board rows the way the GitHub
-one does, under the same label rules.
+A GitLab webhook per org, verified against the secret token that org stored,
+opens, labels, settles and closes board rows the way the GitHub one does, under
+one host-neutral label vocabulary (`ReviewLabelRules`).
 
 ### 12. Challenging a finding
 
@@ -151,3 +155,25 @@ finding. The curation screen has no way to ask for it.
 
 A challenge action on a finding files the investigation and shows the verdict on
 the finding.
+
+### 13. A guided review names its workspace
+
+`CatFactoryGuidedReviewGateway` sends no workspace on any call. cat-factory
+refuses a workspace-scoped call that names none when the key reaches several
+workspaces, so the guided review fails for every repository of such an org.
+
+Opening and looking up a session use the workspaces the org's repository mirror
+links the repository in. A call about a session names its pull request too, and
+is made in the workspace those same keys name.
+
+### 14. Board lookups by host
+
+`ReviewRequestRepository.getByPullRequest` matches a pull request on owner, repo
+and number alone. A GitHub pull request and a GitLab merge request with the same
+names resolve to each other's board row, so an intake for one can update the
+other's review or refuse to track it.
+
+A board row is looked up by the kernel's `pullRequestKey` and a repository's
+history by `projectRefKey`, the keys projects and commitments already use, so
+the host is part of each and the path is compared without case. Both durable
+stores carry them as columns, backfilled from each row.

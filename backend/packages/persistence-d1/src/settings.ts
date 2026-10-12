@@ -25,14 +25,15 @@ import { decodeCount, decodeData, encodeData } from './rows.js'
  */
 
 const SELECT =
-  'SELECT integration_id, sealed, hint, subject, updated_at FROM integration_tokens WHERE org_id = ?'
+  'SELECT integration_id, sealed, hint, subject, subject_is_bot, updated_at FROM integration_tokens WHERE org_id = ?'
 
-const UPSERT = `INSERT INTO integration_tokens (org_id, integration_id, sealed, hint, subject, updated_at)
-VALUES (?, ?, ?, ?, ?, ?)
+const UPSERT = `INSERT INTO integration_tokens (org_id, integration_id, sealed, hint, subject, subject_is_bot, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (org_id, integration_id) DO UPDATE SET
   sealed = excluded.sealed,
   hint = excluded.hint,
   subject = excluded.subject,
+  subject_is_bot = excluded.subject_is_bot,
   updated_at = excluded.updated_at`
 
 function toToken(row: SqlRow): StoredIntegrationToken {
@@ -44,6 +45,7 @@ function toToken(row: SqlRow): StoredIntegrationToken {
     // nobody. `?? null` rather than a cast: SQLite and Postgres agree on NULL
     // and disagree about nothing else here.
     subject: row.subject === null || row.subject === undefined ? null : String(row.subject),
+    subjectIsBot: decodeCount(row.subject_is_bot) === 1,
     updatedAt: decodeCount(row.updated_at),
   }
 }
@@ -71,6 +73,7 @@ export class SqlIntegrationTokenRepository implements IntegrationTokenRepository
       token.sealed,
       token.hint,
       token.subject,
+      token.subjectIsBot ? 1 : 0,
       token.updatedAt,
     ])
     return token

@@ -1,7 +1,7 @@
 import type { Logger, PersistenceProvider } from '@sainte-beuve/kernel'
 import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createContainer, DEFAULT_GITHUB_LABELS } from '../src/container.js'
+import { createContainer, DEFAULT_REVIEW_LABELS } from '../src/container.js'
 
 // The container is where a facade's configuration becomes capabilities, so it is
 // where "blank counts as absent" has to hold: every example deployment ships each
@@ -38,12 +38,12 @@ describe('createContainer', () => {
     const blank = createContainer({
       stores,
       logger,
-      github: { labels: { review: '', aiReview: 'ai', skillPrefix: '' } },
+      labels: { review: '', aiReview: 'ai', skillPrefix: '' },
     })
-    expect(blank.github.labels).toStrictEqual({
-      review: DEFAULT_GITHUB_LABELS.review,
+    expect(blank.labels).toStrictEqual({
+      review: DEFAULT_REVIEW_LABELS.review,
       aiReview: 'ai',
-      skillPrefix: DEFAULT_GITHUB_LABELS.skillPrefix,
+      skillPrefix: DEFAULT_REVIEW_LABELS.skillPrefix,
     })
   })
 

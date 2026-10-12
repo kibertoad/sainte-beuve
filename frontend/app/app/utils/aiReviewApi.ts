@@ -1,5 +1,6 @@
 import type { AiReviewResolution, RequestPullRequestAiReviewInput } from '@sainte-beuve/contracts'
 import {
+  challengeAiReviewFindingContract,
   dismissAiReviewFindingContract,
   listAiReviewRunsContract,
   requestAiReviewContract,
@@ -27,6 +28,12 @@ export function aiReviewCalls(call: ContractCaller) {
       call(listAiReviewRunsContract, { pathParams: { reviewId } }),
     dismissAiReviewFinding: (runId: string, findingId: string) =>
       call(dismissAiReviewFindingContract, { pathParams: { runId, findingId }, body: {} }),
+    /** Send one finding to the investigator. The verdict lands on a later read. */
+    challengeAiReviewFinding: (runId: string, findingId: string, question: string | null) =>
+      call(challengeAiReviewFindingContract, {
+        pathParams: { runId, findingId },
+        body: { question },
+      }),
     /**
      * Act on the curated selection. The answer is the run having ACCEPTED the
      * instruction: cat-factory posts asynchronously, and what landed shows up on a

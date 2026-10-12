@@ -115,7 +115,9 @@ nothing.
 
 Three rules, named by `GITHUB_LABEL_REVIEW`, `GITHUB_LABEL_AI_REVIEW` and
 `GITHUB_LABEL_SKILL_PREFIX` (`needs-review`, `ai-review`, `skill:` by default,
-and shown on the Configuration screen so a team can read them off it):
+and shown on the Configuration screen so a team can read them off it). They are
+one vocabulary for both hosts: a GitLab merge request is labelled the same way,
+and the variables keep the prefix they were introduced under.
 
 - `needs-review` opens a review request and finds it a reviewer.
 - `ai-review` hands the pull request to cat-factory.
@@ -176,6 +178,69 @@ A **label** it cannot honour is a different case, and is acked rather than
 refused. A 5xx makes GitHub redeliver, and tracking a pull request is idempotent
 where an AI-review run is not: every retry would write another run and, once
 cat-factory is configured, submit another paid job.
+
+## What GitLab can make it do
+
+Deliveries arrive at `POST /webhooks/gitlab/<org-slug>`, and the default org's
+also at `POST /webhooks/gitlab`. GitLab does not sign a delivery: it sends the
+webhook's secret token back in `X-Gitlab-Token`, and that token is compared with
+the **GitLab webhook secret** stored on the org's GitLab configuration screen.
+There is no deployment variable for it, because the GitLab credential is an
+org's rather than the deployment's.
+
+The org is in the URL for the reason Slack's is, and the stored secret is what
+makes naming it safe. On the bare path a missing secret is answered 503 with the
+setting named; on an org's path an unknown slug, an org with no secret and a
+wrong token are one 403, so the status code cannot be used to list tenancies.
+
+| Event                                         | What happens                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| merge request opened / reopened               | Tracked on the board, unassigned (a draft waits until it leaves draft) |
+| merge request leaves draft                    | Tracked, unassigned                                                    |
+| merge request merged or closed                | Closed, the clock stops; a review with a verdict keeps it              |
+| merge request becomes approved                | Resolved to `approved`                                                 |
+| its approval is taken back                    | An `approved` review goes back on the clock                            |
+| the review label is added                     | Tracked if it was not, and handed to a reviewer                        |
+| the AI-review label is added                  | Handed to cat-factory, or acked and logged when it is not configured   |
+| a comment on a merge request mentions the bot | The command in it runs, and the bot answers on the merge request       |
+
+A label the merge request was created with counts as added, as it does on
+GitHub, where each one arrives as its own `labeled` event.
+
+A Merge Request Hook names whoever acted, and the merge request's author only by
+id, so the author is known from the payload only when the action is opening it.
+A merge request first seen through a label or a comment has its author read
+from GitLab before its row is opened, so the router can keep the author off
+their own review.
+
+Approval follows GitLab's own rules: `approved` and `unapproved` are the merge
+request as a whole becoming, or ceasing to be, approved. One person approving
+under rules that want two settles nothing, the way a bare GitHub review comment
+does not. GitLab has no "changes requested" event, so a review settles that way
+only from the board.
+
+**Only a project the org registered is acted on**, as on GitHub: a verified
+delivery about any other project is acked and dropped (`ignored:unregistered`).
+The token proves who configured the webhook, not that the org took
+responsibility for the project.
+
+**Only people the directory knows are answered.** A GitLab note says nothing
+about how its author relates to the project, so a comment command runs only for
+somebody this org's reviewer directory holds by that GitLab handle. Anybody else
+gets silence, for the reason a GitHub stranger does.
+
+The bot is the account of the GitLab credential stored for the org, because
+that is the account its replies are posted as and therefore the name people
+mention. It answers only when GitLab marks that account as a bot: a project or
+group access token, or a service account. A person's own token or sign-in still
+reaches GitLab, but with it every mention of that person would read as a
+command, so comment commands stay off. GitLab is asked when the token is
+stored. An org reaching GitLab only through the deployment's `GITLAB_TOKEN` has
+no account recorded, and comment commands are off until it stores one.
+
+Deliveries are not deduplicated by `X-Gitlab-Event-UUID`, any more than GitHub's
+are by delivery id. Every intent is safe to perform twice, and an AI review is
+held to one run in flight by its own admission rule.
 
 ## What Slack can make it do
 
@@ -294,8 +359,23 @@ environment:
 | ----------- | ------------------------------------------------------ | ----------------------------- |
 | Base URL    | The instance, `http://localhost:8787` for a local one  | both                          |
 | API key     | `cf_live_<keyId>.<secret>`, stored sealed              | both (`decide` for AI review) |
-| Service id  | The `blk_…` frame AI reviews are filed under           | AI review                     |
+| Service id  | The `blk_…` frame for a repository no service backs    | neither                       |
 | Pipeline id | Overrides the review task's own pipeline (`pl_review`) | neither                       |
+
+An AI review is filed under the service that backs its repository, read from
+the cat-factory workspace that links it, and in that workspace. The repository
+mirror described under "Repositories come from cat-factory" is what says which
+workspaces link it. The service id is the fallback for a repository no service
+backs, a monorepo for one, filed in the linking workspace that holds it, and a
+review on such a repository is refused while it is unset.
+
+A guided review needs no service, but it lives in a workspace too, and a key
+reaching several workspaces is refused a call that names none. It is opened in
+the workspace that links the repository, the first by id when several do, and
+one already open in any of them is reused. A call about a session names its
+pull request as well, so it is made in the workspace that links the repository
+without a lookup first. Only a repository linked in several workspaces makes it
+read the session in each, and cat-factory answers 404 in all but one.
 
 The key spends one org's budget and the service is one org's repository frame,
 so a deployment-wide value would be lent across the tenancy boundary. That is the
@@ -368,7 +448,8 @@ another project still holds.
 
 The URLs are shown on the Configuration screen, filled in with this deployment's
 own base URL. They sit outside `/api/v1` deliberately: they are typed into a form
-on github.com and slack.com by hand, so they have to survive an API version bump.
+on github.com, gitlab.com and slack.com by hand, so they have to survive an API
+version bump.
 
 ### A GitHub App
 
@@ -381,7 +462,7 @@ on github.com and slack.com by hand, so they have to survive an API version bump
 4. **Setup URL**: `https://<your-api>/connect/github/setup`, so the browser lands
    back on the Configuration screen after an install.
 5. **Repository permissions**: `Pull requests: Read & write` (to request
-   reviewers and comment), `Issues: Read & write` (a pull request's comments are
+   reviewers, comment, and read who reviewed the repository recently), `Issues: Read & write` (a pull request's comments are
    the issues API), `Contents: Read & write` (to merge from My PRs),
    `Metadata: Read-only`.
 6. **Subscribe to events**: `Pull request`, `Pull request review`, `Issues`,
@@ -400,34 +481,52 @@ A key still in PKCS#1 (`BEGIN RSA PRIVATE KEY`) is refused with the conversion
 command in the message, because that is the shape GitHub hands out and therefore
 the failure everybody meets first.
 
+### A GitLab webhook
+
+1. On the project, or on the group to cover all its projects: **Settings →
+   Webhooks → Add new webhook**.
+2. **URL**: as the GitLab configuration screen shows it,
+   `https://<your-api>/webhooks/gitlab/<org-slug>` (the default org may use
+   `https://<your-api>/webhooks/gitlab`).
+3. **Secret token**: any long random value. Store the same value as the
+   **GitLab webhook secret** on that screen.
+4. **Trigger**: `Merge request events` and `Comments`.
+5. Register the project on the Repositories screen, or link it in cat-factory
+   when the org follows its workspaces.
+
 ### A Slack app
 
 1. **api.slack.com/apps → Create New App → From scratch.**
 2. **OAuth & Permissions**: bot scopes `chat:write` (and
    `chat:write.public` to post in a channel the bot has not been invited to).
    Install it, and put the `xoxb-…` token on the Configuration screen or in
-   `SLACK_BOT_TOKEN`.
-3. **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
-   shows it — `https://<your-api>/webhooks/slack` for the default org, and
+   `SLACK_BOT_TOKEN`. A DM (a personal reminder, an attention ask) is posted to
+   the person's user id, which `chat:write` covers: the app never opens a
+   conversation itself, so it needs no `im:write`.
+3. **App Home**: keep **Messages Tab** on. That tab is where the app's DMs
+   land, so with it off a person is never shown the attention asks and
+   reminders sent to them.
+4. **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
+   shows it: `https://<your-api>/webhooks/slack` for the default org, and
    `https://<your-api>/webhooks/slack/<org-slug>` for any other.
-4. **Slash Commands**: `/review`, same URL.
-5. Copy the **Signing Secret** from Basic Information onto the Configuration
+5. **Slash Commands**: `/review`, same URL.
+6. Copy the **Signing Secret** from Basic Information onto the Configuration
    screen, beside the bot token. The default org may set `SLACK_SIGNING_SECRET`
    on the deployment instead; a second org has to store it, because the
    deployment's own secret is not lent across the boundary.
-6. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
+7. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
    **default org's** channel, like the two credentials above it; a second org has
    no announcement channel yet.
 
 ### Locally
 
-GitHub and Slack both have to reach the API, which a laptop is not. A tunnel is
+GitHub, GitLab and Slack all have to reach the API, which a laptop is not. A tunnel is
 enough:
 
 ```bash
 cloudflared tunnel --url http://localhost:8788
 ```
 
-and point the two Request URLs at whatever it prints. The outbound halves (posting
+and point the webhook and Request URLs at whatever it prints. The outbound halves (posting
 to Slack, commenting on GitHub) need no tunnel at all, so a local run can exercise
 most of this with just a bot token and a personal access token.

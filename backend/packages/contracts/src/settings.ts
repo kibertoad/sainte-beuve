@@ -34,12 +34,17 @@ import type { VcsProvider } from './vcs.js'
  * serves one tenancy, so the org that connected it is the org whose board its
  * commands act on — which is the whole of how a Slack command reaches a tenancy
  * that is not the default one. See `SLACK_ORG_WEBHOOK_PATH`.
+ *
+ * `gitlab-webhook-secret` is the same kind of credential for the same reason: the
+ * token a GitLab webhook sends, which is what places a merge request delivery on
+ * this org's board. See `GITLAB_ORG_WEBHOOK_PATH`.
  */
 export const integrationIdSchema = v.picklist([
   'github-pat',
   'gitlab-pat',
   'slack-bot-token',
   'slack-signing-secret',
+  'gitlab-webhook-secret',
   'cat-factory',
 ])
 export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
@@ -65,6 +70,7 @@ const INTEGRATION_TRAITS: Record<IntegrationId, IntegrationTraits> = {
   'gitlab-pat': { label: 'GitLab token', capabilities: [] },
   'slack-bot-token': { label: 'Slack bot token', capabilities: [] },
   'slack-signing-secret': { label: 'Slack signing secret', capabilities: [] },
+  'gitlab-webhook-secret': { label: 'GitLab webhook secret', capabilities: [] },
   'cat-factory': {
     label: 'cat-factory key',
     capabilities: ['aiReview', 'guidedReview', 'repositoryDirectory'],

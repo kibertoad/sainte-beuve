@@ -6,15 +6,18 @@ import type {
   RepositoryLookup,
 } from '@sainte-beuve/contracts'
 import type {
+  EpochMs,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewerTally,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
+import { pastGitHubReviewers } from './history.js'
 import { lookupGitHubRepositories } from './lookup.js'
 import {
   type GitHubPullRequestDetail,
@@ -61,6 +64,8 @@ interface GitHubUser {
   login: string
   name?: string | null
   avatar_url?: string | null
+  /** `User`, `Organization` or `Bot`. */
+  type?: string
 }
 
 interface GitHubPullRequest {
@@ -263,6 +268,14 @@ export class GitHubVcsGateway implements VcsGateway {
     return this.identity
   }
 
+  async pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]> {
+    return pastGitHubReviewers(project, since, {
+      token: await this.options.tokens.tokenFor(project.owner, project.repo),
+      baseUrl: this.options.baseUrl,
+      fetchImpl: this.options.fetchImpl,
+    })
+  }
+
   private async readViewer(): Promise<VcsAccount | null> {
     // No repository in play, so the source is asked for its unscoped token. A
     // static source ignores both arguments; an App source never reaches here.
@@ -278,6 +291,7 @@ export class GitHubVcsGateway implements VcsGateway {
       username: user.login,
       displayName: user.name ?? null,
       avatarUrl: user.avatar_url ?? null,
+      bot: user.type === 'Bot',
     }
   }
 

@@ -1,8 +1,8 @@
 import type {
   CatFactoryConfig,
   AuthMode,
-  GitHubLabelRules,
   ReminderPolicy,
+  ReviewLabelRules,
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
@@ -30,11 +30,12 @@ import {
   authWiring,
   configured,
   githubWiring,
+  labelWiring,
   outboundGateways,
   slackWiring,
 } from './containerWiring.js'
 
-export { DEFAULT_GITHUB_LABELS, DEFAULT_SESSION_LIFETIME_MS } from './containerWiring.js'
+export { DEFAULT_REVIEW_LABELS, DEFAULT_SESSION_LIFETIME_MS } from './containerWiring.js'
 
 /** The environment's own gateway per host. Absent for a host nothing configured. */
 export type EnvironmentVcsGateways = Record<VcsProvider, VcsGateway | null>
@@ -71,7 +72,6 @@ export interface GitHubWiring {
   webhookSecret: string | null
   /** The login the bot answers to when it is @-mentioned in a comment. */
   botLogin: string | null
-  labels: GitHubLabelRules
 }
 
 /**
@@ -224,6 +224,12 @@ export interface AppContainer {
    */
   realtime: RealtimeKind
   github: GitHubWiring
+  /**
+   * The labels that drive the board from a pull request or a merge request.
+   * One set for every host, so it sits beside the hosts' wiring rather than
+   * inside either.
+   */
+  labels: ReviewLabelRules
   slack: SlackWiring
   auth: AuthWiring
   /**
@@ -261,6 +267,7 @@ export interface ContainerOptions {
   /** The cipher, the state signer, and the reason there is neither, as `secretsFrom` reports them. */
   secrets?: SecretsWiring | null
   github?: Partial<GitHubWiring>
+  labels?: Partial<ReviewLabelRules>
   slack?: Partial<SlackWiring>
   auth?: Partial<AuthWiring>
   appBaseUrl?: string | null
@@ -297,6 +304,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     states: secrets.states,
     secretsRejectedReason: secrets.rejectedReason,
     github: githubWiring(options.github),
+    labels: labelWiring(options.labels),
     slack: slackWiring(options.slack),
     auth: authWiring(options.auth),
     appBaseUrl: configured(options.appBaseUrl),

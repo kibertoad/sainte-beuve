@@ -11,6 +11,7 @@ function host(overrides: Partial<VcsConnection> = {}): VcsConnection {
     account: null,
     inboundIntake: true,
     webhooksReady: false,
+    webhookPath: '/webhooks/github',
     botLogin: null,
     labels: { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' },
     ...overrides,

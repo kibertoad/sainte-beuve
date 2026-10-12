@@ -1,4 +1,5 @@
 import {
+  challengeAiReviewFindingContract,
   dismissAiReviewFindingContract,
   getAiReviewRunContract,
   listAiReviewRunsContract,
@@ -10,6 +11,7 @@ import {
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { AiReviewCurationService } from './AiReviewCurationService.js'
 import { AiReviewService } from './AiReviewService.js'
 import { requestPullRequestAiReview } from './pullRequestAiReview.js'
 
@@ -51,22 +53,28 @@ export function aiReviewController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, dismissAiReviewFindingContract, async (c) => {
-    const service = new AiReviewService(c.get('container'))
+    const service = new AiReviewCurationService(c.get('container'))
     const { runId, findingId } = c.req.valid('param')
     return c.json(await service.dismissFinding(runId, findingId), 200)
   })
 
-  // 202 for both of these: cat-factory resolves and resumes ASYNCHRONOUSLY, so
-  // what comes back is the instruction having been accepted rather than the
-  // comments being up. The receipt arrives on a later read, as `postReport`.
+  // 202 for the three below: cat-factory challenges, resolves and resumes
+  // ASYNCHRONOUSLY, so what comes back is the instruction having been accepted
+  // rather than the verdict or the comments. Those arrive on a later read.
+  buildHonoRoute(app, challengeAiReviewFindingContract, async (c) => {
+    const service = new AiReviewCurationService(c.get('container'))
+    const { runId, findingId } = c.req.valid('param')
+    return c.json(await service.challenge(runId, findingId, c.req.valid('json').question), 202)
+  })
+
   buildHonoRoute(app, resolveAiReviewContract, async (c) => {
-    const service = new AiReviewService(c.get('container'))
+    const service = new AiReviewCurationService(c.get('container'))
     const { action, findingIds } = c.req.valid('json')
     return c.json(await service.resolve(c.req.valid('param').runId, { action, findingIds }), 202)
   })
 
   buildHonoRoute(app, resumeAiReviewContract, async (c) => {
-    const service = new AiReviewService(c.get('container'))
+    const service = new AiReviewCurationService(c.get('container'))
     return c.json(await service.resume(c.req.valid('param').runId), 202)
   })
 

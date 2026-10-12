@@ -10,7 +10,8 @@
 // what the BOARD is, once the router has done its work — who is on each review,
 // and which of them somebody should open next (`board`). The last two are about
 // the budget and the board's writes from outside the SPA: whether one more AI
-// review may be filed (`aiAdmission`), and who may change a review from a chat
+// review may be filed (`aiAdmission`) and whether one of its findings may be
+// challenged (`aiChallenge`), and who may change a review from a chat
 // command (`commands`). What merging one of your own pull requests from here
 // may look like (`merging`), and which pull requests are yours to review
 // (`reviewing`).
@@ -22,6 +23,12 @@ export {
   type AiReviewAdmission,
   decideAiReviewAdmission,
 } from './aiAdmission.js'
+export {
+  type AiChallengeAdmission,
+  type ChallengeRun,
+  decideChallengeAdmission,
+  retractedFindingIds,
+} from './aiChallenge.js'
 export { buildBoard, isOverdue, isSettledReview } from './board.js'
 export {
   type ChatActor,
@@ -58,20 +65,45 @@ export {
 export {
   ATTENTION_FIT_FLOOR,
   type AttentionAudienceRule,
+  askedOrAnsweredIds,
   audienceRuleOf,
+  declineRefusal,
   fitsWanted,
+  hasDeclined,
   isAttentionSatisfied,
   isInAttentionAudience,
-  outstandingCommitments,
   selectAttentionAudience,
   unaskableReason,
+  wantedOf,
 } from './attention.js'
 export {
   type RecipientRefusal,
   type RecipientsInput,
   type RecipientsResolution,
+  askableRecipients,
   resolveAttentionRecipients,
 } from './recipients.js'
+export {
+  type AttentionChange,
+  type AttentionPatch,
+  askMoreChange,
+  commitmentChange,
+  declineChange,
+  deliveriesChange,
+  nextToAsk,
+} from './attentionChanges.js'
+export {
+  countPastReviews,
+  familiarityBonus,
+  NO_PAST_REVIEWS,
+  PAST_REVIEW_HALF_POINT,
+  PAST_REVIEW_PREFERENCE,
+  PAST_REVIEW_READ_LIMIT,
+  PAST_REVIEW_STATUSES,
+  PAST_REVIEW_WINDOW_MS,
+  type PastReviewCounts,
+} from './familiarity.js'
+export { type HostReviewTally, pastReviewCounts, type ReviewHistory } from './history.js'
 export {
   diagnoseShortfall,
   distinctAsSpelled,
@@ -81,13 +113,16 @@ export {
   isEligible,
   isSameHandle,
   MATCH_PREFERENCE,
+  matchPreference,
   type MatchTarget,
   matchTargetFor,
   normalizeSkill,
   reviewersWithHandles,
   type ScoredCandidate,
+  matchesOf,
   scoreCandidate,
   scoreCandidates,
+  type ScoringTarget,
   type SelectionInput,
   type SelectionResult,
   selectReviewers,

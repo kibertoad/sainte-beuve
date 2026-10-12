@@ -18,6 +18,7 @@ import {
   patch,
   post,
   PR,
+  noAttentionDms,
   stubGateways,
 } from './helpers.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
@@ -34,6 +35,7 @@ function recordingChat(): ChatGateway & { delivered: { kind: string; target: str
     sendReminder: async (reminder, _review, target) => {
       delivered.push({ kind: reminder.kind, target })
     },
+    ...noAttentionDms(),
   }
 }
 
@@ -588,9 +590,11 @@ describe('a tick across tenancies', () => {
       catFactoryTaskId: `cf-task-${orgId}`,
       catFactoryRunId: 'cf-run-1',
       catFactoryUrl: null,
+      catFactoryWorkspaceId: null,
       summary: null,
       failureReason: null,
       curation: null,
+      challengedFindingIds: [],
       requestedAt: clock.now(),
       lastPolledAt: null,
       parkedAt: null,
@@ -607,6 +611,7 @@ describe('a tick across tenancies', () => {
       sealed: await cipher.encrypt('xoxb-second', 'slack-bot-token'),
       hint: 'cond',
       subject: null,
+      subjectIsBot: false,
       updatedAt: harness.clock.now(),
     })
   }
@@ -622,6 +627,7 @@ describe('a tick across tenancies', () => {
       sendReminder: async () => {
         order.push('nudge')
       },
+      ...noAttentionDms(),
     }
     const harness = buildHarness(
       {

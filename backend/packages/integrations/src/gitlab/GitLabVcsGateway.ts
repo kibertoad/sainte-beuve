@@ -6,14 +6,17 @@ import type {
   RepositoryLookup,
 } from '@sainte-beuve/contracts'
 import type {
+  EpochMs,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewerTally,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { gitlabApiStatusOf, gitlabRequest, projectPath } from './client.js'
+import { pastGitLabReviewers } from './history.js'
 import { lookupGitLabRepositories } from './lookup.js'
 import {
   type GitLabApprovals,
@@ -69,6 +72,8 @@ interface GitLabUser {
   username: string
   name?: string | null
   avatar_url?: string | null
+  /** True for a project or group access token's user and for a service account. */
+  bot?: boolean
 }
 
 interface GitLabMergeRequest {
@@ -234,6 +239,10 @@ export class GitLabVcsGateway implements VcsGateway {
    * merged, or a reroll would silently drop everybody the update did not name.
    * Answers what the list held before, and the users the logins resolved to.
    */
+  async pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]> {
+    return pastGitLabReviewers(project, since, this.options)
+  }
+
   private async changeReviewers(
     pr: PullRequestRef,
     combine: (current: number[], named: number[]) => number[],
@@ -328,6 +337,7 @@ function toAccount(user: GitLabUser): VcsAccount {
     username: user.username,
     displayName: user.name ?? null,
     avatarUrl: user.avatar_url ?? null,
+    bot: user.bot === true,
   }
 }
 

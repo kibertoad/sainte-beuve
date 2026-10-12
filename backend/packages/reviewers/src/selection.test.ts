@@ -1,5 +1,6 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
+import { NO_PAST_REVIEWS, familiarityBonus } from './familiarity.js'
 import {
   MATCH_PREFERENCE,
   type SelectionInput,
@@ -37,7 +38,15 @@ function scripted(values: number[]): () => number {
 
 /** A selection over `candidates` that wants nothing in particular, unless told. */
 function input(candidates: Reviewer[], overrides: Partial<SelectionInput> = {}): SelectionInput {
-  return { candidates, skills: [], domains: [], excludeReviewerIds: [], count: 1, ...overrides }
+  return {
+    candidates,
+    skills: [],
+    domains: [],
+    excludeReviewerIds: [],
+    pastReviews: NO_PAST_REVIEWS,
+    count: 1,
+    ...overrides,
+  }
 }
 
 describe('isEligible', () => {
@@ -66,7 +75,7 @@ describe('drawWeight', () => {
 })
 
 describe('match scoring', () => {
-  const target = { skills: ['typescript'], domains: ['billing'] }
+  const target = { skills: ['typescript'], domains: ['billing'], pastReviews: NO_PAST_REVIEWS }
 
   it('weights skills and domains alike, by the share of the mix a reviewer holds', () => {
     const scored = scoreCandidates(
@@ -100,7 +109,7 @@ describe('match scoring', () => {
   it('leaves the draw to load and weight when the review wants nothing', () => {
     const scored = scoreCandidates(
       [reviewer({ id: 'a', skills: ['go'] })],
-      { skills: [], domains: [] },
+      { skills: [], domains: [], pastReviews: NO_PAST_REVIEWS },
       [],
     )
     expect(scored[0]?.weight).toBe(1)
@@ -118,7 +127,7 @@ describe('affinityOf', () => {
   it('agrees with the score the draw is weighted by', () => {
     const candidate = reviewer({ id: 'a', skills: ['Backend'] })
     const target = { skills: ['Backend', 'Frontend'], domains: [] }
-    const [scored] = scoreCandidates([candidate], target, [])
+    const [scored] = scoreCandidates([candidate], { ...target, pastReviews: NO_PAST_REVIEWS }, [])
     expect(affinityOf(candidate, target)).toBe(scored?.affinity)
   })
 
@@ -126,6 +135,29 @@ describe('affinityOf', () => {
     expect(
       affinityOf(reviewer({ id: 'a', skills: ['Backend'] }), { skills: [], domains: [] }),
     ).toBe(0)
+  })
+})
+
+describe('familiarity in the draw', () => {
+  it('adds the bonus for past reviews on top of the match, under the load damping', () => {
+    const regular = reviewer({ id: 'regular', skills: ['go'], outstandingReviews: 1 })
+    const scored = scoreCandidates(
+      [regular],
+      { skills: ['go'], domains: [], pastReviews: new Map([['regular', 3]]) },
+      [],
+    )
+    expect(scored[0]?.pastReviews).toBe(3)
+    expect(scored[0]?.preference).toBe(1 + MATCH_PREFERENCE + familiarityBonus(3))
+    expect(scored[0]?.weight).toBe((1 + MATCH_PREFERENCE + familiarityBonus(3)) / 2)
+  })
+
+  it('draws the regular where two reviewers otherwise tie', () => {
+    const pool = [reviewer({ id: 'new' }), reviewer({ id: 'regular' })]
+    const pastReviews = new Map([['regular', 3]])
+    // Weights 1 and 2: a draw at 0.4 of the total lands past the newcomer's third.
+    expect(selectReviewers(input(pool, { pastReviews }), scripted([0.4])).selected[0]?.id).toBe(
+      'regular',
+    )
   })
 })
 

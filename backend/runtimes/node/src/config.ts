@@ -1,9 +1,9 @@
-import type { AuthMode, CatFactoryConfig, GitHubLabelRules } from '@sainte-beuve/contracts'
+import type { AuthMode, CatFactoryConfig, ReviewLabelRules } from '@sainte-beuve/contracts'
 import {
   authModeFrom,
   devModeFrom,
   environmentApiKeyFrom,
-  DEFAULT_GITHUB_LABELS,
+  DEFAULT_REVIEW_LABELS,
   DEFAULT_SESSION_LIFETIME_MS,
   retiredVariablesIn,
   withAppOrigin,
@@ -48,7 +48,6 @@ export interface GitHubConfig {
   oauth: { clientId: string; clientSecret: string; scope?: string } | null
   /** The login the bot answers to when @-mentioned in a pull-request comment. */
   botLogin: string | null
-  labels: GitHubLabelRules
 }
 
 /**
@@ -121,6 +120,11 @@ export interface NodeConfig {
   catFactorySuggestion: CatFactoryConfig | null
   github: GitHubConfig
   gitlab: GitLabConfig
+  /**
+   * The labels that drive the board on every host, GitLab included, although
+   * their variables are named `GITHUB_LABEL_*`.
+   */
+  labels: ReviewLabelRules
   slack: { botToken: string | null; signingSecret: string | null; channelId: string | null }
   auth: AuthConfig
   appBaseUrl: string | undefined
@@ -205,6 +209,7 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     catFactorySuggestion: null,
     github: githubFrom(env),
     gitlab: gitlabFrom(env),
+    labels: labelsFrom(env),
     // `||` throughout, not `??`: an empty variable is one somebody left blank,
     // not one they set, and `.env.example` ships every name with no value.
     slack: {
@@ -273,11 +278,11 @@ function gitlabFrom(env: Env): GitLabConfig {
 }
 
 /** The reviewer-facing labels, each falling back to the default when unset. */
-function labelsFrom(env: Env): GitHubLabelRules {
+function labelsFrom(env: Env): ReviewLabelRules {
   return {
-    review: env.GITHUB_LABEL_REVIEW || DEFAULT_GITHUB_LABELS.review,
-    aiReview: env.GITHUB_LABEL_AI_REVIEW || DEFAULT_GITHUB_LABELS.aiReview,
-    skillPrefix: env.GITHUB_LABEL_SKILL_PREFIX || DEFAULT_GITHUB_LABELS.skillPrefix,
+    review: env.GITHUB_LABEL_REVIEW || DEFAULT_REVIEW_LABELS.review,
+    aiReview: env.GITHUB_LABEL_AI_REVIEW || DEFAULT_REVIEW_LABELS.aiReview,
+    skillPrefix: env.GITHUB_LABEL_SKILL_PREFIX || DEFAULT_REVIEW_LABELS.skillPrefix,
   }
 }
 
@@ -297,6 +302,5 @@ function githubFrom(env: Env): GitHubConfig {
       scope: env.GITHUB_OAUTH_SCOPE,
     }),
     botLogin: env.GITHUB_BOT_LOGIN || null,
-    labels: labelsFrom(env),
   }
 }

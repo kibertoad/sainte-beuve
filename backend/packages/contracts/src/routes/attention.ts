@@ -1,11 +1,13 @@
 import { defineApiContract, sseResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
+  askMoreAttentionRequestSchema,
   attentionEventSchema,
   attentionInboxSchema,
   attentionRequestSchema,
   createAttentionRequestSchema,
   createReviewCommitmentSchema,
+  declineAttentionRequestSchema,
   reviewCommitmentSchema,
 } from '../attention.js'
 import { errorResponses, singleStringParam } from './_shared.js'
@@ -60,6 +62,28 @@ export const commitToAttentionContract = defineApiContract({
   requestPathParamsSchema: attentionIdParams,
   pathResolver: ({ attentionId }) => `/attention/${attentionId}/commit`,
   requestBodySchema: v.object({}),
+  responsesByStatusCode: { 200: attentionRequestSchema, ...errorResponses },
+})
+
+/**
+ * "Not me." Open to anybody the ask reached. It leaves the decliner's inbox,
+ * and a named ask the decline leaves short moves on to the next best match
+ * when the requester asked for that.
+ */
+export const declineAttentionContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: attentionIdParams,
+  pathResolver: ({ attentionId }) => `/attention/${attentionId}/decline`,
+  requestBodySchema: declineAttentionRequestSchema,
+  responsesByStatusCode: { 200: attentionRequestSchema, ...errorResponses },
+})
+
+/** The requester asking more people, named or the next best matches. */
+export const askMoreAttentionContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: attentionIdParams,
+  pathResolver: ({ attentionId }) => `/attention/${attentionId}/recipients`,
+  requestBodySchema: askMoreAttentionRequestSchema,
   responsesByStatusCode: { 200: attentionRequestSchema, ...errorResponses },
 })
 

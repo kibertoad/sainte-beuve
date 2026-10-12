@@ -1,5 +1,6 @@
 import type { Reviewer, ReviewRequest, ShortfallReason, VcsProvider } from '@sainte-beuve/contracts'
 import { handleOf } from '@sainte-beuve/contracts'
+import { type PastReviewCounts, familiarityBonus } from './familiarity.js'
 
 /**
  * Reviewer selection: a load-aware weighted random pick that favours the
@@ -26,6 +27,12 @@ export interface MatchTarget {
   domains: readonly string[]
 }
 
+/** What a candidate is scored against: what the review wants, and who knows its repository. */
+export interface ScoringTarget extends MatchTarget {
+  /** What each candidate already finished on the repository. Required, so no caller skips it. */
+  pastReviews: PastReviewCounts
+}
+
 /**
  * What a review wants: the skills it asked for, or else the ones its repository
  * names, and the repository's domains. A review on a repository nobody
@@ -50,11 +57,15 @@ export interface ScoredCandidate {
   matchedDomains: string[]
   /** The share of the wanted skills and domains this reviewer holds, from 0 to 1. */
   affinity: number
-  /** The reviewer's share of the draw. Higher is likelier; never zero for a candidate. */
+  /** Reviews this reviewer finished on the pull request's repository. */
+  pastReviews: number
+  /** How much the review prefers this reviewer, before their load and configured weight. */
+  preference: number
+  /** The reviewer's share of the draw: `preference` times `drawWeight`. Never zero for a candidate. */
   weight: number
 }
 
-export interface SelectionInput extends MatchTarget {
+export interface SelectionInput extends ScoringTarget {
   candidates: Reviewer[]
   /** Reviewer ids that must not be picked: the author, anyone already on, the caller's vetoes. */
   excludeReviewerIds: readonly string[]
@@ -158,30 +169,53 @@ function heldOf(held: readonly string[], wanted: readonly string[]): string[] {
 }
 
 /**
- * Skills and domains count alike: the mix is one list of what the review
- * wants, and the affinity is the share of it the reviewer holds.
+ * How much a review prefers a reviewer, whatever their load: one for anybody,
+ * plus the share of the wanted mix they hold, plus their familiarity with the
+ * repository. The draw multiplies it by `drawWeight` and the recommendations
+ * rank on it, so both favour the same person. `familiarityBonus` stays below
+ * half of `MATCH_PREFERENCE`, so the whole mix outweighs any history.
  */
-export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredCandidate {
-  const matchedSkills = heldOf(reviewer.skills, target.skills)
-  const matchedDomains = heldOf(reviewer.domains, target.domains)
-  const affinity = shareOf(matchedSkills.length + matchedDomains.length, target)
+export function matchPreference(affinity: number, pastReviews: number): number {
+  return 1 + MATCH_PREFERENCE * affinity + familiarityBonus(pastReviews)
+}
+
+/** What of a review's wanted skills and domains one reviewer holds: the reason they fit. */
+export function matchesOf(
+  reviewer: Reviewer,
+  target: MatchTarget,
+): Pick<ScoredCandidate, 'matchedSkills' | 'matchedDomains'> {
   return {
-    reviewer,
-    matchedSkills,
-    matchedDomains,
-    affinity,
-    weight: drawWeight(reviewer) * (1 + MATCH_PREFERENCE * affinity),
+    matchedSkills: heldOf(reviewer.skills, target.skills),
+    matchedDomains: heldOf(reviewer.domains, target.domains),
   }
 }
 
 /**
- * The share of what a review wants that this reviewer holds, from 0 to 1. A
- * review that wants nothing in particular is held by nobody: the share is 0.
+ * Skills and domains count alike: the mix is one list of what the review
+ * wants, and the affinity is the share of it the reviewer holds.
+ */
+export function scoreCandidate(reviewer: Reviewer, target: ScoringTarget): ScoredCandidate {
+  const matches = matchesOf(reviewer, target)
+  const affinity = shareHeld(matches, target)
+  const pastReviews = target.pastReviews.get(reviewer.id) ?? 0
+  const preference = matchPreference(affinity, pastReviews)
+  return {
+    reviewer,
+    ...matches,
+    affinity,
+    pastReviews,
+    preference,
+    weight: drawWeight(reviewer) * preference,
+  }
+}
+
+/**
+ * The share of what a review wants that this reviewer holds, from 0 to 1: the
+ * affinity the draw and the ranking prefer by and an ask is gated on. A review
+ * that wants nothing in particular is held by nobody, so the share is 0.
  */
 export function affinityOf(reviewer: Reviewer, target: MatchTarget): number {
-  const held =
-    heldOf(reviewer.skills, target.skills).length + heldOf(reviewer.domains, target.domains).length
-  return shareOf(held, target)
+  return shareHeld(matchesOf(reviewer, target), target)
 }
 
 /** Whether a review wants anything in particular at all. */
@@ -189,14 +223,18 @@ export function wantsNothing(target: MatchTarget): boolean {
   return target.skills.length === 0 && target.domains.length === 0
 }
 
-function shareOf(held: number, target: MatchTarget): number {
+function shareHeld(
+  matches: Pick<ScoredCandidate, 'matchedSkills' | 'matchedDomains'>,
+  target: MatchTarget,
+): number {
   const wanted = distinct(target.skills).length + distinct(target.domains).length
-  return wanted === 0 ? 0 : held / wanted
+  if (wanted === 0) return 0
+  return (matches.matchedSkills.length + matches.matchedDomains.length) / wanted
 }
 
 export function scoreCandidates(
   candidates: readonly Reviewer[],
-  target: MatchTarget,
+  target: ScoringTarget,
   excludeReviewerIds: readonly string[],
 ): ScoredCandidate[] {
   const excluded = new Set(excludeReviewerIds)
