@@ -45,6 +45,7 @@ export type {
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewerTally,
   VcsAccount,
   VcsGateway,
   VcsIdentityGateway,

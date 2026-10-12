@@ -380,7 +380,7 @@ on github.com and slack.com by hand, so they have to survive an API version bump
 4. **Setup URL**: `https://<your-api>/connect/github/setup`, so the browser lands
    back on the Configuration screen after an install.
 5. **Repository permissions**: `Pull requests: Read & write` (to request
-   reviewers and comment), `Issues: Read & write` (a pull request's comments are
+   reviewers, comment, and read who reviewed the repository recently), `Issues: Read & write` (a pull request's comments are
    the issues API), `Contents: Read & write` (to merge from My PRs),
    `Metadata: Read-only`.
 6. **Subscribe to events**: `Pull request`, `Pull request review`, `Issues`,

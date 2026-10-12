@@ -104,9 +104,12 @@ a team names its own), how many people you want, and whether the ask should stay
 inside your team.
 
 The dialog lists the five best matches as you pick, with what each one matched,
-how many reviews they finished on pull requests opened in the same repository
-over the last six months, and how many they already have open beside their
-name. They are ranked on how much of those skills and the repository's domains a
+how many reviews they finished in the same repository over the last six months,
+and how many they already have open beside their name. Past reviews are read
+from GitHub or GitLab when a credential for the host is configured (a verdict on
+one of the repository's 100 most recently updated pull requests), and from the
+board's own finished reviews otherwise; each person gets the larger of the two
+counts, since both describe the same history. They are ranked on how much of those skills and the repository's domains a
 person holds, raised for those past reviews, and open reviews only order people
 who rank equally on those: you can see the load and weigh it yourself, and a
 busy expert still outranks an idle stranger. Past reviews count with diminishing

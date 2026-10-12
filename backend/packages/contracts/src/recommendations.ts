@@ -56,8 +56,8 @@ export const recommendationReasonsSchema = v.object({
   outstandingReviews: v.number(),
   /**
    * Reviews this person finished on the pull request's repository recently,
-   * which raise their rank with diminishing returns. Counted from the board,
-   * so a review the deployment never tracked is not in it.
+   * which raise their rank with diminishing returns. The larger of the host's
+   * count of their verdicts and the board's count of its finished reviews.
    */
   pastReviews: v.number(),
 })

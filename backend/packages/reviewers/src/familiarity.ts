@@ -38,9 +38,9 @@ export const PAST_REVIEW_HALF_POINT = 3
 export const PAST_REVIEW_STATUSES: readonly ReviewStatus[] = ['approved', 'changes_requested']
 
 /**
- * How far back a past review still counts, measured from when its pull request
- * was tracked rather than when the verdict landed. People move on, and so does a
- * codebase.
+ * How far back a past review still counts. The host measures it from when the
+ * verdict landed; the board, which records no verdict time, from when the pull
+ * request was tracked. People move on, and so does a codebase.
  */
 export const PAST_REVIEW_WINDOW_MS = 180 * 24 * 60 * 60 * 1000
 

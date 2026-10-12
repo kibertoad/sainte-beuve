@@ -22,6 +22,7 @@ import type {
   ReviewRequest,
   VcsProvider,
 } from '@sainte-beuve/contracts'
+import type { EpochMs } from '../domain/types.js'
 import type { RepositoryDirectoryGateway } from './repository-directory.js'
 
 /**
@@ -66,6 +67,12 @@ export interface VcsAccount {
   username: string
   displayName: string | null
   avatarUrl: string | null
+}
+
+/** How many of a project's pull requests one handle gave a verdict on. */
+export interface ReviewerTally {
+  login: string
+  reviews: number
 }
 
 /** A pull request by the coordinates every host addresses it by. */
@@ -143,6 +150,13 @@ export interface VcsGateway {
    * token is: it acts as the App, not as anybody.
    */
   identify(): Promise<VcsAccount | null>
+  /**
+   * Who gave a verdict on the project's pull requests updated since `since`,
+   * each pull request counted once per reviewer, over at most one page of the
+   * most recently updated. A verdict is an approval or a request for changes;
+   * GitLab records only approvals.
+   */
+  pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]>
 }
 
 /**

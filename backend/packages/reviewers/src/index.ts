@@ -74,6 +74,7 @@ export {
   PAST_REVIEW_WINDOW_MS,
   type PastReviewCounts,
 } from './familiarity.js'
+export { type HostReviewTally, pastReviewCounts, type ReviewHistory } from './history.js'
 export {
   diagnoseShortfall,
   distinctAsSpelled,
