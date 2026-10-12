@@ -54,7 +54,9 @@ describe('Postgres repositories', () => {
     // One database for the file, emptied between cases: the cases write fixed
     // ids and read whole lists back.
     await db.execute(sql.raw(`TRUNCATE TABLE ${TABLES.join(', ')}`))
-  })
+    // vitest.config.ts raises the hook limit for the PGlite boot. This runs before
+    // every case, so it keeps the default and a hang fails in seconds.
+  }, 10_000)
 
   for (const testCase of repositoryConformanceCases) {
     it(testCase.name, async () => {
