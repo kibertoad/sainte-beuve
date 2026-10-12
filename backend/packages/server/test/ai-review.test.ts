@@ -143,7 +143,7 @@ describe('curating a delegated AI review', () => {
     expect(loop.catFactory.polls).toBe(polls)
   })
 
-  it('keeps following a parked run after the service id is cleared, and files no new one', async () => {
+  it('keeps following a parked run after the default service id is cleared', async () => {
     const parked = await parkedRun(loop)
     await writeCatFactoryConfig(loop.harness.container, {
       baseUrl: 'https://cat-factory.example.com',
@@ -154,10 +154,33 @@ describe('curating a delegated AI review', () => {
       post(`/api/v1/ai-review/runs/${parked.id}/resume`, {}),
     )
     expect(resumed.status).toBe(202)
-    const filed = await loop.harness.app.fetch(
-      post(`/api/v1/reviews/${parked.reviewId}/ai-review`, {}),
-    )
-    expect(filed.status).toBe(503)
+  })
+
+  /**
+   * Which service backs the repository is the gateway's to read from cat-factory;
+   * what the service has to supply is where cat-factory's directory lists the
+   * repository, and to name the workspace the task landed in on every later call.
+   */
+  it('files with the directory keys of the repository, and names its workspace afterwards', async () => {
+    const { externalRepositories } = loop.harness.container.repositories
+    const listed = (key: string, repo: string, id: string) => ({
+      source: 'cat-factory',
+      key,
+      seq: 1,
+      repository: { provider: 'github' as const, owner: PR.owner, repo, id },
+    })
+    await externalRepositories.apply(listed('ws-a/42', PR.repo, '42'))
+    await externalRepositories.apply(listed('ws-b/42', PR.repo, '42'))
+    await externalRepositories.apply(listed('ws-a/43', 'another-repository', '43'))
+    loop.catFactory.filedIn = 'ws-a'
+
+    const parked = await parkedRun(loop)
+    const keys = [...(loop.catFactory.requested[0]?.directoryKeys ?? [])].sort()
+    expect(keys).toStrictEqual(['ws-a/42', 'ws-b/42'])
+    expect(parked.catFactoryWorkspaceId).toBe('ws-a')
+
+    await loop.harness.app.fetch(post(`/api/v1/ai-review/runs/${parked.id}/resume`, {}))
+    expect(new Set(loop.catFactory.workspaces)).toStrictEqual(new Set(['ws-a']))
   })
 
   it('resumes a stalled review without being told which slices to redo', async () => {
@@ -543,6 +566,7 @@ describe('polling a delegated AI review on the reminder tick', () => {
       catFactoryTaskId: null,
       catFactoryRunId: null,
       catFactoryUrl: null,
+      catFactoryWorkspaceId: null,
       summary: null,
       failureReason: null,
       curation: null,

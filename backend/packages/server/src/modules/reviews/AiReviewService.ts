@@ -4,11 +4,12 @@ import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
 import { ConflictError, ValidationError, assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
-import { type Resolved, resolveAiReview, resolveAiReviewRuns } from '../../integrations/resolve.js'
+import { type Resolved, resolveAiReview } from '../../integrations/resolve.js'
 import type { CredentialSource } from '../../integrations/resolve.js'
 import { admitAiReview, confirmAiReviewAdmission } from './admission.js'
 import { abandonIfOrphaned } from './orphans.js'
 import { NOT_POLLED, type PollOutcome, parkedAtFor, parksIn, replanForPark } from './park.js'
+import { fileWithCatFactory } from './filing.js'
 import { curationFor } from './reconcile.js'
 
 /**
@@ -38,19 +39,16 @@ import { curationFor } from './reconcile.js'
  * no way of knowing it is waiting on them.
  */
 
-/** What a route answers when cat-factory is not configured. Only filing needs a service id. */
-const notConfigured = (needs: string) =>
-  `cat-factory is not configured for this org: an admin sets its ${needs} and an API key with the \`decide\` scope on the Configuration screen`
-const NOT_CONFIGURED = notConfigured('base URL, a service id')
-const NO_ACCESS = notConfigured('base URL')
+/** What a route answers when cat-factory is not configured. */
+const NOT_CONFIGURED =
+  'cat-factory is not configured for this org: an admin sets its base URL and an API key with the `decide` scope on the Configuration screen'
 
 /** The states a poll can still learn something from. Anything else is settled. */
 const IN_FLIGHT = new Set<AiReviewRun['status']>(AI_REVIEW_IN_FLIGHT_STATUSES)
 
 export class AiReviewService {
   /**
-   * The cat-factory resolution for THIS request's run verbs, made at most once.
-   * Filing resolves on its own, because it is the one verb that needs a service.
+   * The cat-factory resolution for THIS request, made at most once.
    *
    * One service instance answers one route, or one org's pass of the clock,
    * which is the lifetime this may be cached for and no longer: a key entered on
@@ -66,7 +64,7 @@ export class AiReviewService {
 
   async request(reviewId: string, instructions: string | null): Promise<AiReviewRun> {
     const { repositories, clock, ids } = this.container
-    const resolved = requireCapability(await resolveAiReview(this.container), NOT_CONFIGURED)
+    const resolved = await this.gateway()
     const review = assertFound(
       await repositories.reviews.getById(reviewId),
       `No review request ${reviewId}`,
@@ -79,6 +77,7 @@ export class AiReviewService {
       catFactoryTaskId: null,
       catFactoryRunId: null,
       catFactoryUrl: null,
+      catFactoryWorkspaceId: null,
       summary: null,
       failureReason: null,
       curation: null,
@@ -88,29 +87,7 @@ export class AiReviewService {
       completedAt: null,
     })
     await confirmAiReviewAdmission(this.container, run)
-
-    try {
-      const handle = await resolved.gateway.requestReview({
-        pullRequest: review.pullRequest,
-        title: review.title,
-        instructions,
-      })
-      return assertFound(
-        await repositories.aiReviewRuns.update(run.id, {
-          status: 'running',
-          catFactoryTaskId: handle.taskId,
-          catFactoryUrl: handle.url,
-        }),
-        `No AI review run ${run.id}`,
-      )
-    } catch (err) {
-      await repositories.aiReviewRuns.update(run.id, {
-        status: 'failed',
-        failureReason: getErrorMessage(err),
-        completedAt: clock.now(),
-      })
-      throw err
-    }
+    return fileWithCatFactory(this.container, resolved.gateway, run, { review, instructions })
   }
 
   /**
@@ -210,8 +187,8 @@ export class AiReviewService {
    * the fresh row.
    */
   async dismissFinding(runId: string, findingId: string): Promise<AiReviewRun> {
-    const { gateway, catFactoryRunId } = await this.curating(runId)
-    const curation = await gateway.dismissFinding({ runId: catFactoryRunId, findingId })
+    const { gateway, target } = await this.curating(runId)
+    const curation = await gateway.dismissFinding({ ...target, findingId })
     if (curation === null) return this.get(runId)
     return this.assertRun(
       await this.container.repositories.aiReviewRuns.update(runId, { curation }),
@@ -237,29 +214,30 @@ export class AiReviewService {
         `\`${resolution.action}\` needs at least one finding selected. Use \`finish\` to close a review without posting anything`,
       )
     }
-    const { gateway, catFactoryRunId } = await this.curating(runId)
-    await gateway.resolveReview({ runId: catFactoryRunId, ...resolution })
+    const { gateway, target } = await this.curating(runId)
+    await gateway.resolveReview({ ...target, ...resolution })
     return this.get(runId)
   }
 
   /** Re-dispatch the slices a stalled review never got back, then re-read the run. */
   async resume(runId: string): Promise<AiReviewRun> {
-    const { gateway, catFactoryRunId } = await this.curating(runId)
-    await gateway.resumeReview({ runId: catFactoryRunId })
+    const { gateway, target } = await this.curating(runId)
+    await gateway.resumeReview(target)
     return this.get(runId)
   }
 
   /**
-   * The gateway and the cat-factory run id a curation verb needs.
+   * The gateway, and the cat-factory run and workspace, a curation verb needs.
    *
    * A run with no cat-factory run id yet is a CONFLICT rather than a fault, and
    * it answers 409 rather than 404 so a caller can act on the difference: the
    * task was accepted and its run has not appeared, so the answer is to poll
    * again in a moment, where a 404 says the run is gone and to stop.
    */
-  private async curating(
-    runId: string,
-  ): Promise<{ gateway: AiReviewGateway; catFactoryRunId: string }> {
+  private async curating(runId: string): Promise<{
+    gateway: AiReviewGateway
+    target: { runId: string; workspaceId: string | null }
+  }> {
     const run = this.assertRun(await this.container.repositories.aiReviewRuns.getById(runId), runId)
     const { gateway } = await this.gateway()
     if (run.catFactoryRunId === null) {
@@ -267,16 +245,19 @@ export class AiReviewService {
         `AI review run ${runId} has no cat-factory run yet, so there is nothing to curate. Poll it again in a moment`,
       )
     }
-    return { gateway, catFactoryRunId: run.catFactoryRunId }
+    return {
+      gateway,
+      target: { runId: run.catFactoryRunId, workspaceId: run.catFactoryWorkspaceId },
+    }
   }
 
   private async gateway(): Promise<Resolved<AiReviewGateway, CredentialSource>> {
-    return requireCapability(await this.resolved(), NO_ACCESS)
+    return requireCapability(await this.resolved(), NOT_CONFIGURED)
   }
 
   /** The resolution this request is working with. See {@link resolution}. */
   private async resolved(): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
-    this.resolution ??= resolveAiReviewRuns(this.container)
+    this.resolution ??= resolveAiReview(this.container)
     return this.resolution
   }
 
@@ -314,7 +295,11 @@ export class AiReviewService {
     const resolved = await this.resolved()
     if (resolved === null) return NOT_POLLED
     try {
-      return await this.write(run, await resolved.gateway.getStatus(run.catFactoryTaskId))
+      const report = await resolved.gateway.getStatus({
+        taskId: run.catFactoryTaskId,
+        workspaceId: run.catFactoryWorkspaceId,
+      })
+      return await this.write(run, report)
     } catch (err) {
       return { run: await this.pollRefused(run, err), park: null }
     }

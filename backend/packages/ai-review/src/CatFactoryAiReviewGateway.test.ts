@@ -11,12 +11,17 @@ interface Call {
   method: string
   path: string
   body: unknown
+  /** The workspace the call named, or null for the key's only one. */
+  workspace: string | null
 }
 
 /** One canned answer, keyed by the path suffix the SDK asks for. */
 type Routes = Record<string, { status?: number; body: unknown }>
 
-function gatewayOver(routes: Routes): {
+function gatewayOver(
+  routes: Routes,
+  serviceId: string | null = 'svc-1',
+): {
   gateway: CatFactoryAiReviewGateway
   calls: Call[]
 } {
@@ -24,7 +29,7 @@ function gatewayOver(routes: Routes): {
   const gateway = new CatFactoryAiReviewGateway({
     baseUrl: 'https://cat-factory.example.com',
     apiKey: 'cf_live_key.secret',
-    serviceId: 'svc-1',
+    serviceId,
     fetch: async (input, init) => {
       const path = new URL(String(input)).pathname
       const raw = init?.body
@@ -32,6 +37,7 @@ function gatewayOver(routes: Routes): {
         method: init?.method ?? 'GET',
         path,
         body: typeof raw === 'string' ? JSON.parse(raw) : null,
+        workspace: new Headers(init?.headers).get('x-cat-factory-workspace'),
       })
       const route = Object.entries(routes).find(([suffix]) => path.endsWith(suffix))
       if (route === undefined) {
@@ -145,12 +151,33 @@ const PULL_REQUEST = {
   url: 'https://github.com/kibertoad/sainte-beuve/pull/7',
 }
 
-function filing(gateway: CatFactoryAiReviewGateway) {
+/** The task and run every poll and curation case asks about, filed in the key's only workspace. */
+const TASK = { taskId: 'task-1', workspaceId: null }
+const RUN = { runId: 'run-1', workspaceId: null }
+
+function filing(gateway: CatFactoryAiReviewGateway, directoryKeys: readonly string[] = []) {
   return gateway.requestReview({
     pullRequest: PULL_REQUEST,
     title: 'Poll on the read',
     instructions: null,
+    directoryKeys,
   })
+}
+
+/** A workspace's linked repositories, as `GET /api/v1/repos` lists them. */
+function repos(...entries: { repoId: number; serviceId: string | null }[]) {
+  return {
+    repos: entries.map((entry) => ({
+      defaultBranch: 'main',
+      linkedElsewhere: false,
+      monorepo: entry.serviceId === null,
+      name: 'sainte-beuve',
+      owner: 'kibertoad',
+      private: false,
+      provider: 'github',
+      ...entry,
+    })),
+  }
 }
 
 describe('CatFactoryAiReviewGateway.requestReview', () => {
@@ -163,10 +190,74 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
     expect(await filing(gateway)).toStrictEqual({
       taskId: 'task-1',
       url: 'https://cat-factory.example.com/tasks/task-1',
+      workspaceId: null,
     })
     expect(calls.map((call) => call.path)).toStrictEqual([
       '/api/v1/services/svc-1/tasks',
       '/api/v1/tasks/task-1/start',
+    ])
+  })
+
+  it('files under the service backing the repository, in the workspace that links it', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/repos': {
+        body: repos({ repoId: 41, serviceId: 'svc-other' }, { repoId: 42, serviceId: 'svc-42' }),
+      },
+      '/tasks': { body: task({ serviceId: 'svc-42' }) },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    expect((await filing(gateway, ['ws-a/42'])).workspaceId).toBe('ws-a')
+    expect(calls.map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
+      { path: '/api/v1/repos', workspace: 'ws-a' },
+      { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-a' },
+      { path: '/api/v1/tasks/task-1/start', workspace: 'ws-a' },
+    ])
+  })
+
+  it('files under the default service when no service backs the repository', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/repos': { body: repos({ repoId: 42, serviceId: null }) },
+      '/tasks': { body: task() },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    expect((await filing(gateway, ['ws-a/42'])).workspaceId).toBeNull()
+    expect(calls.slice(1).map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
+      { path: '/api/v1/services/svc-1/tasks', workspace: null },
+      { path: '/api/v1/tasks/task-1/start', workspace: null },
+    ])
+  })
+
+  it('refuses naming both fixes when nothing backs the repository and there is no default', async () => {
+    const { gateway, calls } = gatewayOver({ '/repos': { body: repos() } }, null)
+
+    await expect(filing(gateway, ['ws-a/42'])).rejects.toMatchObject({
+      code: 'unavailable',
+      message: /Create a service for the repository in cat-factory, or set a default service id/,
+    })
+    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos'])
+  })
+
+  /**
+   * Falling back here would file the review under another repository's service
+   * because the key could not read the workspace, and say nothing about it.
+   */
+  it('does not fall back to the default when the workspace lookup is refused', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/repos': { status: 401, body: { error: { code: 'unauthorized', message: 'no such key' } } },
+    })
+
+    await expect(filing(gateway, ['ws-a/42'])).rejects.toMatchObject({ code: 'forbidden' })
+    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos'])
+  })
+
+  it('asks about a run in the workspace it was filed in', async () => {
+    const { gateway, calls } = gatewayOver({ '/run': { body: run({ status: 'done' }) } })
+
+    await gateway.getStatus({ taskId: 'task-1', workspaceId: 'ws-a' })
+    expect(calls.map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
+      { path: '/api/v1/tasks/task-1/run', workspace: 'ws-a' },
     ])
   })
 
@@ -239,7 +330,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
       }),
     )
 
-    expect(await gateway.getStatus('task-1')).toStrictEqual({
+    expect(await gateway.getStatus(TASK)).toStrictEqual({
       status: 'completed',
       runId: 'run-1',
       summary: 'Two blocking findings.',
@@ -252,7 +343,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
     const { gateway, calls } = gatewayOver({
       '/run': { body: run({ status: 'done', steps: [] }) },
     })
-    await gateway.getStatus('task-1')
+    await gateway.getStatus(TASK)
     expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/tasks/task-1/run'])
   })
 
@@ -261,7 +352,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
       200,
       run({ status: 'failed', error: { code: 'model_error', message: 'the model timed out' } }),
     )
-    const reported = await gateway.getStatus('task-1')
+    const reported = await gateway.getStatus(TASK)
     expect(reported.status).toBe('failed')
     expect(reported.summary).toBeNull()
     expect(reported.failureReason).toBe('the model timed out')
@@ -269,12 +360,12 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
 
   it('reports a cancelled run as cancelled, so nothing polls it for ever', async () => {
     const gateway = gatewayAnswering(200, run({ status: 'cancelled' }))
-    expect((await gateway.getStatus('task-1')).status).toBe('cancelled')
+    expect((await gateway.getStatus(TASK)).status).toBe('cancelled')
   })
 
   it('treats the first poll of a task with no run yet as running', async () => {
     const gateway = gatewayAnswering(404, { error: { code: 'not_found', message: 'no run' } })
-    expect(await gateway.getStatus('task-1')).toStrictEqual({
+    expect(await gateway.getStatus(TASK)).toStrictEqual({
       status: 'running',
       runId: null,
       summary: null,
@@ -285,7 +376,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
 
   it('refuses upstream faults rather than reporting a verdict it does not have', async () => {
     const gateway = gatewayAnswering(500, { error: { code: 'internal', message: 'boom' } })
-    await expect(gateway.getStatus('task-1')).rejects.toThrow(/could not report the run status/)
+    await expect(gateway.getStatus(TASK)).rejects.toThrow(/could not report the run status/)
   })
 
   /**
@@ -300,7 +391,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
       '/decisions': { status: 404, body: { error: { code: 'not_found', message: 'no run' } } },
     })
 
-    const reported = await gateway.getStatus('task-1')
+    const reported = await gateway.getStatus(TASK)
     expect(reported.status).toBe('running')
     expect(reported.curation).toBeNull()
   })
@@ -310,7 +401,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
       '/run': { body: run({ status: 'blocked' }) },
       '/decisions': { status: 500, body: { error: { code: 'internal', message: 'boom' } } },
     })
-    await expect(gateway.getStatus('task-1')).rejects.toMatchObject({ code: 'upstream_failed' })
+    await expect(gateway.getStatus(TASK)).rejects.toMatchObject({ code: 'upstream_failed' })
   })
 
   it('reports a review parked on its findings as awaiting a selection', async () => {
@@ -319,7 +410,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
       '/decisions': { body: decisions() },
     })
 
-    const reported = await gateway.getStatus('task-1')
+    const reported = await gateway.getStatus(TASK)
     expect(reported.status).toBe('awaiting_selection')
     expect(reported.runId).toBe('run-1')
     expect(reported.curation).toStrictEqual({
@@ -382,7 +473,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
       },
     })
 
-    const reported = await gateway.getStatus('task-1')
+    const reported = await gateway.getStatus(TASK)
     expect(reported.status).toBe('awaiting_selection')
     expect(reported.curation?.postAttempts).toBe(2)
     expect(reported.curation?.postedFindingIds).toStrictEqual(['f-9'])
@@ -404,7 +495,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
         '/run': { body: run({ status: 'blocked' }) },
         '/decisions': { body: decisions({ decisions: [decision({ status })] }) },
       })
-      expect((await gateway.getStatus('task-1')).status).toBe('running')
+      expect((await gateway.getStatus(TASK)).status).toBe('running')
     }
   })
 
@@ -414,7 +505,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
         '/run': { body: run({ status }) },
         '/decisions': { body: decisions({ decisions: [], parked: false }) },
       })
-      const reported = await gateway.getStatus('task-1')
+      const reported = await gateway.getStatus(TASK)
       expect(reported.status).toBe('running')
       expect(reported.curation).toBeNull()
     }
@@ -422,16 +513,22 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
 })
 
 describe('CatFactoryAiReviewGateway curation', () => {
-  it('posts the curated selection to the resolve route', async () => {
+  it('posts the curated selection to the resolve route, in the workspace of the run', async () => {
     const { gateway, calls } = gatewayOver({ '/pr-review/resolve': { body: decisions() } })
 
-    await gateway.resolveReview({ runId: 'run-1', action: 'post', findingIds: ['f-1', 'f-2'] })
+    await gateway.resolveReview({
+      runId: 'run-1',
+      workspaceId: 'ws-a',
+      action: 'post',
+      findingIds: ['f-1', 'f-2'],
+    })
 
     expect(calls).toStrictEqual([
       {
         method: 'POST',
         path: '/api/v1/runs/run-1/decisions/pr-review/resolve',
         body: { action: 'post', findingIds: ['f-1', 'f-2'] },
+        workspace: 'ws-a',
       },
     ])
   })
@@ -447,7 +544,11 @@ describe('CatFactoryAiReviewGateway curation', () => {
       '/dismiss': { body: decisions({ decisions: [decision({ findings: [] })] }) },
     })
 
-    const curation = await gateway.dismissFinding({ runId: 'run-1', findingId: 'f-1' })
+    const curation = await gateway.dismissFinding({
+      runId: 'run-1',
+      workspaceId: null,
+      findingId: 'f-1',
+    })
 
     expect(calls).toHaveLength(1)
     expect(calls[0]?.path).toBe('/api/v1/runs/run-1/decisions/pr-review/findings/f-1/dismiss')
@@ -457,11 +558,12 @@ describe('CatFactoryAiReviewGateway curation', () => {
 
   it('resumes a stalled review without saying which slices to redo', async () => {
     const { gateway, calls } = gatewayOver({ '/pr-review/resume': { body: decisions() } })
-    await gateway.resumeReview({ runId: 'run-1' })
+    await gateway.resumeReview(RUN)
     expect(calls[0]).toStrictEqual({
       method: 'POST',
       path: '/api/v1/runs/run-1/decisions/pr-review/resume',
       body: null,
+      workspace: null,
     })
   })
 
@@ -477,7 +579,7 @@ describe('CatFactoryAiReviewGateway curation', () => {
         body: { error: { code: 'not_resumable', message: 'the review is not in progress' } },
       },
     })
-    await expect(gateway.resumeReview({ runId: 'run-1' })).rejects.toMatchObject({
+    await expect(gateway.resumeReview(RUN)).rejects.toMatchObject({
       code: 'conflict',
     })
   })
@@ -490,7 +592,12 @@ describe('CatFactoryAiReviewGateway curation', () => {
       },
     })
     await expect(
-      gateway.resolveReview({ runId: 'run-1', action: 'post', findingIds: ['f-1'] }),
+      gateway.resolveReview({
+        runId: 'run-1',
+        workspaceId: null,
+        action: 'post',
+        findingIds: ['f-1'],
+      }),
     ).rejects.toMatchObject({ code: 'forbidden', message: /`decide` scope/ })
   })
 
@@ -502,7 +609,7 @@ describe('CatFactoryAiReviewGateway curation', () => {
       },
     })
     await expect(
-      gateway.dismissFinding({ runId: 'run-1', findingId: 'f-1' }),
+      gateway.dismissFinding({ runId: 'run-1', workspaceId: null, findingId: 'f-1' }),
     ).rejects.toMatchObject({ code: 'not_found' })
   })
 
@@ -514,7 +621,12 @@ describe('CatFactoryAiReviewGateway curation', () => {
       },
     })
     await expect(
-      gateway.resolveReview({ runId: 'run-1', action: 'finish', findingIds: [] }),
+      gateway.resolveReview({
+        runId: 'run-1',
+        workspaceId: null,
+        action: 'finish',
+        findingIds: [],
+      }),
     ).rejects.toMatchObject({ code: 'upstream_failed' })
   })
 })
