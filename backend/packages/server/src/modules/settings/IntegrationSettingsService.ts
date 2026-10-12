@@ -17,6 +17,7 @@ import {
   resolveSlackSigningSecret,
   resolveVcs,
 } from '../../integrations/resolve.js'
+import { RepositorySyncService } from '../projects/RepositorySyncService.js'
 
 /**
  * The credentials a deployment attaches to its integrations, entered in the SPA
@@ -64,6 +65,7 @@ export class IntegrationSettingsService {
 
   async setToken(integrationId: IntegrationId, token: string): Promise<IntegrationTokenStatus> {
     const cipher = requireCapability(this.container.secrets, this.noCipherMessage())
+    await this.releaseDirectory(integrationId)
     const stored = await this.container.repositories.integrationTokens.put({
       integrationId,
       // Sealed AGAINST the integration id: the envelope opens for this row and
@@ -93,8 +95,18 @@ export class IntegrationSettingsService {
    * store surgery.
    */
   async clearToken(integrationId: IntegrationId): Promise<IntegrationTokenStatus> {
+    await this.releaseDirectory(integrationId)
     await this.container.repositories.integrationTokens.delete(integrationId)
     return this.absent(integrationId)
+  }
+
+  /**
+   * A replaced cat-factory key may reach another account, whose directory the
+   * mirrored repositories, the feed cursor and the enrolled webhook are not from.
+   * They go while the old key still opens, so the webhook can be removed with it.
+   */
+  private async releaseDirectory(integrationId: IntegrationId): Promise<void> {
+    if (integrationId === 'cat-factory') await new RepositorySyncService(this.container).forget()
   }
 
   /**

@@ -28,6 +28,10 @@ import { aiReviewCases, integrationTokenCases, reviewCases } from './board-cases
 import { reminderCases } from './reminder-cases.js'
 import type { ConformanceCase } from './case.js'
 import { integrationConfigCases, integrationConfigTenancyCases } from './config-cases.js'
+import {
+  externalRepositoryCases,
+  externalRepositoryTenancyCases,
+} from './external-repository-cases.js'
 import { reviewerCases } from './reviewer-cases.js'
 import { teamCases, teamTenancyCases } from './teams-cases.js'
 import { type TenancyCase, tenancyConformanceCases as boundaryCases } from './tenancy-cases.js'
@@ -46,6 +50,7 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
   ...attentionCases,
   ...commitmentCases,
   ...teamCases,
+  ...externalRepositoryCases,
 ]
 
 /**
@@ -57,6 +62,7 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
   ...boundaryCases,
   ...integrationConfigTenancyCases,
   ...teamTenancyCases,
+  ...externalRepositoryTenancyCases,
   ...sessionCases,
   ...apiKeyCases,
 ]
@@ -73,6 +79,10 @@ export { apiKeyCases, sessionCases } from './auth-cases.js'
 export { aiReviewCases, integrationTokenCases, reviewCases } from './board-cases.js'
 export { integrationConfigCases, integrationConfigTenancyCases } from './config-cases.js'
 export { teamCases, teamTenancyCases } from './teams-cases.js'
+export {
+  externalRepositoryCases,
+  externalRepositoryTenancyCases,
+} from './external-repository-cases.js'
 export { reminderCases } from './reminder-cases.js'
 export { reviewerCases } from './reviewer-cases.js'
 export { attentionCases, commitmentCases, identityCases, projectCases } from './workspace-cases.js'

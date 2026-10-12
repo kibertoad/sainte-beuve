@@ -67,7 +67,10 @@ export interface GatewayFactoryConfig {
    * The cat-factory members, from `catFactoryGateways()` in @sainte-beuve/ai-review.
    * Passed in because this package does not depend on cat-factory's SDK.
    */
-  catFactory: Pick<GatewayFactory, 'aiReview' | 'guidedReview' | 'catFactoryProbe'>
+  catFactory: Pick<
+    GatewayFactory,
+    'aiReview' | 'guidedReview' | 'catFactoryProbe' | 'catFactoryDirectory'
+  >
   clock?: Clock
   /** Swap the HTTP implementation. Only a test has a reason to. */
   fetchImpl?: typeof globalThis.fetch

@@ -80,6 +80,7 @@ describe('reminder tick', () => {
       recovered: 0,
       sessionsSwept: 0,
       aiReviewsPolled: 0,
+      repositoriesSynced: 0,
     })
 
     harness.clock.advance(4 * HOUR)
@@ -286,6 +287,7 @@ describe('reminder tick', () => {
       recovered: 0,
       sessionsSwept: 0,
       aiReviewsPolled: 0,
+      repositoriesSynced: 0,
     })
     expect(chat.delivered).toStrictEqual([])
     const statuses = (await remindersFor(harness, review.id)).map((r) => r.status)

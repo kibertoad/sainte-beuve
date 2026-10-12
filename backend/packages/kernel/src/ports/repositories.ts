@@ -15,6 +15,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import type { EpochMs } from '../domain/types.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
+import type { ExternalRepositoryRepository } from './external-repositories.js'
 import type { TeamRepository } from './teams.js'
 
 /**
@@ -392,4 +393,5 @@ export interface Repositories {
   sessions: SessionRepository
   apiKeys: ApiKeyRepository
   teams: TeamRepository
+  externalRepositories: ExternalRepositoryRepository
 }

@@ -27,6 +27,10 @@ const { data, pending, error, refresh } = useAsyncData('projects', () => api.lis
 })
 
 const projects = computed<Project[]>(() => data.value?.projects ?? [])
+// While cat-factory is configured the list is its workspaces' linked repositories,
+// so there is nothing to add or remove here.
+const capabilities = useCapabilities()
+const managed = computed(() => capabilities.confirmed('repositoryDirectory'))
 const { busy, run } = useApiAction({ refresh })
 const { confirm } = useConfirm()
 const toast = useToast()
@@ -148,7 +152,18 @@ async function remove(project: Project) {
       </UButton>
     </div>
 
-    <UCard class="mb-4">
+    <UAlert
+      v-if="managed"
+      class="mb-4"
+      color="info"
+      variant="subtle"
+      icon="i-lucide-git-fork"
+      title="These repositories come from cat-factory"
+      description="Link or unlink a repository in a cat-factory workspace and it follows here. Skills, domains and merge settings are still set on this screen."
+      :actions="[{ label: 'Sync status', to: '/configuration/cat-factory', variant: 'link' }]"
+    />
+
+    <UCard v-else class="mb-4">
       <template #header>
         <h2 class="font-medium">Add a repository</h2>
       </template>
@@ -200,7 +215,12 @@ async function remove(project: Project) {
 
     <UCard v-else-if="projects.length === 0">
       <p class="text-sm text-muted">
-        No repositories yet. Your workspace has nothing to sweep until one is registered.
+        <template v-if="managed">
+          No repositories yet. Link one in a cat-factory workspace and it appears here.
+        </template>
+        <template v-else>
+          No repositories yet. Your workspace has nothing to sweep until one is registered.
+        </template>
       </p>
     </UCard>
 
@@ -221,6 +241,9 @@ async function remove(project: Project) {
                 {{ project.owner }}/{{ project.repo }}
               </ULink>
               <span v-else class="font-medium">{{ project.owner }}/{{ project.repo }}</span>
+              <UBadge v-if="project.external" variant="outline" color="neutral" size="sm">
+                from {{ project.external.source }}
+              </UBadge>
             </div>
             <ProjectVocabulary
               class="mt-3"
@@ -238,6 +261,7 @@ async function remove(project: Project) {
             />
           </div>
           <UButton
+            v-if="!managed"
             size="sm"
             variant="ghost"
             color="error"

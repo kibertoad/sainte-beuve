@@ -1,4 +1,5 @@
 import {
+  CAT_FACTORY_WEBHOOK_PATH,
   GITHUB_WEBHOOK_PATH,
   SLACK_ORG_WEBHOOK_PATH,
   SLACK_WEBHOOK_PATH,
@@ -239,6 +240,7 @@ function mountBodyLimits(app: Hono<AppEnv>): void {
   app.use(GITHUB_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
   app.use(SLACK_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
   app.use(SLACK_ORG_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use(CAT_FACTORY_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
   app.use('/api/v1/*', refuseBody(JSON_BODY_LIMIT))
 }
 

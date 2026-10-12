@@ -139,6 +139,9 @@ export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFa
     catFactoryProbe: () => {
       throw new Error('this case wired no cat-factory probe')
     },
+    catFactoryDirectory: () => {
+      throw new Error('this case wired no cat-factory directory')
+    },
     signIn: () => null,
     ...overrides,
   }

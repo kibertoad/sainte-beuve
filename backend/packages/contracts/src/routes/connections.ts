@@ -86,3 +86,15 @@ export const checkCatFactoryContract = defineApiContract({
   requestBodySchema: checkCatFactorySchema,
   responsesByStatusCode: { 200: catFactoryCheckSchema, ...errorResponses },
 })
+
+/**
+ * Bring the org's repositories in step with its cat-factory directory now, and
+ * ask cat-factory to push changes from here on. A POST because it calls out and
+ * writes projects; there is nothing to send.
+ */
+export const syncCatFactoryRepositoriesContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/settings/connections/cat-factory/sync',
+  requestBodySchema: v.object({}),
+  responsesByStatusCode: { 200: catFactoryConnectionSchema, ...errorResponses },
+})

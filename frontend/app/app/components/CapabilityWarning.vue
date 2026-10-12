@@ -15,6 +15,10 @@ const DESCRIPTORS: Record<CapabilityName, { title: string; missing: string }> = 
     title: 'Guided review needs cat-factory',
     missing: 'This org has not connected cat-factory.',
   },
+  repositoryDirectory: {
+    title: 'Following cat-factory workspaces needs cat-factory',
+    missing: 'This org has not connected cat-factory, so its repositories are registered here.',
+  },
 }
 
 const capabilities = useCapabilities()

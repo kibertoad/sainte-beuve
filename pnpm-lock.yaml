@@ -8,6 +8,7 @@ overrides:
   vue: 3.5.42
   vue-router: 5.3.1
   '@cloudflare/workers-types': 5.20260815.1
+  '@cat-factory/directory-sync>@cat-factory/sdk': ^0.57.0
 
 importers:
 
@@ -37,9 +38,15 @@ importers:
 
   backend/packages/ai-review:
     dependencies:
+      '@cat-factory/directory-sync':
+        specifier: ^0.1.0
+        version: 0.1.0
       '@cat-factory/sdk':
-        specifier: ^0.56.1
-        version: 0.56.1
+        specifier: ^0.57.0
+        version: 0.57.0
+      '@cat-factory/webhooks':
+        specifier: ^0.1.0
+        version: 0.1.0
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -60,8 +67,8 @@ importers:
   backend/packages/contracts:
     dependencies:
       '@cat-factory/contracts':
-        specifier: ^0.362.0
-        version: 0.362.0(typescript@7.0.2)
+        specifier: ^0.366.0
+        version: 0.366.0(typescript@7.0.2)
       '@toad-contracts/core':
         specifier: 1.0.0
         version: 1.0.0
@@ -646,11 +653,19 @@ packages:
     resolution: {integrity: sha512-CuNiSqg7+e1cO/GjffyMOm5Tt2jUF9CWHHnvQ/UkqvtkGfHdgwEC0wpmq7fkN3gxwpRnrAN0WzO3vREKmNolMQ==}
     engines: {node: '>=18'}
 
-  '@cat-factory/contracts@0.362.0':
-    resolution: {integrity: sha512-vx04nwJ/EzwvpBFZT6Xwim38gI8GZfDiMqN1uKwwvXCS9p6aIZaVFfJuEw2qKFM1HDBWoPJ6b+o9NWfV5vateA==}
+  '@cat-factory/contracts@0.366.0':
+    resolution: {integrity: sha512-mPIOZaL+ZKWTSzwqUaqIsIk6AyfHpkfQdZwe1rqov8Vyh1ARdfdvVUjZYlPprJRs76+sr9Y08znI6DXQKtb1yg==}
 
-  '@cat-factory/sdk@0.56.1':
-    resolution: {integrity: sha512-3J0vLS0AM4+H4rpLnUD4wPLkIPoTn5ZfKEAAtndM8nWCfMj3JQ2QJjjtQNEItbVTfVRjAcrErwzlBFFqls4Uyw==}
+  '@cat-factory/directory-sync@0.1.0':
+    resolution: {integrity: sha512-MDA4x6sVpvFIAYRcyRfYytjYcP8vYbOp8bju/xkuv9LCEWH+V+c9X+t16rYkJRYJh5ltFS0eEg3Jb99/aAJG1w==}
+    engines: {node: '>=20'}
+
+  '@cat-factory/sdk@0.57.0':
+    resolution: {integrity: sha512-tDXdub/Y9qAidxXyOJFRRJNvW7VqlZ9yxm7SbAyTUacsg9PnSRdPnHeJQwrwT6FUYZJd4Ni0dhxQZga9rM3k1A==}
+    engines: {node: '>=20'}
+
+  '@cat-factory/webhooks@0.1.0':
+    resolution: {integrity: sha512-BEuvG8XUOlazq7OqsxfNde36T2+PganX6Ch5YtVndgACskryP3tcBKu3xQQzmm/21ujwEcS1lD2vuN4bxbxoCg==}
     engines: {node: '>=20'}
 
   '@changesets/apply-release-plan@8.1.0':
@@ -6742,7 +6757,7 @@ snapshots:
     dependencies:
       fontkitten: 1.0.3
 
-  '@cat-factory/contracts@0.362.0(typescript@7.0.2)':
+  '@cat-factory/contracts@0.366.0(typescript@7.0.2)':
     dependencies:
       '@toad-contracts/core': 1.0.0
       '@toad-contracts/valibot': 1.0.0(valibot@1.5.0(typescript@7.0.2))
@@ -6750,7 +6765,14 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@cat-factory/sdk@0.56.1': {}
+  '@cat-factory/directory-sync@0.1.0':
+    dependencies:
+      '@cat-factory/sdk': 0.57.0
+      '@cat-factory/webhooks': 0.1.0
+
+  '@cat-factory/sdk@0.57.0': {}
+
+  '@cat-factory/webhooks@0.1.0': {}
 
   '@changesets/apply-release-plan@8.1.0':
     dependencies:

@@ -40,6 +40,27 @@ export const catFactoryConfigSchema = v.object({
 })
 export type CatFactoryConfig = v.InferOutput<typeof catFactoryConfigSchema>
 
+/**
+ * How this org's repository list is kept in step with cat-factory's directory.
+ * Times are epoch ms; null until the first time each one happened.
+ */
+export const repositorySyncSchema = v.object({
+  /** The last time the change feed was followed to its head. */
+  syncedAt: v.nullable(v.number()),
+  /** The last full snapshot walk. */
+  reconciledAt: v.nullable(v.number()),
+  /**
+   * Whether cat-factory pushes directory changes here. `pending` until a
+   * registration has been tried; the change feed is followed on the clock either way.
+   */
+  webhook: v.picklist(['registered', 'failed', 'pending']),
+  /** The URL cat-factory was asked to push to. */
+  webhookUrl: v.nullable(v.string()),
+  /** Why the last sync or webhook registration failed, cleared by the next one that worked. */
+  error: v.nullable(v.string()),
+})
+export type RepositorySync = v.InferOutput<typeof repositorySyncSchema>
+
 export const catFactoryConnectionSchema = v.object({
   /** What this org stored. Null when it has not configured cat-factory. */
   config: v.nullable(catFactoryConfigSchema),
@@ -53,6 +74,8 @@ export const catFactoryConnectionSchema = v.object({
   aiReviewReady: v.boolean(),
   /** A key and a base URL are in place, so a guided review can be opened. */
   guidedReviewReady: v.boolean(),
+  /** Null while cat-factory is not configured, when repositories are registered here instead. */
+  repositorySync: v.nullable(repositorySyncSchema),
 })
 export type CatFactoryConnection = v.InferOutput<typeof catFactoryConnectionSchema>
 

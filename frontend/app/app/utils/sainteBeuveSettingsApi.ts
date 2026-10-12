@@ -12,6 +12,7 @@ import {
   getConnectionsContract,
   getIntegrationSettingsContract,
   setCatFactoryConfigContract,
+  syncCatFactoryRepositoriesContract,
   setIntegrationTokenContract,
   startGitHubAppInstallContract,
   startVcsSignInContract,
@@ -59,5 +60,6 @@ export function configurationCalls(call: ContractCaller) {
     clearCatFactoryConfig: () => call(clearCatFactoryConfigContract, {}),
     /** Tries a configuration against its instance without storing it. */
     checkCatFactory: (input: CheckCatFactory) => call(checkCatFactoryContract, { body: input }),
+    syncCatFactoryRepositories: () => call(syncCatFactoryRepositoriesContract, { body: {} }),
   }
 }
