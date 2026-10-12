@@ -101,11 +101,15 @@ describe('filing an AI review by pull request', () => {
 
   it('meets the same limit as the board button: one run in flight per review', async () => {
     const { harness, catFactory } = await wired()
-    await harness.app.fetch(post('/api/v1/ai-review', BODY))
+    const first = (await (
+      await harness.app.fetch(post('/api/v1/ai-review', BODY))
+    ).json()) as AiReviewRun
 
     const second = await harness.app.fetch(post('/api/v1/ai-review', BODY))
 
     expect(second.status).toBe(409)
+    // Named, so the row that asked can still take the person to the run in flight.
+    expect(await second.json()).toMatchObject({ error: { details: { reviewId: first.reviewId } } })
     expect(catFactory.requested).toHaveLength(1)
   })
 

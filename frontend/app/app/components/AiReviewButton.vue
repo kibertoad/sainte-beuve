@@ -17,23 +17,42 @@ const props = defineProps<{
 
 const api = useSainteBeuveApi()
 const capabilities = useCapabilities()
-const { busy, run } = useApiAction()
+const toast = useToast()
+const busy = ref(false)
 
 async function file() {
-  let reviewId: string | null = null
-  const filed = await run(
-    async () => {
-      const filedRun = await api.requestPullRequestAiReview({
-        pullRequest: props.pullRequest,
-        title: props.title,
-        authorLogin: props.authorLogin ?? null,
-      })
-      reviewId = filedRun.reviewId
-    },
-    'Could not request an AI review',
-    props.pullRequest.url,
-  )
-  if (filed && reviewId !== null) await navigateTo(boardReviewPath(reviewId))
+  busy.value = true
+  const reviewId = await fileOrExplain()
+  busy.value = false
+  if (reviewId !== null) await navigateTo(boardReviewPath(reviewId))
+}
+
+/**
+ * The board row to go to: the one the run was filed on, or, when the refusal
+ * names one (a run already in flight, the hourly limit), the row it is about.
+ */
+async function fileOrExplain(): Promise<string | null> {
+  try {
+    const run = await api.requestPullRequestAiReview({
+      pullRequest: props.pullRequest,
+      title: props.title,
+      authorLogin: props.authorLogin ?? null,
+    })
+    return run.reviewId
+  } catch (err) {
+    toast.add({
+      color: 'error',
+      title: 'Could not request an AI review',
+      description: apiErrorMessage(err),
+    })
+    return refusedReviewId(err)
+  }
+}
+
+function refusedReviewId(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null
+  const details = err.details as { reviewId?: unknown } | undefined
+  return typeof details?.reviewId === 'string' ? details.reviewId : null
 }
 </script>
 
@@ -43,7 +62,7 @@ async function file() {
     size="sm"
     variant="ghost"
     icon="i-lucide-bot"
-    :loading="busy !== null"
+    :loading="busy"
     @click="file"
   >
     AI review
