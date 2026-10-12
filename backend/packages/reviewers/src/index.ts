@@ -75,5 +75,11 @@ export {
   type SelectionResult,
   selectReviewers,
 } from './selection.js'
+export {
+  compareCandidates,
+  rankCandidates,
+  type RankingInput,
+  type RankingResult,
+} from './recommendation.js'
 export { mergeVocabulary, type MergedVocabulary } from './vocabulary.js'
 export { type PartitionedPullRequests, partitionForViewer } from './workspace.js'

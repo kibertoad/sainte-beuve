@@ -43,10 +43,10 @@ export function matchTargetFor(
 /** A candidate scored for one review, kept beside the reviewer so a caller can explain a pick. */
 export interface ScoredCandidate {
   reviewer: Reviewer
-  /** How many of the wanted skills this reviewer holds. */
-  matchedSkills: number
-  /** How many of the wanted domains this reviewer knows. */
-  matchedDomains: number
+  /** The wanted skills this reviewer holds, as the review spelled them, each once. */
+  matchedSkills: string[]
+  /** The wanted domains this reviewer knows, as the review spelled them, each once. */
+  matchedDomains: string[]
   /** The reviewer's share of the draw. Higher is likelier; never zero for a candidate. */
   weight: number
 }
@@ -122,10 +122,16 @@ function distinct(list: readonly string[]): string[] {
   return [...new Set(list.map(normalizeSkill))]
 }
 
-/** How many of `wanted` appear in `held`, compared case-insensitively. */
-function countHeld(held: readonly string[], wanted: readonly string[]): number {
+/** The entries of `wanted` that appear in `held`, compared case-insensitively, each once. */
+function heldOf(held: readonly string[], wanted: readonly string[]): string[] {
   const owned = new Set(held.map(normalizeSkill))
-  return distinct(wanted).filter((entry) => owned.has(entry)).length
+  const seen = new Set<string>()
+  return wanted.filter((entry) => {
+    const key = normalizeSkill(entry)
+    if (seen.has(key) || !owned.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 /**
@@ -133,10 +139,10 @@ function countHeld(held: readonly string[], wanted: readonly string[]): number {
  * wants, and the affinity is the share of it the reviewer holds.
  */
 export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredCandidate {
-  const matchedSkills = countHeld(reviewer.skills, target.skills)
-  const matchedDomains = countHeld(reviewer.domains, target.domains)
+  const matchedSkills = heldOf(reviewer.skills, target.skills)
+  const matchedDomains = heldOf(reviewer.domains, target.domains)
   const wanted = distinct(target.skills).length + distinct(target.domains).length
-  const affinity = wanted === 0 ? 0 : (matchedSkills + matchedDomains) / wanted
+  const affinity = wanted === 0 ? 0 : (matchedSkills.length + matchedDomains.length) / wanted
   return {
     reviewer,
     matchedSkills,

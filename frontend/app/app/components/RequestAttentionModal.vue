@@ -56,6 +56,11 @@ const skills = computed(() => {
   return project?.skills ?? []
 })
 
+const recommendations = useReviewerRecommendations(
+  computed(() => props.pullRequest?.pullRequest ?? null),
+  selectedSkills,
+)
+
 const counts = Array.from({ length: MAX_NEEDED_COMMITMENTS }, (_, index) => index + 1)
 
 watch(
@@ -106,10 +111,21 @@ function submit() {
         </UFormField>
 
         <UFormField
+          label="Best matches"
+          description="Ranked on the skills picked above, or the repository's when none are, and on its domains. Open reviews lower a reviewer's rank."
+        >
+          <ReviewerRecommendations
+            :result="recommendations.result.value"
+            :pending="recommendations.pending.value"
+            :failure="recommendations.failure.value"
+          />
+        </UFormField>
+
+        <UFormField
           label="Reviewers wanted"
           description="The ask resolves and disappears from everybody's inbox once this many people commit."
         >
-          <USelect v-model="neededCommitments" :items="counts" class="w-24" />
+          <USelect v-model="neededCommitments" :items="counts" class="w-full sm:w-24" />
         </UFormField>
 
         <UCheckbox
