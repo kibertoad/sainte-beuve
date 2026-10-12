@@ -154,47 +154,6 @@ export const attentionCases: readonly ConformanceCase[] = [
     },
   ),
 
-  conformanceCase('an ask keeps where its DMs landed through a later update', async (repos) => {
-    const chatDeliveries = [{ reviewerId: 'r1', conversationId: 'D1', messageId: '17.1' }]
-    await repos.attention.create(attentionRequest('a1', { chatDeliveries }))
-    await repos.attention.update('a1', { status: 'resolved', resolvedAt: 2_000 })
-    assert.deepStrictEqual((await repos.attention.getById('a1'))?.chatDeliveries, chatDeliveries)
-  }),
-
-  conformanceCase('two updates of different fields both survive together', async (repos) => {
-    const chatDeliveries = [{ reviewerId: 'r1', conversationId: 'D1', messageId: '17.1' }]
-    await repos.attention.create(attentionRequest('a1'))
-    const [delivered, resolved] = await Promise.all([
-      repos.attention.update('a1', { chatDeliveries }),
-      repos.attention.update('a1', { status: 'resolved', resolvedAt: 2_000 }),
-    ])
-    const stored = await repos.attention.getById('a1')
-    assert.deepStrictEqual(stored?.chatDeliveries, chatDeliveries)
-    assert.strictEqual(stored?.status, 'resolved')
-    assert.deepStrictEqual(await repos.attention.list({ status: ['resolved'] }), [stored])
-    // Whichever landed second answers with the other's field already in place.
-    assert.ok(
-      delivered?.status === 'resolved' || resolved?.chatDeliveries.length === 1,
-      'neither update saw the other',
-    )
-  }),
-
-  conformanceCase(
-    'an ask keeps who declined it, whether it asks on and who the host lists',
-    async (repos) => {
-      const people = { authorLogin: 'octo', requestedReviewerLogins: ['hubot'] }
-      await repos.attention.create(attentionRequest('a1', { keepAsking: true, people }))
-      const declines = [
-        { reviewerId: 'r1', displayName: 'One', reason: 'On leave', declinedAt: 2_000 },
-      ]
-      await repos.attention.update('a1', { declines, updatedAt: 2_000 })
-      const stored = await repos.attention.getById('a1')
-      assert.deepStrictEqual(stored?.declines, declines)
-      assert.strictEqual(stored?.keepAsking, true)
-      assert.deepStrictEqual(stored?.people, people)
-    },
-  ),
-
   conformanceCase('lists the asks newest first, ties on the id', async (repos) => {
     await repos.attention.create(attentionRequest('a1', { createdAt: 1_000 }))
     await repos.attention.create(attentionRequest('a2', { createdAt: 2_000 }))
@@ -210,22 +169,6 @@ export const attentionCases: readonly ConformanceCase[] = [
     const ids = (await repos.attention.list({ status: ['open'] })).map((row) => row.id)
     assert.deepStrictEqual(ids, ['a1'])
     assert.deepStrictEqual(await repos.attention.list({ status: [] }), [])
-  }),
-
-  conformanceCase('an ask records the people who answered it', async (repos) => {
-    await repos.attention.create(attentionRequest('a1'))
-    const updated = await repos.attention.update('a1', {
-      commitments: [{ reviewerId: 'r1', displayName: 'One', committedAt: 3_000 }],
-      status: 'resolved',
-      resolvedAt: 3_000,
-    })
-    assert.strictEqual(updated?.commitments.length, 1)
-    assert.strictEqual(updated?.status, 'resolved')
-    assert.deepStrictEqual(await repos.attention.list({ status: ['open'] }), [])
-  }),
-
-  conformanceCase('patching an ask that is not there answers null', async (repos) => {
-    assert.strictEqual(await repos.attention.update('nobody', { status: 'cancelled' }), null)
   }),
 ]
 

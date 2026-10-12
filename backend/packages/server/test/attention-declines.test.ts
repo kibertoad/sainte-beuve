@@ -123,6 +123,42 @@ describe('declining an ask', () => {
     expect((await decline(committer, request.id)).status).toBe(409)
   })
 
+  it('is refused when they commit in another tab while the decline is worked out', async () => {
+    const request = await raise(asker, { recipientIds: [ada.id, bo.id], neededCommitments: 2 })
+    const { repositories } = asker.container
+    let raced = false
+    // Lands ada's commitment between the decline's own read and its write.
+    const racing = buildHarness({
+      ...asker.container,
+      vcs: environmentVcs(viewerVcs('ada')),
+      repositories: {
+        ...repositories,
+        attention: {
+          list: (filter) => repositories.attention.list(filter),
+          getById: (id) => repositories.attention.getById(id),
+          create: (ask) => repositories.attention.create(ask),
+          change: async (id, change) => {
+            if (!raced) {
+              raced = true
+              await repositories.attention.change(id, (stored) => ({
+                commitments: [
+                  ...stored.commitments,
+                  { reviewerId: ada.id, displayName: 'Ada', committedAt: 1 },
+                ],
+              }))
+            }
+            return repositories.attention.change(id, change)
+          },
+        },
+      },
+    })
+
+    expect((await decline(racing, request.id)).status).toBe(409)
+    const stored = await repositories.attention.getById(request.id)
+    expect(stored?.declines).toStrictEqual([])
+    expect(stored?.commitments.map((entry) => entry.reviewerId)).toStrictEqual([ada.id])
+  })
+
   it('clears the decline of somebody who then commits after all', async () => {
     const request = await raise(asker, { recipientIds: [ada.id, bo.id] })
     const decliner = as(asker, 'ada')
