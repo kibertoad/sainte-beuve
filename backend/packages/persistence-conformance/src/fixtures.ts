@@ -220,6 +220,7 @@ export function commitment(
     pullRequest: pullRequest(),
     title: 'Ship the thing',
     attentionRequestId: null,
+    requestedHandle: null,
     createdAt: 1_000,
     ...overrides,
   }

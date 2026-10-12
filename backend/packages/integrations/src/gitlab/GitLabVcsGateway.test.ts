@@ -137,7 +137,7 @@ describe('GitLabVcsGateway', () => {
     ])
     const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
 
-    await gateway.requestReviewers(MR, ['alice'])
+    expect(await gateway.requestReviewers(MR, ['alice'])).toStrictEqual(['alice'])
 
     // The update REPLACES the list, so a write that named only the newcomer
     // would quietly un-request everybody already on it.
@@ -170,8 +170,8 @@ describe('GitLabVcsGateway', () => {
     ])
     const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
 
-    await gateway.requestReviewers(MR, ['alice'])
-
+    // Somebody already on the list, reviewed or not, is not requested by this call.
+    expect(await gateway.requestReviewers(MR, ['alice'])).toStrictEqual([])
     expect(calls.map((call) => call.method)).toStrictEqual(['GET', 'GET'])
   })
 
@@ -181,9 +181,28 @@ describe('GitLabVcsGateway', () => {
 
     // A reviewer in our directory with no account here must not stop the
     // request; there is simply nobody to put on it.
-    await gateway.requestReviewers(MR, ['ghost'])
+    expect(await gateway.requestReviewers(MR, ['ghost'])).toStrictEqual([])
 
     expect(calls.every((call) => call.method === 'GET')).toBe(true)
+  })
+
+  it('counts as pending only the reviewers who have not acted yet', async () => {
+    const { fetchImpl, calls } = stub([
+      [
+        { user: { id: 2, username: 'alice' }, state: 'unreviewed' },
+        { user: { id: 3, username: 'bob' }, state: 'reviewed' },
+        { user: { id: 4, username: 'carol' }, state: 'approved' },
+        { user: { id: 5, username: 'dave' } },
+      ],
+    ])
+    const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
+
+    // GitLab keeps a reviewer on the list after they review; withdrawing from
+    // one who did would erase a review, so only `unreviewed` counts.
+    expect(await gateway.pendingReviewers(MR)).toStrictEqual(['alice'])
+    expect(calls[0]?.url).toBe(
+      'https://gitlab.com/api/v4/projects/platform%2Fbackend%2Fapi/merge_requests/12/reviewers',
+    )
   })
 
   it('comments as a merge-request note', async () => {

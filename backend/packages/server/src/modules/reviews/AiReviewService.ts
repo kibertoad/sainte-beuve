@@ -40,7 +40,7 @@ import { curationFor } from './reconcile.js'
  */
 
 /** What a route answers when cat-factory is not configured. */
-const NOT_CONFIGURED =
+export const NOT_CONFIGURED =
   'cat-factory is not configured for this org: an admin sets its base URL and an API key with the `decide` scope on the Configuration screen'
 
 /** The states a poll can still learn something from. Anything else is settled. */
@@ -62,9 +62,13 @@ export class AiReviewService {
 
   constructor(private readonly container: AppContainer) {}
 
-  async request(reviewId: string, instructions: string | null): Promise<AiReviewRun> {
+  async request(
+    reviewId: string,
+    instructions: string | null,
+    filing?: Resolved<AiReviewGateway, CredentialSource>,
+  ): Promise<AiReviewRun> {
     const { repositories, clock, ids } = this.container
-    const resolved = await this.gateway()
+    const resolved = filing ?? (await this.gateway())
     const review = assertFound(
       await repositories.reviews.getById(reviewId),
       `No review request ${reviewId}`,
