@@ -140,6 +140,14 @@ export interface AiReviewGateway {
    * from what the run observed, so there is nothing to pass.
    */
   resumeReview(input: { runId: string } & AiReviewWorkspace): Promise<void>
+  /**
+   * Dispatch cat-factory's investigator to re-examine one finding, with the
+   * curator's concern when there is one. ASYNCHRONOUS like `resolveReview`: the
+   * verdict lands on the finding on a later poll.
+   */
+  challengeFinding(
+    input: { runId: string; findingId: string; question: string | null } & AiReviewWorkspace,
+  ): Promise<void>
 }
 
 /** Where an org's cat-factory is, and the key it reaches it with. */

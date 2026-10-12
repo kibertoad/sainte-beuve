@@ -82,8 +82,33 @@ export function parkedAtFor(
   // the second park as the first and say nothing about the receipt. The status is
   // too coarse to catch that; `postAttempts` is not, because it only ever goes up
   // (it is what `curationFor` decides staleness by), so a posting pass that has
-  // run since the stamp is a park with something new to say.
-  return postAttempts(next.curation) > postAttempts(current.curation) ? now : held
+  // run since the stamp is a park with something new to say. A challenge is the
+  // same shape: its verdict can land between two polls that both read the run
+  // parked, and the verdict is news to the curator who asked for it.
+  const reparked =
+    postAttempts(next.curation) > postAttempts(current.curation) ||
+    settledChallengeSince(current.curation, next.curation)
+  return reparked ? now : held
+}
+
+/**
+ * Whether a challenge on some finding has settled (a verdict, or a failure)
+ * since the row's picture, which held that finding with no settled challenge
+ * or a different one.
+ */
+function settledChallengeSince(
+  current: AiReviewCuration | null,
+  next: AiReviewCuration | null,
+): boolean {
+  const before = new Map(
+    (current?.findings ?? []).map((finding) => [finding.findingId, finding.challenge?.status]),
+  )
+  return (next?.findings ?? []).some((finding) => {
+    const status = finding.challenge?.status
+    return (
+      status !== undefined && status !== 'investigating' && before.get(finding.findingId) !== status
+    )
+  })
 }
 
 /** Posting passes this run has seen. None for a run carrying no review to curate. */

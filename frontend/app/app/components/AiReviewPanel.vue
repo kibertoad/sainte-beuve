@@ -77,6 +77,14 @@ async function dismiss(runId: string, findingId: string): Promise<void> {
   await act(() => api.dismissAiReviewFinding(runId, findingId), 'Could not dismiss it', findingId)
 }
 
+async function challenge(runId: string, findingId: string, question: string | null): Promise<void> {
+  await act(
+    () => api.challengeAiReviewFinding(runId, findingId, question),
+    'Could not challenge it',
+    `challenge:${findingId}`,
+  )
+}
+
 /**
  * Act on a curated selection.
  *
@@ -174,6 +182,7 @@ async function resume(runId: string): Promise<void> {
       :run="entry"
       :busy="busy"
       @dismiss="(findingId) => dismiss(entry.id, findingId)"
+      @challenge="(findingId, question) => challenge(entry.id, findingId, question)"
       @resolve="(action, findingIds) => resolve(entry.id, action, findingIds)"
       @resume="resume(entry.id)"
     />
