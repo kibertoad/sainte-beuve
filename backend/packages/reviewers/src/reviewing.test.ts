@@ -75,6 +75,7 @@ describe('assembleReviewLists', () => {
       pullRequest: pr('web', 4).pullRequest,
       title: 'A change',
       attentionRequestId: null,
+      requestedOnHost: false,
       createdAt: 0,
     }
     const found = input({

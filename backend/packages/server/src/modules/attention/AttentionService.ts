@@ -8,6 +8,7 @@ import type {
   Reviewer,
   ReviewCommitment,
 } from '@sainte-beuve/contracts'
+import { handleOf } from '@sainte-beuve/contracts'
 import { ConflictError, ForbiddenError, assertFound } from '@sainte-beuve/kernel'
 import {
   audienceRuleOf,
@@ -15,6 +16,10 @@ import {
   isInAttentionAudience,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import {
+  requestCommittedReviewer,
+  withdrawCommittedReviewer,
+} from '../../integrations/reviewRequests.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -152,7 +157,8 @@ export class AttentionService {
 
   /**
    * Hand it back. Returns what is left rather than an acknowledgement, because
-   * the third workspace column is what the caller is about to redraw.
+   * the third workspace column is what the caller is about to redraw. The host
+   * request goes with it only when this commitment made it.
    */
   async release(viewer: Reviewer, commitmentId: string): Promise<ReviewCommitment[]> {
     const { repositories } = this.container
@@ -164,6 +170,9 @@ export class AttentionService {
       throw new ForbiddenError('A commitment can only be released by the person who made it')
     }
     await repositories.commitments.delete(commitmentId)
+    if (commitment.requestedOnHost) {
+      await withdrawCommittedReviewer(this.container, commitment.pullRequest, viewer)
+    }
     return repositories.commitments.listByReviewer(viewer.id)
   }
 
@@ -172,6 +181,10 @@ export class AttentionService {
    * `(reviewer, pull request)` so a second click, or committing to a pull
    * request twice through two different asks, does not double-count the
    * promise in the workspace.
+   *
+   * The host is asked before the row is written, because the row records
+   * whether the request was ours. A write that fails after it leaves a request
+   * the retry finds pending, records as somebody else's, and never withdraws.
    */
   private async recordCommitment(
     viewer: Reviewer,
@@ -182,12 +195,16 @@ export class AttentionService {
     const { repositories, clock, ids } = this.container
     const existing = await repositories.commitments.find(viewer.id, pullRequest)
     if (existing !== null) return existing
+    const handle = handleOf(viewer.handles, pullRequest.provider)
+    const requestedOnHost =
+      handle !== null && (await requestCommittedReviewer(this.container, pullRequest, handle))
     return repositories.commitments.create({
       id: ids.next(),
       reviewerId: viewer.id,
       pullRequest,
       title,
       attentionRequestId,
+      requestedOnHost,
       createdAt: clock.now(),
     })
   }

@@ -85,6 +85,13 @@ interface GitLabMergeRequest {
   references?: { full?: string } | null
 }
 
+/** One entry of a merge request's reviewer list, with where that reviewer has got to. */
+interface GitLabReviewer {
+  user: GitLabUser
+  /** `unreviewed` until they act; anything else means they have started or finished. */
+  state?: string | null
+}
+
 export interface GitLabGatewayOptions {
   /** A personal or group access token, or the token a sign-in produced. */
   token: string
@@ -175,6 +182,21 @@ export class GitLabVcsGateway implements VcsGateway {
   async removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
     if (logins.length === 0) return
     await this.changeReviewers(pr, (current, named) => difference(current, named), logins)
+  }
+
+  /**
+   * GitLab keeps a reviewer on the list after they review, so the list alone
+   * cannot say who is pending; the per-reviewer state can. A missing state is
+   * read as acted on, because withdrawing from somebody who did review is the
+   * mistake that cannot be taken back.
+   */
+  async pendingReviewers(pr: PullRequestRef): Promise<string[]> {
+    const reviewers = await this.call<GitLabReviewer[]>({
+      path: `${mergeRequestPath(pr)}/reviewers`,
+    })
+    return reviewers
+      .filter((reviewer) => reviewer.state === 'unreviewed')
+      .map((reviewer) => reviewer.user.username)
   }
 
   async comment(pr: PullRequestRef, body: string): Promise<void> {

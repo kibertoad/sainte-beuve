@@ -186,6 +186,25 @@ describe('GitLabVcsGateway', () => {
     expect(calls.every((call) => call.method === 'GET')).toBe(true)
   })
 
+  it('counts as pending only the reviewers who have not acted yet', async () => {
+    const { fetchImpl, calls } = stub([
+      [
+        { user: { id: 2, username: 'alice' }, state: 'unreviewed' },
+        { user: { id: 3, username: 'bob' }, state: 'reviewed' },
+        { user: { id: 4, username: 'carol' }, state: 'approved' },
+        { user: { id: 5, username: 'dave' } },
+      ],
+    ])
+    const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
+
+    // GitLab keeps a reviewer on the list after they review; withdrawing from
+    // one who did would erase a review, so only `unreviewed` counts.
+    expect(await gateway.pendingReviewers(MR)).toStrictEqual(['alice'])
+    expect(calls[0]?.url).toBe(
+      'https://gitlab.com/api/v4/projects/platform%2Fbackend%2Fapi/merge_requests/12/reviewers',
+    )
+  })
+
   it('comments as a merge-request note', async () => {
     const { fetchImpl, calls } = stub([{}])
     const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })

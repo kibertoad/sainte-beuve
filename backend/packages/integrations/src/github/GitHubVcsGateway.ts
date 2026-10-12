@@ -214,6 +214,16 @@ export class GitHubVcsGateway implements VcsGateway {
     })
   }
 
+  /** GitHub drops a reviewer from this list when they submit a review, so it is pending by construction. */
+  async pendingReviewers(pr: PullRequestRef): Promise<string[]> {
+    const token = await this.options.tokens.tokenFor(pr.owner, pr.repo)
+    const requested = await this.get<{ users?: { login: string }[] | null }>(
+      repoPath(pr, `/pulls/${pr.number}/requested_reviewers`),
+      token,
+    )
+    return (requested.users ?? []).map((user) => user.login)
+  }
+
   async comment(pr: PullRequestRef, body: string): Promise<void> {
     await this.call(pr, {
       method: 'POST',

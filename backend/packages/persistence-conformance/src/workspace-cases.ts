@@ -176,7 +176,7 @@ export const attentionCases: readonly ConformanceCase[] = [
 
 export const commitmentCases: readonly ConformanceCase[] = [
   conformanceCase('a promise comes back with what it was made about', async (repos) => {
-    const written = commitment('c1', { attentionRequestId: 'a1' })
+    const written = commitment('c1', { attentionRequestId: 'a1', requestedOnHost: true })
     assert.deepStrictEqual(await repos.commitments.create(written), written)
     assert.deepStrictEqual(await repos.commitments.getById('c1'), written)
   }),

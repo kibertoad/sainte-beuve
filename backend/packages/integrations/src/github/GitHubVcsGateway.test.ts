@@ -112,6 +112,20 @@ describe('GitHubVcsGateway', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('reads who is still requested, which GitHub empties as each one reviews', async () => {
+    const { fetchImpl, calls } = stub(200, {
+      users: [{ login: 'alice' }, { login: 'bob' }],
+      teams: [{ slug: 'platform' }],
+    })
+    const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
+
+    expect(await gateway.pendingReviewers(PR)).toStrictEqual(['alice', 'bob'])
+    expect(calls[0]).toMatchObject({
+      method: 'GET',
+      path: '/repos/kibertoad/sainte-beuve/pulls/7/requested_reviewers',
+    })
+  })
+
   it('comments through the issues endpoint, because a pull request is an issue', async () => {
     const { fetchImpl, calls } = stub()
     const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })

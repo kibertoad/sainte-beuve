@@ -178,6 +178,7 @@ export function recordingVcs(): VcsGateway & {
       withdrawn.push(logins)
       void pr
     },
+    pendingReviewers: async () => [],
     comment: async (pr, body) => {
       comments.push({ body, number: pr.number })
     },

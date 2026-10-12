@@ -149,10 +149,14 @@ opened that you have a part in. It lists three things:
 
 - **Asked to review**: the host is waiting on your review. "I will review it"
   records a commitment.
-- **Committed to reviewing**: the promises you made here, whether or not the host
-  knows about them.
+- **Committed to reviewing**: the promises you made here.
 - **Reviewed**: still open, and you have reviewed them. One the host asks you to
   look at again moves back up to the first list.
+
+A commitment, made here or by answering an ask, requests your review on the
+host, so the pull request shows who took it. Releasing it takes that request
+back only if the commitment made it and you have not reviewed yet: a request the
+author or a board assignment made stays where it was.
 
 Like My PRs, it covers every repository the host search can see, and **Linked
 repositories only** narrows it to the registered projects. On GitLab, which keeps

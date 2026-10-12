@@ -31,6 +31,7 @@ export function viewerVcs(
     comments,
     requestReviewers: async () => {},
     removeRequestedReviewers: async () => {},
+    pendingReviewers: async () => [],
     comment: async (pr, body) => {
       comments.push({ number: pr.number, body })
     },

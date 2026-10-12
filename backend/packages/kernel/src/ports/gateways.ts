@@ -87,6 +87,13 @@ export interface VcsGateway {
    * and the notifications that come with it.
    */
   removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void>
+  /**
+   * The handles the host is still waiting on a review from: requested, and not
+   * answered yet. Somebody who has already reviewed is not in it, so a caller
+   * that withdraws only from this list never takes back a request somebody has
+   * acted on.
+   */
+  pendingReviewers(pr: PullRequestRef): Promise<string[]>
   /** Post a nudge or an AI-review verdict as a pull-request comment. */
   comment(pr: PullRequestRef, body: string): Promise<void>
   /**
