@@ -30,7 +30,7 @@ pull request is merged with its review findings fixed.
 | 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Not started |                                                          |
 | 8   | A commitment requests the reviewer on the host                | 3, 4 |            | In review   | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
 | 9   | One matching rule for assignment and asks                     | 2    | 2          | Not started |                                                          |
-| 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
+| 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | In review   | [#42](https://github.com/kibertoad/sainte-beuve/pull/42) |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
 | 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
 
