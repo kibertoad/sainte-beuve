@@ -6,6 +6,7 @@ import {
   buildHarness,
   environmentVcs,
   get,
+  openReview,
   PR,
   post,
   type TestHarness,
@@ -87,6 +88,11 @@ describe('an ask that names its reviewers', () => {
   it('refuses somebody who has paused', async () => {
     await asker.container.repositories.reviewers.update(gated.id, { availability: 'paused' })
     expect((await raise(asker, { recipientIds: [gated.id] })).status).toBe(400)
+  })
+
+  it("refuses the pull request's author, as the board row records them", async () => {
+    await openReview(asker, { authorLogin: 'NAMED' })
+    expect((await raise(asker, { recipientIds: [named.id] })).status).toBe(400)
   })
 
   it('refuses waiting for more people than it names', async () => {

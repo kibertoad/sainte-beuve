@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OpenPullRequest, Project } from '@sainte-beuve/contracts'
-import { MAX_NEEDED_COMMITMENTS } from '@sainte-beuve/contracts'
+import { MAX_ATTENTION_RECIPIENTS, MAX_NEEDED_COMMITMENTS } from '@sainte-beuve/contracts'
 import { blankToNull } from '../utils/text'
 
 // "Somebody please look at this."
@@ -32,11 +32,15 @@ const emit = defineEmits<{
   close: []
 }>()
 
+/** How many matches the dialog ranks until the author asks for more. */
+const FIRST_SHOWN = 5
+
 const selectedSkills = ref<string[]>([])
 const recipientIds = ref<string[]>([])
 const sameTeamOnly = ref(false)
-const neededCommitments = ref(1)
+const chosenCommitments = ref(1)
 const note = ref('')
+const shown = ref(FIRST_SHOWN)
 
 const open = computed({
   get: () => props.pullRequest !== null,
@@ -62,16 +66,29 @@ const skills = computed(() => {
   return project?.skills ?? []
 })
 
-const recommendations = useReviewerRecommendations(
-  computed(() => props.pullRequest?.pullRequest ?? null),
-  selectedSkills,
-)
+const recommendations = useReviewerRecommendations({
+  pullRequest: toRef(props, 'pullRequest'),
+  requiredSkills: selectedSkills,
+  sameTeamOnly,
+  limit: shown,
+})
 
-// Somebody ticked and then ranked out of the list by a new skill choice would
-// be asked without being on screen, so a fresh ranking drops them.
+// "Show more" goes as far as one ask can name, so anybody the author may name
+// can be put on screen first.
+const canShowMore = computed(() => {
+  const listed = recommendations.result.value?.recommendations.length ?? 0
+  return shown.value < MAX_ATTENTION_RECIPIENTS && listed >= shown.value
+})
+
+function showMore(): void {
+  shown.value = MAX_ATTENTION_RECIPIENTS
+}
+
+// Somebody ticked and then ranked out of the list by a new skill choice, or
+// hidden behind a failed ranking, would be asked without being on screen, so
+// every new answer drops whoever it does not list.
 watch(recommendations.result, (result) => {
-  if (result === null) return
-  const listed = new Set(result.recommendations.map((entry) => entry.reviewerId))
+  const listed = new Set(result?.recommendations.map((entry) => entry.reviewerId) ?? [])
   recipientIds.value = recipientIds.value.filter((id) => listed.has(id))
 })
 
@@ -85,8 +102,13 @@ const counts = computed(() => {
   return Array.from({ length: most }, (_, index) => index + 1)
 })
 
-watch(counts, (available) => {
-  neededCommitments.value = Math.min(neededCommitments.value, available.length)
+// The cap lifts again as more people are ticked, so ticking one person at a
+// time does not lose the count the author picked.
+const neededCommitments = computed({
+  get: () => Math.min(chosenCommitments.value, counts.value.length),
+  set: (value: number) => {
+    chosenCommitments.value = value
+  },
 })
 
 const submitLabel = computed(() => {
@@ -101,8 +123,9 @@ watch(
     selectedSkills.value = []
     recipientIds.value = []
     sameTeamOnly.value = false
-    neededCommitments.value = 1
+    chosenCommitments.value = 1
     note.value = ''
+    shown.value = FIRST_SHOWN
   },
 )
 
@@ -148,13 +171,16 @@ function submit() {
 
         <UFormField
           label="Best matches"
-          description="Ranked on the skills picked above, or the repository's when none are, and on its domains. Open reviews lower a reviewer's rank. Tick people to ask only them."
+          description="Ranked on how much of the wanted skills and domains each person holds, then on fewer open reviews. With no skill picked, the pull request's own are wanted. Tick people to ask only them; with nobody ticked the ask goes to everyone holding all the picked skills."
         >
           <ReviewerRecommendations
             v-model:selected="recipientIds"
             :result="recommendations.result.value"
             :pending="recommendations.pending.value"
             :failure="recommendations.failure.value"
+            :same-team-only="sameTeamOnly"
+            :can-show-more="canShowMore"
+            @more="showMore()"
           />
         </UFormField>
 
@@ -166,10 +192,13 @@ function submit() {
         </UFormField>
 
         <UCheckbox
-          v-if="!named"
           v-model="sameTeamOnly"
           label="Only my team"
-          description="Keeps the ask inside your own team. Nobody without a team recorded is in it."
+          :description="
+            named
+              ? 'Lists only your own team above. Nobody without a team recorded is in it.'
+              : 'Keeps the ask, and the list above, inside your own team. Nobody without a team recorded is in it.'
+          "
         />
 
         <UFormField label="Anything they should know" description="Optional.">

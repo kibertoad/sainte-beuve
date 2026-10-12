@@ -1,5 +1,5 @@
 import type { Workspace } from '@sainte-beuve/contracts'
-import { partitionForViewer } from '@sainte-beuve/reviewers'
+import { partitionForViewer, placeCommitments } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
@@ -29,7 +29,10 @@ export class WorkspaceService {
     const resolutions = new VcsResolutions(this.container)
     const viewer = await new ViewerService(this.container, this.principal, resolutions).current()
     const projects = await this.container.repositories.projects.list()
-    const reads = await sweepProjects(this.container, resolutions, projects)
+    const [reads, commitments] = await Promise.all([
+      sweepProjects(this.container, resolutions, projects),
+      this.container.repositories.commitments.listByReviewer(viewer.reviewer.id),
+    ])
     const pullRequests = reads.flatMap((read) => read.pullRequests)
     // The whole MAP of handles, not a flat list: each pull request is matched
     // against the name the viewer holds on its own host, so a stranger who
@@ -40,7 +43,7 @@ export class WorkspaceService {
       viewer,
       authored,
       reviewRequested,
-      committed: await this.container.repositories.commitments.listByReviewer(viewer.reviewer.id),
+      committed: placeCommitments(commitments, projects),
       sources: reads.map((read) => read.source),
     }
   }

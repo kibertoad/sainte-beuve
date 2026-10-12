@@ -168,6 +168,12 @@ export const reviewCommitmentSchema = v.object({
   title: v.string(),
   /** The ask this answered, when it answered one. */
   attentionRequestId: v.nullable(v.string()),
+  /**
+   * The handle this commitment requested on the host, or null when the request
+   * there is somebody else's or was never made. Releasing the commitment takes
+   * back only this request. Absent on rows stored before the host was told.
+   */
+  requestedHandle: v.optional(v.nullable(v.string()), null),
   createdAt: v.number(),
 })
 export type ReviewCommitment = v.InferOutput<typeof reviewCommitmentSchema>
