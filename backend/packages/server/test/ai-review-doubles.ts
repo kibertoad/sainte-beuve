@@ -40,6 +40,7 @@ export function aiFinding(
     severity: 'blocker',
     category: 'correctness',
     suggestedFix: null,
+    challenge: null,
     ...overrides,
   }
 }
@@ -54,6 +55,7 @@ export interface StubAiReview extends AiReviewGateway {
   dismissed: { runId: string; findingId: string }[]
   resolved: { runId: string; action: AiReviewResolution; findingIds: string[] }[]
   resumed: string[]
+  challenged: { runId: string; findingId: string; question: string | null }[]
   /** The workspace filing answers with. Null is the key's only workspace. */
   filedIn: string | null
   /** The workspace every poll and curation verb named, in order. */
@@ -94,6 +96,7 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
     dismissed: [],
     resolved: [],
     resumed: [],
+    challenged: [],
     filedIn: null,
     workspaces: [],
     polls: 0,
@@ -128,19 +131,61 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
       if (stub.pollFails) throw new UpstreamFailedError('cat-factory could not be reached')
       return stub.report
     },
-    dismissFinding: async ({ workspaceId, ...input }) => {
-      stub.workspaces.push(workspaceId)
-      stub.dismissed.push(input)
-      return afterDismissal(stub.report.curation, input.findingId)
-    },
-    resolveReview: async ({ workspaceId, ...input }) => {
-      stub.workspaces.push(workspaceId)
-      stub.resolved.push(input)
-    },
-    resumeReview: async ({ runId, workspaceId }) => {
-      stub.workspaces.push(workspaceId)
-      stub.resumed.push(runId)
-    },
+    ...curationVerbs(() => stub),
   }
   return stub
+}
+
+/** The curation half of the stub, recording each verb and the workspace it named. */
+function curationVerbs(
+  stubOf: () => StubAiReview,
+): Pick<AiReviewGateway, 'dismissFinding' | 'resolveReview' | 'resumeReview' | 'challengeFinding'> {
+  return {
+    dismissFinding: async ({ workspaceId, ...input }) => {
+      stubOf().workspaces.push(workspaceId)
+      stubOf().dismissed.push(input)
+      return afterDismissal(stubOf().report.curation, input.findingId)
+    },
+    resolveReview: async ({ workspaceId, ...input }) => {
+      stubOf().workspaces.push(workspaceId)
+      stubOf().resolved.push(input)
+    },
+    resumeReview: async ({ runId, workspaceId }) => {
+      stubOf().workspaces.push(workspaceId)
+      stubOf().resumed.push(runId)
+    },
+    challengeFinding: async ({ workspaceId, ...input }) => {
+      stubOf().workspaces.push(workspaceId)
+      stubOf().challenged.push(input)
+      stubOf().report = challenged(stubOf().report, input)
+    },
+  }
+}
+
+/**
+ * What cat-factory reports once it has accepted a challenge: the finding is
+ * investigating, and the review is no longer waiting on a person.
+ */
+function challenged(
+  report: AiReviewReport,
+  input: { findingId: string; question: string | null },
+): AiReviewReport {
+  const state = report.curation
+  if (state === null) return report
+  return {
+    ...report,
+    status: 'running',
+    curation: {
+      ...state,
+      status: 'challenging',
+      findings: state.findings.map((finding) =>
+        finding.findingId === input.findingId
+          ? {
+              ...finding,
+              challenge: { status: 'investigating', question: input.question, justification: null },
+            }
+          : finding,
+      ),
+    },
+  }
 }

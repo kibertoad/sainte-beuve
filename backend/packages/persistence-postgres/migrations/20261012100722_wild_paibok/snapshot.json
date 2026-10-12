@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "e9c856af-9e20-4da3-8850-7370b28ff2a6",
+  "id": "0dd7e97a-19ab-4933-8ab4-a5b11cd79807",
   "prevIds": ["3dd572fb-37c2-4aa8-8fdf-ee32eb587268"],
   "ddl": [
     {
@@ -19,12 +19,6 @@
     {
       "isRlsEnabled": false,
       "name": "attention_requests",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "external_directory",
       "entityType": "tables",
       "schema": "public"
     },
@@ -372,84 +366,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "attention_requests"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "org_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "external_directory"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "source",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "external_directory"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "external_directory"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "external_directory"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "seq",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "external_directory"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "data",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "external_directory"
     },
     {
       "type": "text",
@@ -1828,6 +1744,55 @@
           "opclass": null
         },
         {
+          "value": "pr_owner",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "pr_repo",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "review_requests_repo_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "review_requests"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "org_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
           "value": "reviewer_id",
           "isExpression": false,
           "asc": true,
@@ -1924,14 +1889,6 @@
       "entityType": "pks",
       "schema": "public",
       "table": "attention_requests"
-    },
-    {
-      "columns": ["org_id", "source", "kind", "key"],
-      "nameExplicit": false,
-      "name": "external_directory_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "external_directory"
     },
     {
       "columns": ["org_id", "source", "key"],

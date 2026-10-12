@@ -133,12 +133,12 @@ describe('loadConfig', () => {
   })
 
   it('ships the label conventions, overridable one at a time', () => {
-    expect(loadConfig({}).github.labels).toStrictEqual({
+    expect(loadConfig({}).labels).toStrictEqual({
       review: 'needs-review',
       aiReview: 'ai-review',
       skillPrefix: 'skill:',
     })
-    expect(loadConfig({ GITHUB_LABEL_REVIEW: 'review-me' }).github.labels).toStrictEqual({
+    expect(loadConfig({ GITHUB_LABEL_REVIEW: 'review-me' }).labels).toStrictEqual({
       review: 'review-me',
       aiReview: 'ai-review',
       skillPrefix: 'skill:',

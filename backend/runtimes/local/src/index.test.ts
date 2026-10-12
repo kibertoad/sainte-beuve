@@ -27,12 +27,12 @@ describe('localConfig', () => {
   it('ships the label conventions a team types on a pull request', () => {
     // Defaults rather than nothing: the labels are the way GitHub drives the
     // board, so a local run has to answer to the same ones a deployment does.
-    expect(localConfig({}).github.labels).toStrictEqual({
+    expect(localConfig({}).labels).toStrictEqual({
       review: 'needs-review',
       aiReview: 'ai-review',
       skillPrefix: 'skill:',
     })
-    expect(localConfig({ GITHUB_LABEL_REVIEW: 'review-me' }).github.labels.review).toBe('review-me')
+    expect(localConfig({ GITHUB_LABEL_REVIEW: 'review-me' }).labels.review).toBe('review-me')
   })
 
   it('reads a GitHub App only when both halves of the credential are set', () => {

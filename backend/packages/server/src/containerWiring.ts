@@ -1,4 +1,4 @@
-import type { GitHubLabelRules } from '@sainte-beuve/contracts'
+import type { ReviewLabelRules } from '@sainte-beuve/contracts'
 import type {
   AppContainer,
   AuthWiring,
@@ -11,11 +11,11 @@ import type {
 // every default in one place.
 
 /**
- * The default reviewer-facing labels. Every rule is a plain string rather than a
- * pattern, because the thing a team has to be able to do is read the label off
- * the Configuration screen and type it onto a pull request.
+ * The default reviewer-facing labels, on every host. Every rule is a plain
+ * string rather than a pattern, because the thing a team has to be able to do is
+ * read the label off the Configuration screen and type it onto a pull request.
  */
-export const DEFAULT_GITHUB_LABELS: GitHubLabelRules = {
+export const DEFAULT_REVIEW_LABELS: ReviewLabelRules = {
   review: 'needs-review',
   aiReview: 'ai-review',
   skillPrefix: 'skill:',
@@ -42,16 +42,18 @@ function configuredOr(value: string | undefined, fallback: string): string {
 }
 
 export function githubWiring(options: Partial<GitHubWiring> | undefined): GitHubWiring {
-  const labels = options?.labels
   return {
     appSlug: configured(options?.appSlug),
     webhookSecret: configured(options?.webhookSecret),
     botLogin: configured(options?.botLogin),
-    labels: {
-      review: configuredOr(labels?.review, DEFAULT_GITHUB_LABELS.review),
-      aiReview: configuredOr(labels?.aiReview, DEFAULT_GITHUB_LABELS.aiReview),
-      skillPrefix: configuredOr(labels?.skillPrefix, DEFAULT_GITHUB_LABELS.skillPrefix),
-    },
+  }
+}
+
+export function labelWiring(labels: Partial<ReviewLabelRules> | undefined): ReviewLabelRules {
+  return {
+    review: configuredOr(labels?.review, DEFAULT_REVIEW_LABELS.review),
+    aiReview: configuredOr(labels?.aiReview, DEFAULT_REVIEW_LABELS.aiReview),
+    skillPrefix: configuredOr(labels?.skillPrefix, DEFAULT_REVIEW_LABELS.skillPrefix),
   }
 }
 

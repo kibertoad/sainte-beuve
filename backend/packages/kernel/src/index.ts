@@ -39,17 +39,25 @@ export type {
   CatFactoryProbe,
   CatFactoryProbeReport,
   CatFactoryReviewTarget,
+  AttentionAskNotice,
   ChatGateway,
+  ChatMessageRef,
   GatewayFactory,
-  GuidedReviewGateway,
-  GuidedReviewWatchEvent,
+} from './ports/gateways.js'
+export type {
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewerTally,
   VcsAccount,
   VcsGateway,
   VcsIdentityGateway,
-} from './ports/gateways.js'
+} from './ports/vcs.js'
+export type {
+  GuidedReviewGateway,
+  GuidedReviewSessionRef,
+  GuidedReviewWatchEvent,
+} from './ports/guided-review.js'
 export type {
   IntegrationConfigRepository,
   StoredIntegrationConfig,
@@ -57,8 +65,13 @@ export type {
 export type { AttentionBus, RealtimeKind, ScopedAttentionBus } from './ports/realtime.js'
 export { isStoredRowError, StoredRowError } from './ports/stored-row.js'
 export type {
-  AiReviewRunRepository,
   ApiKeyRepository,
+  SessionRepository,
+  StoredApiKey,
+  StoredSession,
+} from './ports/auth.js'
+export type {
+  AiReviewRunRepository,
   IdentityRepository,
   IntegrationTokenRepository,
   PersistenceKind,
@@ -68,10 +81,7 @@ export type {
   ReviewerRepository,
   ReviewListOrder,
   ReviewRequestRepository,
-  SessionRepository,
-  StoredApiKey,
   StoredIntegrationToken,
-  StoredSession,
 } from './ports/repositories.js'
 export type { ExternalRepositoryRepository } from './ports/external-repositories.js'
 export type { ExternalDirectoryRepository } from './ports/external-directory.js'

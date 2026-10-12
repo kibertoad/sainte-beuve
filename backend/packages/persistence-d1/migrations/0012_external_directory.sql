@@ -5,7 +5,7 @@
 -- still refuses an older state.
 --
 -- The Postgres adapter carries the same change as
--- `migrations/20261012103439_spotty_luke_cage/migration.sql`.
+-- `migrations/20261012114359_lovely_roughhouse/migration.sql`.
 CREATE TABLE IF NOT EXISTS external_directory (
   org_id TEXT NOT NULL,
   source TEXT NOT NULL,

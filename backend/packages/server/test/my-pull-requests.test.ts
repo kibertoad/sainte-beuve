@@ -215,7 +215,7 @@ describe('a member on a restricted project', () => {
       authorizeUrl: ({ state }) => `https://github.com/login/oauth/authorize?state=${state}`,
       exchangeCode: async () => ({
         token: 'gho_token',
-        account: { subject, username, displayName: username, avatarUrl: null },
+        account: { subject, username, displayName: username, avatarUrl: null, bot: false },
       }),
     }
     return buildHarness(

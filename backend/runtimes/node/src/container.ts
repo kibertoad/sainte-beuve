@@ -63,8 +63,8 @@ export function buildContainer(config: NodeConfig, store: NodeStore, logger: Log
       appSlug: config.github.appSlug,
       webhookSecret: config.github.webhookSecret,
       botLogin: config.github.botLogin,
-      labels: config.github.labels,
     },
+    labels: config.labels,
     slack: {
       signingSecret: config.slack.signingSecret,
       announcementChannelId: config.slack.channelId,

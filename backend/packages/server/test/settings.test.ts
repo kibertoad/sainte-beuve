@@ -68,6 +68,7 @@ describe('integration configuration API', () => {
       'gitlab-pat',
       'slack-bot-token',
       'slack-signing-secret',
+      'gitlab-webhook-secret',
       'cat-factory',
     ])
     expect(await statusOf(harness)).toStrictEqual(status())
@@ -213,6 +214,7 @@ describe('integration configuration API', () => {
       sealed: 'v1.',
       hint: '5b4a',
       subject: null,
+      subjectIsBot: false,
       updatedAt: harness.clock.now(),
     })
     expect(await statusOf(harness)).toMatchObject({
@@ -294,12 +296,14 @@ describe('a pasted GitHub credential', () => {
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
           lookupRepositories: async () => null,
+          pastReviewers: async () => [],
           ...noMerging(),
           identify: async () => ({
             subject: '4249249',
             username: 'kibertoad',
             displayName: null,
             avatarUrl: null,
+            bot: false,
           }),
         }),
       }),
@@ -326,6 +330,7 @@ describe('a pasted GitHub credential', () => {
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
           lookupRepositories: async () => null,
+          pastReviewers: async () => [],
           ...noMerging(),
           identify: () => Promise.reject(refused),
         }),

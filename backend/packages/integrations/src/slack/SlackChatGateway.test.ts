@@ -1,4 +1,4 @@
-import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
+import type { AttentionRequest, Reminder, ReviewRequest } from '@sainte-beuve/contracts'
 import { boardReviewUrl } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { SlackChatGateway } from './SlackChatGateway.js'
@@ -38,6 +38,31 @@ const reminder: Reminder = {
   failureReason: null,
   createdAt: 0,
 }
+
+const ask: AttentionRequest = {
+  id: 'att-1',
+  pullRequest: review.pullRequest,
+  title: 'Add a health check',
+  requestedById: 'rvw-2',
+  requestedByName: 'Igor',
+  recipients: [{ reviewerId: 'rvw-1', displayName: 'Ada' }],
+  chatDeliveries: [],
+  declines: [],
+  keepAsking: false,
+  people: null,
+  requiredSkills: [],
+  sameTeamOnly: false,
+  team: null,
+  neededCommitments: 1,
+  commitments: [],
+  note: null,
+  status: 'open',
+  createdAt: 0,
+  updatedAt: 0,
+  resolvedAt: null,
+}
+
+const notice = { request: ask, recipientId: 'rvw-1', matchedSkills: [], matchedDomains: [] }
 
 function stubFetch(body: unknown, status = 200) {
   const calls: { url: string; payload: Record<string, unknown> }[] = []
@@ -81,6 +106,50 @@ describe('SlackChatGateway', () => {
     expect(calls[0]?.payload.text).toContain(
       boardReviewUrl('https://sainte-beuve.example.com', 'rev-1'),
     )
+  })
+
+  it('DMs an attention ask to the user and answers with the DM conversation, not the user', async () => {
+    const { impl, calls } = stubFetch({ ok: true, channel: 'D777', ts: '1700000000.000200' })
+    const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
+
+    const message = await gateway.sendAttentionAsk(notice, 'U123')
+
+    expect(message).toStrictEqual({ conversationId: 'D777', messageId: '1700000000.000200' })
+    expect(calls[0]?.url).toBe('https://slack.com/api/chat.postMessage')
+    expect(calls[0]?.payload.channel).toBe('U123')
+    expect(calls[0]?.payload.text).toContain('Igor asks you to review')
+  })
+
+  it('refuses a DM reply that does not say where it landed, as it could never be updated', async () => {
+    const { impl } = stubFetch({ ok: true, ts: '1700000000.000200' })
+    const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
+
+    await expect(gateway.sendAttentionAsk(notice, 'U123')).rejects.toThrow('did not say where')
+  })
+
+  it('updates a delivered ask in place, by its conversation and timestamp', async () => {
+    const { impl, calls } = stubFetch({ ok: true })
+    const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
+
+    await gateway.updateAttentionAsk(
+      { ...notice, request: { ...ask, status: 'cancelled' } },
+      { conversationId: 'D777', messageId: '1700000000.000200' },
+    )
+
+    expect(calls[0]?.url).toBe('https://slack.com/api/chat.update')
+    expect(calls[0]?.payload).toMatchObject({ channel: 'D777', ts: '1700000000.000200' })
+    expect(calls[0]?.payload.text).toContain('withdrew')
+  })
+
+  it('DMs the requester of a short ask to their user id', async () => {
+    const { impl, calls } = stubFetch({ ok: true, channel: 'D888', ts: '1700000000.000300' })
+    const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
+
+    await gateway.sendAttentionShort(ask, 'U-igor')
+
+    expect(calls[0]?.url).toBe('https://slack.com/api/chat.postMessage')
+    expect(calls[0]?.payload).toMatchObject({ channel: 'U-igor' })
+    expect(calls[0]?.payload.text).toContain('are left to answer')
   })
 
   it('treats an ok:false 200 as a failure, carrying the slug an operator can act on', async () => {

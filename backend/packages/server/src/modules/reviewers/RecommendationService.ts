@@ -9,10 +9,12 @@ import {
   distinctAsSpelled,
   excludedFromReview,
   matchTargetFor,
+  pastReviewCounts,
   rankCandidates,
   reviewersWithHandles,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { readReviewHistory } from './pastReviews.js'
 
 /**
  * Who an author asking for attention should pick for a pull request, best first.
@@ -26,12 +28,26 @@ export class RecommendationService {
   constructor(private readonly container: AppContainer) {}
 
   async recommend(viewer: Reviewer, input: RecommendReviewers): Promise<ReviewerRecommendations> {
+    const { target, ranked, shortfallReason } = await this.rank(viewer, input)
+    return {
+      wanted: {
+        skills: distinctAsSpelled(target.skills),
+        domains: distinctAsSpelled(target.domains),
+      },
+      recommendations: ranked.map(toRecommendation),
+      shortfallReason,
+    }
+  }
+
+  /** The ranking `recommend` answers with, each candidate with their directory entry. */
+  async rank(viewer: Reviewer, input: RecommendReviewers) {
     const { repositories } = this.container
     const { pullRequest } = input
-    const [candidates, project, boardRow] = await Promise.all([
+    const [candidates, project, boardRow, history] = await Promise.all([
       repositories.reviewers.list(),
       repositories.projects.getByRef(pullRequest),
       repositories.reviews.getByPullRequest(pullRequest),
+      readReviewHistory(this.container, pullRequest),
     ])
     // The board looks a row up by owner, repo and number alone, so a row from
     // the other host under the same names is not this pull request.
@@ -48,16 +64,10 @@ export class RecommendationService {
       candidates,
       audience: { requestedById: viewer.id, team: viewer.team, sameTeamOnly: input.sameTeamOnly },
       excludeReviewerIds: excluded(input, review, candidates),
+      pastReviews: pastReviewCounts(history, candidates, pullRequest.provider),
       limit: input.limit,
     })
-    return {
-      wanted: {
-        skills: distinctAsSpelled(target.skills),
-        domains: distinctAsSpelled(target.domains),
-      },
-      recommendations: ranked.map(toRecommendation),
-      shortfallReason,
-    }
+    return { target, ranked, shortfallReason }
   }
 }
 
@@ -87,6 +97,7 @@ function toRecommendation(candidate: ScoredCandidate) {
       matchedSkills: candidate.matchedSkills,
       matchedDomains: candidate.matchedDomains,
       outstandingReviews: candidate.reviewer.outstandingReviews,
+      pastReviews: candidate.pastReviews,
     },
   }
 }

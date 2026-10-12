@@ -13,10 +13,12 @@ import {
   excludedFromReview,
   isSettledReview,
   matchTargetFor,
+  pastReviewCounts,
   selectReviewers,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
+import { readReviewHistory } from '../reviewers/pastReviews.js'
 import { announceReview } from './announce.js'
 import { boardWithdrawals, mirrorAssignment } from '../../integrations/reviewRequests.js'
 
@@ -227,9 +229,10 @@ export class ReviewService {
   ): Promise<AssignReviewersResult> {
     const { repositories, random } = this.container
     const provider = review.pullRequest.provider
-    const [candidates, project] = await Promise.all([
+    const [candidates, project, history] = await Promise.all([
       repositories.reviewers.list(),
       repositories.projects.getByRef(review.pullRequest),
+      readReviewHistory(this.container, review.pullRequest),
     ])
     const result = selectReviewers(
       {
@@ -239,6 +242,7 @@ export class ReviewService {
         // than by the caller: a client that forgot would otherwise get a reviewer
         // reviewing their own pull request, which the router must never produce.
         excludeReviewerIds: [...input.exclude, ...excludedFromReview(review, candidates)],
+        pastReviews: pastReviewCounts(history, candidates, provider),
         count: input.count,
       },
       random,

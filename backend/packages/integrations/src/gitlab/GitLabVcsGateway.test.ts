@@ -227,9 +227,17 @@ describe('GitLabVcsGateway', () => {
       username: 'igor.savin',
       displayName: 'Igor',
       avatarUrl: null,
+      bot: false,
     })
     await gateway.identify()
     expect(calls).toHaveLength(1)
+  })
+
+  it('reports an access token or service account user as a bot', async () => {
+    const { fetchImpl } = stub([{ id: 78, username: 'project_9_bot_ab12', bot: true }])
+    const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
+
+    expect(await gateway.identify()).toMatchObject({ username: 'project_9_bot_ab12', bot: true })
   })
 
   it('reaches a self-managed install at its own root', async () => {

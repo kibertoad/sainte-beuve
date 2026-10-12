@@ -40,7 +40,7 @@ function stubSignIn(username = 'kibertoad'): VcsIdentityGateway {
     authorizeUrl: ({ state }) => `https://github.com/login/oauth/authorize?state=${state}`,
     exchangeCode: async ({ code }) => ({
       token: `gho_${code}_token`,
-      account: { subject: '4249249', username, displayName: 'Igor', avatarUrl: null },
+      account: { subject: '4249249', username, displayName: 'Igor', avatarUrl: null, bot: false },
     }),
   }
 }

@@ -338,6 +338,12 @@ fourth read across the boundary and a workspace-to-org table, and it would still
 have to be TRUSTED before a signature had been checked against anything.
 `TenancyDirectory` stays at three methods.
 
+GitLab's webhook is placed the same way, at `/webhooks/gitlab` and
+`/webhooks/gitlab/<slug>`, against `gitlab-webhook-secret` in the org's store.
+It has no deployment fallback at all, because a GitLab credential is always an
+org's. The project registry is checked as well, so a verified delivery about a
+project the org never registered is dropped rather than acted on.
+
 The same rule covers the rest of the deployment's Slack app, and it has to: the
 bot token and the announcement channel `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID`
 describe belong to that same app, which is the default org's. Lending the secret
