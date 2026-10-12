@@ -18,7 +18,7 @@ ON CONFLICT (org_id, id) DO UPDATE SET
   revision = attention_requests.revision + 1`
 
 const ATTENTION_WRITE_IF = `UPDATE attention_requests
-SET status = ?, data = ?, revision = revision + 1
+SET status = ?, created_at = ?, data = ?, revision = revision + 1
 WHERE org_id = ? AND id = ? AND revision = ?
 RETURNING id`
 
@@ -74,6 +74,7 @@ export class SqlAttentionRepository implements AttentionRepository {
       writeIf: async (next, expected) => {
         const row = await this.db.first(ATTENTION_WRITE_IF, [
           next.status,
+          next.createdAt,
           encodeData(next),
           this.orgId,
           attentionId,

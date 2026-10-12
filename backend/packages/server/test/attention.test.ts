@@ -148,7 +148,7 @@ describe('answering an attention request', () => {
     const peer = buildHarness({ ...asker.container, vcs: environmentVcs(viewerVcs('peer')) })
     const other = buildHarness({ ...asker.container, vcs: environmentVcs(viewerVcs('other')) })
 
-    // Both read the ask before either writes, which is what used to drop one.
+    // Both read the ask before either writes.
     await Promise.all([
       peer.app.fetch(post(`${ATTENTION}/${request.id}/commit`, {})),
       other.app.fetch(post(`${ATTENTION}/${request.id}/commit`, {})),

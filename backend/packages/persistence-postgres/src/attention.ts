@@ -61,7 +61,12 @@ export class PostgresAttentionRepository implements AttentionRepository {
       writeIf: async (next, expected) => {
         const written = await this.db
           .update(attentionRequests)
-          .set({ status: next.status, data: next, revision: expected + 1 })
+          .set({
+            status: next.status,
+            createdAt: next.createdAt,
+            data: next,
+            revision: expected + 1,
+          })
           .where(and(row, eq(attentionRequests.revision, expected)))
           .returning({ id: attentionRequests.id })
         return written.length > 0

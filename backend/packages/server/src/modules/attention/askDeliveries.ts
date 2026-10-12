@@ -35,9 +35,10 @@ export async function sendAskDms(
   if (chatDeliveries.length === 0) return request
   let recorded: AttentionRequest
   try {
-    recorded = await changeAsk(container, request.id, (stored) =>
+    const changed = await changeAsk(container, request.id, (stored) =>
       deliveriesChange(stored, chatDeliveries),
     )
+    recorded = changed.request
   } catch (err) {
     container.logger.warn({ err, attentionId: request.id }, 'could not record the DMs of an ask')
     return request

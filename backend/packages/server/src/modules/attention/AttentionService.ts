@@ -139,16 +139,13 @@ export class AttentionService {
     // Read off the change as the store last ran it: a commitment of theirs that
     // landed in between writes nothing, and only the one that completes the
     // ask resolves it.
-    const made = { wrote: false, resolved: false }
-    const updated = await changeAsk(this.container, attentionId, (stored) => {
-      const patch = commitmentChange(stored, commitment)
-      made.wrote = patch !== null
-      made.resolved = patch?.status === 'resolved'
-      return patch
-    })
-    if (!made.wrote) return updated
-    this.publish(made.resolved ? 'resolved' : 'committed', updated)
-    await refreshAskDeliveries(this.container, updated, made.resolved ? null : viewer.id)
+    const { request: updated, patch } = await changeAsk(this.container, attentionId, (stored) =>
+      commitmentChange(stored, commitment),
+    )
+    if (patch === null) return updated
+    const resolved = patch.status === 'resolved'
+    this.publish(resolved ? 'resolved' : 'committed', updated)
+    await refreshAskDeliveries(this.container, updated, resolved ? null : viewer.id)
     return updated
   }
 
@@ -164,9 +161,8 @@ export class AttentionService {
     attentionId: string,
     reason: string | null,
   ): Promise<AttentionRequest> {
-    const request = await this.requireOpen(attentionId)
-    const refusal = declineRefusal(request, viewer)
-    if (refusal !== null) throw declineError(refusal, attentionId)
+    const request = await this.require(attentionId)
+    refuseDecline(request, viewer)
     const decline = {
       reviewerId: viewer.id,
       displayName: viewer.displayName,
@@ -177,9 +173,12 @@ export class AttentionService {
     // short: a decline landing alongside this one can leave it short by the
     // time the change is worked out against the stored ask.
     const candidates = request.keepAsking ? await rankedCandidates(this.container, request) : []
-    const updated = await this.applyChange(attentionId, (stored) =>
-      declineChange(stored, decline, candidates),
-    )
+    // Refused again on the ask as stored: it may have closed, or they may have
+    // committed in another tab, since it was read above.
+    const updated = await this.applyChange(attentionId, (stored) => {
+      refuseDecline(stored, viewer)
+      return declineChange(stored, decline, candidates)
+    })
     this.publish('declined', updated.request)
     await refreshAskDeliveries(this.container, updated.request, viewer.id)
     await tellRequesterShort(this.container, request, updated.request)
@@ -219,9 +218,10 @@ export class AttentionService {
     if (askMoreChange(request, candidates, count(request), now).asked.length === 0) {
       throw new ConflictError('Nobody else is available to ask', { attentionId })
     }
-    const updated = await this.applyChange(attentionId, (stored) =>
-      askMoreChange(stored, candidates, count(stored), now),
-    )
+    const updated = await this.applyChange(attentionId, (stored) => {
+      refuseClosed(stored)
+      return askMoreChange(stored, candidates, count(stored), now)
+    })
     this.publish('asked', updated.request)
     return sendAskDms(this.container, updated.request, updated.asked)
   }
@@ -234,13 +234,10 @@ export class AttentionService {
     }
     if (request.status !== 'open') return request
     const now = this.container.clock.now()
-    const made = { cancelled: false }
-    const updated = await changeAsk(this.container, attentionId, (stored) => {
-      const patch = cancelChange(stored, now)
-      made.cancelled = patch !== null
-      return patch
-    })
-    if (!made.cancelled) return updated
+    const { request: updated, patch } = await changeAsk(this.container, attentionId, (stored) =>
+      cancelChange(stored, now),
+    )
+    if (patch === null) return updated
     this.publish('cancelled', updated)
     await refreshAskDeliveries(this.container, updated, null)
     return updated
@@ -305,9 +302,7 @@ export class AttentionService {
 
   private async requireOpen(attentionId: string): Promise<AttentionRequest> {
     const request = await this.require(attentionId)
-    if (request.status !== 'open') {
-      throw new ConflictError(`This request is already ${request.status}`, { attentionId })
-    }
+    refuseClosed(request)
     return request
   }
 
@@ -320,7 +315,7 @@ export class AttentionService {
     decide: (stored: AttentionRequest) => AttentionChange,
   ): Promise<{ request: AttentionRequest; asked: Reviewer[] }> {
     let asked: Reviewer[] = []
-    const request = await changeAsk(this.container, attentionId, (stored) => {
+    const { request } = await changeAsk(this.container, attentionId, (stored) => {
       const change = decide(stored)
       asked = change.asked
       return change.patch
@@ -338,6 +333,21 @@ export class AttentionService {
   private publish(kind: AttentionEventKind, request: AttentionRequest): void {
     this.container.bus.publish({ kind, request })
   }
+}
+
+function refuseClosed(request: AttentionRequest): void {
+  if (request.status !== 'open') {
+    throw new ConflictError(`This request is already ${request.status}`, {
+      attentionId: request.id,
+    })
+  }
+}
+
+/** Throws for a decline this person cannot make on the ask as it stands. */
+function refuseDecline(request: AttentionRequest, viewer: Reviewer): void {
+  refuseClosed(request)
+  const refusal = declineRefusal(request, viewer)
+  if (refusal !== null) throw declineError(refusal, request.id)
 }
 
 function declineError(

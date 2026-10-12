@@ -144,8 +144,11 @@ export const attentionChangeCases: readonly ConformanceCase[] = [
       repos.attention.change('a1', declineBy('r2')),
       repos.attention.change('a1', ask('r3')),
       repos.attention.change('a1', deliverTo('r3')),
+      repos.attention.change('a1', () => ({ status: 'resolved', resolvedAt: 3_000 })),
     ])
     const stored = await repos.attention.getById('a1')
+    assert.strictEqual(stored?.status, 'resolved')
+    assert.deepStrictEqual(await repos.attention.list({ status: ['resolved'] }), [stored])
     assert.deepStrictEqual(reviewerIds(stored?.commitments), ['r1'])
     assert.deepStrictEqual(reviewerIds(stored?.declines), ['r2'])
     assert.deepStrictEqual(reviewerIds(stored?.recipients), ['r3'])
