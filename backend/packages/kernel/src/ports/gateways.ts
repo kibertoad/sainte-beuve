@@ -2,6 +2,7 @@ import type {
   AiReviewCuration,
   AiReviewResolution,
   AskGuidedReviewInput,
+  AttentionRequest,
   EditGuidedReviewDraftInput,
   GuidedReviewCommentDraft,
   GuidedReviewExchange,
@@ -42,12 +43,34 @@ export interface PullRequestSearch {
   role: PullRequestSearchRole
 }
 
+/** Where a chat message landed: the conversation (a DM's own id, not the user's) and the message in it. */
+export interface ChatMessageRef {
+  conversationId: string
+  messageId: string
+}
+
+/**
+ * An attention ask as one recipient sees it. The matched skills and domains say
+ * why they were asked; they are empty when the message is re-rendered after the
+ * ask has moved on, because a closed ask has nothing left to persuade anybody of.
+ */
+export interface AttentionAskNotice {
+  request: AttentionRequest
+  recipientId: string
+  matchedSkills: readonly string[]
+  matchedDomains: readonly string[]
+}
+
 /** Chat delivery (Slack today). */
 export interface ChatGateway {
   /** Announce a new review request to the team channel. Returns the message id, for threading. */
   announceReview(review: ReviewRequest, channelId: string): Promise<{ messageId: string }>
   /** Deliver one scheduled nudge. `target` is a Slack user id for a DM, a channel id otherwise. */
   sendReminder(reminder: Reminder, review: ReviewRequest, target: string): Promise<void>
+  /** DM one person an ask addressed to them. `target` is their Slack user id. */
+  sendAttentionAsk(notice: AttentionAskNotice, target: string): Promise<ChatMessageRef>
+  /** Re-render a delivered ask in the state its request is in now. */
+  updateAttentionAsk(notice: AttentionAskNotice, message: ChatMessageRef): Promise<void>
 }
 
 /**

@@ -49,6 +49,18 @@ export const attentionRecipientSchema = v.object({
 })
 export type AttentionRecipient = v.InferOutput<typeof attentionRecipientSchema>
 
+/**
+ * A chat message an ask was delivered as, kept so the message can be updated
+ * when the ask resolves or is withdrawn, rather than keep offering a button on
+ * an ask that is closed. The conversation is the DM's own id, not the person's.
+ */
+export const attentionDeliverySchema = v.object({
+  reviewerId: v.string(),
+  conversationId: v.string(),
+  messageId: v.string(),
+})
+export type AttentionDelivery = v.InferOutput<typeof attentionDeliverySchema>
+
 export const attentionRequestSchema = v.object({
   id: v.string(),
   pullRequest: pullRequestRefSchema,
@@ -62,6 +74,8 @@ export const attentionRequestSchema = v.object({
    * request stored before names existed decodes as a gated one.
    */
   recipients: v.optional(v.array(attentionRecipientSchema), () => []),
+  /** The chat DMs the named recipients were sent. A factory default, like `recipients`. */
+  chatDeliveries: v.optional(v.array(attentionDeliverySchema), () => []),
   /**
    * Skills a person must ALL have to be in the audience. Empty means everybody
    * available. Kept on a named ask as what the requester was looking for.

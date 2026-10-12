@@ -1,7 +1,6 @@
 import type {
   AttentionEvent,
   AttentionEventKind,
-  AttentionRecipient,
   AttentionRequest,
   CreateAttentionRequest,
   CreateReviewCommitment,
@@ -16,6 +15,7 @@ import {
   isInAttentionAudience,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { deliverAsk, refreshAskDeliveries } from './askDeliveries.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -45,9 +45,13 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
-    const recipients = await this.resolveRecipients(viewer, input)
+    const named = await this.resolveRecipients(viewer, input)
+    const recipients = named.map((reviewer) => ({
+      reviewerId: reviewer.id,
+      displayName: reviewer.displayName,
+    }))
     const now = clock.now()
-    const request = await repositories.attention.create({
+    const draft: AttentionRequest = {
       id: ids.next(),
       pullRequest: input.pullRequest,
       title: input.title,
@@ -67,7 +71,13 @@ export class AttentionService {
       createdAt: now,
       updatedAt: now,
       resolvedAt: null,
-    })
+      chatDeliveries: [],
+    }
+    // The DMs go out BEFORE the row is stored, so the one write carries where
+    // they landed. Stored first and patched after, a commit landing between
+    // the two writes would be overwritten by the patch, or overwrite it.
+    const chatDeliveries = await deliverAsk(this.container, draft, named)
+    const request = await repositories.attention.create({ ...draft, chatDeliveries })
     this.publish('opened', request)
     return request
   }
@@ -124,6 +134,7 @@ export class AttentionService {
       `No attention request ${attentionId}`,
     )
     this.publish(satisfied ? 'resolved' : 'committed', updated)
+    await refreshAskDeliveries(this.container, updated, satisfied ? null : viewer.id)
     return updated
   }
 
@@ -142,6 +153,7 @@ export class AttentionService {
       `No attention request ${attentionId}`,
     )
     this.publish('cancelled', updated)
+    await refreshAskDeliveries(this.container, updated, null)
     return updated
   }
 
@@ -204,7 +216,7 @@ export class AttentionService {
   private async resolveRecipients(
     viewer: Reviewer,
     input: CreateAttentionRequest,
-  ): Promise<AttentionRecipient[]> {
+  ): Promise<Reviewer[]> {
     const wanted = [...new Set(input.recipientIds)]
     if (wanted.length === 0) return []
     if (wanted.length < input.neededCommitments) {
@@ -231,7 +243,7 @@ export class AttentionService {
           reviewerId,
         })
       }
-      return { reviewerId: reviewer.id, displayName: reviewer.displayName }
+      return reviewer
     })
   }
 

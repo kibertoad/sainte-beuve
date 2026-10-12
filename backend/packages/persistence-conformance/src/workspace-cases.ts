@@ -154,6 +154,13 @@ export const attentionCases: readonly ConformanceCase[] = [
     },
   ),
 
+  conformanceCase('an ask keeps where its DMs landed through a later update', async (repos) => {
+    const chatDeliveries = [{ reviewerId: 'r1', conversationId: 'D1', messageId: '17.1' }]
+    await repos.attention.create(attentionRequest('a1', { chatDeliveries }))
+    await repos.attention.update('a1', { status: 'resolved', resolvedAt: 2_000 })
+    assert.deepStrictEqual((await repos.attention.getById('a1'))?.chatDeliveries, chatDeliveries)
+  }),
+
   conformanceCase('lists the asks newest first, ties on the id', async (repos) => {
     await repos.attention.create(attentionRequest('a1', { createdAt: 1_000 }))
     await repos.attention.create(attentionRequest('a2', { createdAt: 2_000 }))
