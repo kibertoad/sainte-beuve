@@ -1,9 +1,9 @@
 import type { AttentionRequest, AttentionStatus, ReviewCommitment } from '@sainte-beuve/contracts'
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
 import { pullRequestKey } from '@sainte-beuve/kernel'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
-import { firstOr, patched } from './rows.js'
+import { firstOr } from './rows.js'
 import { attentionRequests, reviewCommitments } from './schema.js'
 
 /** The asks in flight, and the promises people made against pull requests. */
@@ -42,15 +42,26 @@ export class PostgresAttentionRepository implements AttentionRepository {
     return request
   }
 
+  /**
+   * One statement that merges the patch into the stored payload, so an update
+   * never writes back fields it did not name from a read another writer has
+   * since overtaken. `RETURNING` answers with the row both writes left.
+   */
   async update(
     attentionId: string,
     patch: Partial<AttentionRequest>,
   ): Promise<AttentionRequest | null> {
-    const current = await this.getById(attentionId)
-    if (current === null) return null
-    const next = patched(current, patch)
-    await this.write(next)
-    return next
+    const { id: _id, ...fields } = patch
+    const rows = await this.db
+      .update(attentionRequests)
+      .set({
+        data: sql`${attentionRequests.data} || ${JSON.stringify(fields)}::jsonb`,
+        ...(fields.status === undefined ? {} : { status: fields.status }),
+        ...(fields.createdAt === undefined ? {} : { createdAt: fields.createdAt }),
+      })
+      .where(and(eq(attentionRequests.orgId, this.orgId), eq(attentionRequests.id, attentionId)))
+      .returning({ data: attentionRequests.data })
+    return firstOr(rows)?.data ?? null
   }
 
   private async write(request: AttentionRequest): Promise<void> {

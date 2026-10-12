@@ -1,3 +1,4 @@
+import type { GuidedReviewSession } from '@cat-factory/contracts'
 import { guidedReviewSessionViewSchema } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { vcsProviderSchema } from './vcs.js'
@@ -63,7 +64,10 @@ export const guidedReviewTargetSchema = v.object({
 })
 export type GuidedReviewTarget = v.InferOutput<typeof guidedReviewTargetSchema>
 
-/** The same target as a query string, for the lookup that spends nothing. */
+/**
+ * The same target as a query string: the lookup that spends nothing, and every
+ * call about a session, names its pull request this way.
+ */
 export const guidedReviewTargetQuerySchema = v.object({
   provider: vcsProviderSchema,
   owner: guidedReviewTargetSchema.entries.owner,
@@ -77,6 +81,25 @@ export const guidedReviewTargetQuerySchema = v.object({
     v.minValue(1),
   ),
 })
+
+/** The pull request a session is about, as the target a lookup or a session call names. */
+export function guidedReviewTargetOf(session: GuidedReviewSession): GuidedReviewTarget {
+  const { provider, owner, repo, prNumber } = session
+  return { provider, owner, repo, number: prNumber }
+}
+
+/** Whether a session is about the pull request a target names. Hosts compare names caselessly. */
+export function isGuidedReviewFor(
+  session: GuidedReviewSession,
+  target: GuidedReviewTarget,
+): boolean {
+  return (
+    session.provider === target.provider &&
+    session.prNumber === target.number &&
+    session.owner.toLowerCase() === target.owner.toLowerCase() &&
+    session.repo.toLowerCase() === target.repo.toLowerCase()
+  )
+}
 
 /**
  * One frame of a guided review's live stream: the whole session view whenever

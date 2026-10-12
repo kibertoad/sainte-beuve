@@ -13,6 +13,7 @@ import {
   recordingVcs,
   stubGateways,
   type TestHarness,
+  noAttentionDms,
 } from './helpers.js'
 
 // The three ways a deployment can be connected to GitHub, and the one thing the
@@ -403,6 +404,7 @@ describe('the Slack connection', () => {
       chat: {
         announceReview: async () => ({ messageId: 'm' }),
         sendReminder: async () => {},
+        ...noAttentionDms(),
       },
       slack: { signingSecret: 'shh', announcementChannelId: 'C-reviews' },
     })

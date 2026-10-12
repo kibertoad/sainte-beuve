@@ -60,6 +60,7 @@ export function viewerVcs(
     searchOpenPullRequests: async (search) =>
       pullRequests.filter((pr) => matchesSearch(pr, search, reviewed)),
     lookupRepositories: async (owner, query) => lookupIn(pullRequests, owner, query),
+    pastReviewers: async () => [],
     identify: async () => ({
       subject: `subject-${username}`,
       username,

@@ -1,7 +1,6 @@
 import type {
   AttentionEvent,
   AttentionEventKind,
-  AttentionRecipient,
   AttentionRequest,
   CreateAttentionRequest,
   CreateReviewCommitment,
@@ -23,6 +22,7 @@ import {
   requestCommittedReviewer,
   withdrawCommittedReviewer,
 } from '../../integrations/reviewRequests.js'
+import { refreshAskDeliveries, sendAskDms } from './askDeliveries.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -52,7 +52,11 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
-    const recipients = await this.resolveRecipients(viewer, input)
+    const named = await this.resolveRecipients(viewer, input)
+    const recipients = named.map((reviewer) => ({
+      reviewerId: reviewer.id,
+      displayName: reviewer.displayName,
+    }))
     const now = clock.now()
     const request = await repositories.attention.create({
       id: ids.next(),
@@ -74,9 +78,10 @@ export class AttentionService {
       createdAt: now,
       updatedAt: now,
       resolvedAt: null,
+      chatDeliveries: [],
     })
     this.publish('opened', request)
-    return request
+    return sendAskDms(this.container, request, named)
   }
 
   /**
@@ -131,6 +136,7 @@ export class AttentionService {
       `No attention request ${attentionId}`,
     )
     this.publish(satisfied ? 'resolved' : 'committed', updated)
+    await refreshAskDeliveries(this.container, updated, satisfied ? null : viewer.id)
     return updated
   }
 
@@ -149,6 +155,7 @@ export class AttentionService {
       `No attention request ${attentionId}`,
     )
     this.publish('cancelled', updated)
+    await refreshAskDeliveries(this.container, updated, null)
     return updated
   }
 
@@ -216,7 +223,7 @@ export class AttentionService {
   private async resolveRecipients(
     viewer: Reviewer,
     input: CreateAttentionRequest,
-  ): Promise<AttentionRecipient[]> {
+  ): Promise<Reviewer[]> {
     if (input.recipientIds.length === 0) return []
     const { repositories } = this.container
     const [directory, boardRow] = await Promise.all([
@@ -236,7 +243,7 @@ export class AttentionService {
       neededCommitments: input.neededCommitments,
       authorIds,
     })
-    if (resolution.ok) return resolution.recipients
+    if (resolution.ok) return resolution.reviewers
     throw refusalError(resolution.refusal, input.neededCommitments)
   }
 

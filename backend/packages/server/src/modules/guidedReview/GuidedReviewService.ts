@@ -11,14 +11,29 @@ import type {
   PostGuidedReviewDraftsInput,
   RequestGuidedReviewDraftsInput,
 } from '@sainte-beuve/contracts'
+import { isGuidedReviewFor } from '@sainte-beuve/contracts'
 import {
   type GuidedReviewGateway,
+  type GuidedReviewSessionRef,
   type GuidedReviewWatchEvent,
   NotFoundError,
 } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
+import { catFactoryDirectoryKeys } from '../projects/directoryKeys.js'
 import { resolveGuidedReview } from '../../integrations/resolve.js'
+
+/** A call about one session: its id, and the pull request the caller says it is about. */
+export interface GuidedReviewAddress {
+  sessionId: string
+  target: GuidedReviewTarget
+}
+
+interface CheckedSession {
+  gateway: GuidedReviewGateway
+  session: GuidedReviewSessionRef
+  view: GuidedReviewSessionView
+}
 
 export interface GuidedReviewWatch {
   initial: GuidedReviewSessionView
@@ -35,8 +50,11 @@ const NOT_CONFIGURED =
  * cat-factory owns the sessions and this deployment stores nothing about them.
  * What it adds is the tenancy: one cat-factory key can serve several orgs, so
  * every session is checked against this org's registered projects before
- * anything about it is answered or done to it. A session id from another org's
- * screen reads as not found, the same as one that does not exist.
+ * anything about it is answered or done to it. A call about a session names
+ * its pull request too: the repository is what the check reads, and what says
+ * which cat-factory workspace holds the session. A session id from another
+ * org's screen, or named with a pull request it is not about, reads as not
+ * found, the same as one that does not exist.
  */
 export class GuidedReviewService {
   private resolved: Promise<GuidedReviewGateway> | null = null
@@ -45,72 +63,77 @@ export class GuidedReviewService {
 
   async find(target: GuidedReviewTarget): Promise<GuidedReviewSessionView | null> {
     await this.assertRegistered(target)
-    return (await this.gateway()).find(target)
+    const [gateway, keys] = await Promise.all([
+      this.gateway(),
+      catFactoryDirectoryKeys(this.container, target),
+    ])
+    return gateway.find(target, keys)
   }
 
   async open(target: GuidedReviewTarget): Promise<GuidedReviewSessionView> {
     await this.assertRegistered(target)
-    return (await this.gateway()).open(target)
+    const [gateway, keys] = await Promise.all([
+      this.gateway(),
+      catFactoryDirectoryKeys(this.container, target),
+    ])
+    return gateway.open(target, keys)
   }
 
-  async get(sessionId: string): Promise<GuidedReviewSessionView> {
-    const view = await (await this.gateway()).get(sessionId)
-    const { provider, owner, repo, prNumber } = view.session
-    await this.assertRegistered({ provider, owner, repo, number: prNumber }, sessionId)
-    return view
+  async get(address: GuidedReviewAddress): Promise<GuidedReviewSessionView> {
+    return (await this.checked(address)).view
   }
 
-  async refresh(sessionId: string): Promise<GuidedReviewSessionView> {
-    await this.get(sessionId)
-    return (await this.gateway()).refresh(sessionId)
+  async refresh(address: GuidedReviewAddress): Promise<GuidedReviewSessionView> {
+    const { gateway, session } = await this.checked(address)
+    return gateway.refresh(session)
   }
 
   async openThread(
-    sessionId: string,
+    address: GuidedReviewAddress,
     input: OpenGuidedReviewThreadInput,
   ): Promise<GuidedReviewThreadView> {
-    await this.get(sessionId)
-    return (await this.gateway()).openThread(sessionId, input)
+    const { gateway, session } = await this.checked(address)
+    return gateway.openThread(session, input)
   }
 
-  async getThread(sessionId: string, threadId: string): Promise<GuidedReviewThreadView> {
-    await this.get(sessionId)
-    return (await this.gateway()).getThread(sessionId, threadId)
+  async getThread(address: GuidedReviewAddress, threadId: string): Promise<GuidedReviewThreadView> {
+    const { gateway, session } = await this.checked(address)
+    return gateway.getThread(session, threadId)
   }
 
   async ask(
-    sessionId: string,
+    address: GuidedReviewAddress,
     threadId: string,
     input: AskGuidedReviewInput,
   ): Promise<GuidedReviewExchange> {
-    await this.get(sessionId)
-    return (await this.gateway()).ask(sessionId, threadId, input)
+    const { gateway, session } = await this.checked(address)
+    return gateway.ask(session, threadId, input)
   }
 
   async requestDrafts(
-    sessionId: string,
+    address: GuidedReviewAddress,
     threadId: string,
     input: RequestGuidedReviewDraftsInput,
   ): Promise<GuidedReviewExchange> {
-    await this.get(sessionId)
-    return (await this.gateway()).requestDrafts(sessionId, threadId, input)
+    const { gateway, session } = await this.checked(address)
+    return gateway.requestDrafts(session, threadId, input)
   }
 
   async editDraft(
-    sessionId: string,
+    address: GuidedReviewAddress,
     draftId: string,
     input: EditGuidedReviewDraftInput,
   ): Promise<GuidedReviewCommentDraft> {
-    await this.get(sessionId)
-    return (await this.gateway()).editDraft(sessionId, draftId, input)
+    const { gateway, session } = await this.checked(address)
+    return gateway.editDraft(session, draftId, input)
   }
 
   async postDrafts(
-    sessionId: string,
+    address: GuidedReviewAddress,
     input: PostGuidedReviewDraftsInput,
   ): Promise<GuidedReviewPostResult> {
-    await this.get(sessionId)
-    return (await this.gateway()).postDrafts(sessionId, input)
+    const { gateway, session } = await this.checked(address)
+    return gateway.postDrafts(session, input)
   }
 
   /**
@@ -118,10 +141,28 @@ export class GuidedReviewService {
    * as cat-factory pushes them. The check happens before the stream is
    * answered, so a foreign session is a 404 rather than an empty stream.
    */
-  async watch(sessionId: string): Promise<GuidedReviewWatch> {
-    const initial = await this.get(sessionId)
-    const gateway = await this.gateway()
-    return { initial, events: (signal) => gateway.watch(sessionId, signal) }
+  async watch(address: GuidedReviewAddress): Promise<GuidedReviewWatch> {
+    const { gateway, session, view } = await this.checked(address)
+    return { initial: view, events: (signal) => gateway.watch(session, signal) }
+  }
+
+  /**
+   * Read a session and refuse it unless it is about the pull request the call
+   * named, in a repository this org holds the claim on. The repository's mirror
+   * keys say which workspace to read it in, and the call after it reuses them.
+   */
+  private async checked(address: GuidedReviewAddress): Promise<CheckedSession> {
+    const { sessionId, target } = address
+    await this.assertRegistered(target, sessionId)
+    const [gateway, directoryKeys] = await Promise.all([
+      this.gateway(),
+      catFactoryDirectoryKeys(this.container, target),
+    ])
+    const session = { sessionId, directoryKeys }
+    const view = await gateway.get(session)
+    if (!isGuidedReviewFor(view.session, target))
+      throw new NotFoundError(`No guided review ${sessionId}`)
+    return { gateway, session, view }
   }
 
   /**
