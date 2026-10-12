@@ -171,6 +171,18 @@ describe('a commitment on the host', () => {
     expect(claimedWhenSent).toBe('kibertoad')
   })
 
+  it('writes one row and one host request for two commits landing together', async () => {
+    const github = host('kibertoad')
+    const harness = harnessOn(github)
+
+    const [first, second] = await Promise.all([commit(harness), commit(harness)])
+    expect(second.id).toBe(first.id)
+    const rows = await harness.container.repositories.commitments.listByReviewer(first.reviewerId)
+    expect(rows.map((row) => row.id)).toStrictEqual([first.id])
+    expect(rows[0]?.requestedHandle).toBe('kibertoad')
+    expect(github.requested).toStrictEqual([['kibertoad']])
+  })
+
   it('drops the claim when the request does not land', async () => {
     const github = host('kibertoad')
     github.gateway = {

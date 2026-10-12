@@ -278,8 +278,9 @@ export class AttentionService {
    * request twice through two different asks, does not double-count the
    * promise in the workspace.
    *
-   * The row is written before the host is asked, so a second click finds it
-   * while the host call is still in flight.
+   * The store's unique key decides which click wrote the row, and only that one
+   * requests the reviewer on the host. The row is written before the host is
+   * asked, so a second click finds it while the host call is still in flight.
    */
   private async recordCommitment(
     viewer: Reviewer,
@@ -288,9 +289,7 @@ export class AttentionService {
     attentionRequestId: string | null,
   ): Promise<ReviewCommitment> {
     const { repositories, clock, ids } = this.container
-    const existing = await repositories.commitments.find(viewer.id, pullRequest)
-    if (existing !== null) return existing
-    const commitment = await repositories.commitments.create({
+    const { commitment, created } = await repositories.commitments.createOrGet({
       id: ids.next(),
       reviewerId: viewer.id,
       pullRequest,
@@ -299,6 +298,7 @@ export class AttentionService {
       requestedHandle: null,
       createdAt: clock.now(),
     })
+    if (!created) return commitment
     return requestCommittedReviewer(this.container, commitment, viewer)
   }
 

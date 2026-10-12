@@ -40,7 +40,20 @@ export interface ReviewCommitmentRepository {
     reviewerId: string,
     pullRequest: { provider: string; owner: string; repo: string; number: number },
   ): Promise<ReviewCommitment | null>
-  create(commitment: ReviewCommitment): Promise<ReviewCommitment>
+  /**
+   * Write the commitment, or answer the one the reviewer already holds on that
+   * pull request. One person holds at most one commitment per pull request, and
+   * the store's unique key on `(org, reviewer, pullRequestKey)` enforces it, so
+   * two clicks landing together get one row. `created` is true for the call
+   * that wrote it and for no other, which is how only that call goes on to
+   * request the reviewer on the host.
+   *
+   * There is no plain create on purpose: a lookup ahead of the write is the
+   * race this closes.
+   */
+  createOrGet(
+    commitment: ReviewCommitment,
+  ): Promise<{ commitment: ReviewCommitment; created: boolean }>
   /**
    * Record which host request the commitment holds. Answers null, and writes
    * nothing, when the commitment has been released: a released one must not
