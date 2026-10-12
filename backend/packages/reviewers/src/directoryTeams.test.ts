@@ -70,4 +70,17 @@ describe('planDirectoryTeams', () => {
     expect(plan.create.map((step) => step.name)).toEqual(['Core (ws_1)', 'core (ws_2)'])
     expect(plan.nameByGroup.get('ws_9')).toBe('Core Infra')
   })
+
+  it('cuts a name to the length a team name may have, suffix included', () => {
+    const long = 'x'.repeat(120)
+    const teams = [team('t1', 'x'.repeat(80), 'ws_9')]
+    const groups = [
+      { id: 'ws_1', name: long },
+      { id: 'ws_9', name: 'Other' },
+    ]
+    const plan = planDirectoryTeams(SOURCE, teams, groups)
+    const name = plan.nameByGroup.get('ws_1') ?? ''
+    expect(name).toBe(`${'x'.repeat(80 - ' (ws_1)'.length)} (ws_1)`)
+    expect(name.length).toBe(80)
+  })
 })

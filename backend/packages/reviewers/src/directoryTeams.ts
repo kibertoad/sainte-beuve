@@ -1,4 +1,9 @@
-import type { ExternalGroup, ExternalRef, Team } from '@sainte-beuve/contracts'
+import {
+  type ExternalGroup,
+  type ExternalRef,
+  TEAM_NAME_MAX_LENGTH,
+  type Team,
+} from '@sainte-beuve/contracts'
 
 /**
  * The teams an external directory's groups become.
@@ -7,7 +12,8 @@ import type { ExternalGroup, ExternalRef, Team } from '@sainte-beuve/contracts'
  * made under the same name, or becomes a new team. A team that follows a group
  * the directory no longer lists is removed. Names stay unique the way the store
  * requires: a group whose name another team holds is suffixed with its id, and
- * the suffix goes on the next sync that finds the name free.
+ * the suffix goes on the next sync that finds the name free. A name is cut to the
+ * length a team name may have, suffix included.
  */
 export interface DirectoryTeamPlan {
   create: { name: string; external: ExternalRef }[]
@@ -69,7 +75,7 @@ function adoptable(
     (team) =>
       !claimed.has(team.id) &&
       (team.external === null || team.external === undefined) &&
-      nameKey(team.name) === nameKey(group.name),
+      nameKey(team.name) === nameKey(fitted(group.name)),
   )
 }
 
@@ -80,7 +86,15 @@ function uniqueName(
   assigned: ReadonlySet<string>,
   ownTeamId: string | null,
 ): string {
-  const key = nameKey(group.name)
+  const name = fitted(group.name)
+  const key = nameKey(name)
   const heldElsewhere = teams.some((team) => team.id !== ownTeamId && nameKey(team.name) === key)
-  return heldElsewhere || assigned.has(key) ? `${group.name} (${group.id})` : group.name
+  if (!heldElsewhere && !assigned.has(key)) return name
+  const suffix = ` (${group.id})`
+  return `${fitted(group.name, TEAM_NAME_MAX_LENGTH - suffix.length)}${suffix}`
+}
+
+/** A team name the store accepts: a longer one would fail every later read of the teams. */
+function fitted(name: string, max = TEAM_NAME_MAX_LENGTH): string {
+  return name.length <= max ? name : name.slice(0, Math.max(1, max)).trimEnd()
 }

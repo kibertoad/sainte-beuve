@@ -11,7 +11,14 @@ import { mergeCommentListSchema, mergeCommentOverrideSchema } from './merging.js
 // reviewer in it.
 // ---------------------------------------------------------------------------
 
-export const teamNameSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80))
+export const TEAM_NAME_MAX_LENGTH = 80
+
+export const teamNameSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(TEAM_NAME_MAX_LENGTH),
+)
 
 export const teamSchema = v.object({
   id: v.string(),

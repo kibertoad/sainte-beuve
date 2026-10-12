@@ -131,8 +131,8 @@ Both paths share one rule, and the docs describe it.
 
 ### 10. cat-factory workspaces and users
 
-The directory sync read users, workspaces and memberships and dropped them, so
-the reviewer pool and the teams were kept by hand.
+The directory sync reads users, workspaces and memberships and drops them, so
+the reviewer pool and the teams are kept by hand.
 
 Workspaces become teams and directory users become reviewers, matched on their
 GitHub or GitLab account, which cat-factory publishes on a directory user from

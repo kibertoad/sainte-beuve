@@ -166,4 +166,26 @@ describe('planDirectoryPeople', () => {
     expect(planDirectoryPeople(input({ reviewers })).pause).toEqual(['r1'])
     expect(planDirectoryPeople(input({ reviewers, everListed: false })).pause).toEqual([])
   })
+
+  it('moves a re-created user onto the row their host account is linked to, without pausing it', () => {
+    const plan = planDirectoryPeople(
+      input({
+        reviewers: [reviewer('r1', followed('u-old'))],
+        persons: [person('u-new')],
+        accountOwners: new Map([[accountKey({ provider: 'github', subject: 'gh-u-new' }), 'r1']]),
+      }),
+    )
+    expect(plan.create).toEqual([])
+    expect(plan.update[0]?.patch.external).toEqual({ source: SOURCE, id: 'u-new' })
+    expect(plan.pause).toEqual([])
+  })
+
+  it('names a reviewer within the bounds the store keeps, never blank', () => {
+    const plan = planDirectoryPeople(
+      input({
+        persons: [person('u1', { name: '   ' }), person('u2', { name: 'n'.repeat(200) })],
+      }),
+    )
+    expect(plan.create.map((step) => step.displayName)).toEqual(['u1-gh', 'n'.repeat(120)])
+  })
 })

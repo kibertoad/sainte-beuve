@@ -27,9 +27,11 @@ export type Skill = v.InferOutput<typeof skillSchema>
 export const reviewerAvailabilitySchema = v.picklist(['available', 'paused'])
 export type ReviewerAvailability = v.InferOutput<typeof reviewerAvailabilitySchema>
 
+export const REVIEWER_NAME_MAX_LENGTH = 120
+
 export const reviewerSchema = v.object({
   id: v.string(),
-  displayName: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  displayName: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(REVIEWER_NAME_MAX_LENGTH)),
   /** The person's handle on each host. Empty when they are only reachable in chat. */
   handles: vcsHandlesSchema,
   /** Slack user id (`U…`), the address reminders are delivered to. */

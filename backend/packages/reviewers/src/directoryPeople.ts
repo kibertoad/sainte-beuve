@@ -1,11 +1,12 @@
-import type {
-  ExternalAccount,
-  ExternalMembership,
-  ExternalPerson,
-  ExternalRef,
-  PeopleSync,
-  Reviewer,
-  VcsHandles,
+import {
+  type ExternalAccount,
+  type ExternalMembership,
+  type ExternalPerson,
+  type ExternalRef,
+  type PeopleSync,
+  REVIEWER_NAME_MAX_LENGTH,
+  type Reviewer,
+  type VcsHandles,
 } from '@sainte-beuve/contracts'
 import { isSameHandle } from './selection.js'
 
@@ -13,8 +14,9 @@ import { isSameHandle } from './selection.js'
  * Which reviewers an external directory's people are, and what of them it owns.
  *
  * A person is matched, in order, to the reviewer already following them, to the
- * reviewer one of their host accounts is linked to here, or to the reviewer
- * whose handle on that host is the account's username. Somebody unmatched with a
+ * reviewer one of their host accounts is linked to here (even one following a
+ * person the source no longer lists, which is how a re-created user keeps their
+ * row), or to the reviewer whose handle on that host is the account's username. Somebody unmatched with a
  * host account becomes a new reviewer; somebody with none cannot be told apart
  * from a stranger and is only counted. A followed reviewer the directory no
  * longer lists is paused, never deleted: assignments and sessions point at the row.
@@ -68,8 +70,9 @@ export function planDirectoryPeople(input: DirectoryPeopleInput): DirectoryPeopl
     summary: { listed: input.persons.length, linked: 0, withoutAccount: 0 },
   }
   const claimed = new Set<string>()
+  const listed = new Set(input.persons.map((person) => person.id))
   for (const person of input.persons) {
-    const reviewer = matchReviewer(person, input, claimed)
+    const reviewer = matchReviewer(person, input, { claimed, listed })
     if (reviewer === null && person.accounts.length === 0) {
       plan.summary.withoutAccount += 1
       continue
@@ -90,8 +93,14 @@ export function planDirectoryPeople(input: DirectoryPeopleInput): DirectoryPeopl
       }
     }
   }
-  if (input.everListed) plan.pause = departed(input)
+  if (input.everListed) plan.pause = departed(input, { claimed, listed })
   return plan
+}
+
+/** The reviewers matched so far in this plan, and the people the source lists now. */
+interface MatchState {
+  claimed: ReadonlySet<string>
+  listed: ReadonlySet<string>
 }
 
 function followedBy(reviewer: Reviewer, source: string): string | null {
@@ -101,24 +110,24 @@ function followedBy(reviewer: Reviewer, source: string): string | null {
 function matchReviewer(
   person: ExternalPerson,
   input: DirectoryPeopleInput,
-  claimed: ReadonlySet<string>,
+  { claimed, listed }: MatchState,
 ): Reviewer | null {
-  const free = (reviewer: Reviewer): boolean => {
+  const free = (reviewer: Reviewer, orphanToo: boolean): boolean => {
     if (claimed.has(reviewer.id)) return false
     const follows = followedBy(reviewer, input.source)
-    return follows === null || follows === person.id
+    return follows === null || follows === person.id || (orphanToo && !listed.has(follows))
   }
   const following = input.reviewers.find((r) => followedBy(r, input.source) === person.id)
   if (following !== undefined && !claimed.has(following.id)) return following
   for (const account of person.accounts) {
     const ownerId = input.accountOwners.get(accountKey(account))
     const owner = input.reviewers.find((r) => r.id === ownerId)
-    if (owner !== undefined && free(owner)) return owner
+    if (owner !== undefined && free(owner, true)) return owner
   }
   for (const account of person.accounts) {
     if (account.username === null) continue
     const named = input.reviewers.find(
-      (r) => free(r) && isSameHandle(r.handles[account.provider], account.username),
+      (r) => free(r, false) && isSameHandle(r.handles[account.provider], account.username),
     )
     if (named !== undefined) return named
   }
@@ -155,8 +164,17 @@ function handlesWith(current: VcsHandles, accounts: readonly ExternalAccount[]):
 
 function newcomer(person: ExternalPerson): { displayName: string; handles: VcsHandles } {
   const handles = handlesWith({ github: null, gitlab: null }, person.accounts)
-  const username = person.accounts.find((account) => account.username !== null)?.username
-  return { displayName: person.name ?? username ?? person.id, handles }
+  const username = person.accounts.find((account) => account.username !== null)?.username ?? null
+  const displayName =
+    displayNameOf(person.name) ?? displayNameOf(username) ?? displayNameOf(person.id) ?? person.id
+  return { displayName, handles }
+}
+
+/** A name the reviewer store accepts, or null for a blank one: an invalid name fails every read. */
+function displayNameOf(name: string | null): string | null {
+  const trimmed = name?.trim() ?? ''
+  if (trimmed.length === 0) return null
+  return trimmed.slice(0, REVIEWER_NAME_MAX_LENGTH).trimEnd()
 }
 
 function patchFor(
@@ -167,7 +185,8 @@ function patchFor(
 ): DirectoryOwnedFields {
   const patch: DirectoryOwnedFields = {}
   if (followedBy(reviewer, external.source) !== external.id) patch.external = external
-  if (person.name !== null && person.name !== reviewer.displayName) patch.displayName = person.name
+  const name = displayNameOf(person.name)
+  if (name !== null && name !== reviewer.displayName) patch.displayName = name
   const handles = handlesWith(reviewer.handles, person.accounts)
   if (handles.github !== reviewer.handles.github || handles.gitlab !== reviewer.handles.gitlab) {
     patch.handles = handles
@@ -176,13 +195,13 @@ function patchFor(
   return patch
 }
 
-/** Available reviewers following somebody the source no longer lists. */
-function departed(input: DirectoryPeopleInput): string[] {
-  const listed = new Set(input.persons.map((person) => person.id))
+/** Available reviewers following somebody the source no longer lists, and matched to nobody now. */
+function departed(input: DirectoryPeopleInput, { claimed, listed }: MatchState): string[] {
   return input.reviewers
     .filter((reviewer) => {
       const follows = followedBy(reviewer, input.source)
-      return follows !== null && !listed.has(follows) && reviewer.availability === 'available'
+      if (follows === null || listed.has(follows) || claimed.has(reviewer.id)) return false
+      return reviewer.availability === 'available'
     })
     .map((reviewer) => reviewer.id)
 }

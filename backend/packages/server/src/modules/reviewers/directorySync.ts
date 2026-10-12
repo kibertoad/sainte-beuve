@@ -115,15 +115,17 @@ async function accountOwners(
   container: AppContainer,
   persons: readonly ExternalPerson[],
 ): Promise<Map<string, string>> {
-  const owners = new Map<string, string>()
-  for (const account of persons.flatMap((person) => person.accounts)) {
-    const owner = await container.repositories.identities.findReviewerId(
-      account.provider,
-      account.subject,
-    )
-    if (owner !== null) owners.set(accountKey(account), owner)
-  }
-  return owners
+  const { identities } = container.repositories
+  const accounts = persons.flatMap((person) => person.accounts)
+  const owners = await Promise.all(
+    accounts.map((account) => identities.findReviewerId(account.provider, account.subject)),
+  )
+  return new Map(
+    accounts.flatMap((account, at) => {
+      const owner = owners[at]
+      return owner === null || owner === undefined ? [] : [[accountKey(account), owner] as const]
+    }),
+  )
 }
 
 /** The teams a followed person's groups put them in, by name. */
