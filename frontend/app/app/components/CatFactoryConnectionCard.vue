@@ -7,9 +7,10 @@ import type {
   IntegrationTokenStatus,
 } from '@sainte-beuve/contracts'
 
-// This org's cat-factory: where the instance is, which service AI reviews are
-// filed under, which pipeline they run on, and the key. All of it is the org's
-// and set here; none of it comes from the deployment's environment.
+// This org's cat-factory: where the instance is, the service an AI review goes
+// under when no service backs its repository, which pipeline they run on, and
+// the key. All of it is the org's and set here; none of it comes from the
+// deployment's environment.
 //
 // The page owns the writes, because saving the settings can change whether the
 // stored key is in use. The CHECK is made here: it stores nothing, and its
@@ -125,7 +126,7 @@ const STEP_ICON = {
       color="info"
       variant="subtle"
       title="Prefilled with a local cat-factory's defaults"
-      description="Nothing reaches cat-factory until you save. Pick a service with Test connection, which lists the ones your key can see."
+      description="Nothing reaches cat-factory until you save. Test connection lists the services your key can see, if you want a default one."
     />
 
     <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[10rem_1fr] sm:items-center">
@@ -136,12 +137,12 @@ const STEP_ICON = {
         class="w-full"
         placeholder="http://localhost:8787"
       />
-      <label for="cf-service" class="text-sm font-medium">Service id</label>
+      <label for="cf-service" class="text-sm font-medium">Default service id</label>
       <UInput
         id="cf-service"
         v-model="form.serviceId"
         class="w-full"
-        placeholder="blk_… (needed for AI review)"
+        placeholder="Optional: for a repository no service backs"
       />
       <label for="cf-pipeline" class="text-sm font-medium">Pipeline id</label>
       <UInput

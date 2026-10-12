@@ -269,37 +269,22 @@ export async function resolveGitLabBotUsername(container: AppContainer): Promise
 }
 
 /**
- * The AI reviewer for this org, able to file: its stored key, on its stored
- * instance, under its stored service. Null until all three are on the
- * Configuration screen. There is no environment fallback (see
- * `catFactoryConfig.ts`), so the source is always `stored`.
+ * The AI reviewer for this org: its stored key, on its stored instance. Null
+ * until both are on the Configuration screen. There is no environment fallback
+ * (see `catFactoryConfig.ts`), so the source is always `stored`.
+ *
+ * It needs no service id. A review is filed under the service that backs its
+ * repository in cat-factory, and the org's service id is only the fallback for
+ * a repository with none, so whether a review can be filed is a question about
+ * one repository that `requestReview` answers when it is asked.
  */
 export async function resolveAiReview(
   container: AppContainer,
   pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
 ): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
   const access = await pending
-  if (access === null || access.config.serviceId === null) return null
-  return aiReviewOver(container, access)
-}
-
-/**
- * The AI reviewer for runs already filed. Polling and curating a run never name
- * a service, so clearing the service id stops new reviews without stranding the
- * ones in flight. Its `requestReview` refuses when there is no service id.
- */
-export async function resolveAiReviewRuns(
-  container: AppContainer,
-  pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
-): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
-  const access = await pending
-  return access === null ? null : aiReviewOver(container, access)
-}
-
-function aiReviewOver(
-  container: AppContainer,
-  { config, apiKey }: CatFactoryOrgAccess,
-): Resolved<AiReviewGateway, CredentialSource> | null {
+  if (access === null) return null
+  const { config, apiKey } = access
   const gateway = container.gateways?.aiReview({
     baseUrl: config.baseUrl,
     apiKey,
