@@ -40,6 +40,12 @@ start ticked), **Dismiss** the noise, and then choose:
 - **Finish without posting** closes the review having said nothing, which is the
   right answer more often than it sounds.
 
+Not sure a finding is right? **Challenge** it, with your doubt or without one.
+cat-factory sends an investigator back to the source behind that finding, and the
+verdict lands on it: upheld, amended (with the new wording or severity), or
+retracted, which unticks it and keeps it off the pull request. Each finding can
+be challenged once, one at a time, and a review gets five.
+
 Posting reports back. If seven comments went out and two bounced, the row says
 which two and why, against the attempt number, and posting again skips what
 already landed rather than commenting twice. And if the reviewer wedges with

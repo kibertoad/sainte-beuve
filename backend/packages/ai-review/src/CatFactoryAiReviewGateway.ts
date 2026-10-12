@@ -255,13 +255,29 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     )
   }
 
+  async challengeFinding(input: {
+    runId: string
+    findingId: string
+    question: string | null
+  }): Promise<void> {
+    const question = input.question?.trim()
+    await this.curating(`challenge finding ${input.findingId}`, input.runId, () =>
+      this.client.decisions.challengePrReviewFinding(
+        input.runId,
+        input.findingId,
+        question ? { question } : {},
+      ),
+    )
+  }
+
   /**
    * One curation verb, with its refusal translated.
    *
-   * `resolveReview` and `resumeReview` throw the answer away, and that is the
-   * point for those two: cat-factory ACCEPTS the instruction and acts on it
-   * afterwards, so the list it hands back records a review as `posting` a moment
-   * before the post report exists. Those two re-poll instead, through the one
+   * `resolveReview`, `resumeReview` and `challengeFinding` throw the answer
+   * away, and that is the point for those three: cat-factory ACCEPTS the
+   * instruction and acts on it afterwards, so the list it hands back records a
+   * review as `posting` (or `challenging`) a moment before the receipt or the
+   * verdict exists. Those three re-poll instead, through the one
    * path that maps a run (`getStatus`), so a row is never assembled two
    * different ways. `dismissFinding` is synchronous and keeps it.
    */

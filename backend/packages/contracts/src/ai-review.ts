@@ -71,6 +71,32 @@ export const aiReviewCategorySchema = v.picklist([
 export type AiReviewCategory = v.InferOutput<typeof aiReviewCategorySchema>
 
 /**
+ * Where a challenge of one finding stands. cat-factory's own vocabulary:
+ * `investigating` while its read-only investigator re-examines the finding
+ * against the full source, then the verdict. `amended` is a finding kept with a
+ * changed title, detail, severity or fix (already folded into the finding), and
+ * `upheld` one kept as written. `failed` is an investigator that crashed; the
+ * finding stands and may be challenged again.
+ */
+export const aiReviewChallengeStatusSchema = v.picklist([
+  'investigating',
+  'upheld',
+  'amended',
+  'retracted',
+  'failed',
+])
+export type AiReviewChallengeStatus = v.InferOutput<typeof aiReviewChallengeStatusSchema>
+
+export const aiReviewFindingChallengeSchema = v.object({
+  status: aiReviewChallengeStatusSchema,
+  /** The curator's concern, or null for a challenge that asked for a general re-examination. */
+  question: v.nullable(v.string()),
+  /** The investigator's grounding for its verdict, or why it failed. Null while investigating. */
+  justification: v.nullable(v.string()),
+})
+export type AiReviewFindingChallenge = v.InferOutput<typeof aiReviewFindingChallengeSchema>
+
+/**
  * One thing the reviewer found, as the curation screen shows it and as the
  * inline comment would read.
  *
@@ -91,6 +117,13 @@ export const aiReviewFindingSchema = v.object({
   severity: aiReviewSeveritySchema,
   category: aiReviewCategorySchema,
   suggestedFix: v.nullable(v.string()),
+  /**
+   * The finding's challenge, or null for one nobody challenged. A DEFAULT as
+   * well as nullable, because the curation is stored in the run's payload and
+   * parsed through this schema on every read: a run written before challenges
+   * existed has no key for it. See `parkedAt` on the run.
+   */
+  challenge: v.optional(v.nullable(aiReviewFindingChallengeSchema), null),
 })
 export type AiReviewFinding = v.InferOutput<typeof aiReviewFindingSchema>
 
@@ -284,3 +317,14 @@ export const resolveAiReviewSchema = v.object({
   findingIds: v.optional(v.array(v.string()), []),
 })
 export type ResolveAiReview = v.InferOutput<typeof resolveAiReviewSchema>
+
+/** Ask cat-factory's investigator to re-examine one finding. */
+export const challengeAiReviewFindingSchema = v.object({
+  /**
+   * What the curator doubts about the finding. Optional: without one the
+   * investigator is asked to justify the finding's grounding and relevance.
+   * cat-factory's own limit.
+   */
+  question: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000))), null),
+})
+export type ChallengeAiReviewFinding = v.InferOutput<typeof challengeAiReviewFindingSchema>

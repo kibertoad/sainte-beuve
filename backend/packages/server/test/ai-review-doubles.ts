@@ -40,6 +40,7 @@ export function aiFinding(
     severity: 'blocker',
     category: 'correctness',
     suggestedFix: null,
+    challenge: null,
     ...overrides,
   }
 }
@@ -54,6 +55,7 @@ export interface StubAiReview extends AiReviewGateway {
   dismissed: { runId: string; findingId: string }[]
   resolved: { runId: string; action: AiReviewResolution; findingIds: string[] }[]
   resumed: string[]
+  challenged: { runId: string; findingId: string; question: string | null }[]
   /** How many times it has been polled, so a case can assert a read asked nothing. */
   polls: number
   /** The cat-factory task id of every poll, in order. What a rotation is asserted on. */
@@ -77,6 +79,7 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
     dismissed: [],
     resolved: [],
     resumed: [],
+    challenged: [],
     polls: 0,
     polled: [],
     onPoll: null,
@@ -121,6 +124,38 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
     resumeReview: async (input) => {
       stub.resumed.push(input.runId)
     },
+    challengeFinding: async (input) => {
+      stub.challenged.push(input)
+      stub.report = challenged(stub.report, input)
+    },
   }
   return stub
+}
+
+/**
+ * What cat-factory reports once it has accepted a challenge: the finding is
+ * investigating, and the review is no longer waiting on a person.
+ */
+function challenged(
+  report: AiReviewReport,
+  input: { findingId: string; question: string | null },
+): AiReviewReport {
+  const state = report.curation
+  if (state === null) return report
+  return {
+    ...report,
+    status: 'running',
+    curation: {
+      ...state,
+      status: 'challenging',
+      findings: state.findings.map((finding) =>
+        finding.findingId === input.findingId
+          ? {
+              ...finding,
+              challenge: { status: 'investigating', question: input.question, justification: null },
+            }
+          : finding,
+      ),
+    },
+  }
 }

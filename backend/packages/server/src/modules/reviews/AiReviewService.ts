@@ -1,7 +1,7 @@
-import type { AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import type { AiReviewRun } from '@sainte-beuve/contracts'
 import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
-import { ConflictError, ValidationError, assertFound, getErrorMessage } from '@sainte-beuve/kernel'
+import { assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { type Resolved, resolveAiReview, resolveAiReviewRuns } from '../../integrations/resolve.js'
@@ -203,74 +203,11 @@ export class AiReviewService {
   }
 
   /**
-   * Drop one finding from the parked review.
-   *
-   * No re-poll, unlike the two verbs below it: the drop is synchronous and
-   * cat-factory answers with the decision as the drop left it, so that answer IS
-   * the fresh row.
+   * The gateway the run verbs are sent through, refused with a 503 naming the
+   * missing configuration. Public for `AiReviewCurationService`, which shares
+   * this instance's cached resolution.
    */
-  async dismissFinding(runId: string, findingId: string): Promise<AiReviewRun> {
-    const { gateway, catFactoryRunId } = await this.curating(runId)
-    const curation = await gateway.dismissFinding({ runId: catFactoryRunId, findingId })
-    if (curation === null) return this.get(runId)
-    return this.assertRun(
-      await this.container.repositories.aiReviewRuns.update(runId, { curation }),
-      runId,
-    )
-  }
-
-  /**
-   * Record the curated selection and act on it.
-   *
-   * The empty-selection guard is here rather than left to cat-factory because it
-   * is about what the CALLER asked for: `post` and `fix` both reach the real pull
-   * request, and an empty selection on either is somebody who meant `finish`.
-   * Upstream refuses it too, and a 502 naming a rule of ours is a worse answer
-   * than a 400.
-   */
-  async resolve(
-    runId: string,
-    resolution: { action: AiReviewResolution; findingIds: string[] },
-  ): Promise<AiReviewRun> {
-    if (resolution.action !== 'finish' && resolution.findingIds.length === 0) {
-      throw new ValidationError(
-        `\`${resolution.action}\` needs at least one finding selected. Use \`finish\` to close a review without posting anything`,
-      )
-    }
-    const { gateway, catFactoryRunId } = await this.curating(runId)
-    await gateway.resolveReview({ runId: catFactoryRunId, ...resolution })
-    return this.get(runId)
-  }
-
-  /** Re-dispatch the slices a stalled review never got back, then re-read the run. */
-  async resume(runId: string): Promise<AiReviewRun> {
-    const { gateway, catFactoryRunId } = await this.curating(runId)
-    await gateway.resumeReview({ runId: catFactoryRunId })
-    return this.get(runId)
-  }
-
-  /**
-   * The gateway and the cat-factory run id a curation verb needs.
-   *
-   * A run with no cat-factory run id yet is a CONFLICT rather than a fault, and
-   * it answers 409 rather than 404 so a caller can act on the difference: the
-   * task was accepted and its run has not appeared, so the answer is to poll
-   * again in a moment, where a 404 says the run is gone and to stop.
-   */
-  private async curating(
-    runId: string,
-  ): Promise<{ gateway: AiReviewGateway; catFactoryRunId: string }> {
-    const run = this.assertRun(await this.container.repositories.aiReviewRuns.getById(runId), runId)
-    const { gateway } = await this.gateway()
-    if (run.catFactoryRunId === null) {
-      throw new ConflictError(
-        `AI review run ${runId} has no cat-factory run yet, so there is nothing to curate. Poll it again in a moment`,
-      )
-    }
-    return { gateway, catFactoryRunId: run.catFactoryRunId }
-  }
-
-  private async gateway(): Promise<Resolved<AiReviewGateway, CredentialSource>> {
+  async runGateway(): Promise<Resolved<AiReviewGateway, CredentialSource>> {
     return requireCapability(await this.resolved(), NO_ACCESS)
   }
 

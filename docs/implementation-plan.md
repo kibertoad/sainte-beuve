@@ -320,6 +320,12 @@ The loop runs: file, read the findings, curate, post. What it decided, in short:
   holds when a report carries none, or the post report and the findings would be
   destroyed at the moment somebody wants to read what landed, and nothing could
   recover them.
+- **A challenge is a verdict, bought once.** cat-factory's investigator re-reads
+  the source behind one finding and upholds, amends or retracts it. Each finding
+  may be challenged once (again only after a failure), one at a time, and at most
+  five per review, counted from the verdicts on the findings so no store holds a
+  counter. A retracted finding is unticked and a resolution naming it is refused,
+  because cat-factory drops it from the selection silently.
 
 What is left:
 
@@ -331,9 +337,6 @@ What is left:
   production breaks on the day it matters.
 - Per-repository cat-factory service mapping, replacing the one service id an
   org sets on the Configuration screen.
-- Challenging a finding (cat-factory dispatches an investigator that upholds or
-  retracts it). It is a fourth verb on the same surface; the loop is usable
-  without it and the screen has nowhere to put the verdict yet.
 
 ### Slice 5: durable persistence (done)
 

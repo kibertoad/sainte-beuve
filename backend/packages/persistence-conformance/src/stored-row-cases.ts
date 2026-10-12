@@ -104,6 +104,43 @@ const RUN_BEFORE_PARKED_AT = {
 }
 
 /**
+ * A parked run from before a finding could be challenged: its findings have no
+ * `challenge` key. Every run curated before that release is one of these, and a
+ * parked one is read on every board open and every tick of the clock.
+ */
+const RUN_BEFORE_CHALLENGES = {
+  ...RUN_BEFORE_PARKED_AT,
+  id: 'run-unchallenged',
+  parkedAt: 1_500,
+  curation: {
+    status: 'awaiting_selection',
+    findings: [
+      {
+        findingId: 'finding-1',
+        title: 'Unchecked index',
+        detail: 'The loop reads past the end.',
+        path: 'src/index.ts',
+        line: 42,
+        side: 'RIGHT',
+        severity: 'high',
+        category: 'correctness',
+        suggestedFix: null,
+      },
+    ],
+    selectedFindingIds: [],
+    postedFindingIds: [],
+    postedBody: false,
+    postAttempts: 0,
+    postReport: null,
+    sliceCount: 1,
+    reportedSliceCount: 1,
+    lastActivityAt: null,
+    resumeAttempts: 0,
+    maxResumeAttempts: 3,
+  },
+}
+
+/**
  * An org payload from before anybody decided who may join it: no `enrolment` key
  * at all.
  *
@@ -163,6 +200,16 @@ export const storedRowConformanceCases: readonly StoredRowCase[] = [
 
     assert.strictEqual(byReview[0]?.parkedAt, null)
     assert.strictEqual(inFlight[0]?.parkedAt, null)
+  }),
+
+  storedRowCase('heals a run whose findings predate challenges', async (harness) => {
+    await harness.writeRawAiReviewRun('run-unchallenged', 'review-1', RUN_BEFORE_CHALLENGES)
+
+    const read = await harness.repositories.aiReviewRuns.getById('run-unchallenged')
+    const [listed] = await harness.repositories.aiReviewRuns.listInFlight(10)
+
+    assert.strictEqual(read?.curation?.findings[0]?.challenge, null)
+    assert.strictEqual(listed?.curation?.findings[0]?.challenge, null)
   }),
 
   storedRowCase('heals an org written before anybody decided who may join', async (harness) => {

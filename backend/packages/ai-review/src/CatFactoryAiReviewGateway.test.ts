@@ -335,6 +335,7 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
           severity: 'blocker',
           category: 'correctness',
           suggestedFix: null,
+          challenge: null,
         },
       ],
       selectedFindingIds: [],
@@ -453,6 +454,58 @@ describe('CatFactoryAiReviewGateway curation', () => {
     expect(calls[0]?.path).toBe('/api/v1/runs/run-1/decisions/pr-review/findings/f-1/dismiss')
     expect(curation?.status).toBe('awaiting_selection')
     expect(curation?.findings).toStrictEqual([])
+  })
+
+  it('challenges one finding with the concern the curator wrote', async () => {
+    const { gateway, calls } = gatewayOver({ '/challenge': { body: decisions() } })
+
+    await gateway.challengeFinding({
+      runId: 'run-1',
+      findingId: 'f-1',
+      question: ' Is it reachable? ',
+    })
+
+    expect(calls).toStrictEqual([
+      {
+        method: 'POST',
+        path: '/api/v1/runs/run-1/decisions/pr-review/findings/f-1/challenge',
+        body: { question: 'Is it reachable?' },
+      },
+    ])
+  })
+
+  it('challenges with no concern by sending none, so the investigator asks its own', async () => {
+    const { gateway, calls } = gatewayOver({ '/challenge': { body: decisions() } })
+    await gateway.challengeFinding({ runId: 'run-1', findingId: 'f-1', question: '  ' })
+    expect(calls[0]?.body).toStrictEqual({})
+  })
+
+  it('reads the verdict back onto the finding', async () => {
+    const verdict = { status: 'retracted', question: null, justification: 'The guard is upstream.' }
+    const { gateway } = gatewayOver({
+      '/run': { body: run({ status: 'blocked' }) },
+      '/decisions': {
+        body: decisions({ decisions: [decision({ findings: [finding({ challenge: verdict })] })] }),
+      },
+    })
+
+    const reported = await gateway.getStatus('task-1')
+
+    expect(reported.curation?.findings[0]?.challenge).toStrictEqual(verdict)
+  })
+
+  it('reports a challenge of a retracted finding as a conflict', async () => {
+    const { gateway } = gatewayOver({
+      '/challenge': {
+        status: 409,
+        body: {
+          error: { code: 'conflict', message: 'A retracted finding can no longer be challenged.' },
+        },
+      },
+    })
+    await expect(
+      gateway.challengeFinding({ runId: 'run-1', findingId: 'f-1', question: null }),
+    ).rejects.toMatchObject({ code: 'conflict' })
   })
 
   it('resumes a stalled review without saying which slices to redo', async () => {

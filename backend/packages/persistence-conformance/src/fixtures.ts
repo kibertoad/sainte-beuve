@@ -116,6 +116,11 @@ export function curation(overrides: Partial<AiReviewCuration> = {}): AiReviewCur
         severity: 'high',
         category: 'correctness',
         suggestedFix: 'Guard the read.',
+        challenge: {
+          status: 'upheld',
+          question: 'Is the index ever out of range?',
+          justification: 'The caller passes the length unchecked.',
+        },
       },
     ],
     selectedFindingIds: [],
