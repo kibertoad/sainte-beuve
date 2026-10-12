@@ -56,8 +56,13 @@ export type {
 export type { AttentionBus, RealtimeKind, ScopedAttentionBus } from './ports/realtime.js'
 export { isStoredRowError, StoredRowError } from './ports/stored-row.js'
 export type {
-  AiReviewRunRepository,
   ApiKeyRepository,
+  SessionRepository,
+  StoredApiKey,
+  StoredSession,
+} from './ports/auth.js'
+export type {
+  AiReviewRunRepository,
   AttentionRepository,
   IdentityRepository,
   IntegrationTokenRepository,
@@ -69,10 +74,7 @@ export type {
   ReviewerRepository,
   ReviewListOrder,
   ReviewRequestRepository,
-  SessionRepository,
-  StoredApiKey,
   StoredIntegrationToken,
-  StoredSession,
 } from './ports/repositories.js'
 export type { ExternalRepositoryRepository } from './ports/external-repositories.js'
 export type {

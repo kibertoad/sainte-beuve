@@ -1,4 +1,5 @@
 import type { Reviewer, ShortfallReason } from '@sainte-beuve/contracts'
+import { type PastReviewCounts, familiarityBonus } from './familiarity.js'
 
 /**
  * Reviewer selection: a load-aware weighted random pick that favours the
@@ -47,6 +48,8 @@ export interface ScoredCandidate {
   matchedSkills: string[]
   /** The wanted domains this reviewer knows, as the review spelled them, each once. */
   matchedDomains: string[]
+  /** Reviews this reviewer finished on the pull request's repository. */
+  pastReviews: number
   /** The reviewer's share of the draw. Higher is likelier; never zero for a candidate. */
   weight: number
 }
@@ -55,6 +58,8 @@ export interface SelectionInput extends MatchTarget {
   candidates: Reviewer[]
   /** Reviewer ids that must not be picked: the author, anyone already on, the caller's vetoes. */
   excludeReviewerIds: readonly string[]
+  /** What each candidate already finished on the repository. Required, so no caller skips it. */
+  pastReviews: PastReviewCounts
   count: number
 }
 
@@ -136,9 +141,14 @@ function heldOf(held: readonly string[], wanted: readonly string[]): string[] {
 
 /**
  * Skills and domains count alike: the mix is one list of what the review
- * wants, and the affinity is the share of it the reviewer holds.
+ * wants, and the affinity is the share of it the reviewer holds. Familiarity
+ * with the repository adds its own bounded term beside it.
  */
-export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredCandidate {
+export function scoreCandidate(
+  reviewer: Reviewer,
+  target: MatchTarget,
+  pastReviews = 0,
+): ScoredCandidate {
   const matchedSkills = heldOf(reviewer.skills, target.skills)
   const matchedDomains = heldOf(reviewer.domains, target.domains)
   const wanted = distinct(target.skills).length + distinct(target.domains).length
@@ -147,7 +157,9 @@ export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredC
     reviewer,
     matchedSkills,
     matchedDomains,
-    weight: drawWeight(reviewer) * (1 + MATCH_PREFERENCE * affinity),
+    pastReviews,
+    weight:
+      drawWeight(reviewer) * (1 + MATCH_PREFERENCE * affinity + familiarityBonus(pastReviews)),
   }
 }
 
@@ -155,11 +167,12 @@ export function scoreCandidates(
   candidates: readonly Reviewer[],
   target: MatchTarget,
   excludeReviewerIds: readonly string[],
+  pastReviews: PastReviewCounts,
 ): ScoredCandidate[] {
   const excluded = new Set(excludeReviewerIds)
   return candidates
     .filter((reviewer) => isEligible(reviewer, excluded))
-    .map((reviewer) => scoreCandidate(reviewer, target))
+    .map((reviewer) => scoreCandidate(reviewer, target, pastReviews.get(reviewer.id) ?? 0))
 }
 
 /**
@@ -203,7 +216,7 @@ export function selectReviewers(
   input: SelectionInput,
   random: () => number = Math.random,
 ): SelectionResult {
-  const pool = scoreCandidates(input.candidates, input, input.excludeReviewerIds)
+  const pool = scoreCandidates(input.candidates, input, input.excludeReviewerIds, input.pastReviews)
   if (pool.length === 0) {
     return { selected: [], shortfallReason: diagnoseShortfall(input.candidates) }
   }

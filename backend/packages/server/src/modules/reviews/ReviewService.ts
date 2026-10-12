@@ -17,6 +17,7 @@ import {
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
+import { pastReviewCounts } from '../reviewers/pastReviews.js'
 import { announceReview } from './announce.js'
 import { handlesOf, mirrorAssignment } from './mirror.js'
 
@@ -230,9 +231,10 @@ export class ReviewService {
     // same person is spelled differently on each, and comparing against the
     // wrong one would put them in their own review's candidate pool.
     const provider = review.pullRequest.provider
-    const [candidates, project] = await Promise.all([
+    const [candidates, project, pastReviews] = await Promise.all([
       repositories.reviewers.list(),
       repositories.projects.getByRef(review.pullRequest),
+      pastReviewCounts(this.container, review.pullRequest),
     ])
     const result = selectReviewers(
       {
@@ -248,6 +250,7 @@ export class ReviewService {
             .filter((r) => isSameHandle(handleOf(r.handles, provider), review.authorLogin))
             .map((r) => r.id),
         ],
+        pastReviews,
         count: input.count,
       },
       random,

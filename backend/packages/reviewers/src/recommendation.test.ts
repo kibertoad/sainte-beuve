@@ -1,5 +1,6 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
+import { NO_PAST_REVIEWS } from './familiarity.js'
 import { rankCandidates } from './recommendation.js'
 
 function reviewer(overrides: Partial<Reviewer> & { id: string }): Reviewer {
@@ -19,7 +20,11 @@ function reviewer(overrides: Partial<Reviewer> & { id: string }): Reviewer {
   }
 }
 
-const target = { skills: ['typescript', 'payments'], domains: ['billing'] }
+const target = {
+  skills: ['typescript', 'payments'],
+  domains: ['billing'],
+  pastReviews: NO_PAST_REVIEWS,
+}
 
 function ids(result: ReturnType<typeof rankCandidates>): string[] {
   return result.ranked.map((candidate) => candidate.reviewer.id)
@@ -55,6 +60,35 @@ describe('rankCandidates', () => {
       limit: 10,
     })
     expect(ids(result)).toStrictEqual(['idle', 'busy'])
+  })
+
+  it('lifts somebody who has reviewed the repository before over an equal stranger', () => {
+    const result = rankCandidates({
+      ...target,
+      candidates: [
+        reviewer({ id: 'stranger', skills: ['typescript'] }),
+        reviewer({ id: 'regular', skills: ['typescript'] }),
+      ],
+      excludeReviewerIds: [],
+      pastReviews: new Map([['regular', 2]]),
+      limit: 10,
+    })
+    expect(ids(result)).toStrictEqual(['regular', 'stranger'])
+    expect(result.ranked.map((candidate) => candidate.pastReviews)).toStrictEqual([2, 0])
+  })
+
+  it('still ranks the whole wanted mix over any amount of history', () => {
+    const result = rankCandidates({
+      ...target,
+      candidates: [
+        reviewer({ id: 'regular' }),
+        reviewer({ id: 'expert', skills: ['typescript', 'payments'], domains: ['billing'] }),
+      ],
+      excludeReviewerIds: [],
+      pastReviews: new Map([['regular', 1000]]),
+      limit: 10,
+    })
+    expect(ids(result)).toStrictEqual(['expert', 'regular'])
   })
 
   it('breaks a tie on the name, then the id, whatever order the directory came in', () => {

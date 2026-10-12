@@ -1,5 +1,6 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
+import { NO_PAST_REVIEWS, familiarityBonus } from './familiarity.js'
 import {
   MATCH_PREFERENCE,
   type SelectionInput,
@@ -36,7 +37,15 @@ function scripted(values: number[]): () => number {
 
 /** A selection over `candidates` that wants nothing in particular, unless told. */
 function input(candidates: Reviewer[], overrides: Partial<SelectionInput> = {}): SelectionInput {
-  return { candidates, skills: [], domains: [], excludeReviewerIds: [], count: 1, ...overrides }
+  return {
+    candidates,
+    skills: [],
+    domains: [],
+    excludeReviewerIds: [],
+    pastReviews: NO_PAST_REVIEWS,
+    count: 1,
+    ...overrides,
+  }
 }
 
 describe('isEligible', () => {
@@ -77,6 +86,7 @@ describe('match scoring', () => {
       ],
       target,
       [],
+      NO_PAST_REVIEWS,
     ).map((candidate) => [candidate.reviewer.id, candidate.weight])
     expect(scored).toStrictEqual([
       ['both', 1 + MATCH_PREFERENCE],
@@ -93,7 +103,9 @@ describe('match scoring', () => {
       domains: ['billing'],
       outstandingReviews: 1,
     })
-    expect(scoreCandidates([busy], target, [])[0]?.weight).toBe((1 + MATCH_PREFERENCE) / 2)
+    expect(scoreCandidates([busy], target, [], NO_PAST_REVIEWS)[0]?.weight).toBe(
+      (1 + MATCH_PREFERENCE) / 2,
+    )
   })
 
   it('leaves the draw to load and weight when the review wants nothing', () => {
@@ -101,8 +113,32 @@ describe('match scoring', () => {
       [reviewer({ id: 'a', skills: ['go'] })],
       { skills: [], domains: [] },
       [],
+      NO_PAST_REVIEWS,
     )
     expect(scored[0]?.weight).toBe(1)
+  })
+})
+
+describe('familiarity in the draw', () => {
+  it('adds the bonus for past reviews on top of the match, under the load damping', () => {
+    const regular = reviewer({ id: 'regular', skills: ['go'], outstandingReviews: 1 })
+    const scored = scoreCandidates(
+      [regular],
+      { skills: ['go'], domains: [] },
+      [],
+      new Map([['regular', 3]]),
+    )
+    expect(scored[0]?.pastReviews).toBe(3)
+    expect(scored[0]?.weight).toBe((1 + MATCH_PREFERENCE + familiarityBonus(3)) / 2)
+  })
+
+  it('draws the regular where two reviewers otherwise tie', () => {
+    const pool = [reviewer({ id: 'new' }), reviewer({ id: 'regular' })]
+    const pastReviews = new Map([['regular', 3]])
+    // Weights 1 and 2: a draw at 0.4 of the total lands past the newcomer's third.
+    expect(selectReviewers(input(pool, { pastReviews }), scripted([0.4])).selected[0]?.id).toBe(
+      'regular',
+    )
   })
 })
 

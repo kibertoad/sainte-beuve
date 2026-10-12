@@ -59,6 +59,17 @@ export {
   selectAttentionAudience,
 } from './attention.js'
 export {
+  countPastReviews,
+  familiarityBonus,
+  NO_PAST_REVIEWS,
+  PAST_REVIEW_HALF_POINT,
+  PAST_REVIEW_PREFERENCE,
+  PAST_REVIEW_READ_LIMIT,
+  PAST_REVIEW_STATUSES,
+  PAST_REVIEW_WINDOW_MS,
+  type PastReviewCounts,
+} from './familiarity.js'
+export {
   diagnoseShortfall,
   drawWeight,
   hasAllSkills,

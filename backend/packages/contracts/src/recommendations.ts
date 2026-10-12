@@ -38,6 +38,12 @@ export const recommendationReasonsSchema = v.object({
   matchedDomains: v.array(domainSchema),
   /** Reviews this person is already on, which lowers their score. */
   outstandingReviews: v.number(),
+  /**
+   * Reviews this person finished on the pull request's repository recently,
+   * which raises their score with diminishing returns. Counted from the board,
+   * so a review the deployment never tracked is not in it.
+   */
+  pastReviews: v.number(),
 })
 export type RecommendationReasons = v.InferOutput<typeof recommendationReasonsSchema>
 

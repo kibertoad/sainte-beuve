@@ -7,6 +7,7 @@ import type {
 import { handleOf } from '@sainte-beuve/contracts'
 import { isSameHandle, matchTargetFor, rankCandidates } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { pastReviewCounts } from './pastReviews.js'
 
 /**
  * Who should review a pull request, best first.
@@ -23,10 +24,11 @@ export class RecommendationService {
   async recommend(viewer: Reviewer, input: RecommendReviewers): Promise<ReviewerRecommendations> {
     const { repositories } = this.container
     const { pullRequest } = input
-    const [candidates, project, boardRow] = await Promise.all([
+    const [candidates, project, boardRow, pastReviews] = await Promise.all([
       repositories.reviewers.list(),
       repositories.projects.getByRef(pullRequest),
       repositories.reviews.getByPullRequest(pullRequest),
+      pastReviewCounts(this.container, pullRequest),
     ])
     // The board looks a row up by owner, repo and number alone, so a row from
     // the other host under the same names is not this pull request.
@@ -42,6 +44,7 @@ export class RecommendationService {
       ...target,
       candidates,
       excludeReviewerIds: [viewer.id, ...excludedBy(review, candidates)],
+      pastReviews,
       limit: input.limit,
     })
     return {
@@ -55,6 +58,7 @@ export class RecommendationService {
           matchedSkills: candidate.matchedSkills,
           matchedDomains: candidate.matchedDomains,
           outstandingReviews: candidate.reviewer.outstandingReviews,
+          pastReviews: candidate.pastReviews,
         },
       })),
       shortfallReason,

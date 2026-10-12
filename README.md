@@ -101,9 +101,13 @@ a team names its own), how many people you want, and whether the ask should stay
 inside your team.
 
 The dialog lists the five best matches as you pick: ranked on those skills and
-the repository's domains, lower for each review a person already has open, with
-what each one matched beside their name. It is the same score an automatic
-assignment draws with, so the list and the router agree on who fits.
+the repository's domains, higher for each review a person finished in the same
+repository over the last six months, lower for each review they already have
+open, with what each one matched beside their name. Past reviews count with
+diminishing returns and never outweigh the skills, so the regular of a
+repository is preferred without being handed every review in it. It is the same
+score an automatic assignment draws with, so the list and the router agree on
+who fits.
 
 Everyone available who holds all of those skills is asked, two ways at once. A
 page already open is pushed the request over server-sent events; a page opened

@@ -1,4 +1,5 @@
 import type { Reviewer, ShortfallReason } from '@sainte-beuve/contracts'
+import type { PastReviewCounts } from './familiarity.js'
 import {
   type MatchTarget,
   type ScoredCandidate,
@@ -18,6 +19,8 @@ export interface RankingInput extends MatchTarget {
   candidates: readonly Reviewer[]
   /** Reviewer ids that must not be recommended: the author, anyone already on, the caller. */
   excludeReviewerIds: readonly string[]
+  /** What each candidate already finished on the repository, the same counts selection reads. */
+  pastReviews: PastReviewCounts
   limit: number
 }
 
@@ -40,7 +43,12 @@ export function compareCandidates(left: ScoredCandidate, right: ScoredCandidate)
 }
 
 export function rankCandidates(input: RankingInput): RankingResult {
-  const ranked = scoreCandidates(input.candidates, input, input.excludeReviewerIds)
+  const ranked = scoreCandidates(
+    input.candidates,
+    input,
+    input.excludeReviewerIds,
+    input.pastReviews,
+  )
     .toSorted(compareCandidates)
     .slice(0, input.limit)
   if (ranked.length > 0) return { ranked, shortfallReason: null }
