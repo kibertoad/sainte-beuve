@@ -27,7 +27,7 @@ pull request is merged with its review findings fixed.
 | 4   | Bonus for past reviews in the same repository                 | 2    | 1          | Not started |                                                          |
 | 5   | An AI review files under its repository's cat-factory service | 5    |            | Not started |                                                          |
 | 6   | Start an AI review from any pull request row                  | 5    |            | Not started |                                                          |
-| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Not started |                                                          |
+| 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | In review   | [#38](https://github.com/kibertoad/sainte-beuve/pull/38) |
 | 8   | A commitment requests the reviewer on the host                | 3, 4 |            | Not started |                                                          |
 | 9   | One matching rule for assignment and asks                     | 2    | 2          | Not started |                                                          |
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
