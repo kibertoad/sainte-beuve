@@ -36,7 +36,7 @@ pull request is merged with its review findings fixed.
 | 13  | A guided review names its cat-factory workspace               | 5    | 5          | Merged    | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
 | 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | Merged    | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
 | 15  | Attention answers are written atomically                      | 3    |            | Merged    | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
-| 17  | Slack app setup from a generated manifest                     | 3    |            | In review |                                                          |
+| 17  | Slack app setup from a generated manifest                     | 3    |            | In review | [#47](https://github.com/kibertoad/sainte-beuve/pull/47) |
 
 Status is one of: Not started, In progress, In review, Merged.
 
