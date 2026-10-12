@@ -16,11 +16,13 @@ import { type ChatCommandDecision, decideChatCommand } from '@sainte-beuve/revie
 import type { AppContainer } from '../../container.js'
 import { resolveSlackSigningSecret } from '../../integrations/resolve.js'
 import { snoozeReview } from '../../reminders/snooze.js'
+import { AttentionService } from '../attention/AttentionService.js'
 import { AiReviewService } from '../reviews/AiReviewService.js'
 import { ReviewService } from '../reviews/ReviewService.js'
 
 /**
- * The `/review` slash command and the announcement message's buttons.
+ * The `/review` slash command, the announcement message's buttons, and the commit
+ * button on an attention ask's DM.
  *
  * Both arrive as signed, form-encoded POSTs to one route, which is what makes
  * this the whole Slack inbound surface: no socket, no Bolt, no second server.
@@ -201,6 +203,7 @@ export class SlackWebhookService {
   private async run(intent: SlackIntent, slackUserId: string): Promise<string> {
     if (intent.kind === 'help') return HELP
     if (intent.kind === 'list') return this.list()
+    if (intent.kind === 'attention_commit') return this.commitToAsk(intent.attentionId, slackUserId)
     const review = await this.require(intent.reviewId)
     // Every verb past here WRITES, so it is asked who typed it before anything
     // else. See `decideChatCommand` in @sainte-beuve/reviewers.
@@ -248,6 +251,19 @@ export class SlackWebhookService {
       .map((review) => `- \`${review.id}\` ${describe(review)} (${review.status})`)
     const more = open.length > lines.length ? `\n...and ${open.length - lines.length} more.` : ''
     return `${lines.join('\n')}${more}`
+  }
+
+  /**
+   * "I will review it" from an attention ask's DM, through the same service
+   * the inbox's button calls, so a Slack commitment counts towards the ask and
+   * resolves it exactly as one from the SPA does. The DM itself is re-rendered
+   * by that service; this is the confirmation for whoever pressed it.
+   */
+  private async commitToAsk(attentionId: string, slackUserId: string): Promise<string> {
+    const actor = await this.actorFor(slackUserId)
+    if (actor === null) return refusalFor('not_in_directory', slackUserId)
+    const request = await new AttentionService(this.container).commit(actor, attentionId)
+    return `You will review ${describe(request)}. It is on your workspace.`
   }
 
   /** "I will take it", by the row the Slack user maps to. */
@@ -304,8 +320,8 @@ function ephemeral(text: string): SlackReply {
 }
 
 /** Escaped, because `owner/repo` is a third party's name and `<` is Slack syntax. */
-function describe(review: ReviewRequest): string {
-  return slackLink(review.pullRequest.url, formatPullRequest(review.pullRequest))
+function describe(subject: Pick<ReviewRequest, 'pullRequest'>): string {
+  return slackLink(subject.pullRequest.url, formatPullRequest(subject.pullRequest))
 }
 
 /**

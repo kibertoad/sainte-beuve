@@ -121,7 +121,8 @@ export function reminderMessage(
   return { text: `Reminder: ${link} is waiting on your review.${board}` }
 }
 
-function button(
+/** One block-kit button whose `value` names what it acts on. */
+export function button(
   label: string,
   actionId: string,
   value: string,

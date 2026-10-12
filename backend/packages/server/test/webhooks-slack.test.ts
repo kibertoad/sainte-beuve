@@ -1,7 +1,13 @@
-import { DEFAULT_ORG_ID, type ReviewRequest } from '@sainte-beuve/contracts'
+import {
+  type AttentionRequest,
+  DEFAULT_ORG_ID,
+  type Reviewer,
+  type ReviewRequest,
+} from '@sainte-beuve/contracts'
 import { SLACK_ACTIONS } from '@sainte-beuve/integrations'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { withOrg } from '../src/container.js'
+import { AttentionService } from '../src/modules/attention/AttentionService.js'
 import { announceReview } from '../src/modules/reviews/announce.js'
 import { ReviewService } from '../src/modules/reviews/ReviewService.js'
 import { stubAiReview } from './ai-review-doubles.js'
@@ -555,5 +561,62 @@ describe('Slack intake, per org', () => {
     // secret on the Configuration screen would otherwise be rotating nothing.
     expect((await signed(harness, command('list'), { secret: SECRET })).status).toBe(403)
     expect((await signed(harness, command('list'), { secret: ORG_SECRET })).status).toBe(200)
+  })
+})
+
+describe('an attention ask answered from Slack', () => {
+  let harness: TestHarness
+
+  beforeEach(() => {
+    harness = buildHarness({
+      slack: { signingSecret: SECRET, announcementChannelId: 'C-reviews' },
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** An ask raised through the service, as the dialog would raise it. */
+  async function ask(asker: Reviewer, recipientIds: string[]): Promise<AttentionRequest> {
+    return new AttentionService(harness.container).raise(asker, {
+      pullRequest: PR,
+      title: 'Add a health check',
+      recipientIds,
+      requiredSkills: [],
+      sameTeamOnly: false,
+      neededCommitments: 1,
+      note: null,
+    })
+  }
+
+  it('commits to an attention ask from the button on its DM', async () => {
+    const asker = await addReviewer(harness, { displayName: 'Asker' })
+    const peer = await addReviewer(harness, { displayName: 'Peer', slackUserId: 'U-peer' })
+    const raised = await ask(asker, [peer.id])
+    const posted = captureFollowUps()
+
+    const res = await signed(harness, button(SLACK_ACTIONS.attentionCommit, raised.id))
+    expect(res.text).toBe('')
+    expect(posted).toStrictEqual([
+      { url: RESPONSE_URL, text: expect.stringContaining('You will review') },
+    ])
+    const stored = await harness.container.repositories.attention.getById(raised.id)
+    expect(stored?.status).toBe('resolved')
+    expect(await harness.container.repositories.commitments.find(peer.id, PR)).not.toBeNull()
+  })
+
+  it('says an attention ask is over when its button is pressed after it resolved', async () => {
+    const asker = await addReviewer(harness, { displayName: 'Asker' })
+    const first = await addReviewer(harness, { displayName: 'First' })
+    await addReviewer(harness, { displayName: 'Peer', slackUserId: 'U-peer' })
+    const raised = await ask(asker, [])
+    await new AttentionService(harness.container).commit(first, raised.id)
+    const posted = captureFollowUps()
+
+    await signed(harness, button(SLACK_ACTIONS.attentionCommit, raised.id))
+    expect(posted).toStrictEqual([
+      { url: RESPONSE_URL, text: expect.stringContaining('already resolved') },
+    ])
   })
 })

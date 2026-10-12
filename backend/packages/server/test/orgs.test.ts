@@ -686,6 +686,7 @@ function attentionIn(id: string) {
     requestedById: 'r1',
     requestedByName: 'Somebody',
     recipients: [],
+    chatDeliveries: [],
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,

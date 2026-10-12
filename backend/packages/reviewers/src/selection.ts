@@ -190,13 +190,23 @@ export function matchPreference(affinity: number, pastReviews: number): number {
   return 1 + MATCH_PREFERENCE * affinity + familiarityBonus(pastReviews)
 }
 
+/** What of a review's wanted skills and domains one reviewer holds: the reason they fit. */
+export function matchesOf(
+  reviewer: Reviewer,
+  target: MatchTarget,
+): Pick<ScoredCandidate, 'matchedSkills' | 'matchedDomains'> {
+  return {
+    matchedSkills: heldOf(reviewer.skills, target.skills),
+    matchedDomains: heldOf(reviewer.domains, target.domains),
+  }
+}
+
 /**
  * Skills and domains count alike: the mix is one list of what the review
  * wants, and the affinity is the share of it the reviewer holds.
  */
 export function scoreCandidate(reviewer: Reviewer, target: ScoringTarget): ScoredCandidate {
-  const matchedSkills = heldOf(reviewer.skills, target.skills)
-  const matchedDomains = heldOf(reviewer.domains, target.domains)
+  const { matchedSkills, matchedDomains } = matchesOf(reviewer, target)
   const wanted = distinct(target.skills).length + distinct(target.domains).length
   const affinity = wanted === 0 ? 0 : (matchedSkills.length + matchedDomains.length) / wanted
   const pastReviews = target.pastReviews.get(reviewer.id) ?? 0

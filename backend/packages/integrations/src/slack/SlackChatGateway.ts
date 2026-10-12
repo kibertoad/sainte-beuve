@@ -1,22 +1,26 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
 import {
+  type AttentionAskNotice,
   type ChatGateway,
+  type ChatMessageRef,
   UpstreamFailedError,
   getErrorMessage,
   withDeadline,
 } from '@sainte-beuve/kernel'
+import { attentionAskMessage } from './attentionMessage.js'
 import { announcementMessage, reminderMessage, type SlackMessage } from './message.js'
 
 /**
- * The Slack side of the chat port: announce a review, deliver a nudge.
+ * The Slack side of the chat port: announce a review, deliver a nudge, DM an
+ * attention ask and update it when the ask closes.
  *
  * Plain `fetch` against Slack's Web API rather than `@slack/web-api`. Two
  * reasons, and the first one is not negotiable: the official client reaches for
  * `node:os` (through its instrumentation layer), which workerd does not provide,
  * so importing it makes the Worker bundle fail to load. The second is that the
- * surface we use is two POSTs of JSON, and a client that ships an HTTP stack,
- * retry policy and telemetry to cover them is a lot of dependency for
- * `chat.postMessage`.
+ * surface we use is two methods taking JSON, and a client that ships an HTTP
+ * stack, retry policy and telemetry to cover them is a lot of dependency for
+ * `chat.postMessage` and `chat.update`.
  *
  * `@slack/bolt` is not the alternative: it owns a server and a socket, which is
  * the wrong shape for a Worker and duplicates the HTTP layer we already have on
@@ -38,6 +42,8 @@ interface SlackResponse {
   ok: boolean
   error?: string
   ts?: string
+  /** The conversation the message landed in: a DM's own `D…` id when it was posted to a user. */
+  channel?: string
 }
 
 const SLACK_API_BASE_URL = 'https://slack.com/api'
@@ -63,8 +69,38 @@ export class SlackChatGateway implements ChatGateway {
     await this.postMessage(target, reminderMessage(reminder, review, this.options.appBaseUrl))
   }
 
+  /**
+   * Posted to the user id, which Slack delivers as a DM from the bot. The
+   * conversation id comes back from the reply rather than being the user id,
+   * because `chat.update` only takes the DM's own id.
+   */
+  async sendAttentionAsk(notice: AttentionAskNotice, target: string): Promise<ChatMessageRef> {
+    const result = await this.postMessage(
+      target,
+      attentionAskMessage(notice, this.options.appBaseUrl),
+    )
+    // Both are what a later `chat.update` is addressed by, so a reply missing
+    // either is a DM that can never be closed: refused here rather than stored.
+    if (result.channel === undefined || result.ts === undefined) {
+      throw new UpstreamFailedError('Slack posted the DM but did not say where it landed')
+    }
+    return { conversationId: result.channel, messageId: result.ts }
+  }
+
+  async updateAttentionAsk(notice: AttentionAskNotice, message: ChatMessageRef): Promise<void> {
+    await this.call('chat.update', {
+      channel: message.conversationId,
+      ts: message.messageId,
+      ...attentionAskMessage(notice, this.options.appBaseUrl),
+    })
+  }
+
   private async postMessage(channel: string, message: SlackMessage): Promise<SlackResponse> {
-    const url = `${this.options.apiBaseUrl ?? SLACK_API_BASE_URL}/chat.postMessage`
+    return this.call('chat.postMessage', { channel, ...message })
+  }
+
+  private async call(method: string, body: Record<string, unknown>): Promise<SlackResponse> {
+    const url = `${this.options.apiBaseUrl ?? SLACK_API_BASE_URL}/${method}`
     let response: Response
     try {
       response = await this.fetchImpl(url, {
@@ -73,7 +109,7 @@ export class SlackChatGateway implements ChatGateway {
           authorization: `Bearer ${this.options.botToken}`,
           'content-type': 'application/json; charset=utf-8',
         },
-        body: JSON.stringify({ channel, ...message }),
+        body: JSON.stringify(body),
       })
     } catch (err) {
       throw new UpstreamFailedError(`Could not reach Slack: ${getErrorMessage(err)}`)
