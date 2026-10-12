@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AiReviewFinding, AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import { AI_REVIEW_CHALLENGE_LIMIT, challengedFindingIdsOf } from '@sainte-beuve/contracts'
 
 // One delegated review, and the loop it is in the middle of.
 //
@@ -44,6 +45,11 @@ const retracted = computed(
         .filter((finding) => finding.challenge?.status === 'retracted')
         .map((finding) => finding.findingId),
     ),
+)
+
+/** Whether the review has challenged as many findings as it may. The server holds the same rule. */
+const challengesSpent = computed(
+  () => challengedFindingIdsOf(props.run).size >= AI_REVIEW_CHALLENGE_LIMIT,
 )
 
 /** The states a run has stopped in. Its curation is a record, not a control. */
@@ -139,10 +145,6 @@ const postFailed = computed(() => {
   if (it === null) return false
   return it.failures.length > 0 || it.bodyError !== null || it.bodyPosted === false
 })
-
-function lineOf(finding: { path: string; line: number | null }): string {
-  return finding.line === null ? finding.path : `${finding.path}:${finding.line}`
-}
 </script>
 
 <template>
@@ -215,7 +217,7 @@ function lineOf(finding: { path: string; line: number | null }): string {
         </p>
         <ul v-if="report.failures.length > 0" class="mt-2 list-disc pl-4">
           <li v-for="failure in report.failures" :key="failure.findingId">
-            <span class="font-mono text-xs break-all">{{ lineOf(failure) }}</span
+            <span class="font-mono text-xs break-all">{{ codeLocation(failure) }}</span
             >: {{ failure.reason }}
           </li>
         </ul>
@@ -251,6 +253,7 @@ function lineOf(finding: { path: string; line: number | null }): string {
         :selected="selected.has(finding.findingId)"
         :awaiting="awaiting"
         :posted="posted.has(finding.findingId)"
+        :challenges-spent="challengesSpent"
         :busy="busy"
         @toggle="toggle(finding.findingId)"
         @dismiss="emit('dismiss', finding.findingId)"
