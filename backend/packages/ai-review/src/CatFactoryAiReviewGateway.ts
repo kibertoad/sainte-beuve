@@ -4,12 +4,13 @@ import {
   type AiReviewGateway,
   type AiReviewHandle,
   type AiReviewReport,
-  UnavailableError,
   formatPullRequest,
   withDeadline,
 } from '@sainte-beuve/kernel'
 import { curationOf } from './curation.js'
+import { placeReview } from './placement.js'
 import { refusalFor } from './refusals.js'
+import { WorkspaceClients } from './workspaceClients.js'
 
 /**
  * The cat-factory side of the AI-review port.
@@ -36,11 +37,11 @@ export interface CatFactoryOptions {
    */
   apiKey: string
   /**
-   * The cat-factory service (repository frame) review tasks are filed under. One
-   * service per repository is cat-factory's own model, so a deployment reviewing
-   * several repos configures a mapping; the single-service default is the
-   * starting point, not the end state (docs/implementation-plan.md, slice 4).
-   * Null for a gateway that only polls and curates runs already filed.
+   * The service (repository frame) a review task goes under when no service
+   * backs its repository. cat-factory models one service per repository, so a
+   * review normally goes under its own repository's service, read from the
+   * workspace that links it; this is the fallback for a repository with none,
+   * such as a monorepo. Null files a review only under its repository's service.
    */
   serviceId: string | null
   /** Pin the pipeline the review runs on. Omitted, the task's own pinned pipeline runs. */
@@ -101,15 +102,22 @@ function statusOf(run: PublicRun, curation: AiReviewCuration | null): AiReviewRe
 }
 
 export class CatFactoryAiReviewGateway implements AiReviewGateway {
-  private readonly client: CatFactoryClient
   private readonly options: CatFactoryOptions
+  /** Every call about a run names the workspace it was filed in. */
+  private readonly clients: WorkspaceClients
 
   constructor(options: CatFactoryOptions) {
     this.options = options
-    this.client = new CatFactoryClient({
+    this.clients = new WorkspaceClients((workspaceId) => this.build(workspaceId))
+  }
+
+  private build(workspaceId: string | undefined): CatFactoryClient {
+    const { options } = this
+    return new CatFactoryClient({
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       userAgent: 'sainte-beuve',
+      ...(workspaceId === undefined ? {} : { workspaceId }),
       // Deadlined at the transport, with the shared rule every adapter that
       // calls a host we do not control now carries (`withDeadline` in the
       // kernel). This was the first path to need it and the reason it exists:
@@ -126,12 +134,19 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     pullRequest: PullRequestRef
     title: string
     instructions: string | null
+    directoryKeys: readonly string[]
   }): Promise<AiReviewHandle> {
-    const task = await this.createTask(input)
+    const placement = await placeReview(this.clients, {
+      pullRequest: input.pullRequest,
+      directoryKeys: input.directoryKeys,
+      defaultServiceId: this.options.serviceId,
+    })
+    const client = this.clients.in(placement.workspaceId)
+    const task = await this.createTask(client, placement.serviceId, input)
     // Create and start are two calls in cat-factory's API on purpose (a task is
     // editable before it runs), but a review has nothing to edit, so file it and go.
     try {
-      await this.client.tasks.start(
+      await client.tasks.start(
         task.taskId,
         this.options.pipelineId === undefined ? {} : { pipelineId: this.options.pipelineId },
       )
@@ -141,24 +156,24 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
       // not start one the caller could not answer. See `refusalFor`.
       throw refusalFor(err, `start the review task ${task.taskId} it had accepted`)
     }
-    return { taskId: task.taskId, url: `${this.options.baseUrl}/tasks/${task.taskId}` }
+    return {
+      taskId: task.taskId,
+      url: `${this.options.baseUrl}/tasks/${task.taskId}`,
+      workspaceId: placement.workspaceId,
+    }
   }
 
-  private async createTask(input: {
-    pullRequest: PullRequestRef
-    title: string
-    instructions: string | null
-  }) {
+  private async createTask(
+    client: CatFactoryClient,
+    serviceId: string,
+    input: { pullRequest: PullRequestRef; title: string; instructions: string | null },
+  ) {
     const ref = formatPullRequest(input.pullRequest)
-    const { serviceId } = this.options
-    if (serviceId === null) {
-      throw new UnavailableError(`Cannot file a review task for ${ref}: no service id is set`)
-    }
     const brief = [`Review ${ref}: ${input.pullRequest.url}`, input.instructions]
       .filter((line): line is string => line !== null && line.length > 0)
       .join('\n\n')
     try {
-      return await this.client.tasks.create(serviceId, {
+      return await client.tasks.create(serviceId, {
         title: `Review ${ref}: ${input.title}`.slice(0, 200),
         description: brief.slice(0, 2000),
         taskType: 'review',
@@ -168,15 +183,18 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     }
   }
 
-  async getStatus(taskId: string): Promise<AiReviewReport> {
-    const run = await this.readRun(taskId)
+  async getStatus(input: { taskId: string; workspaceId: string | null }): Promise<AiReviewReport> {
+    const client = this.clients.in(input.workspaceId)
+    const run = await this.readRun(client, input.taskId)
     if (run === null) return NO_RUN_YET
     // Only a run still in flight is asked what it is parked on. A settled one has
     // no decision left to read, because the entry leaves cat-factory's list with
     // the loop it belongs to, so the second call would answer nothing on every
     // poll of every finished review.
     const curation =
-      TERMINAL_STATUSES[run.status] === undefined ? await this.readCuration(run.runId) : null
+      TERMINAL_STATUSES[run.status] === undefined
+        ? await this.readCuration(client, run.runId)
+        : null
     const status = statusOf(run, curation)
     return {
       status,
@@ -188,9 +206,9 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
   }
 
   /** The task's current run, or null when cat-factory has not built one yet. */
-  private async readRun(taskId: string): Promise<PublicRun | null> {
+  private async readRun(client: CatFactoryClient, taskId: string): Promise<PublicRun | null> {
     try {
-      return await this.client.tasks.getRun(taskId)
+      return await client.tasks.getRun(taskId)
     } catch (err) {
       // A task that has been filed but whose run has not been created yet has no
       // run to read. That is the normal first poll, not a fault.
@@ -208,9 +226,12 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
    * all. Every one of those means "nothing to curate", and raising them would
    * fail the whole poll of a review whose findings are sitting right there.
    */
-  private async readCuration(runId: string): Promise<AiReviewCuration | null> {
+  private async readCuration(
+    client: CatFactoryClient,
+    runId: string,
+  ): Promise<AiReviewCuration | null> {
     try {
-      return curationOf(await this.client.decisions.list(runId))
+      return curationOf(await client.decisions.list(runId))
     } catch (err) {
       if (err instanceof CatFactoryNotFoundError) return null
       throw refusalFor(err, `report the decisions for run ${runId}`)
@@ -228,10 +249,12 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
   async dismissFinding(input: {
     runId: string
     findingId: string
+    workspaceId: string | null
   }): Promise<AiReviewCuration | null> {
+    const { decisions } = this.clients.in(input.workspaceId)
     return curationOf(
       await this.curating(`dismiss finding ${input.findingId}`, input.runId, () =>
-        this.client.decisions.dismissPrReviewFinding(input.runId, input.findingId),
+        decisions.dismissPrReviewFinding(input.runId, input.findingId),
       ),
     )
   }
@@ -240,18 +263,21 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     runId: string
     action: AiReviewResolution
     findingIds: string[]
+    workspaceId: string | null
   }): Promise<void> {
+    const { decisions } = this.clients.in(input.workspaceId)
     await this.curating(`resolve the review as \`${input.action}\``, input.runId, () =>
-      this.client.decisions.resolvePrReview(input.runId, {
+      decisions.resolvePrReview(input.runId, {
         action: input.action,
         findingIds: input.findingIds,
       }),
     )
   }
 
-  async resumeReview(input: { runId: string }): Promise<void> {
+  async resumeReview(input: { runId: string; workspaceId: string | null }): Promise<void> {
+    const { decisions } = this.clients.in(input.workspaceId)
     await this.curating('resume the review', input.runId, () =>
-      this.client.decisions.resumePrReview(input.runId),
+      decisions.resumePrReview(input.runId),
     )
   }
 

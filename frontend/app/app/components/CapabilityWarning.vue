@@ -9,7 +9,7 @@ const props = defineProps<{ need: CapabilityName }>()
 const DESCRIPTORS: Record<CapabilityName, { title: string; missing: string }> = {
   aiReview: {
     title: 'AI review needs cat-factory',
-    missing: 'This org has not connected cat-factory, or has no service to file AI reviews under.',
+    missing: 'This org has not connected cat-factory.',
   },
   guidedReview: {
     title: 'Guided review needs cat-factory',

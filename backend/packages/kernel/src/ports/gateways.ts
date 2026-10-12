@@ -169,6 +169,18 @@ export interface AiReviewHandle {
   taskId: string
   /** Deep link into the cat-factory instance that accepted the task, when it gives one. */
   url: string | null
+  /**
+   * The cat-factory workspace the task was filed in, or null when it went to the
+   * key's only workspace. Every later call about the run names it again: a key
+   * reaching several workspaces is refused a call that names none.
+   */
+  workspaceId: string | null
+}
+
+/** The workspace a run was filed in, which every call about it names. */
+export interface AiReviewWorkspace {
+  /** See {@link AiReviewHandle.workspaceId}. */
+  workspaceId: string | null
 }
 
 /**
@@ -202,14 +214,24 @@ export interface AiReviewReport {
  * whose findings the caller is looking at.
  */
 export interface AiReviewGateway {
-  /** Hand a pull request to cat-factory. Resolves once the task is accepted, not once it runs. */
+  /**
+   * Hand a pull request to cat-factory. Resolves once the task is accepted, not
+   * once it runs.
+   *
+   * The task goes under the service that backs the pull request's repository,
+   * found through `directoryKeys`: the keys the org's repository mirror holds
+   * that repository under, one per workspace linking it. When no service backs
+   * it, the task goes to the default service, and with no default it is refused
+   * naming both fixes.
+   */
   requestReview(input: {
     pullRequest: PullRequestRef
     title: string
     instructions: string | null
+    directoryKeys: readonly string[]
   }): Promise<AiReviewHandle>
   /** Poll one delegated run. The Worker cron and the Node scheduler both drive this. */
-  getStatus(taskId: string): Promise<AiReviewReport>
+  getStatus(input: { taskId: string } & AiReviewWorkspace): Promise<AiReviewReport>
   /**
    * Drop one finding from the parked review. The review stays parked.
    *
@@ -218,22 +240,22 @@ export interface AiReviewGateway {
    * upstream calls to be told what this answer already says. Null for a run that
    * came back carrying no review to curate.
    */
-  dismissFinding(input: { runId: string; findingId: string }): Promise<AiReviewCuration | null>
+  dismissFinding(
+    input: { runId: string; findingId: string } & AiReviewWorkspace,
+  ): Promise<AiReviewCuration | null>
   /**
    * Record the curated selection and act on it. ASYNCHRONOUS: it resolves once
    * cat-factory has ACCEPTED the instruction, and what actually landed arrives on
    * a later poll as `postReport`.
    */
-  resolveReview(input: {
-    runId: string
-    action: AiReviewResolution
-    findingIds: string[]
-  }): Promise<void>
+  resolveReview(
+    input: { runId: string; action: AiReviewResolution; findingIds: string[] } & AiReviewWorkspace,
+  ): Promise<void>
   /**
    * Re-dispatch the slices a stalled review never got back. Which ones is derived
    * from what the run observed, so there is nothing to pass.
    */
-  resumeReview(input: { runId: string }): Promise<void>
+  resumeReview(input: { runId: string } & AiReviewWorkspace): Promise<void>
 }
 
 /**
@@ -294,9 +316,12 @@ export interface CatFactoryAccess {
   apiKey: string
 }
 
-/** What filing an AI review needs on top of access: the service, and optionally a pipeline. */
+/** What filing an AI review needs on top of access: a default service, and optionally a pipeline. */
 export interface CatFactoryReviewTarget extends CatFactoryAccess {
-  /** Null for a gateway that only polls and curates runs already filed. Filing refuses without one. */
+  /**
+   * The service a review goes under when no service backs its repository in
+   * cat-factory. Null files a review only under its repository's own service.
+   */
   serviceId: string | null
   /** Null runs the review task's own pinned pipeline. */
   pipelineId: string | null
@@ -351,7 +376,7 @@ export interface GatewayFactory {
    * configured, which is always the case for a host with no App concept.
    */
   vcsAsApp(provider: VcsProvider): VcsGateway | null
-  /** The AI reviewer, for one org's cat-factory key, instance and service. */
+  /** The AI reviewer, for one org's cat-factory key, instance and default service. */
   aiReview(target: CatFactoryReviewTarget): AiReviewGateway
   /**
    * The guided reviewer, from the same key and instance. It needs no service id,

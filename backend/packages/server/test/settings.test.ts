@@ -4,6 +4,7 @@ import { UpstreamFailedError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.js'
 import { WebCryptoSecretCipher } from '../src/crypto/WebCryptoSecretCipher.js'
+import { stubAiReview } from './ai-review-doubles.js'
 import { type TestHarness, buildHarness, del, noMerging, put, stubGateways } from './helpers.js'
 
 // The Configuration screen's API, through the app: the contract validation, the
@@ -130,7 +131,10 @@ describe('integration configuration API', () => {
     const wired = buildHarness({
       repositories: harness.container.repositories,
       secrets: cipherFor(KEY),
-      gateways: stubGateways({ guidedReview: () => ({}) as GuidedReviewGateway }),
+      gateways: stubGateways({
+        aiReview: () => stubAiReview(),
+        guidedReview: () => ({}) as GuidedReviewGateway,
+      }),
     })
     expect(await statusOf(wired)).toMatchObject({ state: 'stored', inUse: false })
 
@@ -141,9 +145,10 @@ describe('integration configuration API', () => {
         pipelineId: null,
       }),
     )
+    // Ready with no service id: a review goes under its repository's own service.
     expect(await saved.json()).toMatchObject({
       config: { baseUrl: 'http://localhost:8787' },
-      aiReviewReady: false,
+      aiReviewReady: true,
       guidedReviewReady: true,
     })
     expect(await statusOf(wired)).toMatchObject({ state: 'stored', inUse: true })

@@ -33,6 +33,7 @@ export {
 export type {
   AiReviewGateway,
   AiReviewHandle,
+  AiReviewWorkspace,
   AiReviewReport,
   CatFactoryAccess,
   CatFactoryProbe,
