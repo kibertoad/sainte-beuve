@@ -52,7 +52,7 @@ Not sure a finding is right? **Challenge** it, with your doubt or without one.
 cat-factory sends an investigator back to the source behind that finding, and the
 verdict lands on it: upheld, amended (with the new wording or severity), or
 retracted, which unticks it and keeps it off the pull request. Each finding can
-be challenged once, one at a time, and a review gets five.
+be challenged once, one at a time, and a review gets five, dismissed ones included.
 
 Posting reports back. If seven comments went out and two bounced, the row says
 which two and why, against the attempt number, and posting again skips what

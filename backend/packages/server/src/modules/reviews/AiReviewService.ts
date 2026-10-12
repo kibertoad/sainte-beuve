@@ -85,6 +85,7 @@ export class AiReviewService {
       summary: null,
       failureReason: null,
       curation: null,
+      challengedFindingIds: [],
       requestedAt: clock.now(),
       lastPolledAt: null,
       parkedAt: null,

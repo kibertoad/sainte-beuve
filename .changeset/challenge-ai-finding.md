@@ -18,7 +18,12 @@ Challenge a finding of a parked AI review.
   The field defaults to null, so runs stored before it still read.
 - `AiReviewGateway` gains `challengeFinding`.
 - `decideChallengeAdmission` in `@sainte-beuve/reviewers`: one challenge per
-  finding (again after a failure), one at a time, five verdicts per review.
+  finding (again after a failure), one at a time, five findings per review
+  (`AI_REVIEW_CHALLENGE_LIMIT` in `@sainte-beuve/contracts`).
+- Each run records `challengedFindingIds`, so a dismissed finding still counts
+  against the five. It defaults to empty for runs stored before it.
+- A verdict that lands between two polls re-parks the review, and a poll older
+  than a challenge no longer writes the finding back unchallenged.
 - A resolution naming a retracted finding answers 400.
 - The curation verbs move to `AiReviewCurationService`. The board's finding rows
   gain Challenge and show the verdict.

@@ -149,6 +149,7 @@ export function aiReviewRun(id: string, overrides: Partial<AiReviewRun> = {}): A
     summary: null,
     failureReason: null,
     curation: curation(),
+    challengedFindingIds: ['finding-1'],
     requestedAt: 1_000,
     lastPolledAt: null,
     parkedAt: null,

@@ -24,8 +24,8 @@ export {
   decideAiReviewAdmission,
 } from './aiAdmission.js'
 export {
-  AI_REVIEW_CHALLENGE_LIMIT,
   type AiChallengeAdmission,
+  type ChallengeRun,
   decideChallengeAdmission,
   retractedFindingIds,
 } from './aiChallenge.js'

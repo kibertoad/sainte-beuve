@@ -105,7 +105,7 @@ const RUN_BEFORE_PARKED_AT = {
 
 /**
  * A parked run from before a finding could be challenged: its findings have no
- * `challenge` key. Every run curated before that release is one of these, and a
+ * `challenge` key, and the run no `challengedFindingIds`. Every run curated before that release is one of these, and a
  * parked one is read on every board open and every tick of the clock.
  */
 const RUN_BEFORE_CHALLENGES = {
@@ -223,6 +223,8 @@ export const storedRowConformanceCases: readonly StoredRowCase[] = [
 
     assert.strictEqual(read?.curation?.findings[0]?.challenge, null)
     assert.strictEqual(listed?.curation?.findings[0]?.challenge, null)
+    assert.deepStrictEqual(read?.challengedFindingIds, [])
+    assert.deepStrictEqual(listed?.challengedFindingIds, [])
   }),
 
   storedRowCase('heals an org written before anybody decided who may join', async (harness) => {

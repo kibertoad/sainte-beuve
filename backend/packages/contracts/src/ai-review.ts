@@ -250,6 +250,13 @@ export const aiReviewRunSchema = v.object({
   failureReason: v.nullable(v.string()),
   /** What there is to curate right now. See {@link aiReviewCurationSchema}. */
   curation: v.nullable(aiReviewCurationSchema),
+  /**
+   * Every finding this deployment has sent to cat-factory's investigator. The
+   * curation cannot hold that record alone: a dismissal removes the finding,
+   * and its challenge with it. See {@link challengedFindingIdsOf}. A default for
+   * the reason `parkedAt` gives.
+   */
+  challengedFindingIds: v.optional(v.array(v.string()), []),
   requestedAt: v.number(),
   /**
    * When a poll last reached cat-factory about this run. Null until one has.
@@ -351,3 +358,22 @@ export const challengeAiReviewFindingSchema = v.object({
   question: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000))), null),
 })
 export type ChallengeAiReviewFinding = v.InferOutput<typeof challengeAiReviewFindingSchema>
+
+/** How many findings of one review may be sent to cat-factory's investigator. */
+export const AI_REVIEW_CHALLENGE_LIMIT = 5
+
+/**
+ * The findings of a run that count against {@link AI_REVIEW_CHALLENGE_LIMIT}:
+ * those recorded as challenged from here, and those the curation shows carrying
+ * a challenge, which covers one filed on cat-factory's own screen. A finding
+ * counts once however many times it is asked about, so a challenge that failed
+ * may be repeated without spending more of the budget.
+ */
+export function challengedFindingIdsOf(
+  run: Pick<AiReviewRun, 'curation' | 'challengedFindingIds'>,
+): Set<string> {
+  const carrying = (run.curation?.findings ?? [])
+    .filter((finding) => finding.challenge !== null)
+    .map((finding) => finding.findingId)
+  return new Set([...run.challengedFindingIds, ...carrying])
+}

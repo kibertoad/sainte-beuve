@@ -49,6 +49,7 @@ function parkedRun(overrides: Partial<AiReviewRun> = {}): AiReviewRun {
     summary: null,
     failureReason: null,
     curation: null,
+    challengedFindingIds: [],
     requestedAt: 0,
     lastPolledAt: null,
     parkedAt: DAY,

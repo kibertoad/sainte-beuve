@@ -1,5 +1,5 @@
 import type { AiReviewFinding, AiReviewRun } from '@sainte-beuve/contracts'
-import { AI_REVIEW_CHALLENGE_LIMIT } from '@sainte-beuve/reviewers'
+import { AI_REVIEW_CHALLENGE_LIMIT } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { aiFinding, curation, type StubAiReview, stubAiReview } from './ai-review-doubles.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
@@ -65,6 +65,19 @@ function verdictOn(loop: Loop, findingId: string, status: 'upheld' | 'retracted'
   }
 }
 
+/** What cat-factory reports once `findingId` is dismissed: the finding is gone. */
+function dismissUpstream(loop: Loop, findingId: string): void {
+  const state = loop.catFactory.report.curation
+  if (state === null) throw new Error('no curation to dismiss from')
+  loop.catFactory.report = {
+    ...loop.catFactory.report,
+    curation: {
+      ...state,
+      findings: state.findings.filter((finding) => finding.findingId !== findingId),
+    },
+  }
+}
+
 describe('challenging a finding of a parked AI review', () => {
   let loop: Loop
 
@@ -126,7 +139,7 @@ describe('challenging a finding of a parked AI review', () => {
     expect(loop.catFactory.challenged).toHaveLength(1)
   })
 
-  it('stops once the review has had as many verdicts as it may', async () => {
+  it('stops once as many findings have been challenged as the review may have', async () => {
     const answered = Array.from({ length: AI_REVIEW_CHALLENGE_LIMIT }, (_, i) =>
       aiFinding({
         findingId: `answered-${i}`,
@@ -139,15 +152,77 @@ describe('challenging a finding of a parked AI review', () => {
 
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({
-      error: { code: 'conflict', message: new RegExp(`${AI_REVIEW_CHALLENGE_LIMIT} challenges`) },
+      error: {
+        code: 'conflict',
+        message: new RegExp(`${AI_REVIEW_CHALLENGE_LIMIT} findings of this review`),
+      },
     })
     expect(loop.catFactory.challenged).toStrictEqual([])
+  })
+
+  it('keeps counting a challenged finding after it is dismissed', async () => {
+    const findings = Array.from({ length: AI_REVIEW_CHALLENGE_LIMIT + 1 }, (_, i) =>
+      aiFinding({ findingId: `f-${i}` }),
+    )
+    const parked = await parkedOn(loop, findings)
+    for (let i = 0; i < AI_REVIEW_CHALLENGE_LIMIT; i += 1) {
+      const res = await loop.harness.app.fetch(challenge(parked.id, `f-${i}`))
+      expect(res.status).toBe(202)
+      verdictOn(loop, `f-${i}`, 'upheld')
+      await readRun(loop, parked.id)
+      await loop.harness.app.fetch(
+        post(`/api/v1/ai-review/runs/${parked.id}/findings/f-${i}/dismiss`, {}),
+      )
+      dismissUpstream(loop, `f-${i}`)
+    }
+
+    const res = await loop.harness.app.fetch(challenge(parked.id, `f-${AI_REVIEW_CHALLENGE_LIMIT}`))
+
+    expect(res.status).toBe(409)
+    expect(loop.catFactory.challenged).toHaveLength(AI_REVIEW_CHALLENGE_LIMIT)
+  })
+
+  it('names the workspace the run was filed in', async () => {
+    loop.catFactory.filedIn = 'ws-a'
+    const parked = await parkedOn(loop, [aiFinding()])
+    loop.catFactory.workspaces.length = 0
+
+    await loop.harness.app.fetch(challenge(parked.id, 'f-1'))
+
+    expect(new Set(loop.catFactory.workspaces)).toStrictEqual(new Set(['ws-a']))
+  })
+
+  it('parks the review anew when a verdict lands between two polls that both read it parked', async () => {
+    const parked = await parkedOn(loop, [aiFinding()])
+    loop.harness.clock.advance(60_000)
+    verdictOn(loop, 'f-1', 'upheld')
+
+    const run = await readRun(loop, parked.id)
+
+    expect(run.parkedAt).toBe(loop.harness.clock.now())
+    expect(run.parkedAt).not.toBe(parked.parkedAt)
   })
 
   it('answers 404 for a finding the review does not carry', async () => {
     const parked = await parkedOn(loop, [aiFinding()])
     const res = await loop.harness.app.fetch(challenge(parked.id, 'f-9'))
     expect(res.status).toBe(404)
+  })
+
+  it('refuses to post a retracted finding the stored row has not seen retracted yet', async () => {
+    const parked = await parkedOn(loop, [aiFinding(), aiFinding({ findingId: 'f-2' })])
+    await loop.harness.app.fetch(challenge(parked.id, 'f-1'))
+    verdictOn(loop, 'f-1', 'retracted')
+
+    const refused = await loop.harness.app.fetch(
+      post(`/api/v1/ai-review/runs/${parked.id}/resolve`, {
+        action: 'post',
+        findingIds: ['f-1', 'f-2'],
+      }),
+    )
+
+    expect(refused.status).toBe(400)
+    expect(loop.catFactory.resolved).toStrictEqual([])
   })
 
   it('refuses to post a finding a challenge retracted', async () => {

@@ -322,9 +322,12 @@ The loop runs: file, read the findings, curate, post. What it decided, in short:
 - **A challenge is a verdict, bought once.** cat-factory's investigator re-reads
   the source behind one finding and upholds, amends or retracts it. Each finding
   may be challenged once (again only after a failure), one at a time, and at most
-  five per review, counted from the verdicts on the findings so no store holds a
-  counter. A retracted finding is unticked and a resolution naming it is refused,
-  because cat-factory drops it from the selection silently.
+  five findings per review. The run records each finding it challenged
+  (`challengedFindingIds`, on the payload, so no migration), because a dismissal
+  removes the finding and its verdict from the curation and would otherwise hand
+  the challenge back. A retracted finding is unticked and a resolution naming it
+  is refused, because cat-factory drops it from the selection silently. A verdict
+  re-parks the review, and that is a new park the ladder nudges about.
 
 What is left:
 

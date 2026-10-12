@@ -1,8 +1,8 @@
 import type { AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import { AI_REVIEW_CHALLENGE_LIMIT } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, AiReviewWorkspace } from '@sainte-beuve/kernel'
 import { ConflictError, NotFoundError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
-  AI_REVIEW_CHALLENGE_LIMIT,
   type AiChallengeAdmission,
   decideChallengeAdmission,
   retractedFindingIds,
@@ -48,15 +48,21 @@ export class AiReviewCurationService {
    * Ask cat-factory's investigator to re-examine one finding.
    *
    * Decided over the review as cat-factory reports it NOW, so the run is polled
-   * first: the budget is counted from the verdicts on its findings, and a row
-   * that missed the last verdict would let one more challenge through than the
-   * limit allows.
+   * first: a row that missed the last verdict would offer a second challenge of
+   * a finding that already has its answer. The finding is recorded on the run
+   * once cat-factory has accepted the challenge, because the budget counts it
+   * even after a dismissal takes it out of the curation.
+   *
+   * Two challenges racing past the admission are not serialised here:
+   * cat-factory takes a challenge only on a parked review and parks it no
+   * longer once it has, so the second is refused upstream as a conflict.
    */
   async challenge(runId: string, findingId: string, question: string | null): Promise<AiReviewRun> {
-    const run = await this.runs.get(runId)
-    refuseUnlessAdmitted(decideChallengeAdmission(run.curation, findingId), findingId)
     const { gateway, target } = await this.curating(runId)
+    const run = await this.runs.get(runId)
+    refuseUnlessAdmitted(decideChallengeAdmission(run, findingId), findingId)
     await gateway.challengeFinding({ ...target, findingId, question })
+    await this.recordChallenged(run, findingId)
     return this.runs.get(runId)
   }
 
@@ -69,7 +75,9 @@ export class AiReviewCurationService {
    * Upstream refuses it too, and a 502 naming a rule of ours is a worse answer
    * than a 400. A retracted finding is refused for the same reason: cat-factory
    * drops it from the selection without saying so, and a caller that asked to
-   * post it would read the receipt as a comment that went missing.
+   * post it would read the receipt as a comment that went missing. The run is
+   * polled before that check for the reason `challenge` polls: the verdict that
+   * retracted a finding may not have reached the row yet.
    */
   async resolve(
     runId: string,
@@ -80,8 +88,8 @@ export class AiReviewCurationService {
         `\`${resolution.action}\` needs at least one finding selected. Use \`finish\` to close a review without posting anything`,
       )
     }
-    const { gateway, target, run } = await this.curating(runId)
-    refuseRetracted(run, resolution)
+    const { gateway, target } = await this.curating(runId)
+    refuseRetracted(await this.runs.get(runId), resolution)
     await gateway.resolveReview({ ...target, ...resolution })
     return this.runs.get(runId)
   }
@@ -104,7 +112,6 @@ export class AiReviewCurationService {
   private async curating(runId: string): Promise<{
     gateway: AiReviewGateway
     target: { runId: string } & AiReviewWorkspace
-    run: AiReviewRun
   }> {
     const run = assertFound(
       await this.container.repositories.aiReviewRuns.getById(runId),
@@ -119,8 +126,14 @@ export class AiReviewCurationService {
     return {
       gateway,
       target: { runId: run.catFactoryRunId, workspaceId: run.catFactoryWorkspaceId },
-      run,
     }
+  }
+
+  private async recordChallenged(run: AiReviewRun, findingId: string): Promise<void> {
+    if (run.challengedFindingIds.includes(findingId)) return
+    await this.container.repositories.aiReviewRuns.update(run.id, {
+      challengedFindingIds: [...run.challengedFindingIds, findingId],
+    })
   }
 }
 
@@ -157,7 +170,7 @@ function refuseUnlessAdmitted(decision: AiChallengeAdmission, findingId: string)
       )
     case 'review_limit':
       throw new ConflictError(
-        `This review has had ${AI_REVIEW_CHALLENGE_LIMIT} challenges answered, which is as many as one review may have`,
+        `${AI_REVIEW_CHALLENGE_LIMIT} findings of this review have been challenged, which is as many as one review may have`,
       )
   }
 }
