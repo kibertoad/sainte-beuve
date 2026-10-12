@@ -671,7 +671,7 @@ describe('the live attention stream', () => {
   })
 })
 
-/** An ask nobody is named in and no skill gates: what every available reviewer concerns. */
+/** An ask nobody is named in that wants nothing in particular: what every available reviewer concerns. */
 function attentionIn(id: string) {
   return {
     id,

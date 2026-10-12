@@ -169,7 +169,7 @@ export class ReviewService {
    * Put one named person on the hook, rather than asking the router to pick.
    *
    * This is what "I will take it" means, from a Slack button or a pull-request
-   * comment. It deliberately skips the skill gate the router applies: somebody
+   * comment. It deliberately skips the router's preference for fit: somebody
    * volunteering has made a judgement about their own competence that a label map
    * is not in a position to overrule.
    */

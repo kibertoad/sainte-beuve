@@ -81,7 +81,7 @@ describe('the Slack DMs of a named ask', () => {
     ])
   })
 
-  it('DMs nobody for an ask the skill gate addresses', async () => {
+  it('DMs nobody for an ask nobody was named on', async () => {
     await raise(asker, { requiredSkills: ['Backend'] })
     expect(chat.asks).toStrictEqual([])
   })
