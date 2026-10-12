@@ -28,7 +28,7 @@ function harnessFor(username: string, subject: string, base?: TestHarness): Test
     authorizeUrl: ({ state }) => `https://github.com/login/oauth/authorize?state=${state}`,
     exchangeCode: async ({ code }) => ({
       token: `gho_${code}_token`,
-      account: { subject, username, displayName: username, avatarUrl: null },
+      account: { subject, username, displayName: username, avatarUrl: null, bot: false },
     }),
   }
   return buildHarness(

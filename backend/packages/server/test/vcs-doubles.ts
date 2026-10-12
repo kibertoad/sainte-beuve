@@ -66,6 +66,7 @@ export function viewerVcs(
       username,
       displayName: null,
       avatarUrl: null,
+      bot: false,
     }),
   }
 }

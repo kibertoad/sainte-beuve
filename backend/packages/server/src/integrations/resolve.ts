@@ -242,6 +242,13 @@ export async function resolveGitLabWebhookSecret(container: AppContainer): Promi
   return openCredential(container, 'gitlab-webhook-secret')
 }
 
+/** The account a stored credential was captured with. */
+export interface StoredAccount {
+  username: string
+  /** Whether the host marked it as a machine account when it was stored. */
+  bot: boolean
+}
+
 /**
  * The account behind a credential this deployment stored, read off the stored
  * row: the handle was captured when the credential was stored, so this costs no
@@ -251,21 +258,30 @@ export async function storedCredentialAccount(
   container: AppContainer,
   provider: VcsProvider,
   method: VcsAuthMethod | null,
-): Promise<string | null> {
+): Promise<StoredAccount | null> {
   if (method !== 'oauth' && method !== 'pat') return null
   const key = method === 'oauth' ? vcsOauthCredentialKey(provider) : vcsPatCredentialKey(provider)
-  return (await container.repositories.integrationTokens.get(key))?.subject ?? null
+  const row = await container.repositories.integrationTokens.get(key)
+  return row?.subject == null ? null : { username: row.subject, bot: row.subjectIsBot }
 }
 
 /**
- * The GitLab username the bot answers to: the account of the credential its
- * replies are posted with, because that is the name people see on the reply and
- * the one they will mention. Null when that credential records no account,
- * which turns comment commands off rather than guessing a name.
+ * The GitLab username the bot answers to: the account its replies are posted
+ * as, because that is the name people see on the reply and the one they will
+ * mention. Only a bot account (a project or group access token, a service
+ * account): with a person's own token or sign-in, every mention of that person
+ * would read as a command, so commands stay off instead.
  */
+export function gitlabBotUsername(account: StoredAccount | null): string | null {
+  return account?.bot === true ? account.username : null
+}
+
+/** {@link gitlabBotUsername} for the credential in force for GitLab. */
 export async function resolveGitLabBotUsername(container: AppContainer): Promise<string | null> {
   const active = await resolveVcs(container, 'gitlab')
-  return storedCredentialAccount(container, 'gitlab', active?.source ?? null)
+  return gitlabBotUsername(
+    await storedCredentialAccount(container, 'gitlab', active?.source ?? null),
+  )
 }
 
 /**

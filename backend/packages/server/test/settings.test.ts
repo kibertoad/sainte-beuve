@@ -214,6 +214,7 @@ describe('integration configuration API', () => {
       sealed: 'v1.',
       hint: '5b4a',
       subject: null,
+      subjectIsBot: false,
       updatedAt: harness.clock.now(),
     })
     expect(await statusOf(harness)).toMatchObject({
@@ -302,6 +303,7 @@ describe('a pasted GitHub credential', () => {
             username: 'kibertoad',
             displayName: null,
             avatarUrl: null,
+            bot: false,
           }),
         }),
       }),

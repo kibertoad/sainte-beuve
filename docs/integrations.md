@@ -196,7 +196,7 @@ wrong token are one 403, so the status code cannot be used to list tenancies.
 | --------------------------------------------- | ---------------------------------------------------------------------- |
 | merge request opened / reopened               | Tracked on the board, unassigned (a draft waits until it leaves draft) |
 | merge request leaves draft                    | Tracked, unassigned                                                    |
-| merge request merged or closed                | The review is closed and the reminder clock stops                      |
+| merge request merged or closed                | Closed, the clock stops; a review with a verdict keeps it              |
 | merge request becomes approved                | Resolved to `approved`                                                 |
 | its approval is taken back                    | An `approved` review goes back on the clock                            |
 | the review label is added                     | Tracked if it was not, and handed to a reviewer                        |
@@ -205,6 +205,12 @@ wrong token are one 403, so the status code cannot be used to list tenancies.
 
 A label the merge request was created with counts as added, as it does on
 GitHub, where each one arrives as its own `labeled` event.
+
+A Merge Request Hook names whoever acted, and the merge request's author only by
+id, so the author is known from the payload only when the action is opening it.
+A merge request first seen through a label or a comment has its author read
+from GitLab before its row is opened, so the router can keep the author off
+their own review.
 
 Approval follows GitLab's own rules: `approved` and `unapproved` are the merge
 request as a whole becoming, or ceasing to be, approved. One person approving
@@ -222,13 +228,14 @@ about how its author relates to the project, so a comment command runs only for
 somebody this org's reviewer directory holds by that GitLab handle. Anybody else
 gets silence, for the reason a GitHub stranger does.
 
-The bot is the account of the GitLab credential stored for the org (a pasted
-token or a sign-in), because that is the account its replies are posted as and
-therefore the name people mention. An org reaching GitLab only through the
-deployment's `GITLAB_TOKEN` has no account recorded, and comment commands are off
-until it stores one. Use a dedicated account (a project or group access token):
-the bot answers every mention of it, so a person's own token would make every
-mention of that person a command.
+The bot is the account of the GitLab credential stored for the org, because
+that is the account its replies are posted as and therefore the name people
+mention. It answers only when GitLab marks that account as a bot: a project or
+group access token, or a service account. A person's own token or sign-in still
+reaches GitLab, but with it every mention of that person would read as a
+command, so comment commands stay off. GitLab is asked when the token is
+stored. An org reaching GitLab only through the deployment's `GITLAB_TOKEN` has
+no account recorded, and comment commands are off until it stores one.
 
 Deliveries are not deduplicated by `X-Gitlab-Event-UUID`, any more than GitHub's
 are by delivery id. Every intent is safe to perform twice, and an AI review is

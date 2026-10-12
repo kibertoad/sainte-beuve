@@ -27,6 +27,7 @@ const TOKEN_COLUMNS = {
   sealed: integrationTokens.sealed,
   hint: integrationTokens.hint,
   subject: integrationTokens.subject,
+  subjectIsBot: integrationTokens.subjectIsBot,
   updatedAt: integrationTokens.updatedAt,
 }
 

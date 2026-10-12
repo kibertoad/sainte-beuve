@@ -72,9 +72,10 @@ async function store(
     integrationId: 'gitlab-webhook-secret' | 'gitlab-pat'
     value: string
     subject?: string
+    bot?: boolean
   },
 ): Promise<void> {
-  const { integrationId, value, subject = null } = credential
+  const { integrationId, value, subject = null, bot = false } = credential
   const cipher = harness.container.secrets
   if (cipher === null) throw new Error('this case needs the harness cipher')
   await harness.container.stores.forOrg(orgId).integrationTokens.put({
@@ -82,6 +83,7 @@ async function store(
     sealed: await cipher.encrypt(value, integrationId),
     hint: value.slice(-4),
     subject,
+    subjectIsBot: bot,
     updatedAt: harness.clock.now(),
   })
 }
@@ -123,6 +125,7 @@ describe('GitLab webhook intake', () => {
       integrationId: 'gitlab-pat',
       value: 'glpat-0123456789',
       subject: 'review-bot',
+      bot: true,
     })
     const res = await harness.app.fetch(
       post('/api/v1/projects', { provider: 'gitlab', owner: 'acme/platform', repo: 'api' }),
@@ -224,6 +227,19 @@ describe('GitLab webhook intake', () => {
     expect(await res.json()).toMatchObject({ action: 'command:review' })
     expect(vcs.comments).toHaveLength(1)
     expect(vcs.comments[0]?.body).toContain('Review requested from')
+  })
+
+  it("does not read a mention of a person as a command when the token is that person's", async () => {
+    await store(harness, harness.container.orgId, {
+      integrationId: 'gitlab-pat',
+      value: 'glpat-0123456789',
+      subject: 'alice',
+    })
+    await addReviewer(harness, { displayName: 'Grace', handles: { gitlab: 'grace' } })
+    const res = await deliver(harness, note('thanks @alice'))
+    expect(await res.json()).toMatchObject({ action: 'ignored' })
+    expect(vcs.comments).toStrictEqual([])
+    expect(await tracked(harness)).toStrictEqual([])
   })
 
   it('stays silent for a commenter the directory does not know', async () => {

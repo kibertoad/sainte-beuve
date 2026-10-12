@@ -221,8 +221,9 @@ const shadowedAdvice = computed(() =>
               >not configured (set GITHUB_BOT_LOGIN to answer mentions)</span
             >
             <span v-else
-              >the account of a token or sign-in stored here, once there is one (a dedicated account
-              is best: the bot answers every mention of it)</span
+              >off until the token stored here is a GitLab bot account (a project or group access
+              token, or a service account): a person's own token would turn every mention of them
+              into a command</span
             >
           </dd>
         </template>

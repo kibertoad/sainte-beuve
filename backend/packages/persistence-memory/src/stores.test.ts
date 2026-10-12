@@ -123,6 +123,7 @@ describe('InMemoryIntegrationTokenRepository', () => {
     sealed: 'v1.a',
     hint: 'aaaa',
     subject: null,
+    subjectIsBot: false,
     updatedAt: 1,
     ...overrides,
   })

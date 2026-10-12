@@ -73,6 +73,7 @@ export class GitHubIdentityGateway implements VcsIdentityGateway {
       login: string
       name?: string | null
       avatar_url?: string | null
+      type?: string
     }>({
       path: '/user',
       token,
@@ -86,6 +87,7 @@ export class GitHubIdentityGateway implements VcsIdentityGateway {
         username: user.login,
         displayName: user.name ?? null,
         avatarUrl: user.avatar_url ?? null,
+        bot: user.type === 'Bot',
       },
     }
   }

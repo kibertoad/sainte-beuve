@@ -105,7 +105,8 @@ export const vcsConnectionSchema = v.object({
   /**
    * The handle the bot answers to when it is @-mentioned in a comment. On GitHub
    * the deployment's `GITHUB_BOT_LOGIN`; on GitLab the account of the credential
-   * stored here, because that is the account the bot comments as.
+   * stored here, because that is the account the bot comments as, and null
+   * unless GitLab marks it as a bot account.
    */
   botLogin: v.nullable(v.string()),
   labels: reviewLabelRulesSchema,

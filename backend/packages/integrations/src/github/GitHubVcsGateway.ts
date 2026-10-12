@@ -64,6 +64,8 @@ interface GitHubUser {
   login: string
   name?: string | null
   avatar_url?: string | null
+  /** `User`, `Organization` or `Bot`. */
+  type?: string
 }
 
 interface GitHubPullRequest {
@@ -289,6 +291,7 @@ export class GitHubVcsGateway implements VcsGateway {
       username: user.login,
       displayName: user.name ?? null,
       avatarUrl: user.avatar_url ?? null,
+      bot: user.type === 'Bot',
     }
   }
 

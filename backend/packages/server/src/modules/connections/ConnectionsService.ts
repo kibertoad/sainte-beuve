@@ -287,7 +287,7 @@ export class ConnectionsService {
       activeMethod: active?.source ?? null,
       availableMethods: this.availableMethods(provider),
       appInstallable: this.appInstallable(provider),
-      account,
+      account: account?.username ?? null,
       ...(await vcsInbound(this.container, provider, account)),
       labels: this.container.labels,
     }

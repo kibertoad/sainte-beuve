@@ -1,6 +1,11 @@
 ---
 '@sainte-beuve/contracts': minor
 '@sainte-beuve/integrations': minor
+'@sainte-beuve/kernel': minor
+'@sainte-beuve/persistence-memory': minor
+'@sainte-beuve/persistence-d1': minor
+'@sainte-beuve/persistence-postgres': minor
+'@sainte-beuve/persistence-conformance': minor
 '@sainte-beuve/server': minor
 '@sainte-beuve/node-server': patch
 '@sainte-beuve/worker': patch
@@ -21,7 +26,19 @@ GitLab merge requests drive the board the way GitHub pull requests do.
   delegate when added, `approved` settles and `unapproved` puts an approved
   review back on the clock. Note Hook: a mention of the bot runs the same
   commands as on GitHub, for people the org's reviewer directory knows by that
-  GitLab handle. The bot is the account of the org's stored GitLab credential.
+  GitLab handle. The bot is the account of the org's stored GitLab credential,
+  and only when GitLab marks that account as a bot (a project or group access
+  token, or a service account): a person's own token leaves commands off.
+- `VcsAccount` gains `bot` and `StoredIntegrationToken` gains `subjectIsBot`,
+  recorded when a credential is stored (migration `0011_integration_token_bot`
+  on D1, and its Postgres twin). A GitLab token stored before this release reads
+  as a person until it is stored again.
+- A merge request first seen through a label or a comment has its author read
+  from the host, as AI-review filing does, rather than recorded as `unknown`.
+  An intent carries a null author where the payload names none, and a GitHub
+  command records the pull request's author rather than the commenter.
+- Merging or closing a merge request keeps a verdict it already has, as GitHub's
+  close does.
 - Only projects the org registered are acted on, as on GitHub.
 - One label vocabulary for both hosts: `GitHubLabelRules` is now
   `ReviewLabelRules`, the container carries it as `labels` rather than

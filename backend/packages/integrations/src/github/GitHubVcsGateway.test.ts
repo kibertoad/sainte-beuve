@@ -159,6 +159,7 @@ describe('GitHubVcsGateway', () => {
       username: 'kibertoad',
       displayName: 'Igor',
       avatarUrl: null,
+      bot: false,
     })
     // Memoised: a status screen that polls must not spend a request per poll.
     await gateway.identify()
