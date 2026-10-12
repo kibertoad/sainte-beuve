@@ -9,7 +9,7 @@ import { DEFAULT_PROJECT_SKILLS } from '@sainte-beuve/contracts'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
 import { mergeVocabulary } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
-import { catFactoryAccess } from '../../integrations/resolve.js'
+import { repositoryDirectoryAccess } from '../../integrations/resolve.js'
 import { OrgService } from '../orgs/OrgService.js'
 
 /**
@@ -87,7 +87,7 @@ export class ProjectService {
    * watches, so adding or removing one here would be undone by the next sync.
    */
   private async refuseWhileManagedElsewhere(): Promise<void> {
-    if ((await catFactoryAccess(this.container)) === null) return
+    if ((await repositoryDirectoryAccess(this.container)) === null) return
     throw new ConflictError(
       "This org's repositories come from its cat-factory workspaces. Link or unlink the " +
         'repository in cat-factory and it follows here; skills, domains and merge settings ' +

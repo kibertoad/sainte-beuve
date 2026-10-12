@@ -9,7 +9,16 @@ import { describe, expect, it } from 'vitest'
 import { runReminderTick } from '../src/reminders/tick.js'
 import { stubAiReview } from './ai-review-doubles.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
-import { buildHarness, del, get, patch, post, stubGateways, type TestHarness } from './helpers.js'
+import {
+  buildHarness,
+  del,
+  get,
+  patch,
+  post,
+  put,
+  stubGateways,
+  type TestHarness,
+} from './helpers.js'
 
 const PUSH_PATH = '/webhooks/cat-factory/default'
 const SYNC_PATH = '/api/v1/settings/connections/cat-factory/sync'
@@ -176,6 +185,19 @@ describe('repositories from cat-factory', () => {
     })
   })
 
+  it('moves the webhook when this deployment moves to another address', async () => {
+    const fake = await syncing([])
+    await fake.harness.app.fetch(post(SYNC_PATH, {}))
+    Object.assign(fake.harness.container, { apiBaseUrl: 'https://moved.example.com' })
+    fake.harness.clock.advance(24 * 60 * 60_000)
+    await runReminderTick(fake.harness.container)
+    expect(fake.registered.map((r) => r.url)).toEqual([
+      `https://reviews.example.com${PUSH_PATH}`,
+      `https://moved.example.com${PUSH_PATH}`,
+    ])
+    expect(fake.removed).toEqual([fake.registered[0]?.webhookId])
+  })
+
   it('applies a verified push, and refuses an unverified one alike for every reason', async () => {
     const fake = await syncing([])
     await fake.harness.app.fetch(post(SYNC_PATH, {}))
@@ -191,6 +213,22 @@ describe('repositories from cat-factory', () => {
 
     expect((await fake.harness.app.fetch(push('v1=good'))).status).toBe(204)
     expect(names(await projects(fake.harness))).toEqual(['acme/payments'])
+  })
+
+  it('starts the directory over when the key is replaced, since it may reach another account', async () => {
+    const fake = await syncing([linked('ws_1/101', 'payments')])
+    await fake.harness.app.fetch(post(SYNC_PATH, {}))
+    const replaced = await fake.harness.app.fetch(
+      put('/api/v1/settings/integrations/cat-factory/token', { token: 'cf_live_other.secret' }),
+    )
+    expect(replaced.status).toBe(200)
+    expect(fake.removed).toEqual([fake.registered[0]?.webhookId])
+    expect(
+      await fake.harness.container.repositories.externalRepositories.list('cat-factory'),
+    ).toEqual([])
+    const res = await fake.harness.app.fetch(get('/api/v1/settings/connections'))
+    const { catFactory } = (await res.json()) as { catFactory: CatFactoryConnection }
+    expect(catFactory.repositorySync).toMatchObject({ webhook: 'pending', syncedAt: null })
   })
 
   it('hands the repositories back to the admins when cat-factory is cleared', async () => {

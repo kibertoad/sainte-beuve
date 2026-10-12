@@ -348,9 +348,9 @@ key that cannot register one still works: the feed is followed on the clock, and
 the screen says changes are polled. Every refusal on that route is the same 403,
 for the reason the Slack one is.
 
-Changing the base URL or clearing the settings removes the webhook, the mirrored
-directory and the push secret. The projects stay, and are an admin's to manage
-again.
+Changing the base URL, replacing or clearing the key, or clearing the settings
+removes the webhook, the mirrored directory and the push secret. The projects
+stay, and are an admin's to manage again until a key is back in place.
 
 What is mirrored is held in `external_repositories`, keyed by source, so another
 system that lists repositories can feed the same projects through the same

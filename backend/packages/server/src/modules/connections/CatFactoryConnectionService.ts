@@ -13,11 +13,18 @@ import {
   writeCatFactoryConfig,
 } from '../../integrations/catFactoryConfig.js'
 import { resolveCapabilities } from '../../integrations/capabilities.js'
-import { openCredential } from '../../integrations/resolve.js'
-import { RepositorySyncService } from '../projects/RepositorySyncService.js'
+import {
+  readRepositorySyncState,
+  repositorySyncOf,
+} from '../../integrations/repositorySyncState.js'
+import { catFactoryAccess, openCredential } from '../../integrations/resolve.js'
+import { CAT_FACTORY_SOURCE, RepositorySyncService } from '../projects/RepositorySyncService.js'
 import { type CheckedKey, catFactoryCheck } from './catFactoryCheck.js'
 
 const NO_ADAPTERS = 'This deployment wired no gateway factory, so it cannot reach cat-factory'
+const NOT_CONFIGURED =
+  'Repositories follow cat-factory once this org has a cat-factory base URL and key; ' +
+  'set both on the Configuration screen'
 
 /**
  * This org's cat-factory connection: the settings it stored, whether a review
@@ -28,17 +35,17 @@ export class CatFactoryConnectionService {
   constructor(private readonly container: AppContainer) {}
 
   async read(): Promise<CatFactoryConnection> {
-    const [config, capabilities, repositorySync] = await Promise.all([
+    const [config, capabilities, sync] = await Promise.all([
       readCatFactoryConfig(this.container),
       resolveCapabilities(this.container),
-      new RepositorySyncService(this.container).status(),
+      readRepositorySyncState(this.container, CAT_FACTORY_SOURCE),
     ])
     return {
       config,
       suggested: this.container.catFactorySuggestion,
       aiReviewReady: capabilities.aiReview,
       guidedReviewReady: capabilities.guidedReview,
-      repositorySync,
+      repositorySync: capabilities.repositoryDirectory ? repositorySyncOf(sync) : null,
     }
   }
 
@@ -60,6 +67,8 @@ export class CatFactoryConnectionService {
 
   /** Bring the repositories in step with cat-factory now, and ask it to push from here on. */
   async syncRepositories(): Promise<CatFactoryConnection> {
+    requireCapability(this.container.gateways, NO_ADAPTERS)
+    requireCapability(await catFactoryAccess(this.container), NOT_CONFIGURED)
     await new RepositorySyncService(this.container).syncNow()
     return this.read()
   }

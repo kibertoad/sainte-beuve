@@ -26,7 +26,9 @@ export interface ProjectSyncPlan {
  * by the source's id first, so a rename keeps its skills and domains, then by
  * owner and repo. Every project left over is removed, because while the source
  * is on it decides which repositories the org watches. A project another
- * source put here is left alone.
+ * source put here is left alone. A repository whose owner and repo a kept
+ * project already holds (the same name under a second id, as a repository
+ * deleted and recreated on the host is) is not created twice.
  */
 export function planProjectSync(
   source: string,
@@ -35,32 +37,42 @@ export function planProjectSync(
 ): ProjectSyncPlan {
   const listed = listedById(entries)
   const plan: ProjectSyncPlan = { remove: [], rename: [], adopt: [], create: [] }
-  const owned = projects.filter((p) => p.external?.source === source)
-  const local = projects.filter((p) => p.external === undefined || p.external === null)
-  for (const project of owned) {
+  const taken = new Set(
+    projects.filter((p) => isFrom(p, source) === 'other').map((p) => projectRefKey(p)),
+  )
+  for (const project of projects.filter((p) => isFrom(p, source) === 'source')) {
     const repository = listed.get(idKey(project.provider, project.external?.id ?? ''))
     if (repository === undefined) plan.remove.push(project.id)
     else {
       listed.delete(idKey(repository.provider, repository.id))
+      taken.add(refKeyOf(repository))
       if (projectRefKey(project) !== refKeyOf(repository)) {
         plan.rename.push({ projectId: project.id, owner: repository.owner, repo: repository.repo })
       }
     }
   }
   const byRef = new Map([...listed.values()].map((r) => [refKeyOf(r), r]))
-  for (const project of local) {
+  for (const project of projects.filter((p) => isFrom(p, source) === 'local')) {
     const repository = byRef.get(projectRefKey(project))
     if (repository === undefined) plan.remove.push(project.id)
     else {
       listed.delete(idKey(repository.provider, repository.id))
+      taken.add(projectRefKey(project))
       plan.adopt.push({ projectId: project.id, external: { source, id: repository.id } })
     }
   }
-  for (const repository of listed.values()) {
-    const { provider, owner, repo, id } = repository
+  for (const { provider, owner, repo, id } of listed.values()) {
+    const ref = projectRefKey({ provider, owner, repo })
+    if (taken.has(ref)) continue
+    taken.add(ref)
     plan.create.push({ provider, owner, repo, external: { source, id } })
   }
   return plan
+}
+
+function isFrom(project: Project, source: string): 'source' | 'local' | 'other' {
+  if (project.external === undefined || project.external === null) return 'local'
+  return project.external.source === source ? 'source' : 'other'
 }
 
 function listedById(entries: readonly ExternalRepository[]): Map<string, Listed> {

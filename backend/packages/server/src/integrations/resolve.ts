@@ -307,6 +307,16 @@ export async function catFactoryAccess(
 }
 
 /**
+ * The org's cat-factory access when this deployment can also reach it, which is
+ * exactly when its repositories follow the cat-factory directory.
+ */
+export async function repositoryDirectoryAccess(
+  container: AppContainer,
+): Promise<CatFactoryOrgAccess | null> {
+  return container.gateways === null ? null : catFactoryAccess(container)
+}
+
+/**
  * The plaintext of one stored credential, or null when there is none this
  * deployment can open.
  *

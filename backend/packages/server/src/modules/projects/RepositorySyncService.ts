@@ -1,4 +1,3 @@
-import type { RepositorySync } from '@sainte-beuve/contracts'
 import { catFactoryWebhookPath, repositorySyncSecretKey } from '@sainte-beuve/contracts'
 import {
   type DirectoryDeliveryOutcome,
@@ -8,7 +7,7 @@ import {
   getErrorMessage,
 } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
-import { catFactoryAccess, openCredential } from '../../integrations/resolve.js'
+import { openCredential, repositoryDirectoryAccess } from '../../integrations/resolve.js'
 import {
   type RepositorySyncState,
   clearRepositorySyncState,
@@ -37,17 +36,6 @@ const RECONCILE_EVERY_MS = 24 * 60 * 60_000
 export class RepositorySyncService {
   constructor(private readonly container: AppContainer) {}
 
-  /** Whether the org's repositories come from cat-factory rather than from its admins. */
-  async managed(): Promise<boolean> {
-    return (await catFactoryAccess(this.container)) !== null
-  }
-
-  async status(): Promise<RepositorySync | null> {
-    if (!(await this.managed())) return null
-    const { cursor: _cursor, ...sync } = await this.state()
-    return sync
-  }
-
   /** Walk the snapshots and register the webhook now. A failure is recorded, not thrown. */
   async syncNow(): Promise<void> {
     const gateway = await this.gateway()
@@ -64,7 +52,7 @@ export class RepositorySyncService {
     const now = this.container.clock.now()
     if (state.reconciledAt === null || now - state.reconciledAt >= RECONCILE_EVERY_MS) {
       const changed = await this.run(gateway, 'reconcile')
-      if (state.webhook !== 'registered') await this.registerWebhook(gateway)
+      if (await this.webhookStale(state)) await this.registerWebhook(gateway)
       return changed
     }
     if (state.syncedAt !== null && now - state.syncedAt < CATCH_UP_EVERY_MS) return 0
@@ -88,7 +76,7 @@ export class RepositorySyncService {
    * the mirror with it. The projects stay, now the admins' to manage.
    */
   async forget(): Promise<void> {
-    await this.removeWebhook()
+    await this.removeWebhook((await this.state()).webhookUrl)
     const { repositories } = this.container
     await repositories.externalRepositories.clear(CAT_FACTORY_SOURCE)
     await repositories.integrationTokens.delete(repositorySyncSecretKey(CAT_FACTORY_SOURCE))
@@ -96,13 +84,19 @@ export class RepositorySyncService {
   }
 
   /** Best effort: an instance that is gone, or a key that may not, must not block forgetting it. */
-  private async removeWebhook(): Promise<void> {
+  private async removeWebhook(url: string | null): Promise<void> {
+    if (url === null) return
     try {
       const gateway = await this.gateway()
-      if (gateway !== null) await gateway.removeWebhook(await this.webhookId())
+      if (gateway !== null) await gateway.removeWebhook(await this.webhookId(url))
     } catch (err) {
       this.container.logger.warn({ err }, 'could not remove the cat-factory directory webhook')
     }
+  }
+
+  /** Whether the push URL cat-factory holds is missing or no longer this deployment's address. */
+  private async webhookStale(state: RepositorySyncState): Promise<boolean> {
+    return state.webhook !== 'registered' || state.webhookUrl !== (await this.webhookUrl())
   }
 
   private async run(
@@ -153,13 +147,17 @@ export class RepositorySyncService {
       })
       return
     }
+    const { webhookUrl: previous } = await this.state()
     try {
       const secret = await this.webhookSecret()
-      await gateway.registerWebhook({ webhookId: await this.webhookId(), url, secret })
+      await gateway.registerWebhook({ webhookId: await this.webhookId(url), url, secret })
       await this.record({ webhook: 'registered', webhookUrl: url })
     } catch (err) {
       await this.record({ webhook: 'failed', webhookUrl: url, error: getErrorMessage(err) })
+      return
     }
+    // The id follows the URL, so the one enrolled for a former address is a separate webhook.
+    if (previous !== url) await this.removeWebhook(previous)
   }
 
   /** The stored push secret, or a new one sealed before cat-factory is told it. */
@@ -193,15 +191,14 @@ export class RepositorySyncService {
    * One id per deployment and org, derived from the push URL: an account can be
    * shared by several deployments, and each must enrol its own endpoint.
    */
-  private async webhookId(): Promise<string> {
-    const url = (await this.webhookUrl()) ?? `org:${this.container.orgId}`
+  private async webhookId(url: string): Promise<string> {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url))
     const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
     return `sainte-beuve-${hex.slice(0, 16)}`
   }
 
   private async gateway(): Promise<RepositoryDirectoryGateway | null> {
-    const access = await catFactoryAccess(this.container)
+    const access = await repositoryDirectoryAccess(this.container)
     if (access === null || this.container.gateways === null) return null
     return this.container.gateways.catFactoryDirectory({
       baseUrl: access.config.baseUrl,

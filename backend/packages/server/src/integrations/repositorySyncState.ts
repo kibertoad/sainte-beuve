@@ -57,6 +57,14 @@ export async function writeRepositorySyncState(
   return next
 }
 
+/** The state as the connection reports it, without the feed position. */
+export function repositorySyncOf({
+  cursor: _cursor,
+  ...sync
+}: RepositorySyncState): RepositorySync {
+  return sync
+}
+
 export async function clearRepositorySyncState(
   container: AppContainer,
   source: string,

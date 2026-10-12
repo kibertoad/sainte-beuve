@@ -48,6 +48,7 @@ export function healthController(): Hono<AppEnv> {
         vcs: { github: github !== null, gitlab: gitlab !== null },
         aiReview: catFactory.aiReview,
         guidedReview: catFactory.guidedReview,
+        repositoryDirectory: catFactory.repositoryDirectory,
         secrets: container.secrets !== null,
         githubWebhooks: container.github.webhookSecret !== null,
         // For the org this probe is in, which on an unauthenticated `/health` is

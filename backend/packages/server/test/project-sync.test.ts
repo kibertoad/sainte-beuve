@@ -53,6 +53,15 @@ describe('planProjectSync', () => {
     })
   })
 
+  it('creates no second project for a name already held under another id', () => {
+    const plan = planProjectSync(
+      'cat-factory',
+      [project('p1', 'payments', { source: 'cat-factory', id: '7' })],
+      [listed('ws_1/7', 'payments', '7'), listed('ws_2/9', 'payments', '9')],
+    )
+    expect(plan).toEqual({ remove: [], rename: [], adopt: [], create: [] })
+  })
+
   it('ignores a dropped entry, and a case-only difference in the name', () => {
     const plan = planProjectSync(
       'cat-factory',
