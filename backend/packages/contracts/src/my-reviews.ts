@@ -1,7 +1,11 @@
 import * as v from 'valibot'
-import { reviewCommitmentSchema } from './attention.js'
 import { openPullRequestSchema, repoOwnerSchema } from './vcs.js'
-import { hostSearchSchema, workspaceScopeSchema, workspaceSourceSchema } from './workspace.js'
+import {
+  hostSearchSchema,
+  placedCommitmentSchema,
+  workspaceScopeSchema,
+  workspaceSourceSchema,
+} from './workspace.js'
 
 // ---------------------------------------------------------------------------
 // My Reviews: the open pull requests other people opened that the viewer was
@@ -20,10 +24,8 @@ const projectIdEntry = { projectId: v.nullable(v.string()) }
 export const myReviewSchema = v.object({ ...openPullRequestSchema.entries, ...projectIdEntry })
 export type MyReview = v.InferOutput<typeof myReviewSchema>
 
-export const myReviewCommitmentSchema = v.object({
-  ...reviewCommitmentSchema.entries,
-  ...projectIdEntry,
-})
+/** The same placed commitment the workspace lists. */
+export const myReviewCommitmentSchema = placedCommitmentSchema
 export type MyReviewCommitment = v.InferOutput<typeof myReviewCommitmentSchema>
 
 export const myReviewsSchema = v.object({

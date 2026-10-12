@@ -2,7 +2,7 @@ import type { AiReviewRun, ReviewRequest } from '@sainte-beuve/contracts'
 import type { AiReviewGateway } from '@sainte-beuve/kernel'
 import { assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
-import { directoryKeysFor } from '../../integrations/catFactoryDirectory.js'
+import { catFactoryDirectoryKeys } from '../projects/directoryKeys.js'
 
 /**
  * Hand a review to cat-factory for a run row already written in `requested`,
@@ -23,7 +23,7 @@ export async function fileWithCatFactory(
       pullRequest: review.pullRequest,
       title: review.title,
       instructions,
-      directoryKeys: await directoryKeysFor(container, review.pullRequest),
+      directoryKeys: await catFactoryDirectoryKeys(container, review.pullRequest),
     })
     return assertFound(
       await repositories.aiReviewRuns.update(run.id, {

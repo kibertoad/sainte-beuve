@@ -1,4 +1,5 @@
-import type { Reviewer, ShortfallReason } from '@sainte-beuve/contracts'
+import type { Reviewer, ReviewRequest, ShortfallReason, VcsProvider } from '@sainte-beuve/contracts'
+import { handleOf } from '@sainte-beuve/contracts'
 
 /**
  * Reviewer selection: a load-aware weighted random pick that favours the
@@ -43,10 +44,12 @@ export function matchTargetFor(
 /** A candidate scored for one review, kept beside the reviewer so a caller can explain a pick. */
 export interface ScoredCandidate {
   reviewer: Reviewer
-  /** How many of the wanted skills this reviewer holds. */
-  matchedSkills: number
-  /** How many of the wanted domains this reviewer knows. */
-  matchedDomains: number
+  /** The wanted skills this reviewer holds, as the review spelled them, each once. */
+  matchedSkills: string[]
+  /** The wanted domains this reviewer knows, as the review spelled them, each once. */
+  matchedDomains: string[]
+  /** The share of the wanted skills and domains this reviewer holds, from 0 to 1. */
+  affinity: number
   /** The reviewer's share of the draw. Higher is likelier; never zero for a candidate. */
   weight: number
 }
@@ -99,6 +102,32 @@ export function hasAllSkills(reviewer: Reviewer, requiredSkills: readonly string
   return requiredSkills.every((skill) => owned.has(normalizeSkill(skill)))
 }
 
+/**
+ * The reviewers a review rules out of its own pool: whoever is already on it,
+ * and its author. The author is matched on the handle for the pull request's
+ * OWN host, because the same person is spelled differently on each.
+ */
+export function excludedFromReview(
+  review: Pick<ReviewRequest, 'pullRequest' | 'authorLogin' | 'assignedReviewerIds'>,
+  candidates: readonly Reviewer[],
+): string[] {
+  return [
+    ...review.assignedReviewerIds,
+    ...reviewersWithHandles(candidates, review.pullRequest.provider, [review.authorLogin]),
+  ]
+}
+
+/** The ids of the reviewers whose handle on `provider` is one of `logins`. */
+export function reviewersWithHandles(
+  candidates: readonly Reviewer[],
+  provider: VcsProvider,
+  logins: readonly string[],
+): string[] {
+  return candidates
+    .filter((r) => logins.some((login) => isSameHandle(handleOf(r.handles, provider), login)))
+    .map((r) => r.id)
+}
+
 /** Whether the router may hand a review to this reviewer at all. */
 export function isEligible(reviewer: Reviewer, excluded: ReadonlySet<string>): boolean {
   if (excluded.has(reviewer.id)) return false
@@ -122,10 +151,21 @@ function distinct(list: readonly string[]): string[] {
   return [...new Set(list.map(normalizeSkill))]
 }
 
-/** How many of `wanted` appear in `held`, compared case-insensitively. */
-function countHeld(held: readonly string[], wanted: readonly string[]): number {
+/** The entries of a list as first spelled, each once, compared case-insensitively. */
+export function distinctAsSpelled(list: readonly string[]): string[] {
+  const seen = new Set<string>()
+  return list.filter((entry) => {
+    const key = normalizeSkill(entry)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/** The entries of `wanted` that appear in `held`, compared case-insensitively, each once. */
+function heldOf(held: readonly string[], wanted: readonly string[]): string[] {
   const owned = new Set(held.map(normalizeSkill))
-  return distinct(wanted).filter((entry) => owned.has(entry)).length
+  return distinctAsSpelled(wanted).filter((entry) => owned.has(normalizeSkill(entry)))
 }
 
 /**
@@ -133,14 +173,15 @@ function countHeld(held: readonly string[], wanted: readonly string[]): number {
  * wants, and the affinity is the share of it the reviewer holds.
  */
 export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredCandidate {
-  const matchedSkills = countHeld(reviewer.skills, target.skills)
-  const matchedDomains = countHeld(reviewer.domains, target.domains)
+  const matchedSkills = heldOf(reviewer.skills, target.skills)
+  const matchedDomains = heldOf(reviewer.domains, target.domains)
   const wanted = distinct(target.skills).length + distinct(target.domains).length
-  const affinity = wanted === 0 ? 0 : (matchedSkills + matchedDomains) / wanted
+  const affinity = wanted === 0 ? 0 : (matchedSkills.length + matchedDomains.length) / wanted
   return {
     reviewer,
     matchedSkills,
     matchedDomains,
+    affinity,
     weight: drawWeight(reviewer) * (1 + MATCH_PREFERENCE * affinity),
   }
 }

@@ -17,7 +17,7 @@ import {
 } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../container.js'
 import { readCatFactoryConfig } from './catFactoryConfig.js'
-import { orgDirectoryKeys } from './catFactoryDirectory.js'
+import { orgDirectoryKeys } from '../modules/projects/directoryKeys.js'
 
 /**
  * Which credential each integration is authenticating with RIGHT NOW.

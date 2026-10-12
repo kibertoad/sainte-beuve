@@ -9,8 +9,8 @@ import type {
 
 // This org's cat-factory: where the instance is, the service an AI review goes
 // under when no service backs its repository, which pipeline they run on, and
-// the key. All of it is the org's
-// and set here; none of it comes from the deployment's environment.
+// the key. All of it is the org's and set here; none of it comes from the
+// deployment's environment.
 //
 // The page owns the writes, because saving the settings can change whether the
 // stored key is in use. The CHECK is made here: it stores nothing, and its

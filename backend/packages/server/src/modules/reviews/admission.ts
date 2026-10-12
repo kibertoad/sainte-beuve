@@ -11,10 +11,12 @@ import type { AppContainer } from '../../container.js'
  * A `ConflictError`, which is the board's own answer about a review's state, so
  * every surface repeats it as it is, including the pull-request comment, which
  * is how somebody typing `@bot ai` twice finds out why the second did nothing.
+ * Every refusal names the review in its details, so a caller that asked by pull
+ * request can still take the person to the run that is already there.
  */
 export async function admitAiReview(container: AppContainer, reviewId: string): Promise<void> {
   const runs = await container.repositories.aiReviewRuns.listByReview(reviewId)
-  refuseUnlessAdmitted(decideAiReviewAdmission(runs, container.clock.now()))
+  refuseUnlessAdmitted(decideAiReviewAdmission(runs, container.clock.now()), reviewId)
 }
 
 /**
@@ -47,20 +49,23 @@ export async function confirmAiReviewAdmission(
   throw new ConflictError(
     'Another request for an AI review of this pull request arrived at the same moment. If no ' +
       'run appears on the board, request it again.',
+    { reviewId: run.reviewId },
   )
 }
 
 const RACED = 'another request for an AI review of this pull request arrived at the same moment'
 
-function refuseUnlessAdmitted(decision: AiReviewAdmission): void {
+function refuseUnlessAdmitted(decision: AiReviewAdmission, reviewId: string): void {
   if (decision.admitted) return
   if (decision.reason === 'in_flight') {
     throw new ConflictError(
       'An AI review of this pull request is already in flight. Its findings will be on the board.',
+      { reviewId },
     )
   }
   throw new ConflictError(
     'This pull request has had as many AI reviews as it may in an hour. The next one may be ' +
       `requested after ${new Date(decision.retryAt).toISOString()}.`,
+    { reviewId },
   )
 }

@@ -196,6 +196,7 @@ export function attentionRequest(
     title: `Attention ${id}`,
     requestedById: 'reviewer-1',
     requestedByName: 'Reviewer 1',
+    recipients: [],
     requiredSkills: ['typescript'],
     sameTeamOnly: false,
     team: 'platform',
@@ -220,6 +221,7 @@ export function commitment(
     pullRequest: pullRequest(),
     title: 'Ship the thing',
     attentionRequestId: null,
+    requestedHandle: null,
     createdAt: 1_000,
     ...overrides,
   }

@@ -10,7 +10,7 @@ import type { ReviewListOrder } from '@sainte-beuve/kernel'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
 import {
   buildBoard,
-  isSameHandle,
+  excludedFromReview,
   isSettledReview,
   matchTargetFor,
   selectReviewers,
@@ -18,7 +18,7 @@ import {
 import type { AppContainer } from '../../container.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
 import { announceReview } from './announce.js'
-import { handlesOf, mirrorAssignment } from './mirror.js'
+import { boardWithdrawals, mirrorAssignment } from '../../integrations/reviewRequests.js'
 
 /**
  * Review-request use cases: register a pull request, hand it to reviewers, move it
@@ -226,9 +226,6 @@ export class ReviewService {
     input: { count: number; exclude: string[]; release?: string[] },
   ): Promise<AssignReviewersResult> {
     const { repositories, random } = this.container
-    // The author is matched on the handle for the pull request's OWN host: the
-    // same person is spelled differently on each, and comparing against the
-    // wrong one would put them in their own review's candidate pool.
     const provider = review.pullRequest.provider
     const [candidates, project] = await Promise.all([
       repositories.reviewers.list(),
@@ -241,13 +238,7 @@ export class ReviewService {
         // The author and whoever is already on the hook are excluded here rather
         // than by the caller: a client that forgot would otherwise get a reviewer
         // reviewing their own pull request, which the router must never produce.
-        excludeReviewerIds: [
-          ...input.exclude,
-          ...review.assignedReviewerIds,
-          ...candidates
-            .filter((r) => isSameHandle(handleOf(r.handles, provider), review.authorLogin))
-            .map((r) => r.id),
-        ],
+        excludeReviewerIds: [...input.exclude, ...excludedFromReview(review, candidates)],
         count: input.count,
       },
       random,
@@ -263,7 +254,7 @@ export class ReviewService {
     })
     await mirrorAssignment(this.container, updated, {
       request: result.selected.map((r) => handleOf(r.handles, provider)),
-      withdraw: handlesOf(candidates, release, provider),
+      withdraw: await boardWithdrawals(this.container, review.pullRequest, candidates, release),
     })
     return { review: updated, assigned, shortfallReason: result.shortfallReason }
   }

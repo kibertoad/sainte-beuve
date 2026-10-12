@@ -18,7 +18,7 @@ import {
 } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
-import { directoryKeysFor } from '../../integrations/catFactoryDirectory.js'
+import { catFactoryDirectoryKeys } from '../projects/directoryKeys.js'
 import { resolveGuidedReview } from '../../integrations/resolve.js'
 
 export interface GuidedReviewWatch {
@@ -48,7 +48,7 @@ export class GuidedReviewService {
     await this.assertRegistered(target)
     const [gateway, keys] = await Promise.all([
       this.gateway(),
-      directoryKeysFor(this.container, target),
+      catFactoryDirectoryKeys(this.container, target),
     ])
     return gateway.find(target, keys)
   }
@@ -57,7 +57,7 @@ export class GuidedReviewService {
     await this.assertRegistered(target)
     const [gateway, keys] = await Promise.all([
       this.gateway(),
-      directoryKeysFor(this.container, target),
+      catFactoryDirectoryKeys(this.container, target),
     ])
     return gateway.open(target, keys)
   }

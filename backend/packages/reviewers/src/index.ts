@@ -42,7 +42,12 @@ export {
   searchesBeyondProjects,
   unlinkedPullRequests,
 } from './merging.js'
-export { assembleReviewLists, type ReviewLists, type ReviewListsInput } from './reviewing.js'
+export {
+  assembleReviewLists,
+  placeCommitments,
+  type ReviewLists,
+  type ReviewListsInput,
+} from './reviewing.js'
 export {
   decideTeamAction,
   ownerOfNewTeam,
@@ -57,10 +62,19 @@ export {
   isInAttentionAudience,
   outstandingCommitments,
   selectAttentionAudience,
+  unaskableReason,
 } from './attention.js'
 export {
+  type RecipientRefusal,
+  type RecipientsInput,
+  type RecipientsResolution,
+  resolveAttentionRecipients,
+} from './recipients.js'
+export {
   diagnoseShortfall,
+  distinctAsSpelled,
   drawWeight,
+  excludedFromReview,
   hasAllSkills,
   isEligible,
   isSameHandle,
@@ -68,6 +82,7 @@ export {
   type MatchTarget,
   matchTargetFor,
   normalizeSkill,
+  reviewersWithHandles,
   type ScoredCandidate,
   scoreCandidate,
   scoreCandidates,
@@ -75,5 +90,11 @@ export {
   type SelectionResult,
   selectReviewers,
 } from './selection.js'
+export {
+  compareCandidates,
+  rankCandidates,
+  type RankingInput,
+  type RankingResult,
+} from './recommendation.js'
 export { mergeVocabulary, type MergedVocabulary } from './vocabulary.js'
 export { type PartitionedPullRequests, partitionForViewer } from './workspace.js'

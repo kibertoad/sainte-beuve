@@ -4,13 +4,13 @@ import {
   type AiReviewGateway,
   type AiReviewHandle,
   type AiReviewReport,
-  UnavailableError,
   formatPullRequest,
   withDeadline,
 } from '@sainte-beuve/kernel'
 import { curationOf } from './curation.js'
-import { type DirectoryLocation, locationOf } from './directoryKeys.js'
+import { placeReview } from './placement.js'
 import { refusalFor } from './refusals.js'
+import { WorkspaceClients } from './workspaceClients.js'
 
 /**
  * The cat-factory side of the AI-review port.
@@ -48,13 +48,6 @@ export interface CatFactoryOptions {
   pipelineId?: string
   /** Swap the HTTP implementation. The SDK's own seam, so a suite needs no live instance. */
   fetch?: typeof globalThis.fetch
-}
-
-/** Where a review task goes: a service, and the workspace it belongs to. */
-interface Placement {
-  serviceId: string
-  /** Null for the default service, which is filed in the key's only workspace. */
-  workspaceId: string | null
 }
 
 /**
@@ -109,28 +102,13 @@ function statusOf(run: PublicRun, curation: AiReviewCuration | null): AiReviewRe
 }
 
 export class CatFactoryAiReviewGateway implements AiReviewGateway {
-  private readonly client: CatFactoryClient
   private readonly options: CatFactoryOptions
-  /** One client per workspace a call has named, built on first use. */
-  private readonly workspaceClients = new Map<string, CatFactoryClient>()
+  /** Every call about a run names the workspace it was filed in. */
+  private readonly clients: WorkspaceClients
 
   constructor(options: CatFactoryOptions) {
     this.options = options
-    this.client = this.build(undefined)
-  }
-
-  /**
-   * The client for calls about a run in `workspaceId`. A key reaching several
-   * workspaces is refused a workspace-scoped call that names none, so a run
-   * filed in a named workspace is asked about through a client that names it.
-   */
-  private clientFor(workspaceId: string | null): CatFactoryClient {
-    if (workspaceId === null) return this.client
-    const held = this.workspaceClients.get(workspaceId)
-    if (held !== undefined) return held
-    const client = this.build(workspaceId)
-    this.workspaceClients.set(workspaceId, client)
-    return client
+    this.clients = new WorkspaceClients((workspaceId) => this.build(workspaceId))
   }
 
   private build(workspaceId: string | undefined): CatFactoryClient {
@@ -158,8 +136,12 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     instructions: string | null
     directoryKeys: readonly string[]
   }): Promise<AiReviewHandle> {
-    const placement = await this.placementFor(input.pullRequest, input.directoryKeys)
-    const client = this.clientFor(placement.workspaceId)
+    const placement = await placeReview(this.clients, {
+      pullRequest: input.pullRequest,
+      directoryKeys: input.directoryKeys,
+      defaultServiceId: this.options.serviceId,
+    })
+    const client = this.clients.in(placement.workspaceId)
     const task = await this.createTask(client, placement.serviceId, input)
     // Create and start are two calls in cat-factory's API on purpose (a task is
     // editable before it runs), but a review has nothing to edit, so file it and go.
@@ -178,46 +160,6 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
       taskId: task.taskId,
       url: `${this.options.baseUrl}/tasks/${task.taskId}`,
       workspaceId: placement.workspaceId,
-    }
-  }
-
-  /**
-   * The service that backs the pull request's repository in a workspace linking
-   * it, else the default service.
-   *
-   * A repository linked in no workspace, or backed by no service in any (a
-   * monorepo never is, since it can back several), falls back to the default. A
-   * refused lookup is NOT a fallback: filing under the default because the key
-   * could not read the workspace would put the review under another
-   * repository's service without saying so.
-   */
-  private async placementFor(
-    pullRequest: PullRequestRef,
-    directoryKeys: readonly string[],
-  ): Promise<Placement> {
-    const ref = formatPullRequest(pullRequest)
-    const locations = directoryKeys
-      .map(locationOf)
-      .filter((location): location is DirectoryLocation => location !== null)
-    const backed = await Promise.all(locations.map((location) => this.backing(location, ref)))
-    const found = backed.find((placement): placement is Placement => placement !== null)
-    if (found !== undefined) return found
-    const fallback = this.options.serviceId
-    if (fallback !== null) return { serviceId: fallback, workspaceId: null }
-    throw new UnavailableError(
-      `Cannot file a review task for ${ref}: no cat-factory service backs its repository and no default service is set. ` +
-        'Create a service for the repository in cat-factory, or set a default service id on the Configuration screen',
-    )
-  }
-
-  /** The service backing one linked repository, or null when none does. */
-  private async backing(location: DirectoryLocation, ref: string): Promise<Placement | null> {
-    try {
-      const { repos } = await this.clientFor(location.workspaceId).repos.list()
-      const serviceId = repos.find((repo) => repo.repoId === location.repoId)?.serviceId ?? null
-      return serviceId === null ? null : { serviceId, workspaceId: location.workspaceId }
-    } catch (err) {
-      throw refusalFor(err, `find the service that backs ${ref}`)
     }
   }
 
@@ -242,7 +184,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
   }
 
   async getStatus(input: { taskId: string; workspaceId: string | null }): Promise<AiReviewReport> {
-    const client = this.clientFor(input.workspaceId)
+    const client = this.clients.in(input.workspaceId)
     const run = await this.readRun(client, input.taskId)
     if (run === null) return NO_RUN_YET
     // Only a run still in flight is asked what it is parked on. A settled one has
@@ -309,7 +251,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     findingId: string
     workspaceId: string | null
   }): Promise<AiReviewCuration | null> {
-    const { decisions } = this.clientFor(input.workspaceId)
+    const { decisions } = this.clients.in(input.workspaceId)
     return curationOf(
       await this.curating(`dismiss finding ${input.findingId}`, input.runId, () =>
         decisions.dismissPrReviewFinding(input.runId, input.findingId),
@@ -323,7 +265,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     findingIds: string[]
     workspaceId: string | null
   }): Promise<void> {
-    const { decisions } = this.clientFor(input.workspaceId)
+    const { decisions } = this.clients.in(input.workspaceId)
     await this.curating(`resolve the review as \`${input.action}\``, input.runId, () =>
       decisions.resolvePrReview(input.runId, {
         action: input.action,
@@ -333,7 +275,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
   }
 
   async resumeReview(input: { runId: string; workspaceId: string | null }): Promise<void> {
-    const { decisions } = this.clientFor(input.workspaceId)
+    const { decisions } = this.clients.in(input.workspaceId)
     await this.curating('resume the review', input.runId, () =>
       decisions.resumePrReview(input.runId),
     )
