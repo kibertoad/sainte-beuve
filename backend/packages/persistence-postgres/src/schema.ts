@@ -285,6 +285,8 @@ export const attentionRequests = pgTable(
     status: text('status').notNull(),
     createdAt: epochMs('created_at').notNull(),
     data: payload<AttentionRequest>('data', 'attention_requests', attentionRequestSchema).notNull(),
+    /** Moves on with every write, so a change writes only over the row it read. */
+    revision: integer('revision').notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),

@@ -33,6 +33,7 @@ pull request is merged with its review findings fixed.
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
 | 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
+| 15  | Attention answers are written atomically                      | 3    |            | In review   |                                                          |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -151,3 +152,15 @@ finding. The curation screen has no way to ask for it.
 
 A challenge action on a finding files the investigation and shows the verdict on
 the finding.
+
+### 15. Atomic answers to an ask
+
+Answering an ask reads the request, changes it and writes it back whole, with no
+transaction. Two people committing at the same moment both read the ask before
+either writes, so the second write drops the first commitment. Declining and
+asking the next candidate (gap 7) write the same row the same way.
+
+The attention store changes a request only through `change`, which re-reads and
+remakes the decision when another write landed in between: a `revision` column
+in Postgres and D1, and a read and write with nothing awaited between them in
+memory.

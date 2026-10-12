@@ -64,6 +64,7 @@ export {
   selectAttentionAudience,
   unaskableReason,
 } from './attention.js'
+export { type AnswerPatch, type CommitDecision, decideCancel, decideCommit } from './answers.js'
 export {
   type RecipientRefusal,
   type RecipientsInput,

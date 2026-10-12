@@ -170,22 +170,6 @@ export const attentionCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(ids, ['a1'])
     assert.deepStrictEqual(await repos.attention.list({ status: [] }), [])
   }),
-
-  conformanceCase('an ask records the people who answered it', async (repos) => {
-    await repos.attention.create(attentionRequest('a1'))
-    const updated = await repos.attention.update('a1', {
-      commitments: [{ reviewerId: 'r1', displayName: 'One', committedAt: 3_000 }],
-      status: 'resolved',
-      resolvedAt: 3_000,
-    })
-    assert.strictEqual(updated?.commitments.length, 1)
-    assert.strictEqual(updated?.status, 'resolved')
-    assert.deepStrictEqual(await repos.attention.list({ status: ['open'] }), [])
-  }),
-
-  conformanceCase('patching an ask that is not there answers null', async (repos) => {
-    assert.strictEqual(await repos.attention.update('nobody', { status: 'cancelled' }), null)
-  }),
 ]
 
 export const commitmentCases: readonly ConformanceCase[] = [

@@ -11,9 +11,11 @@ import type {
 } from '@sainte-beuve/contracts'
 import { ConflictError, ForbiddenError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
+  type CommitDecision,
   type RecipientRefusal,
   audienceRuleOf,
-  isAttentionSatisfied,
+  decideCancel,
+  decideCommit,
   isInAttentionAudience,
   resolveAttentionRecipients,
   reviewersWithHandles,
@@ -95,25 +97,11 @@ export class AttentionService {
    */
   async commit(viewer: Reviewer, attentionId: string): Promise<AttentionRequest> {
     const request = await this.require(attentionId)
-    if (request.requestedById === viewer.id) {
-      throw new ForbiddenError('You asked for this review, so you cannot be the one to take it')
-    }
-    // Their OWN commitment is answered before the status is, and the order is
-    // the whole point: with the default critical mass of one, the click that
-    // resolved the ask makes the next click from the same person a click on a
-    // resolved ask. Refusing it would toast "could not commit" at the one
-    // person who did, over a re-render or a restored tab.
-    if (request.commitments.some((entry) => entry.reviewerId === viewer.id)) return request
-    if (request.status !== 'open') {
-      throw new ConflictError(`This request is already ${request.status}`, { attentionId })
-    }
-
+    const committer = { reviewerId: viewer.id, displayName: viewer.displayName }
     const now = this.container.clock.now()
-    const commitments = [
-      ...request.commitments,
-      { reviewerId: viewer.id, displayName: viewer.displayName, committedAt: now },
-    ]
-    const satisfied = isAttentionSatisfied({ ...request, commitments })
+    if (refuseCommit(decideCommit(request, committer, now), attentionId) === 'already') {
+      return request
+    }
     // The commitment row FIRST, then the ask, then the event. Both writes are
     // needed and there is no transaction across them, so the order decides what
     // a failure between them leaves behind: this way a refused second write
@@ -121,16 +109,18 @@ export class AttentionService {
     // that row and is a no-op. The other way round resolves the ask, drops the
     // promise, and tells nobody.
     await this.recordCommitment(viewer, request.pullRequest, request.title, attentionId)
-    const updated = assertFound(
-      await this.container.repositories.attention.update(attentionId, {
-        commitments,
-        status: satisfied ? 'resolved' : 'open',
-        updatedAt: now,
-        resolvedAt: satisfied ? now : null,
-      }),
-      `No attention request ${attentionId}`,
-    )
-    this.publish(satisfied ? 'resolved' : 'committed', updated)
+    // The decision is remade on the ask as stored, so another answer landing
+    // in between is counted rather than written over.
+    const outcome: { event: AttentionEventKind | null } = { event: null }
+    const updated = await this.change(attentionId, (current) => {
+      const decision = decideCommit(current, committer, now)
+      outcome.event = null
+      refuseCommit(decision, attentionId)
+      if (decision.kind !== 'commit') return null
+      outcome.event = decision.resolves ? 'resolved' : 'committed'
+      return decision.patch
+    })
+    if (outcome.event !== null) this.publish(outcome.event, updated)
     return updated
   }
 
@@ -141,14 +131,14 @@ export class AttentionService {
       throw new ForbiddenError('Only the person who asked for attention can withdraw the request')
     }
     if (request.status !== 'open') return request
-    const updated = assertFound(
-      await this.container.repositories.attention.update(attentionId, {
-        status: 'cancelled',
-        updatedAt: this.container.clock.now(),
-      }),
-      `No attention request ${attentionId}`,
-    )
-    this.publish('cancelled', updated)
+    const now = this.container.clock.now()
+    const outcome = { cancelled: false }
+    const updated = await this.change(attentionId, (current) => {
+      const patch = decideCancel(current, now)
+      outcome.cancelled = patch !== null
+      return patch
+    })
+    if (outcome.cancelled) this.publish('cancelled', updated)
     return updated
   }
 
@@ -240,6 +230,16 @@ export class AttentionService {
     throw refusalError(resolution.refusal, input.neededCommitments)
   }
 
+  private async change(
+    attentionId: string,
+    change: (current: AttentionRequest) => Partial<AttentionRequest> | null,
+  ): Promise<AttentionRequest> {
+    return assertFound(
+      await this.container.repositories.attention.change(attentionId, change),
+      `No attention request ${attentionId}`,
+    )
+  }
+
   private async require(attentionId: string): Promise<AttentionRequest> {
     return assertFound(
       await this.container.repositories.attention.getById(attentionId),
@@ -249,6 +249,19 @@ export class AttentionService {
 
   private publish(kind: AttentionEventKind, request: AttentionRequest): void {
     this.container.bus.publish({ kind, request })
+  }
+}
+
+/** Throws for a commitment that cannot be made; answers 'already' for one that was. */
+function refuseCommit(decision: CommitDecision, attentionId: string): 'already' | 'commit' {
+  switch (decision.kind) {
+    case 'requester':
+      throw new ForbiddenError('You asked for this review, so you cannot be the one to take it')
+    case 'closed':
+      throw new ConflictError(`This request is already ${decision.status}`, { attentionId })
+    case 'already':
+    case 'commit':
+      return decision.kind
   }
 }
 

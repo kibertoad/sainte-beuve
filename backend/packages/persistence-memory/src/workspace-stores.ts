@@ -122,12 +122,15 @@ export class InMemoryAttentionRepository implements AttentionRepository {
     return clone(request)
   }
 
-  async update(
+  /** Atomic without a revision: nothing awaits between the read and the write. */
+  async change(
     attentionId: string,
-    patch: Partial<AttentionRequest>,
+    change: (current: AttentionRequest) => Partial<AttentionRequest> | null,
   ): Promise<AttentionRequest | null> {
     const row = this.rows.get(attentionId)
     if (row === undefined) return null
+    const patch = change(clone(row))
+    if (patch === null) return clone(row)
     const next = patched(row, patch)
     this.rows.set(attentionId, next)
     return clone(next)
