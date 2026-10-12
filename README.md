@@ -103,6 +103,14 @@ which skills (from the project's own vocabulary, `Backend` and `Frontend` until
 a team names its own), how many people you want, and whether the ask should stay
 inside your team.
 
+The dialog lists the five best matches as you pick, with what each one matched
+and how many reviews they already have open beside their name. They are ranked
+on how much of those skills and the repository's domains a person holds, and
+open reviews only order people who fit equally: you can see the load and weigh
+it yourself, and a busy expert still outranks an idle stranger. The list is the
+people an ask could reach, so it never names you, the author, anybody already
+on the pull request or paused, and it keeps to your team when the ask does.
+
 Everyone available who holds all of those skills is asked, two ways at once. A
 page already open is pushed the request over server-sent events; a page opened
 an hour later fetches the same thing over REST. Neither is a fallback for the
@@ -151,11 +159,15 @@ A GitHub App needs `Contents: Read & write` to merge.
 opened that you have a part in. It lists three things:
 
 - **Asked to review**: the host is waiting on your review. "I will review it"
-  records a commitment.
-- **Committed to reviewing**: the promises you made here, whether or not the host
-  knows about them.
+  records a commitment, which moves the pull request to the next list.
+- **Committed to reviewing**: the promises you made here.
 - **Reviewed**: still open, and you have reviewed them. One the host asks you to
   look at again moves back up to the first list.
+
+A commitment, made here or by answering an ask, requests your review on the
+host, so the pull request shows who took it. Releasing it takes that request
+back only if the commitment made it and you have not reviewed yet: a request the
+author or a board assignment made stays where it was.
 
 Like My PRs, it covers every repository the host search can see, and **Linked
 repositories only** narrows it to the registered projects. On GitLab, which keeps

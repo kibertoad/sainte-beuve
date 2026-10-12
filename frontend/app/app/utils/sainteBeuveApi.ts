@@ -1,7 +1,5 @@
 import type {
-  CreateAttentionRequestInput,
   CreateProjectInput,
-  PullRequestRef,
   RepositoryLookupQuery,
   ReviewStatus,
   Role,
@@ -12,22 +10,16 @@ import {
   actAsContract,
   addProjectContract,
   assignReviewersContract,
-  cancelAttentionContract,
-  commitToAttentionContract,
-  commitToPullRequestContract,
   createApiKeyContract,
   getAuthStateContract,
   getViewerContract,
   getWorkspaceContract,
   issuePath,
   listApiKeysContract,
-  listAttentionContract,
   listProjectsContract,
   lookupRepositoriesContract,
   listReviewsContract,
-  releaseCommitmentContract,
   removeProjectContract,
-  requestAttentionContract,
   revokeApiKeyContract,
   signOutContract,
   startSessionSignInContract,
@@ -46,6 +38,7 @@ import {
 import { sendByApiContract, UnexpectedResponseError } from '@toad-contracts/frontend-http-client'
 import wretch from 'wretch'
 import type { RequestParams, SuccessBody } from './contractCall'
+import { attentionCalls } from './attentionApi'
 import { capabilityCalls } from './capabilitiesApi'
 import { aiReviewCalls } from './aiReviewApi'
 import { guidedReviewCalls } from './guidedReviewApi'
@@ -293,18 +286,6 @@ export function createSainteBeuveApi(apiBase: string) {
     lookupRepositories: (query: RepositoryLookupQuery) =>
       call(lookupRepositoriesContract, { queryParams: query }),
 
-    listAttention: () => call(listAttentionContract, {}),
-    requestAttention: (request: CreateAttentionRequestInput) =>
-      call(requestAttentionContract, { body: request }),
-    commitToAttention: (attentionId: string) =>
-      call(commitToAttentionContract, { pathParams: { attentionId }, body: {} }),
-    cancelAttention: (attentionId: string) =>
-      call(cancelAttentionContract, { pathParams: { attentionId } }),
-    commitToPullRequest: (pullRequest: PullRequestRef, title: string) =>
-      call(commitToPullRequestContract, { body: { pullRequest, title } }),
-    releaseCommitment: (commitmentId: string) =>
-      call(releaseCommitmentContract, { pathParams: { commitmentId } }),
-
     /**
      * The board. Unfiltered it is the ACTIVE reviews, newest first and capped,
      * which is the server's default and what every screen here wants: the
@@ -330,6 +311,7 @@ export function createSainteBeuveApi(apiBase: string) {
       call(assignReviewersContract, { pathParams: { reviewId }, body: { count } }),
 
     ...aiReviewCalls(call),
+    ...attentionCalls(call),
     ...guidedReviewCalls(call),
     ...myPullRequestCalls(call),
     ...myReviewCalls(call),
