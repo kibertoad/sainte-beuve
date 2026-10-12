@@ -6,15 +6,18 @@ import type {
   RepositoryLookup,
 } from '@sainte-beuve/contracts'
 import type {
+  EpochMs,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewerTally,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
+import { pastGitHubReviewers } from './history.js'
 import { lookupGitHubRepositories } from './lookup.js'
 import {
   type GitHubPullRequestDetail,
@@ -261,6 +264,14 @@ export class GitHubVcsGateway implements VcsGateway {
       throw err
     })
     return this.identity
+  }
+
+  async pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]> {
+    return pastGitHubReviewers(project, since, {
+      token: await this.options.tokens.tokenFor(project.owner, project.repo),
+      baseUrl: this.options.baseUrl,
+      fetchImpl: this.options.fetchImpl,
+    })
   }
 
   private async readViewer(): Promise<VcsAccount | null> {

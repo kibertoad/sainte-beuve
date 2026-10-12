@@ -192,6 +192,7 @@ export function recordingVcs(): VcsGateway & {
     listOpenPullRequests: async () => [],
     searchOpenPullRequests: async () => [],
     lookupRepositories: async () => null,
+    pastReviewers: async () => [],
     ...noMerging(),
   }
 }

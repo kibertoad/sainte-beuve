@@ -8,6 +8,7 @@ import {
 } from '@sainte-beuve/kernel'
 import type { GitHubDelivery, GitHubIntent } from '@sainte-beuve/integrations'
 import { interpretGitHubDelivery, verifyGitHubSignature } from '@sainte-beuve/integrations'
+import { PAST_REVIEW_STATUSES } from '@sainte-beuve/reviewers'
 import { type AppContainer, withOrg } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { resolveVcs } from '../../integrations/resolve.js'
@@ -150,6 +151,11 @@ export class GitHubWebhookService {
     // simply not our business.
     const review = await this.tracked(intent.pullRequest)
     if (review === null) return IGNORED
+    // Closing never erases a verdict. Merging is how an approved pull request
+    // usually ends, and the review history counts who reviewed it by its verdict.
+    if (intent.kind === 'close' && PAST_REVIEW_STATUSES.includes(review.status)) {
+      return { action: 'ignored:settled', reviewId: review.id }
+    }
     await new ReviewService(this.container).updateStatus(review.id, status)
     return { action: status, reviewId: review.id }
   }
