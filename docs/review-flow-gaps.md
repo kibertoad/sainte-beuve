@@ -33,6 +33,7 @@ pull request is merged with its review findings fixed.
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
 | 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
+| 13  | A guided review names its cat-factory workspace               | 5    | 5          | In progress |                                                          |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -142,3 +143,13 @@ curation screen has no way to ask for it.
 
 A challenge action on a finding files the investigation and shows the verdict on
 the finding.
+
+### 13. A guided review names its workspace
+
+`CatFactoryGuidedReviewGateway` sends no workspace on any call. cat-factory
+refuses a workspace-scoped call that names none when the key reaches several
+workspaces, so the guided review fails for every repository of such an org.
+
+Opening and looking up a session use the workspaces the org's repository mirror
+links the repository in. A call by session id names the org's only workspace, or
+reads the session in each when there are several and uses the one that answers.

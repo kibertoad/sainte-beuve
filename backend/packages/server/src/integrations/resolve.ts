@@ -17,6 +17,7 @@ import {
 } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../container.js'
 import { readCatFactoryConfig } from './catFactoryConfig.js'
+import { orgDirectoryKeys } from './catFactoryDirectory.js'
 
 /**
  * Which credential each integration is authenticating with RIGHT NOW.
@@ -267,6 +268,7 @@ export async function resolveGuidedReview(
   const gateway = container.gateways?.guidedReview({
     baseUrl: access.config.baseUrl,
     apiKey: access.apiKey,
+    directoryKeys: () => orgDirectoryKeys(container),
   })
   return gateway === undefined ? null : { gateway, source: 'stored' }
 }

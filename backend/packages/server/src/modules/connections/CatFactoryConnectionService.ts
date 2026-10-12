@@ -18,7 +18,8 @@ import {
   repositorySyncOf,
 } from '../../integrations/repositorySyncState.js'
 import { catFactoryAccess, openCredential } from '../../integrations/resolve.js'
-import { CAT_FACTORY_SOURCE, RepositorySyncService } from '../projects/RepositorySyncService.js'
+import { CAT_FACTORY_SOURCE } from '../../integrations/catFactoryDirectory.js'
+import { RepositorySyncService } from '../projects/RepositorySyncService.js'
 import { type CheckedKey, catFactoryCheck } from './catFactoryCheck.js'
 
 const NO_ADAPTERS = 'This deployment wired no gateway factory, so it cannot reach cat-factory'

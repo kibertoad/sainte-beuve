@@ -14,12 +14,10 @@ import {
   readRepositorySyncState,
   writeRepositorySyncState,
 } from '../../integrations/repositorySyncState.js'
+import { CAT_FACTORY_SOURCE } from '../../integrations/catFactoryDirectory.js'
 import { OrgService } from '../orgs/OrgService.js'
 import { planProjectSync } from './projectSync.js'
 import { ProjectService } from './ProjectService.js'
-
-/** The source this service follows. The store and the planner take any. */
-export const CAT_FACTORY_SOURCE = 'cat-factory'
 
 const CATCH_UP_EVERY_MS = 5 * 60_000
 const RECONCILE_EVERY_MS = 24 * 60 * 60_000

@@ -57,6 +57,8 @@ function threadView(sessionId: string): GuidedReviewThreadView {
 
 interface StubGuidedReview extends GuidedReviewGateway {
   calls: string[]
+  /** The directory keys each `find` and `open` was handed, sorted. */
+  keys: string[][]
   /** What the next `watch` yields, in order. */
   frames: GuidedReviewWatchEvent[]
 }
@@ -77,15 +79,23 @@ function stubGuidedReview(): StubGuidedReview {
     calls.push(call)
     return Promise.resolve(answer)
   }
+  const keys: string[][] = []
   const stub: StubGuidedReview = {
     calls,
+    keys,
     frames: [],
     async *watch(sessionId) {
       calls.push(`watch ${sessionId}`)
       yield* stub.frames
     },
-    find: (target: GuidedReviewTarget) => record(`find ${target.repo}`, null),
-    open: (target) => record(`open ${target.repo}#${target.number}`, read('grs-ours')),
+    find: (target: GuidedReviewTarget, directoryKeys) => {
+      keys.push([...directoryKeys].sort())
+      return record(`find ${target.repo}`, null)
+    },
+    open: (target, directoryKeys) => {
+      keys.push([...directoryKeys].sort())
+      return record(`open ${target.repo}#${target.number}`, read('grs-ours'))
+    },
     get: (sessionId) => record(`get ${sessionId}`, read(sessionId)),
     refresh: (sessionId) => record(`refresh ${sessionId}`, read(sessionId)),
     openThread: (sessionId) => record(`openThread ${sessionId}`, threadView(sessionId)),
@@ -289,6 +299,50 @@ describe('guided review', () => {
 
     expect(res.status).toBe(404)
     expect(catFactory.calls).toStrictEqual(['get grs-theirs'])
+  })
+
+  /**
+   * Which workspace a call names is the gateway's to read out of a key; what
+   * the service supplies is where the org's mirror lists the repository, and
+   * every key it holds for a call that arrives by session id.
+   */
+  it("hands the gateway the repository's directory keys, and every key the org mirrors", async () => {
+    const { externalRepositories } = harness.container.repositories
+    const listed = (key: string, repo: string, id: string) => ({
+      source: 'cat-factory',
+      key,
+      seq: 1,
+      repository: { provider: 'github' as const, owner: 'kibertoad', repo, id },
+    })
+    await externalRepositories.apply(listed('ws-a/42', 'sainte-beuve', '42'))
+    await externalRepositories.apply(listed('ws-b/42', 'sainte-beuve', '42'))
+    await externalRepositories.apply(listed('ws-a/43', 'elsewhere', '43'))
+    await externalRepositories.apply({
+      source: 'cat-factory',
+      key: 'ws-c/44',
+      seq: 1,
+      repository: null,
+    })
+    const accessed: (() => Promise<readonly string[]>)[] = []
+    const gateways = harness.container.gateways
+    if (gateways === null) throw new Error('catFactoryWired wires a factory')
+    gateways.guidedReview = (access) => {
+      accessed.push(access.directoryKeys)
+      return catFactory
+    }
+    const target = { provider: 'github', owner: 'kibertoad', repo: 'sainte-beuve', number: 7 }
+
+    await harness.app.fetch(
+      get(`${BASE}?provider=github&owner=kibertoad&repo=sainte-beuve&number=7`),
+    )
+    await harness.app.fetch(post(BASE, target))
+
+    expect(catFactory.keys).toStrictEqual([
+      ['ws-a/42', 'ws-b/42'],
+      ['ws-a/42', 'ws-b/42'],
+    ])
+    const orgKeys = await accessed[0]?.()
+    expect([...(orgKeys ?? [])].sort()).toStrictEqual(['ws-a/42', 'ws-a/43', 'ws-b/42'])
   })
 
   it('names the missing configuration when no cat-factory is wired', async () => {

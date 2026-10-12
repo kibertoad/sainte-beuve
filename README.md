@@ -93,9 +93,11 @@ There is one guided review per pull request on a deployment, and everybody who
 opens it sees the same threads. Opening the page reads; only **Start a guided
 review** spends model budget. It needs the same cat-factory key as the AI
 review (the `write` scope is enough) and a base URL, both set per org on the
-Configuration screen, but no service id: the repository has to be linked in the
+Configuration screen, but no service id: the repository has to be linked in a
 cat-factory workspace, which with cat-factory configured is also what registers
-it here (see [docs/integrations.md](./docs/integrations.md)).
+it here (see [docs/integrations.md](./docs/integrations.md)). A key that reaches
+several workspaces works too: the review opens in the workspace that links the
+repository.
 
 ## Asking for attention
 

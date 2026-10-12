@@ -1,4 +1,4 @@
-import { CatFactoryClient } from '@cat-factory/sdk'
+import { CatFactoryClient, CatFactoryNotFoundError } from '@cat-factory/sdk'
 import type {
   AskGuidedReviewInput,
   EditGuidedReviewDraftInput,
@@ -16,8 +16,10 @@ import type {
 import {
   type GuidedReviewGateway,
   type GuidedReviewWatchEvent,
+  NotFoundError,
   withDeadline,
 } from '@sainte-beuve/kernel'
+import { type DirectoryLocation, locationOf } from './directoryKeys.js'
 import { refusalFor } from './refusals.js'
 
 export interface CatFactoryGuidedReviewOptions {
@@ -29,9 +31,30 @@ export interface CatFactoryGuidedReviewOptions {
    * own sessions and runs on the cat-factory workspace's credentials.
    */
   apiKey: string
+  /**
+   * Every key the org's repository mirror holds, read when a call by session id
+   * has to find the session's workspace. Absent, every such call goes to the
+   * key's only workspace.
+   */
+  directoryKeys?: () => Promise<readonly string[]>
   /** Swap the HTTP implementation. The SDK's own seam, so a suite needs no live instance. */
   fetch?: typeof globalThis.fetch
 }
+
+/** The two clients for one workspace. */
+interface WorkspaceClients {
+  client: CatFactoryClient
+  /**
+   * The same key without the transport deadline, for the stream alone. A
+   * deadline aborts the body as well as the connect, so the shared one would
+   * cut every stream at twenty seconds. cat-factory caps the stream's length
+   * itself, and the reader aborts it on leaving.
+   */
+  streaming: CatFactoryClient
+}
+
+/** Where a session lives: a named workspace, or null for the key's only one. */
+type Workspace = string | null
 
 /** Whether a session is about the pull request a target names. Hosts compare names caselessly. */
 function isFor(session: GuidedReviewSession, target: GuidedReviewTarget): boolean {
@@ -44,127 +67,164 @@ function isFor(session: GuidedReviewSession, target: GuidedReviewTarget): boolea
 }
 
 /**
+ * The workspaces a set of mirror keys names, each once and in id order, so the
+ * same keys always pick the same workspace first. No keys names the key's only
+ * workspace, which is how a deployment without a mirror has always called.
+ */
+function workspacesOf(directoryKeys: readonly string[]): Workspace[] {
+  const ids = directoryKeys
+    .map(locationOf)
+    .filter((location): location is DirectoryLocation => location !== null)
+    .map((location) => location.workspaceId)
+  const distinct = [...new Set(ids)].toSorted()
+  return distinct.length === 0 ? [null] : distinct
+}
+
+/**
  * The cat-factory side of the guided-review port.
  *
  * A thin relay on purpose. The SDK's operations and models are generated from
  * cat-factory's OpenAPI spec, and the shapes this port answers with are
- * cat-factory's own schemas, so there is nothing to translate except a refusal.
+ * cat-factory's own schemas, so there is nothing to translate except a refusal
+ * and the workspace a call has to name.
+ *
+ * Built per request, so what it learns about where a session lives lasts one
+ * request: the tenancy check reads the session first, and the call after it
+ * reuses the workspace that read found.
  */
 export class CatFactoryGuidedReviewGateway implements GuidedReviewGateway {
-  private readonly client: CatFactoryClient
-  /**
-   * The same key without the transport deadline, for the stream alone. A
-   * deadline aborts the body as well as the connect, so the shared one would
-   * cut every stream at twenty seconds. cat-factory caps the stream's length
-   * itself, and the reader aborts it on leaving.
-   */
-  private readonly streaming: CatFactoryClient
+  private readonly options: CatFactoryGuidedReviewOptions
+  private readonly clients = new Map<string, WorkspaceClients>()
+  private readonly sessionWorkspaces = new Map<string, Workspace>()
+  private orgWorkspaces: Promise<Workspace[]> | null = null
 
   constructor(options: CatFactoryGuidedReviewOptions) {
-    const client = { baseUrl: options.baseUrl, apiKey: options.apiKey, userAgent: 'sainte-beuve' }
-    this.client = new CatFactoryClient({ ...client, fetch: withDeadline(options.fetch) })
-    this.streaming = new CatFactoryClient({
-      ...client,
-      timeoutMs: 0,
-      ...(options.fetch ? { fetch: options.fetch } : {}),
-    })
+    this.options = options
   }
 
   /**
    * cat-factory lists sessions by its own repository id, which nothing here
    * holds, so the lookup narrows by pull request number and matches the
-   * repository on the rows. `mine` keeps it to sessions this key owns: any
-   * other is one this deployment could read but never ask anything of.
+   * repository on the rows, in each workspace that links the repository. `mine`
+   * keeps it to sessions this key owns: any other is one this deployment could
+   * read but never ask anything of.
    */
-  async find(target: GuidedReviewTarget): Promise<GuidedReviewSessionView | null> {
-    const session = await this.relay(`look up the guided review of #${target.number}`, async () => {
-      for await (const row of this.client.guidedReviews.listAll({
-        prNumber: target.number,
-        mine: 'true',
-      })) {
-        if (isFor(row, target)) return row
-      }
-      return null
-    })
-    return session === null ? null : this.get(session.id)
+  async find(
+    target: GuidedReviewTarget,
+    directoryKeys: readonly string[],
+  ): Promise<GuidedReviewSessionView | null> {
+    const sessionId = await this.findIn(workspacesOf(directoryKeys), target)
+    return sessionId === null ? null : this.get(sessionId)
   }
 
-  open(target: GuidedReviewTarget): Promise<GuidedReviewSessionView> {
+  /**
+   * Open in the first workspace linking the repository. With several linking
+   * it, a session already open in any of them is answered instead, because
+   * cat-factory only returns the existing session of the workspace it is asked
+   * in, and a second one would split the review's threads in two.
+   */
+  async open(
+    target: GuidedReviewTarget,
+    directoryKeys: readonly string[],
+  ): Promise<GuidedReviewSessionView> {
+    const workspaces = workspacesOf(directoryKeys)
+    if (workspaces.length > 1) {
+      const existing = await this.findIn(workspaces, target)
+      if (existing !== null) return this.get(existing)
+    }
+    const workspace = workspaces[0] ?? null
     const { provider, owner, repo, number } = target
-    return this.relay(`open a guided review of ${owner}/${repo}#${number}`, () =>
-      this.client.guidedReviews.open({ provider, owner, repo, prNumber: number }),
+    const view = await this.relay(`open a guided review of ${owner}/${repo}#${number}`, () =>
+      this.clientsFor(workspace).client.guidedReviews.open({
+        provider,
+        owner,
+        repo,
+        prNumber: number,
+      }),
     )
+    this.sessionWorkspaces.set(view.session.id, workspace)
+    return view
   }
 
-  get(sessionId: string): Promise<GuidedReviewSessionView> {
+  async get(sessionId: string): Promise<GuidedReviewSessionView> {
+    const located = await this.locate(sessionId)
+    if (located.view !== null) return located.view
     return this.relay(`read guided review ${sessionId}`, () =>
-      this.client.guidedReviews.get(sessionId),
+      this.clientsFor(located.workspace).client.guidedReviews.get(sessionId),
     )
   }
 
-  refresh(sessionId: string): Promise<GuidedReviewSessionView> {
+  async refresh(sessionId: string): Promise<GuidedReviewSessionView> {
+    const { client } = await this.clientsOf(sessionId)
     return this.relay(`refresh guided review ${sessionId}`, () =>
-      this.client.guidedReviews.refresh(sessionId),
+      client.guidedReviews.refresh(sessionId),
     )
   }
 
-  openThread(
+  async openThread(
     sessionId: string,
     input: OpenGuidedReviewThreadInput,
   ): Promise<GuidedReviewThreadView> {
+    const { client } = await this.clientsOf(sessionId)
     return this.relay(`open a thread on guided review ${sessionId}`, () =>
-      this.client.guidedReviews.openThread(sessionId, input),
+      client.guidedReviews.openThread(sessionId, input),
     )
   }
 
-  getThread(sessionId: string, threadId: string): Promise<GuidedReviewThreadView> {
+  async getThread(sessionId: string, threadId: string): Promise<GuidedReviewThreadView> {
+    const { client } = await this.clientsOf(sessionId)
     return this.relay(`read thread ${threadId} of guided review ${sessionId}`, () =>
-      this.client.guidedReviews.getThread(sessionId, threadId),
+      client.guidedReviews.getThread(sessionId, threadId),
     )
   }
 
-  ask(
+  async ask(
     sessionId: string,
     threadId: string,
     input: AskGuidedReviewInput,
   ): Promise<GuidedReviewExchange> {
+    const { client } = await this.clientsOf(sessionId)
     return this.relay(`ask in thread ${threadId} of guided review ${sessionId}`, () =>
-      this.client.guidedReviews.ask(sessionId, threadId, input),
+      client.guidedReviews.ask(sessionId, threadId, input),
     )
   }
 
-  requestDrafts(
+  async requestDrafts(
     sessionId: string,
     threadId: string,
     input: RequestGuidedReviewDraftsInput,
   ): Promise<GuidedReviewExchange> {
+    const { client } = await this.clientsOf(sessionId)
     return this.relay(`draft comments from thread ${threadId} of guided review ${sessionId}`, () =>
-      this.client.guidedReviews.requestDrafts(sessionId, threadId, input),
+      client.guidedReviews.requestDrafts(sessionId, threadId, input),
     )
   }
 
-  editDraft(
+  async editDraft(
     sessionId: string,
     draftId: string,
     input: EditGuidedReviewDraftInput,
   ): Promise<GuidedReviewCommentDraft> {
+    const { client } = await this.clientsOf(sessionId)
     return this.relay(`edit draft ${draftId} of guided review ${sessionId}`, () =>
-      this.client.guidedReviews.editDraft(sessionId, draftId, input),
+      client.guidedReviews.editDraft(sessionId, draftId, input),
     )
   }
 
-  postDrafts(
+  async postDrafts(
     sessionId: string,
     input: PostGuidedReviewDraftsInput,
   ): Promise<GuidedReviewPostResult> {
+    const { client } = await this.clientsOf(sessionId)
     return this.relay(`post the comment drafts of guided review ${sessionId}`, () =>
-      this.client.guidedReviews.postDrafts(sessionId, input),
+      client.guidedReviews.postDrafts(sessionId, input),
     )
   }
 
   async *watch(sessionId: string, signal: AbortSignal): AsyncGenerator<GuidedReviewWatchEvent> {
+    const { streaming } = await this.clientsOf(sessionId)
     const stream = await this.relay(`stream guided review ${sessionId}`, () =>
-      this.streaming.guidedReviews.stream(sessionId, { signal, timeoutMs: 0 }),
+      streaming.guidedReviews.stream(sessionId, { signal, timeoutMs: 0 }),
     )
     try {
       for await (const frame of stream) {
@@ -175,6 +235,104 @@ export class CatFactoryGuidedReviewGateway implements GuidedReviewGateway {
     } finally {
       await stream.close()
     }
+  }
+
+  /** The id of this key's session for the target in the first workspace holding one. */
+  private async findIn(
+    workspaces: readonly Workspace[],
+    target: GuidedReviewTarget,
+  ): Promise<string | null> {
+    for (const workspace of workspaces) {
+      const { client } = this.clientsFor(workspace)
+      const session = await this.relay(
+        `look up the guided review of #${target.number}`,
+        async () => {
+          for await (const row of client.guidedReviews.listAll({
+            prNumber: target.number,
+            mine: 'true',
+          })) {
+            if (isFor(row, target)) return row
+          }
+          return null
+        },
+      )
+      if (session !== null) {
+        this.sessionWorkspaces.set(session.id, workspace)
+        return session.id
+      }
+    }
+    return null
+  }
+
+  private async clientsOf(sessionId: string): Promise<WorkspaceClients> {
+    return this.clientsFor((await this.locate(sessionId)).workspace)
+  }
+
+  /**
+   * The workspace holding a session, and its view when finding it meant reading
+   * it. One candidate is named without a read. With several, the session is read
+   * in each: cat-factory answers 404 everywhere but the workspace that holds it,
+   * and any other refusal is passed through rather than read as absence.
+   */
+  private async locate(
+    sessionId: string,
+  ): Promise<{ workspace: Workspace; view: GuidedReviewSessionView | null }> {
+    const known = this.sessionWorkspaces.get(sessionId)
+    if (known !== undefined) return { workspace: known, view: null }
+    const candidates = await this.candidateWorkspaces()
+    if (candidates.length === 1) return { workspace: candidates[0] ?? null, view: null }
+    const reads = await Promise.all(
+      candidates.map((workspace) => this.readIn(workspace, sessionId)),
+    )
+    const found = reads.find((read) => read !== null)
+    if (found === undefined) {
+      throw new NotFoundError(
+        `cat-factory has no guided review ${sessionId} in any workspace this org's repositories are linked in`,
+        { upstream: 'cat-factory' },
+      )
+    }
+    this.sessionWorkspaces.set(sessionId, found.workspace)
+    return found
+  }
+
+  private async readIn(
+    workspace: Workspace,
+    sessionId: string,
+  ): Promise<{ workspace: Workspace; view: GuidedReviewSessionView } | null> {
+    try {
+      return {
+        workspace,
+        view: await this.clientsFor(workspace).client.guidedReviews.get(sessionId),
+      }
+    } catch (err) {
+      if (err instanceof CatFactoryNotFoundError) return null
+      throw refusalFor(err, `read guided review ${sessionId}`, 'write')
+    }
+  }
+
+  private candidateWorkspaces(): Promise<Workspace[]> {
+    const read = this.options.directoryKeys
+    this.orgWorkspaces ??= read === undefined ? Promise.resolve([null]) : read().then(workspacesOf)
+    return this.orgWorkspaces
+  }
+
+  private clientsFor(workspace: Workspace): WorkspaceClients {
+    const key = workspace ?? ''
+    const held = this.clients.get(key)
+    if (held !== undefined) return held
+    const { baseUrl, apiKey, fetch } = this.options
+    const shared = {
+      baseUrl,
+      apiKey,
+      userAgent: 'sainte-beuve',
+      ...(workspace === null ? {} : { workspaceId: workspace }),
+    }
+    const built = {
+      client: new CatFactoryClient({ ...shared, fetch: withDeadline(fetch) }),
+      streaming: new CatFactoryClient({ ...shared, timeoutMs: 0, ...(fetch ? { fetch } : {}) }),
+    }
+    this.clients.set(key, built)
+    return built
   }
 
   private async relay<T>(what: string, call: () => Promise<T>): Promise<T> {

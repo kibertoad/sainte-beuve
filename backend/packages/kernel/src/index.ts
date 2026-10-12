@@ -41,8 +41,6 @@ export type {
   CatFactoryReviewTarget,
   ChatGateway,
   GatewayFactory,
-  GuidedReviewGateway,
-  GuidedReviewWatchEvent,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
@@ -50,6 +48,11 @@ export type {
   VcsGateway,
   VcsIdentityGateway,
 } from './ports/gateways.js'
+export type {
+  CatFactoryGuidedReviewAccess,
+  GuidedReviewGateway,
+  GuidedReviewWatchEvent,
+} from './ports/guided-review.js'
 export type {
   IntegrationConfigRepository,
   StoredIntegrationConfig,

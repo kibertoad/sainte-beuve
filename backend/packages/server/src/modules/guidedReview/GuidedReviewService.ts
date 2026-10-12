@@ -18,6 +18,7 @@ import {
 } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
+import { directoryKeysFor } from '../../integrations/catFactoryDirectory.js'
 import { resolveGuidedReview } from '../../integrations/resolve.js'
 
 export interface GuidedReviewWatch {
@@ -45,12 +46,20 @@ export class GuidedReviewService {
 
   async find(target: GuidedReviewTarget): Promise<GuidedReviewSessionView | null> {
     await this.assertRegistered(target)
-    return (await this.gateway()).find(target)
+    const [gateway, keys] = await Promise.all([
+      this.gateway(),
+      directoryKeysFor(this.container, target),
+    ])
+    return gateway.find(target, keys)
   }
 
   async open(target: GuidedReviewTarget): Promise<GuidedReviewSessionView> {
     await this.assertRegistered(target)
-    return (await this.gateway()).open(target)
+    const [gateway, keys] = await Promise.all([
+      this.gateway(),
+      directoryKeysFor(this.container, target),
+    ])
+    return gateway.open(target, keys)
   }
 
   async get(sessionId: string): Promise<GuidedReviewSessionView> {
