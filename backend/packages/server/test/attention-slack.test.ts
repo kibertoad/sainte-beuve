@@ -123,6 +123,25 @@ describe('the Slack DMs of a named ask', () => {
     expect(request.chatDeliveries).toStrictEqual([])
   })
 
+  it('raises the ask with no DMs when a read on the way to Slack fails', async () => {
+    const { repositories } = asker.container
+    const brokenProjects = buildHarness({
+      ...asker.container,
+      repositories: {
+        ...repositories,
+        projects: {
+          ...repositories.projects,
+          getByRef: async () => {
+            throw new Error('the project store is down')
+          },
+        },
+      },
+    })
+    const request = await raise(brokenProjects, { recipientIds: [ada.id] })
+    expect(request.chatDeliveries).toStrictEqual([])
+    expect(chat.asks).toStrictEqual([])
+  })
+
   it('raises the ask as before when the org has no Slack', async () => {
     const request = await raise(buildHarness({ ...asker.container, chat: null }), {
       recipientIds: [ada.id],

@@ -10,6 +10,8 @@ import { resolveChat } from '../../integrations/resolve.js'
  * the inbox whether or not Slack took the message, so a Slack outage or a
  * missing token costs the DM and nothing else. A failed post is a warning,
  * because it carries Slack's own slug and is usually a bot nobody let into a DM.
+ * A store read failing on the way to Slack is caught too: by then the ask is
+ * about to be written, or already was, and must not fail over its DMs.
  */
 
 /**
@@ -23,10 +25,15 @@ export async function deliverAsk(
 ): Promise<AttentionDelivery[]> {
   const reachable = recipients.filter((reviewer) => reviewer.slackUserId !== null)
   if (reachable.length === 0) return []
-  const chat = await resolveChat(container)
-  if (chat === null) return []
-  const project = await container.repositories.projects.getByRef(request.pullRequest)
-  const target = matchTargetFor({ requiredSkills: request.requiredSkills }, project)
+  const reached = await quietly(container, request, async () => {
+    const [chat, project] = await Promise.all([
+      resolveChat(container),
+      container.repositories.projects.getByRef(request.pullRequest),
+    ])
+    return chat === null ? null : { chat, target: matchTargetFor(request, project) }
+  })
+  if (reached === null) return []
+  const { chat, target } = reached
   const sent = await Promise.allSettled(
     reachable.map(async (reviewer): Promise<AttentionDelivery> => {
       const { matchedSkills, matchedDomains } = scoreCandidate(reviewer, target)
@@ -59,7 +66,7 @@ export async function refreshAskDeliveries(
     (delivery) => reviewerId === null || delivery.reviewerId === reviewerId,
   )
   if (due.length === 0) return
-  const chat = await resolveChat(container)
+  const chat = await quietly(container, request, () => resolveChat(container))
   if (chat === null) return
   const updated = await Promise.allSettled(
     due.map((delivery) =>
@@ -76,4 +83,21 @@ export async function refreshAskDeliveries(
       'could not update the DM of an attention ask',
     )
   })
+}
+
+/** `read`'s answer, or null with a warning when it throws. */
+async function quietly<T>(
+  container: AppContainer,
+  request: AttentionRequest,
+  read: () => Promise<T | null>,
+): Promise<T | null> {
+  try {
+    return await read()
+  } catch (err) {
+    container.logger.warn(
+      { err, attentionId: request.id },
+      'could not reach chat for the DMs of an attention ask',
+    )
+    return null
+  }
 }

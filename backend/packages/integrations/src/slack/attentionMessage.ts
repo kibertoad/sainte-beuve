@@ -51,7 +51,7 @@ function openAsk(
     `${escapeSlackText(request.requestedByName)} asks you to review ` +
     `${link} ${escapeSlackText(request.title)}`
   const details = [
-    request.note === null ? null : `> ${escapeSlackText(request.note)}`,
+    request.note === null ? null : quoted(request.note),
     matchLine(notice),
     request.neededCommitments > 1 ? `${request.neededCommitments} reviewers wanted.` : null,
     appBaseUrl === undefined ? null : slackLink(appBaseUrl, 'Open your inbox'),
@@ -77,6 +77,14 @@ function matchLine(notice: AttentionAskNotice): string | null {
     notice.matchedDomains.length === 0 ? null : `domains ${notice.matchedDomains.join(', ')}`,
   ].filter((part): part is string => part !== null)
   return parts.length === 0 ? null : `You match on ${escapeSlackText(parts.join('; '))}.`
+}
+
+/** Every line prefixed, since a mrkdwn quote ends at the first line break and the note is a textarea. */
+function quoted(note: string): string {
+  return escapeSlackText(note)
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n')
 }
 
 function pullRequestLink(request: AttentionRequest): string {

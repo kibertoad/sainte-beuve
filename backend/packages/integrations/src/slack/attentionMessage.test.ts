@@ -98,6 +98,14 @@ describe('attentionAskMessage', () => {
     expect(message.blocks?.[1]?.text?.text).toBe('> &lt;https://evil.example|x&gt;')
   })
 
+  it('quotes every line of a note that runs over several', () => {
+    const message = attentionAskMessage(
+      notice({ request: request({ note: 'Touches billing\nand the invoices' }) }),
+      undefined,
+    )
+    expect(message.blocks?.[1]?.text?.text).toBe('> Touches billing\n> and the invoices')
+  })
+
   it('drops the button once this person has committed and the ask is still open', () => {
     const message = attentionAskMessage(
       notice({ request: request({ neededCommitments: 2, commitments: [ADA_COMMITTED] }) }),
