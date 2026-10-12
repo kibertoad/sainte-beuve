@@ -124,11 +124,11 @@ export const reviewCommitmentSchema = v.object({
   /** The ask this answered, when it answered one. */
   attentionRequestId: v.nullable(v.string()),
   /**
-   * Whether this commitment is what put the review request on the host. Only
-   * then does releasing it take the request back: one somebody else made stays.
-   * Absent on rows stored before the host was told, which never made one.
+   * The handle this commitment requested on the host, or null when the request
+   * there is somebody else's or was never made. Releasing the commitment takes
+   * back only this request. Absent on rows stored before the host was told.
    */
-  requestedOnHost: v.optional(v.boolean(), false),
+  requestedHandle: v.optional(v.nullable(v.string()), null),
   createdAt: v.number(),
 })
 export type ReviewCommitment = v.InferOutput<typeof reviewCommitmentSchema>

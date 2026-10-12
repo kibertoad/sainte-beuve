@@ -18,7 +18,7 @@ import {
 import type { AppContainer } from '../../container.js'
 import { scheduleNextReminder } from '../../reminders/schedule.js'
 import { announceReview } from './announce.js'
-import { handlesOf, mirrorAssignment } from '../../integrations/reviewRequests.js'
+import { boardWithdrawals, mirrorAssignment } from '../../integrations/reviewRequests.js'
 
 /**
  * Review-request use cases: register a pull request, hand it to reviewers, move it
@@ -263,7 +263,7 @@ export class ReviewService {
     })
     await mirrorAssignment(this.container, updated, {
       request: result.selected.map((r) => handleOf(r.handles, provider)),
-      withdraw: handlesOf(candidates, release, provider),
+      withdraw: await boardWithdrawals(this.container, review.pullRequest, candidates, release),
     })
     return { review: updated, assigned, shortfallReason: result.shortfallReason }
   }

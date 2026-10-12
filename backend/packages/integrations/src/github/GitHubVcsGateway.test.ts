@@ -77,7 +77,7 @@ describe('GitHubVcsGateway', () => {
     const { fetchImpl, calls } = stub()
     const gateway = new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
 
-    await gateway.requestReviewers(PR, ['alice', 'bob'])
+    expect(await gateway.requestReviewers(PR, ['alice', 'bob'])).toStrictEqual(['alice', 'bob'])
     expect(calls[0]).toMatchObject({
       method: 'POST',
       path: '/repos/kibertoad/sainte-beuve/pulls/7/requested_reviewers',

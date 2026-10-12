@@ -193,13 +193,18 @@ export class GitHubVcsGateway implements VcsGateway {
     }
   }
 
-  async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
-    if (logins.length === 0) return
+  /**
+   * GitHub refuses the whole call over a login it cannot request, and requests
+   * again somebody who has already reviewed, so a success requested everyone named.
+   */
+  async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<string[]> {
+    if (logins.length === 0) return []
     await this.call(pr, {
       method: 'POST',
       path: repoPath(pr, `/pulls/${pr.number}/requested_reviewers`),
       body: { reviewers: logins },
     })
+    return logins
   }
 
   async removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {

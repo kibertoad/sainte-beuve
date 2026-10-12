@@ -176,9 +176,25 @@ export const attentionCases: readonly ConformanceCase[] = [
 
 export const commitmentCases: readonly ConformanceCase[] = [
   conformanceCase('a promise comes back with what it was made about', async (repos) => {
-    const written = commitment('c1', { attentionRequestId: 'a1', requestedOnHost: true })
+    const written = commitment('c1', { attentionRequestId: 'a1', requestedHandle: 'kibertoad' })
     assert.deepStrictEqual(await repos.commitments.create(written), written)
     assert.deepStrictEqual(await repos.commitments.getById('c1'), written)
+  }),
+
+  conformanceCase('a promise records the host request it holds, and drops it', async (repos) => {
+    await repos.commitments.create(commitment('c1'))
+    const claimed = await repos.commitments.setRequestedHandle('c1', 'kibertoad')
+    assert.deepStrictEqual(claimed, commitment('c1', { requestedHandle: 'kibertoad' }))
+    assert.deepStrictEqual(await repos.commitments.getById('c1'), claimed)
+    await repos.commitments.setRequestedHandle('c1', null)
+    assert.strictEqual((await repos.commitments.getById('c1'))?.requestedHandle, null)
+  }),
+
+  conformanceCase('a released promise takes no host request, and stays released', async (repos) => {
+    await repos.commitments.create(commitment('c1'))
+    await repos.commitments.delete('c1')
+    assert.strictEqual(await repos.commitments.setRequestedHandle('c1', 'kibertoad'), null)
+    assert.strictEqual(await repos.commitments.getById('c1'), null)
   }),
 
   conformanceCase("lists one person's promises newest first, ties on the id", async (repos) => {

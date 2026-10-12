@@ -173,6 +173,7 @@ export function recordingVcs(): VcsGateway & {
     requestReviewers: async (pr, logins) => {
       requested.push(logins)
       void pr
+      return logins
     },
     removeRequestedReviewers: async (pr, logins) => {
       withdrawn.push(logins)

@@ -1,7 +1,9 @@
 import type { AttentionRequest, ReviewCommitment } from '@sainte-beuve/contracts'
 import type { VcsGateway } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
+import { ReviewService } from '../src/modules/reviews/ReviewService.js'
 import {
+  addReviewer,
   buildHarness,
   del,
   environmentVcs,
@@ -36,6 +38,7 @@ function host(username: string, pending: string[] = []): Host {
     requestReviewers: async (_pr, logins) => {
       state.requested.push(logins)
       state.pending.push(...logins)
+      return logins
     },
     removeRequestedReviewers: async (_pr, logins) => {
       state.withdrawn.push(logins)
@@ -68,7 +71,7 @@ describe('a commitment on the host', () => {
     const harness = harnessOn(github)
 
     const commitment = await commit(harness)
-    expect(commitment.requestedOnHost).toBe(true)
+    expect(commitment.requestedHandle).toBe('kibertoad')
     expect(github.requested).toStrictEqual([['kibertoad']])
 
     await release(harness, commitment)
@@ -81,7 +84,7 @@ describe('a commitment on the host', () => {
     const harness = harnessOn(github)
 
     const commitment = await commit(harness)
-    expect(commitment.requestedOnHost).toBe(false)
+    expect(commitment.requestedHandle).toBeNull()
     expect(github.requested).toStrictEqual([])
 
     await release(harness, commitment)
@@ -113,6 +116,100 @@ describe('a commitment on the host', () => {
     expect(github.withdrawn).toStrictEqual([])
   })
 
+  it('keeps the request a commitment relies on when the board rerolls the same person', async () => {
+    const github = host('kibertoad')
+    const harness = harnessOn(github)
+    const commitment = await commit(harness)
+    await addReviewer(harness, { displayName: 'Second', handles: { github: 'second' } })
+    const review = await openReview(harness)
+    await harness.container.repositories.reviews.update(review.id, {
+      status: 'assigned',
+      assignedReviewerIds: [commitment.reviewerId],
+    })
+
+    await new ReviewService(harness.container).reroll(review.id)
+    expect(github.withdrawn).toStrictEqual([])
+    expect(github.requested.at(-1)).toStrictEqual(['second'])
+  })
+
+  it('hands a rerolled board request to the commitment, which takes it back on release', async () => {
+    // The board requested them first, so committing found them pending and claimed nothing.
+    const github = host('kibertoad', ['kibertoad'])
+    const harness = harnessOn(github)
+    const commitment = await commit(harness)
+    expect(commitment.requestedHandle).toBeNull()
+    await addReviewer(harness, { displayName: 'Second', handles: { github: 'second' } })
+    const review = await openReview(harness)
+    await harness.container.repositories.reviews.update(review.id, {
+      status: 'assigned',
+      assignedReviewerIds: [commitment.reviewerId],
+    })
+
+    await new ReviewService(harness.container).reroll(review.id)
+    expect(github.withdrawn).toStrictEqual([])
+
+    await release(harness, commitment)
+    expect(github.withdrawn).toStrictEqual([['kibertoad']])
+  })
+
+  it('claims the request on the row before it goes out', async () => {
+    const github = host('kibertoad')
+    let claimedWhenSent: string | null | undefined
+    const harness = harnessOn(github)
+    const send = github.gateway.requestReviewers
+    github.gateway.requestReviewers = async (pr, logins) => {
+      const { repositories } = harness.container
+      const viewer = (await repositories.reviewers.list()).find(
+        (r) => r.handles.github === 'kibertoad',
+      )
+      const [row] = await repositories.commitments.listByReviewer(viewer?.id ?? '')
+      claimedWhenSent = row?.requestedHandle
+      return send(pr, logins)
+    }
+
+    await commit(harness)
+    expect(claimedWhenSent).toBe('kibertoad')
+  })
+
+  it('drops the claim when the request does not land', async () => {
+    const github = host('kibertoad')
+    github.gateway = {
+      ...github.gateway,
+      requestReviewers: () => Promise.reject(new Error('GitHub answered 502')),
+    }
+    const harness = harnessOn(github)
+
+    const commitment = await commit(harness)
+    expect(commitment.requestedHandle).toBeNull()
+    const stored = await harness.container.repositories.commitments.getById(commitment.id)
+    expect(stored?.requestedHandle).toBeNull()
+  })
+
+  it('claims nothing when the host takes the request as a no-op', async () => {
+    // GitLab keeps a reviewer who has reviewed on the list, and adding them again changes nothing.
+    const github = host('kibertoad')
+    github.gateway = { ...github.gateway, requestReviewers: async () => [] }
+    const harness = harnessOn(github)
+
+    const commitment = await commit(harness)
+    expect(commitment.requestedHandle).toBeNull()
+
+    // The author asks them again on the host; that request is the author's to keep.
+    github.pending = ['kibertoad']
+    await release(harness, commitment)
+    expect(github.withdrawn).toStrictEqual([])
+  })
+
+  it('withdraws the handle the commitment requested, whatever the reviewer is called now', async () => {
+    const github = host('kibertoad', ['old-login'])
+    const harness = harnessOn(github)
+    const commitment = await commit(harness)
+    await harness.container.repositories.commitments.setRequestedHandle(commitment.id, 'old-login')
+
+    await release(harness, commitment)
+    expect(github.withdrawn).toStrictEqual([['old-login']])
+  })
+
   it('keeps the promise when the host cannot be reached', async () => {
     const github = host('kibertoad')
     github.gateway = {
@@ -122,7 +219,7 @@ describe('a commitment on the host', () => {
     const harness = harnessOn(github)
 
     const commitment = await commit(harness)
-    expect(commitment.requestedOnHost).toBe(false)
+    expect(commitment.requestedHandle).toBeNull()
     expect(github.requested).toStrictEqual([])
   })
 

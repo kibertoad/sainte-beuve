@@ -137,7 +137,7 @@ describe('GitLabVcsGateway', () => {
     ])
     const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
 
-    await gateway.requestReviewers(MR, ['alice'])
+    expect(await gateway.requestReviewers(MR, ['alice'])).toStrictEqual(['alice'])
 
     // The update REPLACES the list, so a write that named only the newcomer
     // would quietly un-request everybody already on it.
@@ -170,8 +170,8 @@ describe('GitLabVcsGateway', () => {
     ])
     const gateway = new GitLabVcsGateway({ token: 'glpat_x', fetchImpl })
 
-    await gateway.requestReviewers(MR, ['alice'])
-
+    // Somebody already on the list, reviewed or not, is not requested by this call.
+    expect(await gateway.requestReviewers(MR, ['alice'])).toStrictEqual([])
     expect(calls.map((call) => call.method)).toStrictEqual(['GET', 'GET'])
   })
 
@@ -181,7 +181,7 @@ describe('GitLabVcsGateway', () => {
 
     // A reviewer in our directory with no account here must not stop the
     // request; there is simply nobody to put on it.
-    await gateway.requestReviewers(MR, ['ghost'])
+    expect(await gateway.requestReviewers(MR, ['ghost'])).toStrictEqual([])
 
     expect(calls.every((call) => call.method === 'GET')).toBe(true)
   })

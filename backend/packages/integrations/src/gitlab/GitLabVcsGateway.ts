@@ -174,14 +174,20 @@ export class GitLabVcsGateway implements VcsGateway {
     }
   }
 
-  async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
-    if (logins.length === 0) return
-    await this.changeReviewers(pr, (current, named) => union(current, named), logins)
+  /**
+   * GitLab keeps a reviewer on the list after they review, and adding them again
+   * changes nothing, so only a reviewer the list did not hold yet is requested.
+   */
+  async requestReviewers(pr: PullRequestRef, logins: string[]): Promise<string[]> {
+    if (logins.length === 0) return []
+    const { current, named } = await this.changeReviewers(pr, union, logins)
+    const held = new Set(current)
+    return named.filter((user) => !held.has(user.id)).map((user) => user.username)
   }
 
   async removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void> {
     if (logins.length === 0) return
-    await this.changeReviewers(pr, (current, named) => difference(current, named), logins)
+    await this.changeReviewers(pr, difference, logins)
   }
 
   /**
@@ -226,37 +232,43 @@ export class GitLabVcsGateway implements VcsGateway {
    * Rewrite the reviewer list. GitLab has no add/remove endpoint: the update
    * REPLACES `reviewer_ids` wholesale, so the current list has to be read and
    * merged, or a reroll would silently drop everybody the update did not name.
+   * Answers what the list held before, and the users the logins resolved to.
    */
   private async changeReviewers(
     pr: PullRequestRef,
     combine: (current: number[], named: number[]) => number[],
     logins: string[],
-  ): Promise<void> {
+  ): Promise<{ current: number[]; named: GitLabUser[] }> {
     const path = `/projects/${projectPath(pr.owner, pr.repo)}/merge_requests/${pr.number}`
     const merge = await this.call<GitLabMergeRequest>({ path })
     const current = (merge.reviewers ?? []).map((user) => user.id)
-    const named = await this.userIds(logins)
-    const next = combine(current, named)
-    if (sameSet(current, next)) return
-    await this.call({ method: 'PUT', path, body: { reviewer_ids: next } })
+    const named = await this.users(logins)
+    const next = combine(
+      current,
+      named.map((user) => user.id),
+    )
+    if (!sameSet(current, next)) {
+      await this.call({ method: 'PUT', path, body: { reviewer_ids: next } })
+    }
+    return { current, named }
   }
 
   /**
-   * Handles to numeric ids, which is the only thing the update accepts. A
+   * Handles to users, whose numeric id is the only thing the update accepts. A
    * handle GitLab does not know is DROPPED rather than failing the call: a
    * reviewer registered here who has no account on this install must not stop
    * the ones who do from being requested.
    */
-  private async userIds(logins: string[]): Promise<number[]> {
-    const found = await Promise.all(logins.map((login) => this.userId(login)))
-    return found.filter((id): id is number => id !== null)
+  private async users(logins: string[]): Promise<GitLabUser[]> {
+    const found = await Promise.all(logins.map((login) => this.user(login)))
+    return found.filter((user): user is GitLabUser => user !== null)
   }
 
-  private async userId(login: string): Promise<number | null> {
+  private async user(login: string): Promise<GitLabUser | null> {
     const users = await this.call<GitLabUser[]>({
       path: `/users?username=${encodeURIComponent(login)}`,
     })
-    return users[0]?.id ?? null
+    return users[0] ?? null
   }
 
   private async readViewer(): Promise<VcsAccount | null> {

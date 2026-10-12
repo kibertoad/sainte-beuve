@@ -29,7 +29,7 @@ export function viewerVcs(
     listed,
     merged,
     comments,
-    requestReviewers: async () => {},
+    requestReviewers: async (_pr, logins) => logins,
     removeRequestedReviewers: async () => {},
     pendingReviewers: async () => [],
     comment: async (pr, body) => {

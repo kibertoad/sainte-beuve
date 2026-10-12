@@ -78,8 +78,12 @@ export type PullRequestAddress = ProjectRef & { number: number }
  * host a project is on.
  */
 export interface VcsGateway {
-  /** Mirror the assignment onto the pull request, so the VCS stays the source of truth. */
-  requestReviewers(pr: PullRequestRef, logins: string[]): Promise<void>
+  /**
+   * Mirror the assignment onto the pull request, so the VCS stays the source of
+   * truth. Answers the logins this call put a request on: one the host already
+   * listed, or has no account for, is left out where the host can tell.
+   */
+  requestReviewers(pr: PullRequestRef, logins: string[]): Promise<string[]>
   /**
    * Take the review request back off people who are no longer on the hook. The
    * other half of `requestReviewers`: a reroll that only added the replacement

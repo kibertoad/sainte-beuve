@@ -169,6 +169,17 @@ export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepos
     return clone(commitment)
   }
 
+  async setRequestedHandle(
+    commitmentId: string,
+    requestedHandle: string | null,
+  ): Promise<ReviewCommitment | null> {
+    const row = this.rows.get(commitmentId)
+    if (row === undefined) return null
+    const next = { ...row, requestedHandle }
+    this.rows.set(commitmentId, next)
+    return clone(next)
+  }
+
   async delete(commitmentId: string): Promise<void> {
     this.rows.delete(commitmentId)
   }

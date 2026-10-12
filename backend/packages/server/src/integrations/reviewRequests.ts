@@ -1,4 +1,10 @@
-import type { PullRequestRef, Reviewer, ReviewRequest, VcsProvider } from '@sainte-beuve/contracts'
+import type {
+  PullRequestRef,
+  Reviewer,
+  ReviewCommitment,
+  ReviewRequest,
+  VcsProvider,
+} from '@sainte-beuve/contracts'
 import { ACTIVE_REVIEW_STATUSES, handleOf } from '@sainte-beuve/contracts'
 import type { VcsGateway } from '@sainte-beuve/kernel'
 import { isSameHandle } from '@sainte-beuve/reviewers'
@@ -63,25 +69,38 @@ export async function mirrorAssignment(
 
 /**
  * Request a committed reviewer on the host, unless the host is already waiting
- * on them. Answers whether this call is what put the request there, which is
- * the only case in which releasing the commitment may take it back.
+ * on them, and answer the commitment with the request it now holds.
+ *
+ * The claim is written before the request goes out, so a request that lands is
+ * always one the row can take back; a request that does not land drops it.
  */
 export async function requestCommittedReviewer(
   container: AppContainer,
-  pullRequest: PullRequestRef,
-  handle: string,
-): Promise<boolean> {
-  const failure = {
-    message: 'could not request the committed reviewer on the PR',
-    fields: { pullRequest: pullRequest.url },
-    fallback: false,
-  }
-  return onHost(container, pullRequest, failure, async (vcs) => {
-    const pending = await vcs.pendingReviewers(pullRequest)
-    if (pending.some((login) => isSameHandle(login, handle))) return false
-    await vcs.requestReviewers(pullRequest, [handle])
-    return true
-  })
+  commitment: ReviewCommitment,
+  reviewer: Reviewer,
+): Promise<ReviewCommitment> {
+  const { pullRequest } = commitment
+  const { commitments } = container.repositories
+  const handle = handleOf(reviewer.handles, pullRequest.provider)
+  if (handle === null) return commitment
+  const fields = { commitmentId: commitment.id, pullRequest: pullRequest.url }
+  const pending = await onHost(
+    container,
+    pullRequest,
+    { message: 'could not read who the PR is waiting on', fields, fallback: null },
+    (vcs) => vcs.pendingReviewers(pullRequest),
+  )
+  if (pending === null || pending.some((login) => isSameHandle(login, handle))) return commitment
+  const claimed = await commitments.setRequestedHandle(commitment.id, handle)
+  if (claimed === null) return commitment
+  const requested = await onHost(
+    container,
+    pullRequest,
+    { message: 'could not request the committed reviewer on the PR', fields, fallback: [] },
+    (vcs) => vcs.requestReviewers(pullRequest, [handle]),
+  )
+  if (requested.some((login) => isSameHandle(login, handle))) return claimed
+  return (await commitments.setRequestedHandle(commitment.id, null)) ?? commitment
 }
 
 /**
@@ -92,19 +111,19 @@ export async function requestCommittedReviewer(
  */
 export async function withdrawCommittedReviewer(
   container: AppContainer,
-  pullRequest: PullRequestRef,
-  reviewer: Reviewer,
+  commitment: ReviewCommitment,
 ): Promise<void> {
-  const handle = handleOf(reviewer.handles, pullRequest.provider)
-  if (handle === null || (await isAssignedOnBoard(container, pullRequest, reviewer))) return
+  const { pullRequest, requestedHandle } = commitment
+  if (requestedHandle === null) return
   const failure = {
     message: 'could not withdraw the released reviewer from the PR',
-    fields: { pullRequest: pullRequest.url },
+    fields: { commitmentId: commitment.id, pullRequest: pullRequest.url },
     fallback: undefined,
   }
   await onHost(container, pullRequest, failure, async (vcs) => {
+    if (await isAssignedOnBoard(container, pullRequest, commitment.reviewerId)) return
     const pending = await vcs.pendingReviewers(pullRequest)
-    const login = pending.find((entry) => isSameHandle(entry, handle))
+    const login = pending.find((entry) => isSameHandle(entry, requestedHandle))
     if (login !== undefined) await vcs.removeRequestedReviewers(pullRequest, [login])
   })
 }
@@ -112,19 +131,46 @@ export async function withdrawCommittedReviewer(
 async function isAssignedOnBoard(
   container: AppContainer,
   pullRequest: PullRequestRef,
-  reviewer: Reviewer,
+  reviewerId: string,
 ): Promise<boolean> {
   const review = await container.repositories.reviews.getByPullRequest(pullRequest)
   return (
     review !== null &&
     review.pullRequest.provider === pullRequest.provider &&
     ACTIVE_REVIEW_STATUSES.includes(review.status) &&
-    review.assignedReviewerIds.includes(reviewer.id)
+    review.assignedReviewerIds.includes(reviewerId)
   )
 }
 
-/** The named reviewers' handles on the pull request's host, for the mirror. */
-export function handlesOf(
+/**
+ * The handles a board release may withdraw on the host. A released reviewer
+ * who has also committed to the pull request keeps the request, and their
+ * commitment takes it over, so releasing that commitment is what takes it back.
+ */
+export async function boardWithdrawals(
+  container: AppContainer,
+  pullRequest: PullRequestRef,
+  candidates: Reviewer[],
+  released: string[],
+): Promise<(string | null)[]> {
+  const { commitments } = container.repositories
+  const handles = handlesOf(candidates, released, pullRequest.provider)
+  const committed = await Promise.all(
+    released.map(async (reviewerId, index) => {
+      const commitment = await commitments.find(reviewerId, pullRequest)
+      if (commitment === null) return false
+      const handle = handles[index] ?? null
+      if (commitment.requestedHandle === null && handle !== null) {
+        await commitments.setRequestedHandle(commitment.id, handle)
+      }
+      return true
+    }),
+  )
+  return handles.filter((_, index) => !committed[index])
+}
+
+/** The named reviewers' handles on the pull request's host. */
+function handlesOf(
   candidates: Reviewer[],
   reviewerIds: string[],
   provider: VcsProvider,

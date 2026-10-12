@@ -123,6 +123,21 @@ export class SqlReviewCommitmentRepository implements ReviewCommitmentRepository
     return commitment
   }
 
+  /** An UPDATE rather than the upsert, so a row released since the read stays gone. */
+  async setRequestedHandle(
+    commitmentId: string,
+    requestedHandle: string | null,
+  ): Promise<ReviewCommitment | null> {
+    const current = await this.getById(commitmentId)
+    if (current === null) return null
+    const next = { ...current, requestedHandle }
+    const row = await this.db.first(
+      'UPDATE review_commitments SET data = ? WHERE org_id = ? AND id = ? RETURNING id',
+      [encodeData(next), this.orgId, commitmentId],
+    )
+    return row === null ? null : next
+  }
+
   async delete(commitmentId: string): Promise<void> {
     await this.db.run('DELETE FROM review_commitments WHERE org_id = ? AND id = ?', [
       this.orgId,
