@@ -113,8 +113,11 @@ on the pull request or paused, and it keeps to your team when the ask does.
 
 Tick people in that list and the ask goes to them by name: exactly those
 people, whatever skills they hold, and each of them sees who else was asked. It
-can wait for no more people than it names. Tick nobody and everyone available
-who holds all of the skills is asked instead, inside your team if you said so.
+can wait for no more people than it names. Tick nobody and the ask goes to
+everyone available who holds at least half of what is wanted: the picked skills,
+or the pull request's own when none are picked, and the repository's domains. It
+stays inside your team if you said so, and an ask on a repository that wants
+nothing in particular reaches everybody available.
 Either way anybody can still volunteer, because a skill list is not in a
 position to overrule somebody's own judgement of what they can review.
 
@@ -187,9 +190,10 @@ can be asked, what they know, and how much they should take.
 
 A person carries a handle PER HOST, and the screen shows both, because a reviewer
 with no handle on the host a project lives on is invisible in that project's
-workspace and this is the only place that says so. Skills are an ALL-of gate: a
-review that needs `payments` is never handed to somebody who merely knows
-`typescript`, so a partial match is not a near miss, it is not a candidate.
+workspace and this is the only place that says so. Skills and domains are
+matched one way everywhere: the share of what a review wants that a person
+holds. The ranking sorts on it, the board's draw favours it without excluding
+anybody, and an ask nobody was named on reaches whoever holds at least half.
 Weight is the share of the load, for somebody part-time or ramping up.
 
 Going heads-down is one click: **Pause** takes somebody out of every selection and

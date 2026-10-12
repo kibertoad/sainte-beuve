@@ -92,17 +92,6 @@ export function isSameHandle(left: string | null, right: string | null): boolean
 }
 
 /**
- * Whether a reviewer holds every named skill. The gate an attention request
- * addresses its audience by; review selection scores skills instead. An empty
- * requirement matches everybody.
- */
-export function hasAllSkills(reviewer: Reviewer, requiredSkills: readonly string[]): boolean {
-  if (requiredSkills.length === 0) return true
-  const owned = new Set(reviewer.skills.map(normalizeSkill))
-  return requiredSkills.every((skill) => owned.has(normalizeSkill(skill)))
-}
-
-/**
  * The reviewers a review rules out of its own pool: whoever is already on it,
  * and its author. The author is matched on the handle for the pull request's
  * OWN host, because the same person is spelled differently on each.
@@ -175,8 +164,7 @@ function heldOf(held: readonly string[], wanted: readonly string[]): string[] {
 export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredCandidate {
   const matchedSkills = heldOf(reviewer.skills, target.skills)
   const matchedDomains = heldOf(reviewer.domains, target.domains)
-  const wanted = distinct(target.skills).length + distinct(target.domains).length
-  const affinity = wanted === 0 ? 0 : (matchedSkills.length + matchedDomains.length) / wanted
+  const affinity = shareOf(matchedSkills.length + matchedDomains.length, target)
   return {
     reviewer,
     matchedSkills,
@@ -184,6 +172,26 @@ export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredC
     affinity,
     weight: drawWeight(reviewer) * (1 + MATCH_PREFERENCE * affinity),
   }
+}
+
+/**
+ * The share of what a review wants that this reviewer holds, from 0 to 1. A
+ * review that wants nothing in particular is held by nobody: the share is 0.
+ */
+export function affinityOf(reviewer: Reviewer, target: MatchTarget): number {
+  const held =
+    heldOf(reviewer.skills, target.skills).length + heldOf(reviewer.domains, target.domains).length
+  return shareOf(held, target)
+}
+
+/** Whether a review wants anything in particular at all. */
+export function wantsNothing(target: MatchTarget): boolean {
+  return target.skills.length === 0 && target.domains.length === 0
+}
+
+function shareOf(held: number, target: MatchTarget): number {
+  const wanted = distinct(target.skills).length + distinct(target.domains).length
+  return wanted === 0 ? 0 : held / wanted
 }
 
 export function scoreCandidates(

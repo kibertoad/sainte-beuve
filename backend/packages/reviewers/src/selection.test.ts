@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MATCH_PREFERENCE,
   type SelectionInput,
+  affinityOf,
   drawWeight,
   isEligible,
   isSameHandle,
@@ -103,6 +104,28 @@ describe('match scoring', () => {
       [],
     )
     expect(scored[0]?.weight).toBe(1)
+  })
+})
+
+describe('affinityOf', () => {
+  it('is the share of the wanted skills and domains held, counted once each', () => {
+    const candidate = reviewer({ id: 'a', skills: ['Backend'], domains: ['billing'] })
+    expect(
+      affinityOf(candidate, { skills: ['backend', 'Backend', 'Go'], domains: ['billing'] }),
+    ).toBe(2 / 3)
+  })
+
+  it('agrees with the score the draw is weighted by', () => {
+    const candidate = reviewer({ id: 'a', skills: ['Backend'] })
+    const target = { skills: ['Backend', 'Frontend'], domains: [] }
+    const [scored] = scoreCandidates([candidate], target, [])
+    expect(affinityOf(candidate, target)).toBe(scored?.affinity)
+  })
+
+  it('is zero for a review that wants nothing in particular', () => {
+    expect(
+      affinityOf(reviewer({ id: 'a', skills: ['Backend'] }), { skills: [], domains: [] }),
+    ).toBe(0)
   })
 })
 

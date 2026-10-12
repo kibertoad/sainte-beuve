@@ -6,7 +6,7 @@ import { type MatchTarget, type ScoredCandidate, scoreCandidate } from './select
  * Reviewer recommendation: who an author asking for attention should pick,
  * best first.
  *
- * The pool is the attention audience without its skill gate, because a pick
+ * The pool is the attention audience without its fit floor, because a pick
  * becomes an ask: the requester is never in it, a paused reviewer is not, a
  * weight of 0 does not keep anybody out, and "only my team" narrows it. The
  * candidates are scored as the router scores them, then ranked on fit first
@@ -18,7 +18,7 @@ import { type MatchTarget, type ScoredCandidate, scoreCandidate } from './select
 export interface RankingInput extends MatchTarget {
   candidates: readonly Reviewer[]
   /** Who is asking, and whether the ask stays in their team. */
-  audience: Omit<AttentionAudienceRule, 'requiredSkills' | 'recipientIds'>
+  audience: Omit<AttentionAudienceRule, 'wanted' | 'recipientIds'>
   /** Reviewer ids that must not be recommended: the author, and anyone already on or asked. */
   excludeReviewerIds: readonly string[]
   limit: number
@@ -51,7 +51,11 @@ export function compareCandidates(left: ScoredCandidate, right: ScoredCandidate)
 
 export function rankCandidates(input: RankingInput): RankingResult {
   const excluded = new Set(input.excludeReviewerIds)
-  const rule: AttentionAudienceRule = { ...input.audience, recipientIds: [], requiredSkills: [] }
+  const rule: AttentionAudienceRule = {
+    ...input.audience,
+    recipientIds: [],
+    wanted: { skills: [], domains: [] },
+  }
   const ranked = input.candidates
     .filter((reviewer) => !excluded.has(reviewer.id) && isInAttentionAudience(reviewer, rule))
     .map((reviewer) => scoreCandidate(reviewer, input))

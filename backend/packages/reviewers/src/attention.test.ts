@@ -1,6 +1,7 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
+  ATTENTION_FIT_FLOOR,
   type AttentionAudienceRule,
   isAttentionSatisfied,
   isInAttentionAudience,
@@ -26,10 +27,14 @@ function reviewer(overrides: Partial<Reviewer> = {}): Reviewer {
   }
 }
 
+function wants(skills: string[], domains: string[] = []) {
+  return { skills, domains }
+}
+
 function rule(overrides: Partial<AttentionAudienceRule> = {}): AttentionAudienceRule {
   return {
     recipientIds: [],
-    requiredSkills: [],
+    wanted: wants([]),
     sameTeamOnly: false,
     team: null,
     requestedById: 'asker',
@@ -38,7 +43,7 @@ function rule(overrides: Partial<AttentionAudienceRule> = {}): AttentionAudience
 }
 
 describe('isInAttentionAudience', () => {
-  it('asks everybody available when no skill is named', () => {
+  it('asks everybody available when the ask wants nothing in particular', () => {
     expect(isInAttentionAudience(reviewer(), rule())).toBe(true)
   })
 
@@ -56,17 +61,40 @@ describe('isInAttentionAudience', () => {
     expect(isInAttentionAudience(reviewer({ weight: 0 }), rule())).toBe(true)
   })
 
-  it('needs every named skill, not one of them', () => {
+  it('asks whoever holds at least half of what the ask wants', () => {
     const candidate = reviewer({ skills: ['Backend'] })
-    expect(isInAttentionAudience(candidate, rule({ requiredSkills: ['Backend'] }))).toBe(true)
+    expect(isInAttentionAudience(candidate, rule({ wanted: wants(['Backend']) }))).toBe(true)
+    expect(isInAttentionAudience(candidate, rule({ wanted: wants(['Backend', 'Frontend']) }))).toBe(
+      true,
+    )
     expect(
-      isInAttentionAudience(candidate, rule({ requiredSkills: ['Backend', 'Frontend'] })),
+      isInAttentionAudience(candidate, rule({ wanted: wants(['Backend', 'Frontend', 'Mobile']) })),
     ).toBe(false)
+  })
+
+  it('leaves out somebody who holds none of it', () => {
+    const candidate = reviewer({ skills: ['Frontend'] })
+    expect(isInAttentionAudience(candidate, rule({ wanted: wants(['Payments']) }))).toBe(false)
+  })
+
+  it('counts domains alongside skills, as the board does', () => {
+    const candidate = reviewer({ skills: [], domains: ['billing'] })
+    const ask = rule({ wanted: wants(['Backend'], ['billing']) })
+    expect(isInAttentionAudience(candidate, ask)).toBe(true)
+    expect(isInAttentionAudience(reviewer({ skills: ['Frontend'] }), ask)).toBe(false)
+  })
+
+  it('sets the floor at ATTENTION_FIT_FLOOR of the wanted mix', () => {
+    const halfOfFour = reviewer({ skills: ['a', 'b'] })
+    expect(ATTENTION_FIT_FLOOR).toBe(0.5)
+    expect(isInAttentionAudience(halfOfFour, rule({ wanted: wants(['a', 'b'], ['c', 'd']) }))).toBe(
+      true,
+    )
   })
 
   it('matches skills regardless of how they were typed', () => {
     const candidate = reviewer({ skills: ['backend'] })
-    expect(isInAttentionAudience(candidate, rule({ requiredSkills: ['Backend'] }))).toBe(true)
+    expect(isInAttentionAudience(candidate, rule({ wanted: wants(['Backend']) }))).toBe(true)
   })
 
   it('keeps a same-team ask inside the team', () => {
@@ -87,12 +115,12 @@ describe('isInAttentionAudience', () => {
 describe('isInAttentionAudience with named recipients', () => {
   const named = rule({
     recipientIds: ['r-1'],
-    requiredSkills: ['Payments'],
+    wanted: wants(['Payments']),
     sameTeamOnly: true,
     team: 'Platform',
   })
 
-  it('asks a named person whatever the skill and team gate would say', () => {
+  it('asks a named person whatever the fit and team gate would say', () => {
     expect(isInAttentionAudience(reviewer({ id: 'r-1', team: 'Mobile' }), named)).toBe(true)
   })
 
@@ -122,7 +150,7 @@ describe('selectAttentionAudience', () => {
       reviewer({ id: 'c', skills: ['Backend'], availability: 'paused' }),
       reviewer({ id: 'd', skills: ['Backend', 'Frontend'] }),
     ]
-    const audience = selectAttentionAudience(candidates, rule({ requiredSkills: ['Backend'] }))
+    const audience = selectAttentionAudience(candidates, rule({ wanted: wants(['Backend']) }))
     expect(audience.map((r) => r.id)).toStrictEqual(['a', 'd'])
   })
 })

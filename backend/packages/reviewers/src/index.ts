@@ -56,8 +56,10 @@ export {
   type TeamDecision,
 } from './teams.js'
 export {
+  ATTENTION_FIT_FLOOR,
   type AttentionAudienceRule,
   audienceRuleOf,
+  fitsWanted,
   isAttentionSatisfied,
   isInAttentionAudience,
   outstandingCommitments,
@@ -75,7 +77,7 @@ export {
   distinctAsSpelled,
   drawWeight,
   excludedFromReview,
-  hasAllSkills,
+  affinityOf,
   isEligible,
   isSameHandle,
   MATCH_PREFERENCE,
@@ -89,6 +91,7 @@ export {
   type SelectionInput,
   type SelectionResult,
   selectReviewers,
+  wantsNothing,
 } from './selection.js'
 export {
   compareCandidates,

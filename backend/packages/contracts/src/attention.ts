@@ -8,8 +8,8 @@ import { pullRequestRefSchema } from './vcs.js'
 // This is the one thing the workspace does that a pull-request list cannot: it
 // turns "somebody please look at this" into an addressed ask. The requester
 // either names the people to ask, usually picked from the ranked
-// recommendations, or leaves the audience to be derived from the skills the
-// change needs and, optionally, from their own team.
+// recommendations, or leaves the audience to be derived from the skills and
+// domains the change needs and, optionally, from their own team.
 //
 // It RESOLVES itself. Once enough people have said they will review, the
 // request is answered and disappears from everybody's inbox, including the
@@ -58,15 +58,22 @@ export const attentionRequestSchema = v.object({
   requestedByName: v.string(),
   /**
    * The people asked by name. When there are any, they ARE the audience, and
-   * the skill and team gate below does not apply. A factory default, so a
+   * the fit and team gate below does not apply. A factory default, so a
    * request stored before names existed decodes as a gated one.
    */
   recipients: v.optional(v.array(attentionRecipientSchema), () => []),
   /**
-   * Skills a person must ALL have to be in the audience. Empty means everybody
-   * available. Kept on a named ask as what the requester was looking for.
+   * The skills the ask wants: the ones the requester picked, or else the pull
+   * request's own, captured when it was raised. With `domains`, the mix a
+   * broadcast is matched against. Kept on a named ask as what was looked for.
    */
   requiredSkills: v.array(skillSchema),
+  /**
+   * The repository's domains when the ask was raised, matched alongside the
+   * skills. A factory default, so a request stored before domains counted
+   * decodes as one that wants none.
+   */
+  domains: v.optional(v.array(skillSchema), () => []),
   /** Whether the ask stays inside one team. Ignored when recipients are named. */
   sameTeamOnly: v.boolean(),
   /**

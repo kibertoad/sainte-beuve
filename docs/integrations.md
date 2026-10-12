@@ -119,8 +119,9 @@ and shown on the Configuration screen so a team can read them off it):
 
 - `needs-review` opens a review request and finds it a reviewer.
 - `ai-review` hands the pull request to cat-factory.
-- `skill:payments` makes `payments` a skill the reviewer must have. Skills are an
-  ALL-of gate, so two of these means one reviewer holding both.
+- `skill:payments` makes `payments` a skill the review wants. Skills are a
+  preference: the draw favours whoever holds more of the wanted skills and the
+  repository's domains, and excludes nobody for missing one.
 
 A label added through the **issues** UI on something that is a pull request
 arrives as an `issues` event rather than a `pull_request` one, and is handled

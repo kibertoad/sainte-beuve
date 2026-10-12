@@ -265,6 +265,7 @@ function requestFor(id: string): AttentionRequest {
     requestedByName: 'kibertoad',
     recipients: [],
     requiredSkills: [],
+    domains: [],
     sameTeamOnly: false,
     team: null,
     neededCommitments: 1,

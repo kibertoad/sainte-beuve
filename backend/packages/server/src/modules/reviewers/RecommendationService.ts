@@ -8,11 +8,11 @@ import {
   type ScoredCandidate,
   distinctAsSpelled,
   excludedFromReview,
-  matchTargetFor,
   rankCandidates,
   reviewersWithHandles,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { loadPullRequestContext, wantedFor } from './wanted.js'
 
 /**
  * Who an author asking for attention should pick for a pull request, best first.
@@ -26,23 +26,13 @@ export class RecommendationService {
   constructor(private readonly container: AppContainer) {}
 
   async recommend(viewer: Reviewer, input: RecommendReviewers): Promise<ReviewerRecommendations> {
-    const { repositories } = this.container
     const { pullRequest } = input
-    const [candidates, project, boardRow] = await Promise.all([
-      repositories.reviewers.list(),
-      repositories.projects.getByRef(pullRequest),
-      repositories.reviews.getByPullRequest(pullRequest),
+    const [candidates, context] = await Promise.all([
+      this.container.repositories.reviewers.list(),
+      loadPullRequestContext(this.container, pullRequest),
     ])
-    // The board looks a row up by owner, repo and number alone, so a row from
-    // the other host under the same names is not this pull request.
-    const review = boardRow?.pullRequest.provider === pullRequest.provider ? boardRow : null
-    const target = matchTargetFor(
-      {
-        requiredSkills:
-          input.requiredSkills.length > 0 ? input.requiredSkills : (review?.requiredSkills ?? []),
-      },
-      project,
-    )
+    const { review } = context
+    const target = wantedFor(input.requiredSkills, context)
     const { ranked, shortfallReason } = rankCandidates({
       ...target,
       candidates,

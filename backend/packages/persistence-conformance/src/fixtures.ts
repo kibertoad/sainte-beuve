@@ -197,6 +197,7 @@ export function attentionRequest(
     requestedByName: 'Reviewer 1',
     recipients: [],
     requiredSkills: ['typescript'],
+    domains: ['billing'],
     sameTeamOnly: false,
     team: 'platform',
     neededCommitments: 1,

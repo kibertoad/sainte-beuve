@@ -8,11 +8,13 @@ import type {
   PullRequestRef,
   Reviewer,
   ReviewCommitment,
+  ReviewRequest,
 } from '@sainte-beuve/contracts'
 import { ConflictError, ForbiddenError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
   type RecipientRefusal,
   audienceRuleOf,
+  distinctAsSpelled,
   isAttentionSatisfied,
   isInAttentionAudience,
   resolveAttentionRecipients,
@@ -23,6 +25,7 @@ import {
   requestCommittedReviewer,
   withdrawCommittedReviewer,
 } from '../../integrations/reviewRequests.js'
+import { loadPullRequestContext, wantedFor } from '../reviewers/wanted.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -52,7 +55,11 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
-    const recipients = await this.resolveRecipients(viewer, input)
+    const context = await loadPullRequestContext(this.container, input.pullRequest)
+    const recipients = await this.resolveRecipients(viewer, input, context.review)
+    // What the ask wants is captured with it, like the team: editing the
+    // repository's vocabulary later does not re-address an ask already out.
+    const wanted = wantedFor(input.requiredSkills, context)
     const now = clock.now()
     const request = await repositories.attention.create({
       id: ids.next(),
@@ -61,7 +68,8 @@ export class AttentionService {
       requestedById: viewer.id,
       requestedByName: viewer.displayName,
       recipients,
-      requiredSkills: input.requiredSkills,
+      requiredSkills: distinctAsSpelled(wanted.skills),
+      domains: distinctAsSpelled(wanted.domains),
       sameTeamOnly: input.sameTeamOnly,
       // The requester's team is captured HERE rather than read at delivery
       // time, so somebody changing team does not silently re-address an ask
@@ -216,19 +224,14 @@ export class AttentionService {
   private async resolveRecipients(
     viewer: Reviewer,
     input: CreateAttentionRequest,
+    review: ReviewRequest | null,
   ): Promise<AttentionRecipient[]> {
     if (input.recipientIds.length === 0) return []
-    const { repositories } = this.container
-    const [directory, boardRow] = await Promise.all([
-      repositories.reviewers.list(),
-      repositories.reviews.getByPullRequest(input.pullRequest),
-    ])
-    // The board looks a row up by owner, repo and number alone, so a row from
-    // the other host under the same names is not this pull request.
+    const directory = await this.container.repositories.reviewers.list()
     const authorIds =
-      boardRow?.pullRequest.provider === input.pullRequest.provider
-        ? reviewersWithHandles(directory, input.pullRequest.provider, [boardRow.authorLogin])
-        : []
+      review === null
+        ? []
+        : reviewersWithHandles(directory, input.pullRequest.provider, [review.authorLogin])
     const resolution = resolveAttentionRecipients({
       directory,
       requestedById: viewer.id,

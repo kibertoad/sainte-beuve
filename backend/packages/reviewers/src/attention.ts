@@ -1,5 +1,5 @@
 import type { AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
-import { hasAllSkills } from './selection.js'
+import { type MatchTarget, affinityOf, wantsNothing } from './selection.js'
 
 /**
  * Who an attention request is addressed to, and when it has been answered.
@@ -13,16 +13,25 @@ import { hasAllSkills } from './selection.js'
  * A request either names its audience or derives it. Named recipients are
  * the audience exactly: the requester picked them, usually off the ranked
  * recommendations, and a skill list is not in a position to overrule that.
- * Without names the request is a broadcast, and the skill and team gate is what
- * keeps a `payments` ping off the screens of people who hold none of it.
+ * Without names the request is a broadcast to whoever fits it: the same share
+ * of wanted skills and domains that ranks the recommendations and weighs the
+ * board's draw, held at `ATTENTION_FIT_FLOOR` or above.
  */
+
+/**
+ * The share of a broadcast's wanted skills and domains a person must hold to be
+ * asked. Half keeps a `payments` ping off the screens of people who hold none
+ * of it, while a backend engineer still hears about a change that wants backend
+ * and frontend: the board would hand them that review too, only less often.
+ */
+export const ATTENTION_FIT_FLOOR = 0.5
 
 /** Who a request is addressed to: by name, or by the gate. */
 export interface AttentionAudienceRule {
-  /** Reviewer ids asked by name. Non-empty replaces the skill and team gate. */
+  /** Reviewer ids asked by name. Non-empty replaces the fit and team gate. */
   recipientIds: readonly string[]
-  /** Skills a person must ALL have. Empty addresses everybody who is available. */
-  requiredSkills: readonly string[]
+  /** What the ask wants. Nothing wanted addresses everybody who is available. */
+  wanted: MatchTarget
   /** Whether the ask stays inside one team. */
   sameTeamOnly: boolean
   /** The team the gate is against. Null with `sameTeamOnly` set addresses nobody. */
@@ -34,7 +43,7 @@ export interface AttentionAudienceRule {
 export function audienceRuleOf(request: AttentionRequest): AttentionAudienceRule {
   return {
     recipientIds: request.recipients.map((recipient) => recipient.reviewerId),
-    requiredSkills: request.requiredSkills,
+    wanted: { skills: request.requiredSkills, domains: request.domains },
     sameTeamOnly: request.sameTeamOnly,
     team: request.team,
     requestedById: request.requestedById,
@@ -74,7 +83,13 @@ export function isInAttentionAudience(reviewer: Reviewer, rule: AttentionAudienc
   if (unaskableReason(reviewer, rule.requestedById) !== null) return false
   if (rule.recipientIds.length > 0) return rule.recipientIds.includes(reviewer.id)
   if (rule.sameTeamOnly && !isSameTeam(reviewer.team, rule.team)) return false
-  return hasAllSkills(reviewer, rule.requiredSkills)
+  return fitsWanted(reviewer, rule.wanted)
+}
+
+/** Whether a person holds enough of what a broadcast wants to be asked. */
+export function fitsWanted(reviewer: Reviewer, wanted: MatchTarget): boolean {
+  if (wantsNothing(wanted)) return true
+  return affinityOf(reviewer, wanted) >= ATTENTION_FIT_FLOOR
 }
 
 /** Everybody the request is addressed to, in directory order. */

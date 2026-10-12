@@ -724,9 +724,13 @@ bad sense: people learn their slot, pre-empt it and trade it away, and it stops
 reflecting who is free. Weighted random keeps the long-run share honest while no
 single assignment is anybody's turn to resent.
 
-**Skills are an ALL-of gate, not a ranking.** A review that needs `payments` must not
-fall to somebody who merely knows `typescript`. A partial match reads to the author
-like a real review and is not one.
+**One measure of fit, three uses.** The share of a review's wanted skills and domains
+a person holds ranks the recommendations, weights the board's draw and addresses an
+ask nobody was named on, which reaches whoever holds at least half
+(`ATTENTION_FIT_FLOOR`). A gate on every skill would leave a review unassigned
+whenever the one person holding a rare skill is busy, and would let the list an
+author picks from disagree with the people the same ask reaches. The floor is what
+keeps a `payments` ping off the screens of people who hold none of it.
 
 **cat-factory over its published SDK.** The SDK's operations are generated from
 cat-factory's own OpenAPI spec, so a deployment bumping cat-factory cannot silently
