@@ -56,10 +56,11 @@ const skills = computed(() => {
   return project?.skills ?? []
 })
 
-const recommendations = useReviewerRecommendations(
-  computed(() => props.pullRequest?.pullRequest ?? null),
-  selectedSkills,
-)
+const recommendations = useReviewerRecommendations({
+  pullRequest: toRef(props, 'pullRequest'),
+  requiredSkills: selectedSkills,
+  sameTeamOnly,
+})
 
 const counts = Array.from({ length: MAX_NEEDED_COMMITMENTS }, (_, index) => index + 1)
 
@@ -112,12 +113,13 @@ function submit() {
 
         <UFormField
           label="Best matches"
-          description="Ranked on the skills picked above, or the repository's when none are, and on its domains. Open reviews lower a reviewer's rank."
+          description="Ranked on how much of the wanted skills and domains each person holds, then on fewer open reviews. With no skill picked, the pull request's own are wanted. The ask itself goes to everyone holding all the picked skills."
         >
           <ReviewerRecommendations
             :result="recommendations.result.value"
             :pending="recommendations.pending.value"
             :failure="recommendations.failure.value"
+            :same-team-only="sameTeamOnly"
           />
         </UFormField>
 

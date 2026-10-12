@@ -2,12 +2,13 @@
 import type { ReviewerRecommendation, ReviewerRecommendations } from '@sainte-beuve/contracts'
 import { shortfallCause, shortfallRemedy } from '@sainte-beuve/contracts'
 
-// Who fits this pull request best, and why: the router's own ranking, so the
-// list agrees with whoever an automatic assignment would have drawn.
+// Who fits this pull request best, and why. While a new ranking loads the
+// previous one stays, dimmed, so the dialog does not jump on every click.
 const props = defineProps<{
   result: ReviewerRecommendations | null
   pending: boolean
   failure: string | null
+  sameTeamOnly: boolean
 }>()
 
 const wantedCount = computed(() => {
@@ -18,6 +19,9 @@ const wantedCount = computed(() => {
 const emptyMessage = computed(() => {
   const reason = props.result?.shortfallReason
   if (reason === null || reason === undefined) return 'Nobody to recommend.'
+  if (reason === 'all_excluded' && props.sameTeamOnly) {
+    return 'Nobody else on your team can be asked about this.'
+  }
   const remedy = shortfallRemedy(reason)
   return remedy === null ? `${shortfallCause(reason)}.` : `${shortfallCause(reason)}. ${remedy}`
 })
@@ -37,9 +41,9 @@ function loadLine(entry: ReviewerRecommendation): string {
 
 <template>
   <div class="flex flex-col gap-2">
-    <LoadingSpinner v-if="pending" label="Ranking reviewers…" />
-    <p v-else-if="failure" class="text-sm text-error">{{ failure }}</p>
-    <template v-else-if="result">
+    <p v-if="failure" class="text-sm text-error">{{ failure }}</p>
+    <LoadingSpinner v-else-if="result === null" label="Ranking reviewers…" />
+    <div v-else :class="{ 'opacity-60': pending }">
       <p v-if="result.recommendations.length === 0" class="text-sm text-muted">
         {{ emptyMessage }}
       </p>
@@ -81,6 +85,6 @@ function loadLine(entry: ReviewerRecommendation): string {
           </div>
         </li>
       </ol>
-    </template>
+    </div>
   </div>
 </template>
