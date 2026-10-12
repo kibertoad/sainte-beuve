@@ -25,6 +25,8 @@ function request(overrides: Partial<AttentionRequest> = {}): AttentionRequest {
     requestedByName: 'Igor',
     recipients: [{ reviewerId: 'rev-ada', displayName: 'Ada' }],
     chatDeliveries: [],
+    declines: [],
+    keepAsking: false,
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,
@@ -56,7 +58,7 @@ function buttons(message: ReturnType<typeof attentionAskMessage>): unknown[] {
 const ADA_COMMITTED = { reviewerId: 'rev-ada', displayName: 'Ada', committedAt: 2 }
 
 describe('attentionAskMessage', () => {
-  it('says who asks for what, with a commit button carrying the ask id', () => {
+  it('says who asks for what, with commit and decline buttons carrying the ask id', () => {
     const message = attentionAskMessage(notice(), undefined)
     expect(message.text).toBe(`Igor asks you to review ${LINK} Add a health check`)
     expect(buttons(message)).toStrictEqual([
@@ -66,6 +68,12 @@ describe('attentionAskMessage', () => {
         action_id: SLACK_ACTIONS.attentionCommit,
         value: 'att-1',
         style: 'primary',
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Not me' },
+        action_id: SLACK_ACTIONS.attentionDecline,
+        value: 'att-1',
       },
     ])
   })
@@ -104,6 +112,13 @@ describe('attentionAskMessage', () => {
       undefined,
     )
     expect(message.text).toBe(`You said you will review ${LINK}. It is on your workspace.`)
+    expect(buttons(message)).toStrictEqual([])
+  })
+
+  it('says this person passed once they declined, with no button', () => {
+    const declines = [{ reviewerId: 'rev-ada', displayName: 'Ada', reason: null, declinedAt: 2 }]
+    const message = attentionAskMessage(notice({ request: request({ declines }) }), undefined)
+    expect(message.text).toBe(`You passed on reviewing ${LINK}.`)
     expect(buttons(message)).toStrictEqual([])
   })
 

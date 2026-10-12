@@ -50,6 +50,18 @@ export const attentionRecipientSchema = v.object({
 export type AttentionRecipient = v.InferOutput<typeof attentionRecipientSchema>
 
 /**
+ * Somebody the ask reached saying they will not take it. Recorded rather than
+ * inferred from silence, so the requester can tell a no from an unread ask.
+ */
+export const attentionDeclineSchema = v.object({
+  reviewerId: v.string(),
+  displayName: v.string(),
+  reason: v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(300))),
+  declinedAt: v.number(),
+})
+export type AttentionDecline = v.InferOutput<typeof attentionDeclineSchema>
+
+/**
  * A chat message an ask was delivered as, kept so the message can be updated
  * when the ask resolves or is withdrawn, rather than keep offering a button on
  * an ask that is closed. The conversation is the DM's own id, not the person's.
@@ -76,6 +88,13 @@ export const attentionRequestSchema = v.object({
   recipients: v.optional(v.array(attentionRecipientSchema), () => []),
   /** The chat DMs the named recipients were sent. A factory default, like `recipients`. */
   chatDeliveries: v.optional(v.array(attentionDeliverySchema), () => []),
+  /** Who said no, and why when they said. A factory default, like `recipients`. */
+  declines: v.optional(v.array(attentionDeclineSchema), () => []),
+  /**
+   * Whether a decline that leaves a named ask short asks the next best match
+   * by itself. Off, the requester is shown the shortfall and asks on.
+   */
+  keepAsking: v.optional(v.boolean(), false),
   /**
    * Skills a person must ALL have to be in the audience. Empty means everybody
    * available. Kept on a named ask as what the requester was looking for.
@@ -123,10 +142,31 @@ export const createAttentionRequestSchema = v.object({
   sameTeamOnly: v.optional(v.boolean(), false),
   neededCommitments: v.optional(attentionRequestSchema.entries.neededCommitments, 1),
   note: v.optional(v.nullable(attentionRequestSchema.entries.note), null),
+  keepAsking: v.optional(v.boolean(), false),
 })
 export type CreateAttentionRequest = v.InferOutput<typeof createAttentionRequestSchema>
 /** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
 export type CreateAttentionRequestInput = v.InferInput<typeof createAttentionRequestSchema>
+
+/** Turning an ask down. The reason is optional and shown to the requester. */
+export const declineAttentionRequestSchema = v.object({
+  reason: v.optional(attentionDeclineSchema.entries.reason, null),
+})
+export type DeclineAttentionRequest = v.InferOutput<typeof declineAttentionRequestSchema>
+
+/**
+ * The requester asking more people on an open ask. Named ids are asked as
+ * given; none asks the next best matches, as many as the ask is short.
+ */
+export const askMoreAttentionRequestSchema = v.object({
+  recipientIds: v.optional(
+    v.pipe(v.array(v.string()), v.maxLength(MAX_ATTENTION_RECIPIENTS)),
+    () => [],
+  ),
+})
+export type AskMoreAttentionRequest = v.InferOutput<typeof askMoreAttentionRequestSchema>
+/** What a CALLER sends. */
+export type AskMoreAttentionRequestInput = v.InferInput<typeof askMoreAttentionRequestSchema>
 
 /**
  * What the inbox holds, and what the stream pushes.
@@ -145,9 +185,18 @@ export type AttentionInbox = v.InferOutput<typeof attentionInboxSchema>
  * `resolved` and `cancelled` are pushed as well as `opened`, because the point
  * of the stream is that a request DISAPPEARS the moment it is answered. A stream
  * that only announced new asks would leave every other reader looking at a
- * queue of work somebody else already took.
+ * queue of work somebody else already took. `declined` takes it off the
+ * decliner's screen and tells the requester; `asked` puts it on the screens of
+ * the people added to it.
  */
-export const attentionEventKindSchema = v.picklist(['opened', 'committed', 'resolved', 'cancelled'])
+export const attentionEventKindSchema = v.picklist([
+  'opened',
+  'committed',
+  'declined',
+  'asked',
+  'resolved',
+  'cancelled',
+])
 export type AttentionEventKind = v.InferOutput<typeof attentionEventKindSchema>
 
 export const attentionEventSchema = v.object({

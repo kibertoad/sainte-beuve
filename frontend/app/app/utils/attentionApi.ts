@@ -4,9 +4,11 @@ import type {
   RecommendReviewers,
 } from '@sainte-beuve/contracts'
 import {
+  askMoreAttentionContract,
   cancelAttentionContract,
   commitToAttentionContract,
   commitToPullRequestContract,
+  declineAttentionContract,
   listAttentionContract,
   recommendReviewersContract,
   releaseCommitmentContract,
@@ -24,6 +26,11 @@ export function attentionCalls(call: ContractCaller) {
       call(requestAttentionContract, { body: request }),
     commitToAttention: (attentionId: string) =>
       call(commitToAttentionContract, { pathParams: { attentionId }, body: {} }),
+    declineAttention: (attentionId: string, reason: string | null = null) =>
+      call(declineAttentionContract, { pathParams: { attentionId }, body: { reason } }),
+    /** No ids asks the next best matches, as many as the ask is short. */
+    askMoreAttention: (attentionId: string, recipientIds: string[] = []) =>
+      call(askMoreAttentionContract, { pathParams: { attentionId }, body: { recipientIds } }),
     cancelAttention: (attentionId: string) =>
       call(cancelAttentionContract, { pathParams: { attentionId } }),
     commitToPullRequest: (pullRequest: PullRequestRef, title: string) =>

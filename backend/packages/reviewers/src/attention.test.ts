@@ -33,6 +33,7 @@ function rule(overrides: Partial<AttentionAudienceRule> = {}): AttentionAudience
     sameTeamOnly: false,
     team: null,
     requestedById: 'asker',
+    declinedIds: [],
     ...overrides,
   }
 }
@@ -40,6 +41,13 @@ function rule(overrides: Partial<AttentionAudienceRule> = {}): AttentionAudience
 describe('isInAttentionAudience', () => {
   it('asks everybody available when no skill is named', () => {
     expect(isInAttentionAudience(reviewer(), rule())).toBe(true)
+  })
+
+  it('leaves out somebody who declined, even on an ask that names them', () => {
+    expect(isInAttentionAudience(reviewer(), rule({ declinedIds: ['r-1'] }))).toBe(false)
+    expect(
+      isInAttentionAudience(reviewer(), rule({ recipientIds: ['r-1'], declinedIds: ['r-1'] })),
+    ).toBe(false)
   })
 
   it('never asks the person who raised it', () => {

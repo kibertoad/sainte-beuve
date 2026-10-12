@@ -47,6 +47,8 @@ const ask: AttentionRequest = {
   requestedByName: 'Igor',
   recipients: [{ reviewerId: 'rvw-1', displayName: 'Ada' }],
   chatDeliveries: [],
+  declines: [],
+  keepAsking: false,
   requiredSkills: [],
   sameTeamOnly: false,
   team: null,

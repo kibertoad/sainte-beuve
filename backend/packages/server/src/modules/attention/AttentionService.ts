@@ -11,11 +11,21 @@ import type {
 import { ConflictError, ForbiddenError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
   audienceRuleOf,
+  hasDeclined,
   isAttentionSatisfied,
   isInAttentionAudience,
+  recipientShortfall,
+  withDecline,
+  withoutDecline,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { deliverAsk, refreshAskDeliveries } from './askDeliveries.js'
+import {
+  checkRecipients,
+  namedAdditions,
+  nextRecipients,
+  saveWithRecipients,
+} from './recipients.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -72,6 +82,10 @@ export class AttentionService {
       updatedAt: now,
       resolvedAt: null,
       chatDeliveries: [],
+      declines: [],
+      // Asking on means asking the next named person, which an ask sent by
+      // skill has no use for: it already reaches everybody who matches.
+      keepAsking: input.keepAsking && recipients.length > 0,
     }
     // The DMs go out BEFORE the row is stored, so the one write carries where
     // they landed. Stored first and patched after, a commit landing between
@@ -130,11 +144,91 @@ export class AttentionService {
         status: satisfied ? 'resolved' : 'open',
         updatedAt: now,
         resolvedAt: satisfied ? now : null,
+        // Somebody who declined and then volunteered changed their mind.
+        declines: withoutDecline(request.declines, viewer.id),
       }),
       `No attention request ${attentionId}`,
     )
     this.publish(satisfied ? 'resolved' : 'committed', updated)
     await refreshAskDeliveries(this.container, updated, satisfied ? null : viewer.id)
+    return updated
+  }
+
+  /**
+   * "Not me." Open to anybody the ask reached, named or through the gate, and
+   * to somebody declining again with a new reason. The ask leaves their inbox
+   * and their DM says so. A named ask the decline leaves short asks the next
+   * best match by itself when the requester chose that; otherwise the
+   * requester sees the shortfall and asks on through `askMore`.
+   */
+  async decline(
+    viewer: Reviewer,
+    attentionId: string,
+    reason: string | null,
+  ): Promise<AttentionRequest> {
+    const request = await this.requireOpen(attentionId)
+    if (request.requestedById === viewer.id) {
+      throw new ForbiddenError('You asked for this review, so there is nothing to decline')
+    }
+    if (request.commitments.some((entry) => entry.reviewerId === viewer.id)) {
+      throw new ConflictError('You already said you will review this', { attentionId })
+    }
+    const reached = isInAttentionAudience(viewer, audienceRuleOf(request))
+    if (!reached && !hasDeclined(request, viewer.id)) {
+      throw new ForbiddenError('This request was not addressed to you')
+    }
+    const now = this.container.clock.now()
+    const decline = {
+      reviewerId: viewer.id,
+      displayName: viewer.displayName,
+      reason,
+      declinedAt: now,
+    }
+    const declined = { ...request, declines: withDecline(request.declines, decline) }
+    const added = declined.keepAsking
+      ? await nextRecipients(this.container, declined, recipientShortfall(declined))
+      : []
+    const updated = await saveWithRecipients(this.container, declined, added, {
+      declines: declined.declines,
+      updatedAt: now,
+    })
+    this.publish('declined', updated)
+    await refreshAskDeliveries(this.container, updated, viewer.id)
+    return updated
+  }
+
+  /**
+   * The requester asking more people on a named ask: the ones they name, or
+   * else the next best matches, as many as the ask is short and at least one.
+   * An ask sent by skill already reaches everybody who matches, and naming
+   * people on it would narrow it to them, so that is refused.
+   */
+  async askMore(
+    viewer: Reviewer,
+    attentionId: string,
+    recipientIds: readonly string[],
+  ): Promise<AttentionRequest> {
+    const request = await this.requireOpen(attentionId)
+    if (request.requestedById !== viewer.id) {
+      throw new ForbiddenError('Only the person who asked for attention can ask more people')
+    }
+    if (request.recipients.length === 0) {
+      throw new ValidationError(
+        'This ask goes to everybody who holds its skills, so there is nobody to add',
+        { attentionId },
+      )
+    }
+    const added =
+      recipientIds.length > 0
+        ? await namedAdditions(this.container, viewer, request, recipientIds)
+        : await nextRecipients(this.container, request, Math.max(1, recipientShortfall(request)))
+    if (added.length === 0) {
+      throw new ConflictError('Nobody else is available to ask', { attentionId })
+    }
+    const updated = await saveWithRecipients(this.container, request, added, {
+      updatedAt: this.container.clock.now(),
+    })
+    this.publish('asked', updated)
     return updated
   }
 
@@ -208,43 +302,30 @@ export class AttentionService {
   }
 
   /**
-   * The people an ask names, checked against the directory as it stands now.
-   * Each has to be somebody who could answer: in the directory, not paused,
-   * and not the requester. An ask naming fewer people than it waits for could
-   * never resolve, so that is refused too.
+   * The people an ask names. An ask naming fewer people than it waits for
+   * could never resolve, so that is refused along with anybody who could not
+   * answer (see `checkRecipients`).
    */
   private async resolveRecipients(
     viewer: Reviewer,
     input: CreateAttentionRequest,
   ): Promise<Reviewer[]> {
-    const wanted = [...new Set(input.recipientIds)]
-    if (wanted.length === 0) return []
-    if (wanted.length < input.neededCommitments) {
+    const wanted = new Set(input.recipientIds)
+    if (wanted.size > 0 && wanted.size < input.neededCommitments) {
       throw new ValidationError(
-        `This ask waits for ${input.neededCommitments} reviewers but names only ${wanted.length}`,
-        { neededCommitments: input.neededCommitments, recipients: wanted.length },
+        `This ask waits for ${input.neededCommitments} reviewers but names only ${wanted.size}`,
+        { neededCommitments: input.neededCommitments, recipients: wanted.size },
       )
     }
-    const directory = new Map(
-      (await this.container.repositories.reviewers.list()).map((entry) => [entry.id, entry]),
-    )
-    return wanted.map((reviewerId) => {
-      const reviewer = directory.get(reviewerId)
-      if (reviewer === undefined) {
-        throw new ValidationError(`No reviewer ${reviewerId} to ask`, { reviewerId })
-      }
-      if (reviewer.id === viewer.id) {
-        throw new ValidationError('You cannot ask yourself to review your own request', {
-          reviewerId,
-        })
-      }
-      if (reviewer.availability !== 'available') {
-        throw new ValidationError(`${reviewer.displayName} is paused and cannot be asked`, {
-          reviewerId,
-        })
-      }
-      return reviewer
-    })
+    return checkRecipients(this.container, viewer, [...wanted])
+  }
+
+  private async requireOpen(attentionId: string): Promise<AttentionRequest> {
+    const request = await this.require(attentionId)
+    if (request.status !== 'open') {
+      throw new ConflictError(`This request is already ${request.status}`, { attentionId })
+    }
+    return request
   }
 
   private async require(attentionId: string): Promise<AttentionRequest> {
@@ -276,5 +357,8 @@ export function concerns(request: AttentionRequest, viewer: Reviewer): boolean {
 
 /** Whether a live event should reach this person's stream. */
 export function reaches(event: AttentionEvent, viewer: Reviewer): boolean {
+  // A decline takes the ask out of the decliner's audience, and the event that
+  // says so still has to reach their other open pages to take it off them.
+  if (event.kind === 'declined' && hasDeclined(event.request, viewer.id)) return true
   return concerns(event.request, viewer)
 }

@@ -1,4 +1,4 @@
-import type { AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
+import type { AttentionDecline, AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
 import { hasAllSkills } from './selection.js'
 
 /**
@@ -29,6 +29,8 @@ export interface AttentionAudienceRule {
   team: string | null
   /** Who raised it. They are never in their own audience. */
   requestedById: string
+  /** Who turned it down. Out of the audience until they change their mind. */
+  declinedIds: readonly string[]
 }
 
 export function audienceRuleOf(request: AttentionRequest): AttentionAudienceRule {
@@ -38,6 +40,7 @@ export function audienceRuleOf(request: AttentionRequest): AttentionAudienceRule
     sameTeamOnly: request.sameTeamOnly,
     team: request.team,
     requestedById: request.requestedById,
+    declinedIds: request.declines.map((decline) => decline.reviewerId),
   }
 }
 
@@ -59,6 +62,7 @@ function isSameTeam(left: string | null, right: string | null): boolean {
 export function isInAttentionAudience(reviewer: Reviewer, rule: AttentionAudienceRule): boolean {
   if (reviewer.id === rule.requestedById) return false
   if (reviewer.availability !== 'available') return false
+  if (rule.declinedIds.includes(reviewer.id)) return false
   if (rule.recipientIds.length > 0) return rule.recipientIds.includes(reviewer.id)
   if (rule.sameTeamOnly && !isSameTeam(reviewer.team, rule.team)) return false
   return hasAllSkills(reviewer, rule.requiredSkills)
@@ -92,4 +96,67 @@ export function outstandingCommitments(request: {
   commitments: readonly unknown[]
 }): number {
   return Math.max(0, request.neededCommitments - request.commitments.length)
+}
+
+/**
+ * The named recipients who could still answer: neither committed nor declined.
+ * Empty for an ask sent by skill, which names nobody.
+ */
+export function pendingRecipientIds(request: AttentionRequest): string[] {
+  const answered = new Set([
+    ...request.commitments.map((entry) => entry.reviewerId),
+    ...request.declines.map((entry) => entry.reviewerId),
+  ])
+  return request.recipients
+    .map((recipient) => recipient.reviewerId)
+    .filter((reviewerId) => !answered.has(reviewerId))
+}
+
+/**
+ * How many more people a NAMED ask has to ask before it can resolve at all:
+ * what it still waits for, less the recipients who have not answered yet.
+ * Zero for an ask sent by skill, whose audience is whoever holds the skills,
+ * and zero while enough named people are still to answer.
+ */
+export function recipientShortfall(request: AttentionRequest): number {
+  if (request.recipients.length === 0) return 0
+  return Math.max(0, outstandingCommitments(request) - pendingRecipientIds(request).length)
+}
+
+/**
+ * Everybody the ask has already been to, one way or another: the requester,
+ * every named recipient, whoever committed and whoever declined. Asking on
+ * goes to somebody outside this set, so nobody is asked twice.
+ */
+export function askedOrAnsweredIds(request: AttentionRequest): Set<string> {
+  return new Set([
+    request.requestedById,
+    ...request.recipients.map((entry) => entry.reviewerId),
+    ...request.commitments.map((entry) => entry.reviewerId),
+    ...request.declines.map((entry) => entry.reviewerId),
+  ])
+}
+
+/** Whether this person has turned the ask down. */
+export function hasDeclined(request: AttentionRequest, reviewerId: string): boolean {
+  return request.declines.some((entry) => entry.reviewerId === reviewerId)
+}
+
+/**
+ * The declines with this one recorded. A second decline from the same person
+ * replaces the first, so a changed reason is kept and nobody is counted twice.
+ */
+export function withDecline(
+  declines: readonly AttentionDecline[],
+  decline: AttentionDecline,
+): AttentionDecline[] {
+  return [...declines.filter((entry) => entry.reviewerId !== decline.reviewerId), decline]
+}
+
+/** The declines without this person's, for somebody who changed their mind and committed. */
+export function withoutDecline(
+  declines: readonly AttentionDecline[],
+  reviewerId: string,
+): AttentionDecline[] {
+  return declines.filter((entry) => entry.reviewerId !== reviewerId)
 }

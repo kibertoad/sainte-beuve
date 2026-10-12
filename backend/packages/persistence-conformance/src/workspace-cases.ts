@@ -161,6 +161,17 @@ export const attentionCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual((await repos.attention.getById('a1'))?.chatDeliveries, chatDeliveries)
   }),
 
+  conformanceCase('an ask keeps who declined it and whether it asks on', async (repos) => {
+    await repos.attention.create(attentionRequest('a1', { keepAsking: true }))
+    const declines = [
+      { reviewerId: 'r1', displayName: 'One', reason: 'On leave', declinedAt: 2_000 },
+    ]
+    await repos.attention.update('a1', { declines, updatedAt: 2_000 })
+    const stored = await repos.attention.getById('a1')
+    assert.deepStrictEqual(stored?.declines, declines)
+    assert.strictEqual(stored?.keepAsking, true)
+  }),
+
   conformanceCase('lists the asks newest first, ties on the id', async (repos) => {
     await repos.attention.create(attentionRequest('a1', { createdAt: 1_000 }))
     await repos.attention.create(attentionRequest('a2', { createdAt: 2_000 }))

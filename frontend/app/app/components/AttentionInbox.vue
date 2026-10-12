@@ -31,7 +31,21 @@ const props = defineProps<{
   busy: string | null
 }>()
 
-const emit = defineEmits<{ commit: [id: string]; cancel: [id: string] }>()
+const emit = defineEmits<{
+  commit: [id: string]
+  decline: [id: string]
+  askMore: [id: string]
+  cancel: [id: string]
+}>()
+
+// An ask the viewer declined stays open for everybody else, and a live event
+// can still carry it here, so it is left out by the viewer's own decline.
+const visible = computed(() =>
+  props.requests.filter(
+    (request) =>
+      mine(request) || !request.declines.some((entry) => entry.reviewerId === props.viewerId),
+  ),
+)
 
 function outstanding(request: AttentionRequest): number {
   return Math.max(0, request.neededCommitments - request.commitments.length)
@@ -45,7 +59,33 @@ function waitingFor(request: AttentionRequest): string {
   return left === 1 ? `one reviewer${taken}` : `${left} reviewers${taken}`
 }
 
-const mine = (request: AttentionRequest): boolean => request.requestedById === props.viewerId
+function mine(request: AttentionRequest): boolean {
+  return request.requestedById === props.viewerId
+}
+
+/** Who passed on the ask, with their reason when they gave one. */
+function declinedLine(request: AttentionRequest): string {
+  return request.declines
+    .map((entry) =>
+      entry.reason === null ? entry.displayName : `${entry.displayName} (${entry.reason})`,
+    )
+    .join(', ')
+}
+
+/**
+ * Whether a named ask can no longer fill from the people it names: fewer of
+ * them are left to answer than it still waits for. The same rule as
+ * `recipientShortfall` in @sainte-beuve/reviewers, which the SPA cannot import.
+ */
+function isShort(request: AttentionRequest): boolean {
+  if (request.recipients.length === 0) return false
+  const answered = new Set([
+    ...request.commitments.map((entry) => entry.reviewerId),
+    ...request.declines.map((entry) => entry.reviewerId),
+  ])
+  const pending = request.recipients.filter((entry) => !answered.has(entry.reviewerId)).length
+  return pending < outstanding(request)
+}
 
 /** Who an ask named, with the viewer said as "you". Empty for an ask sent by skill. */
 function askedLine(request: AttentionRequest): string {
@@ -91,13 +131,13 @@ function askedLine(request: AttentionRequest): string {
       :description="error"
     />
 
-    <p v-if="requests.length === 0 && error === null" class="text-sm text-muted">
+    <p v-if="visible.length === 0 && error === null" class="text-sm text-muted">
       Nobody is waiting on a reviewer. An ask disappears from here the moment enough people commit.
     </p>
 
-    <div v-if="requests.length > 0" class="flex flex-col divide-y divide-default">
+    <div v-if="visible.length > 0" class="flex flex-col divide-y divide-default">
       <div
-        v-for="request in requests"
+        v-for="request in visible"
         :key="request.id"
         class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
       >
@@ -116,6 +156,12 @@ function askedLine(request: AttentionRequest): string {
           <p v-if="request.recipients.length > 0" class="text-xs text-muted">
             Asked: {{ askedLine(request) }}
           </p>
+          <p v-if="mine(request) && request.declines.length > 0" class="text-xs text-muted">
+            Declined: {{ declinedLine(request) }}
+          </p>
+          <p v-if="mine(request) && isShort(request)" class="text-xs text-warning">
+            Not enough of the people you named are left to answer.
+          </p>
           <p v-if="request.note" class="text-sm mt-1">{{ request.note }}</p>
           <div class="flex flex-wrap gap-1 mt-2">
             <UBadge v-for="skill in request.requiredSkills" :key="skill" size="sm" variant="subtle">
@@ -132,25 +178,45 @@ function askedLine(request: AttentionRequest): string {
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
-          <UButton
-            v-if="mine(request)"
-            size="sm"
-            variant="ghost"
-            color="neutral"
-            :loading="busy === request.id"
-            @click="emit('cancel', request.id)"
-          >
-            Withdraw
-          </UButton>
-          <UButton
-            v-else
-            size="sm"
-            variant="soft"
-            :loading="busy === request.id"
-            @click="emit('commit', request.id)"
-          >
-            I will review it
-          </UButton>
+          <template v-if="mine(request)">
+            <UButton
+              v-if="isShort(request)"
+              size="sm"
+              variant="soft"
+              :loading="busy === request.id"
+              @click="emit('askMore', request.id)"
+            >
+              Ask the next best match
+            </UButton>
+            <UButton
+              size="sm"
+              variant="ghost"
+              color="neutral"
+              :loading="busy === request.id"
+              @click="emit('cancel', request.id)"
+            >
+              Withdraw
+            </UButton>
+          </template>
+          <template v-else>
+            <UButton
+              size="sm"
+              variant="soft"
+              :loading="busy === request.id"
+              @click="emit('commit', request.id)"
+            >
+              I will review it
+            </UButton>
+            <UButton
+              size="sm"
+              variant="ghost"
+              color="neutral"
+              :loading="busy === request.id"
+              @click="emit('decline', request.id)"
+            >
+              Not me
+            </UButton>
+          </template>
           <UButton
             :to="safeHref(request.pullRequest.url)"
             target="_blank"

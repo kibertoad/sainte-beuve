@@ -97,9 +97,10 @@ when it is not there yet and files the review.
 "I will review it" is the only answer to an ask. The requester cannot tell a no
 from silence, and nothing moves on to the next candidate.
 
-A recipient can decline. A named ask that still needs commitments offers the
-next ranked candidate to the requester, or asks them directly when the author
-opted into that.
+Anybody the ask reached can decline, with an optional reason, from the inbox or
+the Slack DM. A named ask the declines leave short asks the next ranked
+candidate by itself when the requester kept "ask the next best match" ticked,
+and otherwise shows the requester the shortfall with a one-click ask.
 
 ### 8. A commitment on the host
 

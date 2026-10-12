@@ -27,6 +27,7 @@ const emit = defineEmits<{
       sameTeamOnly: boolean
       neededCommitments: number
       note: string | null
+      keepAsking: boolean
     },
   ]
   close: []
@@ -37,6 +38,9 @@ const recipientIds = ref<string[]>([])
 const sameTeamOnly = ref(false)
 const neededCommitments = ref(1)
 const note = ref('')
+// On by default: somebody who picks reviewers wants the review covered, and a
+// decline that leaves the ask short would otherwise stall it until they look.
+const keepAsking = ref(true)
 
 const open = computed({
   get: () => props.pullRequest !== null,
@@ -103,6 +107,7 @@ watch(
     sameTeamOnly.value = false
     neededCommitments.value = 1
     note.value = ''
+    keepAsking.value = true
   },
 )
 
@@ -113,6 +118,7 @@ function submit() {
     sameTeamOnly: named.value ? false : sameTeamOnly.value,
     neededCommitments: neededCommitments.value,
     note: blankToNull(note.value),
+    keepAsking: named.value && keepAsking.value,
   })
 }
 </script>
@@ -164,6 +170,13 @@ function submit() {
         >
           <USelect v-model="neededCommitments" :items="counts" class="w-full sm:w-24" />
         </UFormField>
+
+        <UCheckbox
+          v-if="named"
+          v-model="keepAsking"
+          label="If somebody declines, ask the next best match"
+          description="Keeps the ask able to fill. Off, you are shown who declined and ask on yourself."
+        />
 
         <UCheckbox
           v-if="!named"

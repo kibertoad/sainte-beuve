@@ -52,11 +52,17 @@ export {
 } from './teams.js'
 export {
   type AttentionAudienceRule,
+  askedOrAnsweredIds,
   audienceRuleOf,
+  hasDeclined,
   isAttentionSatisfied,
   isInAttentionAudience,
   outstandingCommitments,
+  pendingRecipientIds,
+  recipientShortfall,
   selectAttentionAudience,
+  withDecline,
+  withoutDecline,
 } from './attention.js'
 export {
   diagnoseShortfall,

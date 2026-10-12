@@ -55,6 +55,7 @@ async function ask(request: {
   sameTeamOnly: boolean
   neededCommitments: number
   note: string | null
+  keepAsking: boolean
 }) {
   const pr = asking.value
   if (pr === null) return
@@ -73,6 +74,18 @@ async function commit(attentionId: string) {
     attentionId,
   )
   await refresh()
+}
+
+async function decline(attentionId: string) {
+  await runAsk(
+    () => api.declineAttention(attentionId),
+    'Could not decline the request',
+    attentionId,
+  )
+}
+
+async function askMore(attentionId: string) {
+  await runAsk(() => api.askMoreAttention(attentionId), 'Could not ask anybody else', attentionId)
 }
 
 async function withdraw(attentionId: string) {
@@ -150,6 +163,8 @@ async function release(commitmentId: string) {
         :error="attention.error.value"
         :busy="askBusy"
         @commit="commit"
+        @decline="decline"
+        @ask-more="askMore"
         @cancel="withdraw"
       />
 
