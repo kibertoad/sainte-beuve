@@ -230,12 +230,10 @@ export class AttentionService {
       repositories.reviewers.list(),
       repositories.reviews.getByPullRequest(input.pullRequest),
     ])
-    // The board looks a row up by owner, repo and number alone, so a row from
-    // the other host under the same names is not this pull request.
     const authorIds =
-      boardRow?.pullRequest.provider === input.pullRequest.provider
-        ? reviewersWithHandles(directory, input.pullRequest.provider, [boardRow.authorLogin])
-        : []
+      boardRow === null
+        ? []
+        : reviewersWithHandles(directory, input.pullRequest.provider, [boardRow.authorLogin])
     const resolution = resolveAttentionRecipients({
       directory,
       requestedById: viewer.id,
