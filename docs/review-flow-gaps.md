@@ -33,6 +33,7 @@ pull request is merged with its review findings fixed.
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
 | 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
+| 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | In progress |                                                          |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -151,3 +152,14 @@ finding. The curation screen has no way to ask for it.
 
 A challenge action on a finding files the investigation and shows the verdict on
 the finding.
+
+### 14. Board lookups by host
+
+`ReviewRequestRepository.getByPullRequest` matches a pull request on owner, repo
+and number alone. A GitHub pull request and a GitLab merge request with the same
+names resolve to each other's board row, so an intake for one can update the
+other's review or refuse to track it.
+
+The provider is part of the key: the port takes it, all three stores filter on
+it, and both durable stores carry a `pr_provider` column backfilled from the
+payload, with the lookup index leading on it.

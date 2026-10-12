@@ -9,6 +9,7 @@ import type {
   ReviewRequest,
   ReviewStatus,
   Role,
+  VcsProvider,
 } from '@sainte-beuve/contracts'
 import type { EpochMs } from '../domain/types.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
@@ -55,6 +56,14 @@ export interface ReviewerRepository {
  */
 export type ReviewListOrder = 'newest' | 'oldest'
 
+/** What names one pull request on one host. A `PullRequestRef` is one. */
+export interface PullRequestKey {
+  provider: VcsProvider
+  owner: string
+  repo: string
+  number: number
+}
+
 export interface ReviewRequestRepository {
   /**
    * The board, newest first unless asked otherwise, ties broken on the id.
@@ -75,12 +84,12 @@ export interface ReviewRequestRepository {
     order?: ReviewListOrder
   }): Promise<ReviewRequest[]>
   getById(reviewId: string): Promise<ReviewRequest | null>
-  /** Look up by pull request so a webhook replay updates the row instead of duplicating it. */
-  getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null>
+  /**
+   * Look up by pull request so a webhook replay updates the row instead of
+   * duplicating it. The host is part of the key: `platform/api#12` on GitHub
+   * and on GitLab are two different changes.
+   */
+  getByPullRequest(ref: PullRequestKey): Promise<ReviewRequest | null>
   create(review: ReviewRequest): Promise<ReviewRequest>
   update(reviewId: string, patch: Partial<ReviewRequest>): Promise<ReviewRequest | null>
 }

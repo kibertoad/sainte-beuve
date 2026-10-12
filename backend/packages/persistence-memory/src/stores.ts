@@ -11,6 +11,7 @@ import type {
   AiReviewRunRepository,
   EpochMs,
   IntegrationTokenRepository,
+  PullRequestKey,
   ReminderRepository,
   Repositories,
   ReviewerRepository,
@@ -122,14 +123,15 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
     return row === undefined ? null : clone(row)
   }
 
-  async getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null> {
+  async getByPullRequest(ref: PullRequestKey): Promise<ReviewRequest | null> {
     for (const row of this.rows.values()) {
       const pr = row.pullRequest
-      if (pr.owner === ref.owner && pr.repo === ref.repo && pr.number === ref.number) {
+      if (
+        pr.provider === ref.provider &&
+        pr.owner === ref.owner &&
+        pr.repo === ref.repo &&
+        pr.number === ref.number
+      ) {
         return clone(row)
       }
     }

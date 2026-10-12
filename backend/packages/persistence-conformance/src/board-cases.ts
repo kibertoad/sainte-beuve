@@ -70,16 +70,53 @@ export const reviewCases: readonly ConformanceCase[] = [
       review('rev-1', { pullRequest: pullRequest({ owner: 'platform', repo: 'api', number: 12 }) }),
     )
     const found = await repos.reviews.getByPullRequest({
+      provider: 'github',
       owner: 'platform',
       repo: 'api',
       number: 12,
     })
     assert.strictEqual(found?.id, 'rev-1')
     assert.strictEqual(
-      await repos.reviews.getByPullRequest({ owner: 'platform', repo: 'api', number: 13 }),
+      await repos.reviews.getByPullRequest({
+        provider: 'github',
+        owner: 'platform',
+        repo: 'api',
+        number: 13,
+      }),
       null,
     )
   }),
+
+  conformanceCase(
+    'a GitHub and a GitLab pull request under one name are two reviews',
+    async (repos) => {
+      // `platform/api#12` exists on both hosts and they are two different
+      // changes, so neither lookup may hand back the other's row.
+      const onGitHub = pullRequest({
+        provider: 'github',
+        owner: 'platform',
+        repo: 'api',
+        number: 12,
+      })
+      const onGitLab = pullRequest({
+        provider: 'gitlab',
+        owner: 'platform',
+        repo: 'api',
+        number: 12,
+        url: 'https://gitlab.com/platform/api/-/merge_requests/12',
+      })
+      await repos.reviews.create(review('rev-gh', { pullRequest: onGitHub }))
+      assert.strictEqual(await repos.reviews.getByPullRequest(onGitLab), null)
+
+      await repos.reviews.create(review('rev-gl', { pullRequest: onGitLab }))
+      assert.strictEqual((await repos.reviews.getByPullRequest(onGitHub))?.id, 'rev-gh')
+      assert.strictEqual((await repos.reviews.getByPullRequest(onGitLab))?.id, 'rev-gl')
+
+      // A rewrite of one row keeps its host, so the other lookup still misses it.
+      await repos.reviews.update('rev-gh', { status: 'assigned' })
+      assert.strictEqual((await repos.reviews.getByPullRequest(onGitLab))?.id, 'rev-gl')
+    },
+  ),
 
   conformanceCase('a review patch touches the fields it names', async (repos) => {
     await repos.reviews.create(review('rev-1'))

@@ -14,6 +14,7 @@ import {
 import type {
   AiReviewRunRepository,
   EpochMs,
+  PullRequestKey,
   ReminderRepository,
   ReviewListOrder,
   ReviewRequestRepository,
@@ -33,10 +34,11 @@ import { decodeData, decodeRows, encodeData, patched, placeholders } from './row
  * can follow.
  */
 
-const REVIEW_UPSERT = `INSERT INTO review_requests (org_id, id, status, pr_owner, pr_repo, pr_number, created_at, data)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+const REVIEW_UPSERT = `INSERT INTO review_requests (org_id, id, status, pr_provider, pr_owner, pr_repo, pr_number, created_at, data)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (org_id, id) DO UPDATE SET
   status = excluded.status,
+  pr_provider = excluded.pr_provider,
   pr_owner = excluded.pr_owner,
   pr_repo = excluded.pr_repo,
   pr_number = excluded.pr_number,
@@ -83,14 +85,10 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
   }
 
-  async getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null> {
+  async getByPullRequest(ref: PullRequestKey): Promise<ReviewRequest | null> {
     const row = await this.db.first(
-      'SELECT data FROM review_requests WHERE org_id = ? AND pr_owner = ? AND pr_repo = ? AND pr_number = ?',
-      [this.orgId, ref.owner, ref.repo, ref.number],
+      'SELECT data FROM review_requests WHERE org_id = ? AND pr_provider = ? AND pr_owner = ? AND pr_repo = ? AND pr_number = ?',
+      [this.orgId, ref.provider, ref.owner, ref.repo, ref.number],
     )
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
   }
@@ -114,6 +112,7 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
       this.orgId,
       review.id,
       review.status,
+      pr.provider,
       pr.owner,
       pr.repo,
       pr.number,

@@ -62,6 +62,7 @@ export type {
   IntegrationTokenRepository,
   PersistenceKind,
   ProjectRepository,
+  PullRequestKey,
   ReminderRepository,
   Repositories,
   ReviewerRepository,

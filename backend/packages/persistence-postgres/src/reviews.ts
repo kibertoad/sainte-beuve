@@ -9,6 +9,7 @@ import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type {
   AiReviewRunRepository,
   EpochMs,
+  PullRequestKey,
   ReminderRepository,
   ReviewListOrder,
   ReviewRequestRepository,
@@ -73,17 +74,14 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
     return firstOr(rows)?.data ?? null
   }
 
-  async getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null> {
+  async getByPullRequest(ref: PullRequestKey): Promise<ReviewRequest | null> {
     const rows = await this.db
       .select()
       .from(reviewRequests)
       .where(
         and(
           eq(reviewRequests.orgId, this.orgId),
+          eq(reviewRequests.prProvider, ref.provider),
           eq(reviewRequests.prOwner, ref.owner),
           eq(reviewRequests.prRepo, ref.repo),
           eq(reviewRequests.prNumber, ref.number),
@@ -110,6 +108,7 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
       orgId: this.orgId,
       id: review.id,
       status: review.status,
+      prProvider: review.pullRequest.provider,
       prOwner: review.pullRequest.owner,
       prRepo: review.pullRequest.repo,
       prNumber: review.pullRequest.number,

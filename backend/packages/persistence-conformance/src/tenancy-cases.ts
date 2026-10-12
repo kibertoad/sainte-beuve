@@ -66,7 +66,7 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
   tenancyCase('two orgs can each hold a review of the same pull request', async (stores) => {
     await stores.forOrg(ORG_A).reviews.create(review('rev1', { title: 'A' }))
     await stores.forOrg(ORG_B).reviews.create(review('rev1', { title: 'B' }))
-    const ref = { owner: 'platform', repo: 'api', number: 12 }
+    const ref = { provider: 'github' as const, owner: 'platform', repo: 'api', number: 12 }
     assert.strictEqual((await stores.forOrg(ORG_A).reviews.getByPullRequest(ref))?.title, 'A')
     assert.strictEqual((await stores.forOrg(ORG_B).reviews.getByPullRequest(ref))?.title, 'B')
   }),

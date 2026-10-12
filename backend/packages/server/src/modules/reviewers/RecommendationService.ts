@@ -28,14 +28,11 @@ export class RecommendationService {
   async recommend(viewer: Reviewer, input: RecommendReviewers): Promise<ReviewerRecommendations> {
     const { repositories } = this.container
     const { pullRequest } = input
-    const [candidates, project, boardRow] = await Promise.all([
+    const [candidates, project, review] = await Promise.all([
       repositories.reviewers.list(),
       repositories.projects.getByRef(pullRequest),
       repositories.reviews.getByPullRequest(pullRequest),
     ])
-    // The board looks a row up by owner, repo and number alone, so a row from
-    // the other host under the same names is not this pull request.
-    const review = boardRow?.pullRequest.provider === pullRequest.provider ? boardRow : null
     const target = matchTargetFor(
       {
         requiredSkills:
