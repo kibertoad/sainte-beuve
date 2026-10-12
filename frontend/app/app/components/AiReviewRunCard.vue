@@ -1,10 +1,6 @@
 <script setup lang="ts">
-import type {
-  AiReviewFinding,
-  AiReviewResolution,
-  AiReviewRun,
-  AiReviewSeverity,
-} from '@sainte-beuve/contracts'
+import type { AiReviewFinding, AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import { AI_REVIEW_CHALLENGE_LIMIT, challengedFindingIdsOf } from '@sainte-beuve/contracts'
 
 // One delegated review, and the loop it is in the middle of.
 //
@@ -20,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   dismiss: [findingId: string]
+  challenge: [findingId: string, question: string | null]
   resolve: [action: AiReviewResolution, findingIds: string[]]
   resume: []
 }>()
@@ -37,16 +34,23 @@ const statusColor: Record<AiReviewRun['status'], BadgeColor> = {
   cancelled: 'neutral',
 }
 
-const severityColor: Record<AiReviewSeverity, BadgeColor> = {
-  blocker: 'error',
-  high: 'error',
-  medium: 'warning',
-  low: 'info',
-  nit: 'neutral',
-}
-
 const curation = computed(() => props.run.curation)
 const findings = computed<AiReviewFinding[]>(() => curation.value?.findings ?? [])
+
+/** What a challenge retracted. Never ticked and never posted, whatever was ticked before. */
+const retracted = computed(
+  () =>
+    new Set(
+      findings.value
+        .filter((finding) => finding.challenge?.status === 'retracted')
+        .map((finding) => finding.findingId),
+    ),
+)
+
+/** Whether the review has challenged as many findings as it may. The server holds the same rule. */
+const challengesSpent = computed(
+  () => challengedFindingIdsOf(props.run).size >= AI_REVIEW_CHALLENGE_LIMIT,
+)
 
 /** The states a run has stopped in. Its curation is a record, not a control. */
 const SETTLED = new Set<AiReviewRun['status']>(['completed', 'failed', 'cancelled'])
@@ -89,7 +93,9 @@ function toggle(findingId: string): void {
 }
 
 const selectedIds = computed(() =>
-  findings.value.map((f) => f.findingId).filter((id) => selected.value.has(id)),
+  findings.value
+    .map((f) => f.findingId)
+    .filter((id) => selected.value.has(id) && !retracted.value.has(id)),
 )
 
 const awaiting = computed(() => props.run.status === 'awaiting_selection')
@@ -139,10 +145,6 @@ const postFailed = computed(() => {
   if (it === null) return false
   return it.failures.length > 0 || it.bodyError !== null || it.bodyPosted === false
 })
-
-function lineOf(finding: { path: string; line: number | null }): string {
-  return finding.line === null ? finding.path : `${finding.path}:${finding.line}`
-}
 </script>
 
 <template>
@@ -215,7 +217,7 @@ function lineOf(finding: { path: string; line: number | null }): string {
         </p>
         <ul v-if="report.failures.length > 0" class="mt-2 list-disc pl-4">
           <li v-for="failure in report.failures" :key="failure.findingId">
-            <span class="font-mono text-xs break-all">{{ lineOf(failure) }}</span
+            <span class="font-mono text-xs break-all">{{ codeLocation(failure) }}</span
             >: {{ failure.reason }}
           </li>
         </ul>
@@ -244,48 +246,19 @@ function lineOf(finding: { path: string; line: number | null }): string {
     </p>
 
     <div v-else class="flex flex-col divide-y divide-default">
-      <div
+      <AiReviewFindingRow
         v-for="finding in findings"
         :key="finding.findingId"
-        class="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
-      >
-        <UCheckbox
-          :model-value="selected.has(finding.findingId)"
-          :disabled="!awaiting"
-          class="mt-1"
-          @update:model-value="toggle(finding.findingId)"
-        />
-        <div class="min-w-0 grow">
-          <div class="flex items-center gap-2 flex-wrap">
-            <UBadge :color="severityColor[finding.severity]" size="sm" variant="subtle">
-              {{ finding.severity }}
-            </UBadge>
-            <UBadge size="sm" variant="subtle" color="neutral">{{ finding.category }}</UBadge>
-            <span class="font-medium">{{ finding.title }}</span>
-            <UBadge v-if="posted.has(finding.findingId)" size="sm" variant="subtle" color="success">
-              posted
-            </UBadge>
-          </div>
-          <p class="font-mono text-xs text-muted mt-1 break-all">{{ lineOf(finding) }}</p>
-          <p class="text-sm mt-1 whitespace-pre-wrap">{{ finding.detail }}</p>
-          <pre
-            v-if="finding.suggestedFix"
-            class="text-xs mt-2 p-2 rounded bg-elevated overflow-x-auto"
-            >{{ finding.suggestedFix }}</pre>
-        </div>
-        <UButton
-          size="sm"
-          variant="ghost"
-          color="neutral"
-          icon="i-lucide-x"
-          class="shrink-0"
-          :disabled="!awaiting"
-          :loading="busy === finding.findingId"
-          @click="emit('dismiss', finding.findingId)"
-        >
-          <span class="sr-only sm:not-sr-only">Dismiss</span>
-        </UButton>
-      </div>
+        :finding="finding"
+        :selected="selected.has(finding.findingId)"
+        :awaiting="awaiting"
+        :posted="posted.has(finding.findingId)"
+        :challenges-spent="challengesSpent"
+        :busy="busy"
+        @toggle="toggle(finding.findingId)"
+        @dismiss="emit('dismiss', finding.findingId)"
+        @challenge="(question) => emit('challenge', finding.findingId, question)"
+      />
     </div>
 
     <template v-if="awaiting" #footer>

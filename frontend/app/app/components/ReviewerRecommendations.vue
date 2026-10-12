@@ -4,12 +4,25 @@ import { shortfallCause, shortfallRemedy } from '@sainte-beuve/contracts'
 
 // Who fits this pull request best, and why. While a new ranking loads the
 // previous one stays, dimmed, so the dialog does not jump on every click.
+// Ticking somebody names them on the ask.
 const props = defineProps<{
   result: ReviewerRecommendations | null
   pending: boolean
   failure: string | null
   sameTeamOnly: boolean
+  /** Whether a longer ranking could list more people than this one. */
+  canShowMore: boolean
 }>()
+
+const emit = defineEmits<{ more: [] }>()
+
+/** The reviewer ids ticked, in the order they were ticked. */
+const selected = defineModel<string[]>('selected', { required: true })
+
+function toggle(reviewerId: string, ticked: boolean | 'indeterminate'): void {
+  const others = selected.value.filter((id) => id !== reviewerId)
+  selected.value = ticked === true ? [...others, reviewerId] : others
+}
 
 const wantedCount = computed(() => {
   const wanted = props.result?.wanted
@@ -30,6 +43,11 @@ function matchLine(entry: ReviewerRecommendation): string {
   const matched = entry.reasons.matchedSkills.length + entry.reasons.matchedDomains.length
   if (wantedCount.value === 0) return 'Nothing in particular is wanted'
   return `Matches ${matched} of ${wantedCount.value}`
+}
+
+function historyLine(entry: ReviewerRecommendation): string {
+  const past = entry.reasons.pastReviews
+  return past === 1 ? 'Reviewed this repository once' : `Reviewed this repository ${past} times`
 }
 
 function loadLine(entry: ReviewerRecommendation): string {
@@ -54,10 +72,17 @@ function loadLine(entry: ReviewerRecommendation): string {
           class="flex flex-col gap-1 rounded-md border border-default p-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
         >
           <div class="flex min-w-0 flex-col gap-1">
-            <span class="text-sm font-medium">
-              {{ entry.displayName }}
-              <span v-if="entry.team" class="font-normal text-muted">· {{ entry.team }}</span>
-            </span>
+            <UCheckbox
+              :model-value="selected.includes(entry.reviewerId)"
+              @update:model-value="toggle(entry.reviewerId, $event)"
+            >
+              <template #label>
+                <span class="text-sm font-medium">
+                  {{ entry.displayName }}
+                  <span v-if="entry.team" class="font-normal text-muted">· {{ entry.team }}</span>
+                </span>
+              </template>
+            </UCheckbox>
             <div
               v-if="entry.reasons.matchedSkills.length + entry.reasons.matchedDomains.length > 0"
               class="flex flex-wrap gap-1"
@@ -81,10 +106,21 @@ function loadLine(entry: ReviewerRecommendation): string {
           </div>
           <div class="flex flex-col text-xs text-muted sm:shrink-0 sm:text-right">
             <span>{{ matchLine(entry) }}</span>
+            <span v-if="entry.reasons.pastReviews > 0">{{ historyLine(entry) }}</span>
             <span>{{ loadLine(entry) }}</span>
           </div>
         </li>
       </ol>
+      <UButton
+        v-if="canShowMore && result.recommendations.length > 0"
+        variant="link"
+        color="neutral"
+        size="sm"
+        class="mt-1"
+        :disabled="pending"
+        @click="emit('more')"
+        >Show more</UButton
+      >
     </div>
   </div>
 </template>

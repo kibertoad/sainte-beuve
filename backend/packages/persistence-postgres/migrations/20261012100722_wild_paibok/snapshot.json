@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "3ac926c0-494d-4d7d-b0cf-bd72199382cf",
+  "id": "0dd7e97a-19ab-4933-8ab4-a5b11cd79807",
   "prevIds": ["3dd572fb-37c2-4aa8-8fdf-ee32eb587268"],
   "ddl": [
     {
@@ -960,19 +960,6 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "pr_provider",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "review_requests"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "pr_owner",
       "entityType": "columns",
       "schema": "public",
@@ -1715,13 +1702,6 @@
           "opclass": null
         },
         {
-          "value": "pr_provider",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
           "value": "pr_owner",
           "isExpression": false,
           "asc": true,
@@ -1749,6 +1729,55 @@
       "method": "btree",
       "concurrently": false,
       "name": "review_requests_pr_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "review_requests"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "org_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "pr_owner",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "pr_repo",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "review_requests_repo_idx",
       "entityType": "indexes",
       "schema": "public",
       "table": "review_requests"

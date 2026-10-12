@@ -1,21 +1,24 @@
 import type {
   AiReviewRun,
-  IdentityProvider,
+  AttentionRequest,
   LinkedIdentity,
   Org,
   Project,
   Reminder,
   Reviewer,
+  ReviewCommitment,
   ReviewRequest,
-  Role,
   Team,
+  VcsProvider,
 } from '@sainte-beuve/contracts'
 import {
   aiReviewRunSchema,
+  attentionRequestSchema,
   linkedIdentitySchema,
   orgSchema,
   projectSchema,
   reminderSchema,
+  reviewCommitmentSchema,
   reviewerSchema,
   reviewRequestSchema,
   teamSchema,
@@ -95,7 +98,7 @@ export const reviewRequests = pgTable(
     orgId: orgId(),
     id: text('id').notNull(),
     status: text('status').notNull(),
-    prProvider: text('pr_provider').notNull(),
+    prProvider: text('pr_provider').$type<VcsProvider>().notNull(),
     prOwner: text('pr_owner').notNull(),
     prRepo: text('pr_repo').notNull(),
     prNumber: integer('pr_number').notNull(),
@@ -121,13 +124,24 @@ export const reviewRequests = pgTable(
     index('review_requests_created_idx').on(table.orgId, table.createdAt.desc(), table.id.desc()),
     // A webhook replay looks a review up by the pull request it is about, so
     // this is the index that keeps an intake from scanning the board. The host
-    // leads it because it is part of that key.
+    // is part of that key, as it is of the repository's below.
     index('review_requests_pr_idx').on(
       table.orgId,
       table.prProvider,
       table.prOwner,
       table.prRepo,
       table.prNumber,
+    ),
+    // One repository's history, newest first: the read a reviewer's familiarity
+    // with a repository is counted from. Ordered like the board's own indexes so
+    // the capped read stops at its limit instead of sorting every row.
+    index('review_requests_repo_idx').on(
+      table.orgId,
+      table.prProvider,
+      table.prOwner,
+      table.prRepo,
+      table.createdAt.desc(),
+      table.id.desc(),
     ),
   ],
 )
@@ -281,67 +295,38 @@ export const identities = pgTable(
   ],
 )
 
-/**
- * The sessions a browser is carried by.
- *
- * No payload column, beside `integration_tokens` and for the same reason: the
- * row is flat and every field is read. What is stored of the credential is a
- * DIGEST, so a dump of this table lets nobody present anything.
- */
-export const sessions = pgTable(
-  'sessions',
+export const attentionRequests = pgTable(
+  'attention_requests',
   {
     orgId: orgId(),
     id: text('id').notNull(),
-    /**
-     * SHA-256 of the cookie's value, base64url. UNIQUE ACROSS EVERY ORG, unlike
-     * every other index here: the digest is what DECIDES which org a request is
-     * in, so it is read before there is an org to scope it by, and two rows for
-     * one value would make which board a cookie opens depend on which row the
-     * planner reached first.
-     */
-    tokenDigest: text('token_digest').notNull().unique('sessions_digest_idx'),
-    reviewerId: text('reviewer_id').notNull(),
-    provider: text('provider').$type<IdentityProvider>().notNull(),
-    subject: text('subject').notNull(),
+    status: text('status').notNull(),
     createdAt: epochMs('created_at').notNull(),
-    lastSeenAt: epochMs('last_seen_at').notNull(),
-    expiresAt: epochMs('expires_at').notNull(),
+    data: payload<AttentionRequest>('data', 'attention_requests', attentionRequestSchema).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
-    index('sessions_reviewer_idx').on(table.orgId, table.reviewerId),
-    // The tick's sweep: everything already expired, in the org it is ticking.
-    index('sessions_expiry_idx').on(table.orgId, table.expiresAt),
+    index('attention_requests_status_idx').on(table.orgId, table.status, table.createdAt),
   ],
 )
 
-/** The keys a machine calls with. Beside the sessions, and stored the same way. */
-export const apiKeys = pgTable(
-  'api_keys',
+export const reviewCommitments = pgTable(
+  'review_commitments',
   {
     orgId: orgId(),
     id: text('id').notNull(),
-    /** Global, beside the sessions' digest and for the same reason. */
-    tokenDigest: text('token_digest').notNull().unique('api_keys_digest_idx'),
-    label: text('label').notNull(),
+    reviewerId: text('reviewer_id').notNull(),
     /**
-     * What the key may do in its org. On the ROW rather than derived from
-     * whoever minted it: a key outlives the person who made it, and a CI job
-     * that silently inherited an operator's admin is how a build script comes to
-     * be able to revoke the credentials it runs on.
+     * `provider:owner/repo#number`. The host is part of the key: the same path
+     * and number exist on both, and they are two different changes.
      */
-    role: text('role').$type<Role>().notNull().default('member'),
-    /** The last four characters, so a row can be matched to a secret store's entry. */
-    hint: text('hint').notNull(),
-    /** The reviewer who minted it, when a person did. Null for one nobody is behind. */
-    createdBy: text('created_by'),
+    pullRequestKey: text('pull_request_key').notNull(),
     createdAt: epochMs('created_at').notNull(),
-    lastUsedAt: epochMs('last_used_at'),
+    data: payload<ReviewCommitment>('data', 'review_commitments', reviewCommitmentSchema).notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
-    index('api_keys_created_idx').on(table.orgId, table.createdAt),
+    index('review_commitments_reviewer_idx').on(table.orgId, table.reviewerId, table.createdAt),
   ],
 )
 
@@ -361,5 +346,5 @@ export const teams = pgTable(
   ],
 )
 
-export { attentionRequests, reviewCommitments } from './attention-schema.js'
+export { apiKeys, sessions } from './auth-schema.js'
 export { externalRepositories } from './external-schema.js'

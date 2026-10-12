@@ -21,9 +21,11 @@ function holding(held: AiReviewRun['curation']): AiReviewRun {
     catFactoryTaskId: 'cf-task-1',
     catFactoryRunId: 'cf-run-1',
     catFactoryUrl: null,
+    catFactoryWorkspaceId: null,
     summary: null,
     failureReason: null,
     curation: held,
+    challengedFindingIds: [],
     requestedAt: 1_000,
     lastPolledAt: null,
     parkedAt: null,
@@ -85,5 +87,35 @@ describe('the curation a poll writes', () => {
     expect(
       curationFor(reporting(held), holding(curation({ postAttempts: 1, lastActivityAt: null }))),
     ).toStrictEqual(held)
+  })
+
+  it('keeps the row when the report predates a challenge it holds', () => {
+    // Filing a challenge restarts cat-factory's step and clears its heartbeat,
+    // so only the finding itself says which picture is older.
+    const investigating = aiFinding({
+      challenge: { status: 'investigating', question: null, justification: null },
+    })
+    const held = curation({
+      status: 'challenging',
+      findings: [investigating],
+      lastActivityAt: null,
+    })
+    const older = curation({ findings: [aiFinding()], lastActivityAt: 5_000 })
+    expect(curationFor(reporting(older), holding(held))).toStrictEqual(held)
+  })
+
+  it('takes a report that moves a challenge on, or no longer carries the finding', () => {
+    const investigating = aiFinding({
+      challenge: { status: 'investigating', question: null, justification: null },
+    })
+    const held = curation({ status: 'challenging', findings: [investigating] })
+    const verdict = curation({
+      findings: [
+        aiFinding({ challenge: { status: 'retracted', question: null, justification: 'No.' } }),
+      ],
+    })
+    const dismissed = curation({ findings: [] })
+    expect(curationFor(reporting(verdict), holding(held))).toStrictEqual(verdict)
+    expect(curationFor(reporting(dismissed), holding(held))).toStrictEqual(dismissed)
   })
 })

@@ -1,6 +1,6 @@
 import type { Reviewer, ShortfallReason } from '@sainte-beuve/contracts'
 import { type AttentionAudienceRule, isInAttentionAudience } from './attention.js'
-import { type MatchTarget, type ScoredCandidate, scoreCandidate } from './selection.js'
+import { type ScoredCandidate, type ScoringTarget, scoreCandidate } from './selection.js'
 
 /**
  * Reviewer recommendation: who an author asking for attention should pick,
@@ -9,16 +9,17 @@ import { type MatchTarget, type ScoredCandidate, scoreCandidate } from './select
  * The pool is the attention audience without its skill gate, because a pick
  * becomes an ask: the requester is never in it, a paused reviewer is not, a
  * weight of 0 does not keep anybody out, and "only my team" narrows it. The
- * candidates are scored as the router scores them, then ranked on fit first
- * and load second. A person choosing reads the load beside each name and
- * weighs it themselves; ranking on the draw weight would bury the one expert
- * under idle strangers whenever the expert is busy.
+ * candidates are scored as the router scores them, then ranked on the
+ * preference the draw starts from (the wanted mix held, raised for past
+ * reviews in the repository) and on load second. A person choosing reads the
+ * load beside each name and weighs it themselves; ranking on the draw weight
+ * would bury the one expert under idle strangers whenever the expert is busy.
  */
 
-export interface RankingInput extends MatchTarget {
+export interface RankingInput extends ScoringTarget {
   candidates: readonly Reviewer[]
   /** Who is asking, and whether the ask stays in their team. */
-  audience: Omit<AttentionAudienceRule, 'requiredSkills'>
+  audience: Omit<AttentionAudienceRule, 'requiredSkills' | 'recipientIds'>
   /** Reviewer ids that must not be recommended: the author, and anyone already on or asked. */
   excludeReviewerIds: readonly string[]
   limit: number
@@ -31,13 +32,13 @@ export interface RankingResult {
 }
 
 /**
- * Best first: the larger share of what is wanted, then fewer open reviews, then
+ * Best first: the larger preference, then fewer open reviews, then
  * the larger configured weight, then the display name and the id, so two equal
  * reviewers never swap places between two reads. The locale is pinned so the
  * order does not follow the default locale of the host runtime.
  */
 export function compareCandidates(left: ScoredCandidate, right: ScoredCandidate): number {
-  if (left.affinity !== right.affinity) return right.affinity - left.affinity
+  if (left.preference !== right.preference) return right.preference - left.preference
   const byLoad = left.reviewer.outstandingReviews - right.reviewer.outstandingReviews
   if (byLoad !== 0) return byLoad
   if (left.reviewer.weight !== right.reviewer.weight) {
@@ -51,7 +52,7 @@ export function compareCandidates(left: ScoredCandidate, right: ScoredCandidate)
 
 export function rankCandidates(input: RankingInput): RankingResult {
   const excluded = new Set(input.excludeReviewerIds)
-  const rule: AttentionAudienceRule = { ...input.audience, requiredSkills: [] }
+  const rule: AttentionAudienceRule = { ...input.audience, recipientIds: [], requiredSkills: [] }
   const ranked = input.candidates
     .filter((reviewer) => !excluded.has(reviewer.id) && isInAttentionAudience(reviewer, rule))
     .map((reviewer) => scoreCandidate(reviewer, input))

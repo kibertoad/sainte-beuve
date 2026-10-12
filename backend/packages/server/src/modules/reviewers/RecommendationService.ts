@@ -9,10 +9,12 @@ import {
   distinctAsSpelled,
   excludedFromReview,
   matchTargetFor,
+  pastReviewCounts,
   rankCandidates,
   reviewersWithHandles,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { readReviewHistory } from './pastReviews.js'
 
 /**
  * Who an author asking for attention should pick for a pull request, best first.
@@ -28,10 +30,11 @@ export class RecommendationService {
   async recommend(viewer: Reviewer, input: RecommendReviewers): Promise<ReviewerRecommendations> {
     const { repositories } = this.container
     const { pullRequest } = input
-    const [candidates, project, review] = await Promise.all([
+    const [candidates, project, review, history] = await Promise.all([
       repositories.reviewers.list(),
       repositories.projects.getByRef(pullRequest),
       repositories.reviews.getByPullRequest(pullRequest),
+      readReviewHistory(this.container, pullRequest),
     ])
     const target = matchTargetFor(
       {
@@ -45,6 +48,7 @@ export class RecommendationService {
       candidates,
       audience: { requestedById: viewer.id, team: viewer.team, sameTeamOnly: input.sameTeamOnly },
       excludeReviewerIds: excluded(input, review, candidates),
+      pastReviews: pastReviewCounts(history, candidates, pullRequest.provider),
       limit: input.limit,
     })
     return {
@@ -84,6 +88,7 @@ function toRecommendation(candidate: ScoredCandidate) {
       matchedSkills: candidate.matchedSkills,
       matchedDomains: candidate.matchedDomains,
       outstandingReviews: candidate.reviewer.outstandingReviews,
+      pastReviews: candidate.pastReviews,
     },
   }
 }

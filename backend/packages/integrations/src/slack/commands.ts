@@ -20,6 +20,7 @@ export type SlackIntent =
   | { kind: 'reroll'; reviewId: string }
   | { kind: 'snooze'; reviewId: string; hours: number }
   | { kind: 'ai_review'; reviewId: string }
+  | { kind: 'attention_commit'; attentionId: string }
   | { kind: 'help' }
 
 export interface SlackRequest {
@@ -41,11 +42,15 @@ export interface SlackRequest {
   responseUrl: string | null
 }
 
-/** The action ids the announcement message's buttons carry. */
+/**
+ * The action ids the bot's buttons carry: the announcement's three, and the
+ * commit button on an attention ask's DM, whose value is the ask's id.
+ */
 export const SLACK_ACTIONS = {
   claim: 'review_claim',
   reroll: 'review_reroll',
   snooze: 'review_snooze',
+  attentionCommit: 'attention_commit',
 } as const
 
 /** How long a snooze pushes the next nudge out when nobody names a number. */
@@ -138,9 +143,9 @@ function parseInteraction(raw: string): SlackRequest | null {
 
 /** What one button stands for, or null when its id or its value is not one we set. */
 function actionIntent(action: InteractionAction | undefined): SlackIntent | null {
-  const reviewId = action?.value ?? ''
-  if (reviewId.length === 0) return null
-  return intentForAction(action?.action_id ?? '', reviewId)
+  const value = action?.value ?? ''
+  if (value.length === 0) return null
+  return intentForAction(action?.action_id ?? '', value)
 }
 
 /** Null rather than a throw: Slack posts non-interaction bodies to the same URL. */
@@ -152,11 +157,15 @@ function readPayload(raw: string): InteractionPayload | null {
   }
 }
 
-function intentForAction(actionId: string, reviewId: string): SlackIntent | null {
-  if (actionId === SLACK_ACTIONS.claim) return { kind: 'claim', reviewId }
-  if (actionId === SLACK_ACTIONS.reroll) return { kind: 'reroll', reviewId }
+/** `value` is the review's id, or the ask's for an attention button. */
+function intentForAction(actionId: string, value: string): SlackIntent | null {
+  if (actionId === SLACK_ACTIONS.attentionCommit) {
+    return { kind: 'attention_commit', attentionId: value }
+  }
+  if (actionId === SLACK_ACTIONS.claim) return { kind: 'claim', reviewId: value }
+  if (actionId === SLACK_ACTIONS.reroll) return { kind: 'reroll', reviewId: value }
   if (actionId === SLACK_ACTIONS.snooze) {
-    return { kind: 'snooze', reviewId, hours: DEFAULT_SNOOZE_HOURS }
+    return { kind: 'snooze', reviewId: value, hours: DEFAULT_SNOOZE_HOURS }
   }
   return null
 }

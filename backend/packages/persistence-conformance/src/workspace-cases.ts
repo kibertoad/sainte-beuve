@@ -140,6 +140,45 @@ export const attentionCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.attention.getById('a1'), written)
   }),
 
+  conformanceCase(
+    'an ask keeps the people it named, in the order they were named',
+    async (repos) => {
+      const recipients = [
+        { reviewerId: 'r2', displayName: 'Two' },
+        { reviewerId: 'r1', displayName: 'One' },
+      ]
+      await repos.attention.create(attentionRequest('a1', { recipients, neededCommitments: 2 }))
+      assert.deepStrictEqual((await repos.attention.getById('a1'))?.recipients, recipients)
+      const [listed] = await repos.attention.list({ status: ['open'] })
+      assert.deepStrictEqual(listed?.recipients, recipients)
+    },
+  ),
+
+  conformanceCase('an ask keeps where its DMs landed through a later update', async (repos) => {
+    const chatDeliveries = [{ reviewerId: 'r1', conversationId: 'D1', messageId: '17.1' }]
+    await repos.attention.create(attentionRequest('a1', { chatDeliveries }))
+    await repos.attention.update('a1', { status: 'resolved', resolvedAt: 2_000 })
+    assert.deepStrictEqual((await repos.attention.getById('a1'))?.chatDeliveries, chatDeliveries)
+  }),
+
+  conformanceCase('two updates of different fields both survive together', async (repos) => {
+    const chatDeliveries = [{ reviewerId: 'r1', conversationId: 'D1', messageId: '17.1' }]
+    await repos.attention.create(attentionRequest('a1'))
+    const [delivered, resolved] = await Promise.all([
+      repos.attention.update('a1', { chatDeliveries }),
+      repos.attention.update('a1', { status: 'resolved', resolvedAt: 2_000 }),
+    ])
+    const stored = await repos.attention.getById('a1')
+    assert.deepStrictEqual(stored?.chatDeliveries, chatDeliveries)
+    assert.strictEqual(stored?.status, 'resolved')
+    assert.deepStrictEqual(await repos.attention.list({ status: ['resolved'] }), [stored])
+    // Whichever landed second answers with the other's field already in place.
+    assert.ok(
+      delivered?.status === 'resolved' || resolved?.chatDeliveries.length === 1,
+      'neither update saw the other',
+    )
+  }),
+
   conformanceCase('lists the asks newest first, ties on the id', async (repos) => {
     await repos.attention.create(attentionRequest('a1', { createdAt: 1_000 }))
     await repos.attention.create(attentionRequest('a2', { createdAt: 2_000 }))

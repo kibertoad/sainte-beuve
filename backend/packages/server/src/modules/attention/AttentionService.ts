@@ -8,17 +8,21 @@ import type {
   Reviewer,
   ReviewCommitment,
 } from '@sainte-beuve/contracts'
-import { ConflictError, ForbiddenError, assertFound } from '@sainte-beuve/kernel'
+import { ConflictError, ForbiddenError, ValidationError, assertFound } from '@sainte-beuve/kernel'
 import {
+  type RecipientRefusal,
   audienceRuleOf,
   isAttentionSatisfied,
   isInAttentionAudience,
+  resolveAttentionRecipients,
+  reviewersWithHandles,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import {
   requestCommittedReviewer,
   withdrawCommittedReviewer,
 } from '../../integrations/reviewRequests.js'
+import { refreshAskDeliveries, sendAskDms } from './askDeliveries.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -48,6 +52,11 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
+    const named = await this.resolveRecipients(viewer, input)
+    const recipients = named.map((reviewer) => ({
+      reviewerId: reviewer.id,
+      displayName: reviewer.displayName,
+    }))
     const now = clock.now()
     const request = await repositories.attention.create({
       id: ids.next(),
@@ -55,6 +64,7 @@ export class AttentionService {
       title: input.title,
       requestedById: viewer.id,
       requestedByName: viewer.displayName,
+      recipients,
       requiredSkills: input.requiredSkills,
       sameTeamOnly: input.sameTeamOnly,
       // The requester's team is captured HERE rather than read at delivery
@@ -68,9 +78,10 @@ export class AttentionService {
       createdAt: now,
       updatedAt: now,
       resolvedAt: null,
+      chatDeliveries: [],
     })
     this.publish('opened', request)
-    return request
+    return sendAskDms(this.container, request, named)
   }
 
   /**
@@ -125,6 +136,7 @@ export class AttentionService {
       `No attention request ${attentionId}`,
     )
     this.publish(satisfied ? 'resolved' : 'committed', updated)
+    await refreshAskDeliveries(this.container, updated, satisfied ? null : viewer.id)
     return updated
   }
 
@@ -143,6 +155,7 @@ export class AttentionService {
       `No attention request ${attentionId}`,
     )
     this.publish('cancelled', updated)
+    await refreshAskDeliveries(this.container, updated, null)
     return updated
   }
 
@@ -203,6 +216,37 @@ export class AttentionService {
     return requestCommittedReviewer(this.container, commitment, viewer)
   }
 
+  /**
+   * The people an ask names, checked against the directory as it stands now.
+   * The pull request's author is known from its board row, when it has one.
+   */
+  private async resolveRecipients(
+    viewer: Reviewer,
+    input: CreateAttentionRequest,
+  ): Promise<Reviewer[]> {
+    if (input.recipientIds.length === 0) return []
+    const { repositories } = this.container
+    const [directory, boardRow] = await Promise.all([
+      repositories.reviewers.list(),
+      repositories.reviews.getByPullRequest(input.pullRequest),
+    ])
+    // The board looks a row up by owner, repo and number alone, so a row from
+    // the other host under the same names is not this pull request.
+    const authorIds =
+      boardRow?.pullRequest.provider === input.pullRequest.provider
+        ? reviewersWithHandles(directory, input.pullRequest.provider, [boardRow.authorLogin])
+        : []
+    const resolution = resolveAttentionRecipients({
+      directory,
+      requestedById: viewer.id,
+      recipientIds: input.recipientIds,
+      neededCommitments: input.neededCommitments,
+      authorIds,
+    })
+    if (resolution.ok) return resolution.reviewers
+    throw refusalError(resolution.refusal, input.neededCommitments)
+  }
+
   private async require(attentionId: string): Promise<AttentionRequest> {
     return assertFound(
       await this.container.repositories.attention.getById(attentionId),
@@ -212,6 +256,33 @@ export class AttentionService {
 
   private publish(kind: AttentionEventKind, request: AttentionRequest): void {
     this.container.bus.publish({ kind, request })
+  }
+}
+
+function refusalError(refusal: RecipientRefusal, neededCommitments: number): ValidationError {
+  switch (refusal.reason) {
+    case 'too_few':
+      return new ValidationError(
+        `This ask waits for ${neededCommitments} reviewers but names only ${refusal.named}`,
+        { neededCommitments, recipients: refusal.named },
+      )
+    case 'unknown':
+      return new ValidationError(`No reviewer ${refusal.reviewerId} to ask`, {
+        reviewerId: refusal.reviewerId,
+      })
+    case 'requester':
+      return new ValidationError('You cannot ask yourself to review your own request', {
+        reviewerId: refusal.reviewer.id,
+      })
+    case 'paused':
+      return new ValidationError(`${refusal.reviewer.displayName} is paused and cannot be asked`, {
+        reviewerId: refusal.reviewer.id,
+      })
+    case 'author':
+      return new ValidationError(
+        `${refusal.reviewer.displayName} wrote this pull request and cannot be asked to review it`,
+        { reviewerId: refusal.reviewer.id },
+      )
   }
 }
 

@@ -293,8 +293,23 @@ environment:
 | ----------- | ------------------------------------------------------ | ----------------------------- |
 | Base URL    | The instance, `http://localhost:8787` for a local one  | both                          |
 | API key     | `cf_live_<keyId>.<secret>`, stored sealed              | both (`decide` for AI review) |
-| Service id  | The `blk_…` frame AI reviews are filed under           | AI review                     |
+| Service id  | The `blk_…` frame for a repository no service backs    | neither                       |
 | Pipeline id | Overrides the review task's own pipeline (`pl_review`) | neither                       |
+
+An AI review is filed under the service that backs its repository, read from
+the cat-factory workspace that links it, and in that workspace. The repository
+mirror described under "Repositories come from cat-factory" is what says which
+workspaces link it. The service id is the fallback for a repository no service
+backs, a monorepo for one, filed in the linking workspace that holds it, and a
+review on such a repository is refused while it is unset.
+
+A guided review needs no service, but it lives in a workspace too, and a key
+reaching several workspaces is refused a call that names none. It is opened in
+the workspace that links the repository, the first by id when several do, and
+one already open in any of them is reused. A call about a session names its
+pull request as well, so it is made in the workspace that links the repository
+without a lookup first. Only a repository linked in several workspaces makes it
+read the session in each, and cat-factory answers 404 in all but one.
 
 The key spends one org's budget and the service is one org's repository frame,
 so a deployment-wide value would be lent across the tenancy boundary. That is the
@@ -380,7 +395,7 @@ on github.com and slack.com by hand, so they have to survive an API version bump
 4. **Setup URL**: `https://<your-api>/connect/github/setup`, so the browser lands
    back on the Configuration screen after an install.
 5. **Repository permissions**: `Pull requests: Read & write` (to request
-   reviewers and comment), `Issues: Read & write` (a pull request's comments are
+   reviewers, comment, and read who reviewed the repository recently), `Issues: Read & write` (a pull request's comments are
    the issues API), `Contents: Read & write` (to merge from My PRs),
    `Metadata: Read-only`.
 6. **Subscribe to events**: `Pull request`, `Pull request review`, `Issues`,
@@ -405,16 +420,21 @@ the failure everybody meets first.
 2. **OAuth & Permissions**: bot scopes `chat:write` (and
    `chat:write.public` to post in a channel the bot has not been invited to).
    Install it, and put the `xoxb-…` token on the Configuration screen or in
-   `SLACK_BOT_TOKEN`.
-3. **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
-   shows it — `https://<your-api>/webhooks/slack` for the default org, and
+   `SLACK_BOT_TOKEN`. A DM (a personal reminder, an attention ask) is posted to
+   the person's user id, which `chat:write` covers: the app never opens a
+   conversation itself, so it needs no `im:write`.
+3. **App Home**: keep **Messages Tab** on. That tab is where the app's DMs
+   land, so with it off a person is never shown the attention asks and
+   reminders sent to them.
+4. **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
+   shows it: `https://<your-api>/webhooks/slack` for the default org, and
    `https://<your-api>/webhooks/slack/<org-slug>` for any other.
-4. **Slash Commands**: `/review`, same URL.
-5. Copy the **Signing Secret** from Basic Information onto the Configuration
+5. **Slash Commands**: `/review`, same URL.
+6. Copy the **Signing Secret** from Basic Information onto the Configuration
    screen, beside the bot token. The default org may set `SLACK_SIGNING_SECRET`
    on the deployment instead; a second org has to store it, because the
    deployment's own secret is not lent across the boundary.
-6. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
+7. Set `SLACK_CHANNEL_ID` to the channel new reviews are announced in. It is the
    **default org's** channel, like the two credentials above it; a second org has
    no announcement channel yet.
 

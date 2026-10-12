@@ -6,9 +6,10 @@ import { pullRequestRefSchema } from './vcs.js'
 
 // Reviewer recommendations: who an author asking for attention should pick for
 // a pull request, best first, and why. The pool is the people an ask could
-// reach; the order is fit first and open reviews second. Each entry carries its
-// reasons as named fields, which is where a new reason is added without
-// breaking a client that reads the ones it knows.
+// reach; the order is fit raised for past reviews in the repository first, and
+// open reviews second. Each entry carries its reasons as named fields, which is
+// where a new reason is added without breaking a client that reads the ones it
+// knows.
 
 /** The most recommendations one read returns. */
 export const MAX_RECOMMENDATIONS = 25
@@ -51,8 +52,14 @@ export const recommendationReasonsSchema = v.object({
   matchedSkills: v.array(skillSchema),
   /** The repository's domains this reviewer knows. */
   matchedDomains: v.array(domainSchema),
-  /** Reviews this person is already on. Among equal fits, fewer ranks higher. */
+  /** Reviews this person is already on. Among otherwise equal candidates, fewer ranks higher. */
   outstandingReviews: v.number(),
+  /**
+   * Reviews this person finished on the pull request's repository recently,
+   * which raise their rank with diminishing returns. The larger of the host's
+   * count of their verdicts and the board's count of its finished reviews.
+   */
+  pastReviews: v.number(),
 })
 export type RecommendationReasons = v.InferOutput<typeof recommendationReasonsSchema>
 

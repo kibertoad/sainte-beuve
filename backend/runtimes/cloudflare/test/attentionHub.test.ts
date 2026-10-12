@@ -263,6 +263,8 @@ function requestFor(id: string): AttentionRequest {
     title: 'Close the attention stream across isolates',
     requestedById: 'reviewer-1',
     requestedByName: 'kibertoad',
+    recipients: [],
+    chatDeliveries: [],
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,

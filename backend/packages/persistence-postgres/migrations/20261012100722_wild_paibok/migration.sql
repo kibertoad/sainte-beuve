@@ -1,0 +1,1 @@
+CREATE INDEX "review_requests_repo_idx" ON "review_requests" ("org_id","pr_owner","pr_repo","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);

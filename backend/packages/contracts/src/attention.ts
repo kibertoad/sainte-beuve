@@ -6,9 +6,10 @@ import { pullRequestRefSchema } from './vcs.js'
 // Asking for attention on a pull request.
 //
 // This is the one thing the workspace does that a pull-request list cannot: it
-// turns "somebody please look at this" into an addressed ask. The audience is
-// derived rather than named, from the skills the change needs and, optionally,
-// from the requester's own team, so nobody has to know who is free.
+// turns "somebody please look at this" into an addressed ask. The requester
+// either names the people to ask, usually picked from the ranked
+// recommendations, or leaves the audience to be derived from the skills the
+// change needs and, optionally, from their own team.
 //
 // It RESOLVES itself. Once enough people have said they will review, the
 // request is answered and disappears from everybody's inbox, including the
@@ -35,6 +36,31 @@ export type AttentionCommitment = v.InferOutput<typeof attentionCommitmentSchema
 /** The most people one ask can wait for, so a typo cannot make a request unresolvable. */
 export const MAX_NEEDED_COMMITMENTS = 5
 
+/** The most people one ask can name. Past this it is a broadcast, and the gate is the tool for that. */
+export const MAX_ATTENTION_RECIPIENTS = 10
+
+/**
+ * A person the ask was addressed to by name. The display name is captured
+ * with the id so every inbox can say who was asked without a directory read.
+ */
+export const attentionRecipientSchema = v.object({
+  reviewerId: v.string(),
+  displayName: v.string(),
+})
+export type AttentionRecipient = v.InferOutput<typeof attentionRecipientSchema>
+
+/**
+ * A chat message an ask was delivered as, kept so the message can be updated
+ * when the ask resolves or is withdrawn, rather than keep offering a button on
+ * an ask that is closed. The conversation is the DM's own id, not the person's.
+ */
+export const attentionDeliverySchema = v.object({
+  reviewerId: v.string(),
+  conversationId: v.string(),
+  messageId: v.string(),
+})
+export type AttentionDelivery = v.InferOutput<typeof attentionDeliverySchema>
+
 export const attentionRequestSchema = v.object({
   id: v.string(),
   pullRequest: pullRequestRefSchema,
@@ -42,9 +68,20 @@ export const attentionRequestSchema = v.object({
   /** Who asked. A reviewer id, because the requester is a person in the directory. */
   requestedById: v.string(),
   requestedByName: v.string(),
-  /** Skills a person must ALL have to be in the audience. Empty means everybody available. */
+  /**
+   * The people asked by name. When there are any, they ARE the audience, and
+   * the skill and team gate below does not apply. A factory default, so a
+   * request stored before names existed decodes as a gated one.
+   */
+  recipients: v.optional(v.array(attentionRecipientSchema), () => []),
+  /** The chat DMs the named recipients were sent. A factory default, like `recipients`. */
+  chatDeliveries: v.optional(v.array(attentionDeliverySchema), () => []),
+  /**
+   * Skills a person must ALL have to be in the audience. Empty means everybody
+   * available. Kept on a named ask as what the requester was looking for.
+   */
   requiredSkills: v.array(skillSchema),
-  /** Whether the ask stays inside one team. */
+  /** Whether the ask stays inside one team. Ignored when recipients are named. */
   sameTeamOnly: v.boolean(),
   /**
    * The team the gate is against, captured when the request was raised. Stored
@@ -72,6 +109,14 @@ export type AttentionRequest = v.InferOutput<typeof attentionRequestSchema>
 export const createAttentionRequestSchema = v.object({
   pullRequest: pullRequestRefSchema,
   title: attentionRequestSchema.entries.title,
+  /**
+   * Reviewer ids to ask by name. Each must be in the directory, available and
+   * not the requester, and there must be at least as many as `neededCommitments`.
+   */
+  recipientIds: v.optional(
+    v.pipe(v.array(v.string()), v.maxLength(MAX_ATTENTION_RECIPIENTS)),
+    () => [],
+  ),
   // A FACTORY default: valibot hands a plain default back by reference, so
   // every ask parsed without the field would share one array.
   requiredSkills: v.optional(v.array(skillSchema), () => []),

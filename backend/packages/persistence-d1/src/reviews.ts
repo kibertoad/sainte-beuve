@@ -16,6 +16,7 @@ import type {
   EpochMs,
   PullRequestKey,
   ReminderRepository,
+  RepositoryKey,
   ReviewListOrder,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
@@ -91,6 +92,29 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
       [this.orgId, ref.provider, ref.owner, ref.repo, ref.number],
     )
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
+  }
+
+  async listForRepository(
+    repository: RepositoryKey,
+    filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
+  ): Promise<ReviewRequest[]> {
+    if (filter.status.length === 0) return []
+    const rows = await this.db.all(
+      `SELECT data FROM review_requests
+WHERE org_id = ? AND pr_provider = ? AND pr_owner = ? AND pr_repo = ? AND created_at >= ?
+  AND status IN (${placeholders(filter.status.length)})
+ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [
+        this.orgId,
+        repository.provider,
+        repository.owner,
+        repository.repo,
+        filter.since,
+        ...filter.status,
+        filter.limit,
+      ],
+    )
+    return decodeRows(reviewRequestSchema, 'review_requests', rows)
   }
 
   async create(review: ReviewRequest): Promise<ReviewRequest> {

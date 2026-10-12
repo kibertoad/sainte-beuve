@@ -22,17 +22,18 @@ pull request is merged with its review findings fixed.
 | #   | Gap                                                           | Step | Depends on | Status      | PR                                                       |
 | --- | ------------------------------------------------------------- | ---- | ---------- | ----------- | -------------------------------------------------------- |
 | 1   | Ranked reviewer recommendations, with the reason for each     | 2    |            | In review   | [#31](https://github.com/kibertoad/sainte-beuve/pull/31) |
-| 2   | Pick recommended reviewers and send each a named ask          | 3    | 1          | Not started |                                                          |
-| 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | Not started |                                                          |
-| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | Not started |                                                          |
-| 5   | An AI review files under its repository's cat-factory service | 5    |            | Not started |                                                          |
+| 2   | Pick recommended reviewers and send each a named ask          | 3    | 1          | In review   | [#34](https://github.com/kibertoad/sainte-beuve/pull/34) |
+| 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | In review   | [#36](https://github.com/kibertoad/sainte-beuve/pull/36) |
+| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | In review   | [#35](https://github.com/kibertoad/sainte-beuve/pull/35) |
+| 5   | An AI review files under its repository's cat-factory service | 5    |            | In review   | [#33](https://github.com/kibertoad/sainte-beuve/pull/33) |
 | 6   | Start an AI review from any pull request row                  | 5    |            | In review   | [#32](https://github.com/kibertoad/sainte-beuve/pull/32) |
 | 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Not started |                                                          |
 | 8   | A commitment requests the reviewer on the host                | 3, 4 |            | In review   | [#30](https://github.com/kibertoad/sainte-beuve/pull/30) |
 | 9   | One matching rule for assignment and asks                     | 2    | 2          | Not started |                                                          |
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
-| 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
+| 12  | Challenge an AI review finding                                | 5    |            | In review   | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
+| 13  | A guided review names its cat-factory workspace               | 5    | 5          | In review   | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
 | 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | In review   | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
 
 Status is one of: Not started, In progress, In review, Merged.
@@ -152,6 +153,16 @@ finding. The curation screen has no way to ask for it.
 
 A challenge action on a finding files the investigation and shows the verdict on
 the finding.
+
+### 13. A guided review names its workspace
+
+`CatFactoryGuidedReviewGateway` sends no workspace on any call. cat-factory
+refuses a workspace-scoped call that names none when the key reaches several
+workspaces, so the guided review fails for every repository of such an org.
+
+Opening and looking up a session use the workspaces the org's repository mirror
+links the repository in. A call about a session names its pull request too, and
+is made in the workspace those same keys name.
 
 ### 14. Board lookups by host
 
