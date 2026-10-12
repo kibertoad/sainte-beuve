@@ -15,5 +15,5 @@ With cat-factory configured, an org's teams follow its cat-factory workspaces an
 follows the account's members, matched on their GitHub or GitLab account. A followed reviewer's
 name, handles and team are set in cat-factory and answer 409 here; a followed team cannot be
 renamed or deleted here. Somebody the directory stops listing is paused and signed out. The mirror
-is a new source-neutral `external_directory` table (D1 `0012_external_directory.sql`, Postgres
-`20261012114359_lovely_roughhouse`).
+is a new source-neutral `external_directory` table (D1 `0013_external_directory.sql`, Postgres
+`20261012115750_external_directory`).
