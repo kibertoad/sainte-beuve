@@ -165,6 +165,11 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
       }),
       null,
     )
+    assert.strictEqual(await stores.forOrg(ORG_B).commitments.setRequestedHandle('c1', 'x'), null)
+    assert.strictEqual(
+      (await stores.forOrg(ORG_A).commitments.getById('c1'))?.requestedHandle,
+      null,
+    )
   }),
 
   // The one read that crosses the boundary on purpose: a digest is presented

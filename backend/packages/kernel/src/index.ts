@@ -58,14 +58,12 @@ export { isStoredRowError, StoredRowError } from './ports/stored-row.js'
 export type {
   AiReviewRunRepository,
   ApiKeyRepository,
-  AttentionRepository,
   IdentityRepository,
   IntegrationTokenRepository,
   PersistenceKind,
   ProjectRepository,
   ReminderRepository,
   Repositories,
-  ReviewCommitmentRepository,
   ReviewerRepository,
   ReviewListOrder,
   ReviewRequestRepository,
@@ -75,6 +73,7 @@ export type {
   StoredSession,
 } from './ports/repositories.js'
 export type { ExternalRepositoryRepository } from './ports/external-repositories.js'
+export type { AttentionRepository, ReviewCommitmentRepository } from './ports/attention.js'
 export type {
   DirectoryDeliveryOutcome,
   DirectorySyncReport,

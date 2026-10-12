@@ -42,7 +42,12 @@ export {
   searchesBeyondProjects,
   unlinkedPullRequests,
 } from './merging.js'
-export { assembleReviewLists, type ReviewLists, type ReviewListsInput } from './reviewing.js'
+export {
+  assembleReviewLists,
+  placeCommitments,
+  type ReviewLists,
+  type ReviewListsInput,
+} from './reviewing.js'
 export {
   decideTeamAction,
   ownerOfNewTeam,
@@ -57,7 +62,14 @@ export {
   isInAttentionAudience,
   outstandingCommitments,
   selectAttentionAudience,
+  unaskableReason,
 } from './attention.js'
+export {
+  type RecipientRefusal,
+  type RecipientsInput,
+  type RecipientsResolution,
+  resolveAttentionRecipients,
+} from './recipients.js'
 export {
   diagnoseShortfall,
   distinctAsSpelled,

@@ -24,10 +24,13 @@ to be registered where, is [docs/integrations.md](./docs/integrations.md).
 
 ## The AI review is a loop, not a button
 
-Press **AI review** on a board row and the pull request goes to cat-factory,
-which fans the diff out across parallel reviewers. It posts nothing. It comes
-back and waits, and the row opens on what it found: each finding with its
-severity, the file and line it is about, and the fix it suggests.
+Press **AI review** on a pull request and it goes to cat-factory, which fans
+the diff out across parallel reviewers. The button is on every board row, and on
+the workspace, My PRs and My Reviews for any repository that is linked. A pull
+request that is not on the board yet is put there, because its board row is
+where the review is curated, and the button takes you to it. It posts nothing.
+It comes back and waits, and the row opens on what it found: each finding with
+its severity, the file and line it is about, and the fix it suggests.
 
 You are the gate. Tick the ones worth saying out loud (the blockers and the highs
 start ticked), **Dismiss** the noise, and then choose:
@@ -108,10 +111,17 @@ it yourself, and a busy expert still outranks an idle stranger. The list is the
 people an ask could reach, so it never names you, the author, anybody already
 on the pull request or paused, and it keeps to your team when the ask does.
 
-Everyone available who holds all of those skills is asked, two ways at once. A
-page already open is pushed the request over server-sent events; a page opened
-an hour later fetches the same thing over REST. Neither is a fallback for the
-other, and both carry the same payload.
+Tick people in that list and the ask goes to them by name: exactly those
+people, whatever skills they hold, and each of them sees who else was asked. It
+can wait for no more people than it names. Tick nobody and everyone available
+who holds all of the skills is asked instead, inside your team if you said so.
+Either way anybody can still volunteer, because a skill list is not in a
+position to overrule somebody's own judgement of what they can review.
+
+The ask is delivered two ways at once. A page already open is pushed the
+request over server-sent events; a page opened an hour later fetches the same
+thing over REST. Neither is a fallback for the other, and both carry the same
+payload.
 
 The ask ANSWERS ITSELF. Once enough people have said they will review, it is
 resolved and disappears from everybody's inbox, including the people who never
@@ -156,11 +166,15 @@ A GitHub App needs `Contents: Read & write` to merge.
 opened that you have a part in. It lists three things:
 
 - **Asked to review**: the host is waiting on your review. "I will review it"
-  records a commitment.
-- **Committed to reviewing**: the promises you made here, whether or not the host
-  knows about them.
+  records a commitment, which moves the pull request to the next list.
+- **Committed to reviewing**: the promises you made here.
 - **Reviewed**: still open, and you have reviewed them. One the host asks you to
   look at again moves back up to the first list.
+
+A commitment, made here or by answering an ask, requests your review on the
+host, so the pull request shows who took it. Releasing it takes that request
+back only if the commitment made it and you have not reviewed yet: a request the
+author or a board assignment made stays where it was.
 
 Like My PRs, it covers every repository the host search can see, and **Linked
 repositories only** narrows it to the registered projects. On GitLab, which keeps
