@@ -39,6 +39,7 @@ function stubSignIn(): VcsIdentityGateway & { redirects: string[] } {
         username: 'kibertoad',
         displayName: 'Igor',
         avatarUrl: null,
+        bot: false,
       },
     }),
   }
@@ -134,7 +135,6 @@ describe('GitHub and Slack connections', () => {
         appSlug: 'sainte-beuve',
         webhookSecret: 'secret',
         botLogin: null,
-        labels: harness.container.github.labels,
       },
     })
     await app.app.fetch(put(PAT_PATH, { token: 'ghp_0123456789abcd' }))
@@ -218,7 +218,6 @@ describe('GitHub and Slack connections', () => {
         appSlug: 'sainte-beuve',
         webhookSecret: null,
         botLogin: null,
-        labels: harness.container.github.labels,
       },
     })
     const { state, jar } = await startFlow(signing, `${CONNECTIONS}/github/app-install`)
@@ -279,7 +278,6 @@ describe('GitHub and Slack connections', () => {
         appSlug: 'sainte-beuve',
         webhookSecret: null,
         botLogin: null,
-        labels: harness.container.github.labels,
       },
     })
     const jar = cookieJar()
@@ -305,6 +303,68 @@ describe('GitHub and Slack connections', () => {
       github: { ...harness.container.github, webhookSecret: 'secret' },
     })
     expect((await github(verifying)).webhooksReady).toBe(true)
+  })
+})
+
+describe('the GitLab connection', () => {
+  let harness: TestHarness
+
+  beforeEach(() => {
+    harness = keyed()
+  })
+
+  it("reports GitLab's intake from this org's own secret, URL and credential", async () => {
+    const gitlabOf = async (target: TestHarness) =>
+      (await connections(target)).vcs.find((row) => row.provider === 'gitlab')
+    expect(await gitlabOf(harness)).toMatchObject({
+      inboundIntake: true,
+      webhooksReady: false,
+      webhookPath: '/webhooks/gitlab/default',
+      botLogin: null,
+    })
+    const secret = await harness.app.fetch(
+      put('/api/v1/settings/integrations/gitlab-webhook-secret/token', {
+        token: 'the-gitlab-webhook-token',
+      }),
+    )
+    expect(secret.status).toBe(200)
+    expect(await secret.json()).toMatchObject({ state: 'stored', inUse: true })
+    expect((await gitlabOf(harness))?.webhooksReady).toBe(true)
+  })
+
+  it('names a GitLab bot only when GitLab marks the stored token as a bot account', async () => {
+    const tokenAs = (username: string, bot: boolean) =>
+      keyed({
+        gateways: stubGateways({
+          vcsFromToken: () => ({
+            ...recordingVcs(),
+            identify: async () => ({
+              subject: '7',
+              username,
+              displayName: null,
+              avatarUrl: null,
+              bot,
+            }),
+          }),
+        }),
+      })
+    const gitlabWith = async (target: TestHarness) => {
+      const res = await target.app.fetch(
+        put('/api/v1/settings/integrations/gitlab-pat/token', { token: 'glpat-0123456789' }),
+      )
+      expect(res.status).toBe(200)
+      return (await connections(target)).vcs.find((row) => row.provider === 'gitlab')
+    }
+
+    expect(await gitlabWith(tokenAs('review-bot', true))).toMatchObject({
+      account: 'review-bot',
+      botLogin: 'review-bot',
+    })
+    // A person's own token is connected, and mentions of that person stay theirs.
+    expect(await gitlabWith(tokenAs('alice', false))).toMatchObject({
+      account: 'alice',
+      botLogin: null,
+    })
   })
 })
 

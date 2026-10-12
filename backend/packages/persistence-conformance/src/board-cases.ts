@@ -236,6 +236,18 @@ export const integrationTokenCases: readonly ConformanceCase[] = [
     assert.strictEqual((await repos.integrationTokens.get('slack'))?.subject, 'U42')
   }),
 
+  conformanceCase('a credential records whether its account is a bot', async (repos) => {
+    await repos.integrationTokens.put(
+      integrationToken('gitlab-pat', { subject: 'review-bot', subjectIsBot: true }),
+    )
+    await repos.integrationTokens.put(integrationToken('github-pat', { subject: 'ada' }))
+    assert.strictEqual((await repos.integrationTokens.get('gitlab-pat'))?.subjectIsBot, true)
+    assert.strictEqual((await repos.integrationTokens.get('github-pat'))?.subjectIsBot, false)
+    // A replacement carries its own answer rather than keeping the old one.
+    await repos.integrationTokens.put(integrationToken('gitlab-pat', { subject: 'ada' }))
+    assert.strictEqual((await repos.integrationTokens.get('gitlab-pat'))?.subjectIsBot, false)
+  }),
+
   conformanceCase('a credential that is not there reads as null', async (repos) => {
     assert.strictEqual(await repos.integrationTokens.get('github'), null)
     assert.deepStrictEqual(await repos.integrationTokens.list(), [])

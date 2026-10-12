@@ -1,0 +1,1 @@
+ALTER TABLE "integration_tokens" ADD COLUMN "subject_is_bot" boolean DEFAULT false NOT NULL;

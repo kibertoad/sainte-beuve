@@ -389,6 +389,7 @@ describe('Slack intake, per org', () => {
       sealed: await cipher.encrypt(secret, 'slack-signing-secret'),
       hint: secret.slice(-4),
       subject: null,
+      subjectIsBot: false,
       updatedAt: harness.clock.now(),
     })
   }

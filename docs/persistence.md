@@ -48,7 +48,7 @@ org gets there — no port method takes one, and no service passes one.
 | `review_requests`       | `(org_id, id)`                | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at`                                                                      |
 | `reminders`             | `(org_id, id)`                | `review_id`, `status`, `due_at`, `claimed_at`                                                                                   |
 | `ai_review_runs`        | `(org_id, id)`                | `review_id`, `status`, `requested_at`, `last_polled_at`                                                                         |
-| `integration_tokens`    | `(org_id, integration_id)`    | `sealed`, `hint`, `subject`, `updated_at` (no payload)                                                                          |
+| `integration_tokens`    | `(org_id, integration_id)`    | `sealed`, `hint`, `subject`, `subject_is_bot`, `updated_at` (no payload)                                                        |
 | `integration_configs`   | `(org_id, integration_id)`    | `updated_at`                                                                                                                    |
 | `projects`              | `(org_id, id)`                | `ref_key` (UNIQUE per org), `created_at`                                                                                        |
 | `external_repositories` | `(org_id, source, key)`       | `seq`                                                                                                                           |
