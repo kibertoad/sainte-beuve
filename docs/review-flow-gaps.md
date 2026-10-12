@@ -33,7 +33,7 @@ pull request is merged with its review findings fixed.
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
 | 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
-| 13  | A guided review names its cat-factory workspace               | 5    | 5          | In progress |                                                          |
+| 13  | A guided review names its cat-factory workspace               | 5    | 5          | In review   | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
 
 Status is one of: Not started, In progress, In review, Merged.
 
