@@ -183,6 +183,42 @@ describe('curating a delegated AI review', () => {
     expect(new Set(loop.catFactory.workspaces)).toStrictEqual(new Set(['ws-a']))
   })
 
+  /**
+   * The host's id survives a rename the mirror has not caught up with, and a
+   * repository recreated under the old name is a different one.
+   */
+  it('finds an adopted project in the directory by its id, not its name', async () => {
+    const { projects, externalRepositories } = loop.harness.container.repositories
+    const external = { source: 'cat-factory', id: '42' }
+    const held = await projects.getByRef(PR)
+    if (held === null) {
+      await projects.create({
+        id: 'project-1',
+        provider: PR.provider,
+        owner: PR.owner,
+        repo: PR.repo,
+        webUrl: null,
+        skills: [],
+        domains: [],
+        mergeComments: null,
+        restrictDirectMerge: false,
+        external,
+        createdAt: 0,
+      })
+    } else await projects.update(held.id, { external })
+    const listed = (key: string, repo: string, id: string) => ({
+      source: 'cat-factory',
+      key,
+      seq: 1,
+      repository: { provider: 'github' as const, owner: PR.owner, repo, id },
+    })
+    await externalRepositories.apply(listed('ws-a/42', 'its-old-name', '42'))
+    await externalRepositories.apply(listed('ws-b/43', PR.repo, '43'))
+
+    await parkedRun(loop)
+    expect(loop.catFactory.requested[0]?.directoryKeys).toStrictEqual(['ws-a/42'])
+  })
+
   it('resumes a stalled review without being told which slices to redo', async () => {
     const parked = await parkedRun(loop)
     const res = await loop.harness.app.fetch(post(`/api/v1/ai-review/runs/${parked.id}/resume`, {}))
