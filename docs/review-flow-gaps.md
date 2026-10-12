@@ -51,8 +51,9 @@ modal shows that list.
 
 ### 2. Named asks to picked reviewers
 
-An attention request goes to everyone available who holds every wanted skill.
-The author cannot address it to people.
+An attention request goes to everyone available who holds every wanted skill,
+optionally only within the requester's team. The author cannot address it to
+people.
 
 The modal lets the author tick reviewers from the ranked list. A request with
 named recipients reaches exactly those people, and the skill gate applies only
@@ -68,8 +69,9 @@ the org has Slack configured.
 
 ### 4. Past reviews in the same repository
 
-Selection reads skills, domains, weight and outstanding reviews. Nothing records
-or reads who has reviewed a repository before.
+Selection reads skills, domains, weight and outstanding reviews. A finished board
+review keeps the reviewers who were on it, but nothing reads that history when
+choosing the next one.
 
 The score gains a bounded bonus for reviews the candidate completed on the same
 repository, read from the board's own history, and the recommendation says so.
@@ -86,8 +88,8 @@ repositories are already synced from, with the org setting as the fallback.
 ### 6. AI review from any pull request row
 
 The AI review button lives on board rows only. A pull request reaches the board
-through a label, a webhook, Slack or the API, so the workspace, My PRs and My
-Reviews offer only the guided review.
+through a label, a webhook, Slack or the API, so the workspace and My Reviews
+offer only the guided review, and My PRs offers no review action at all.
 
 Those rows gain an AI review action that registers the pull request on the board
 when it is not there yet and files the review.
@@ -113,8 +115,8 @@ best-effort mirror the board uses, and withdrawing it removes the request.
 
 Board assignment scores skills and domains as a preference, while an attention
 request without named recipients requires every skill and ignores domains. The
-README and the implementation plan still describe the ALL-of gate as the
-selection rule.
+README, the implementation plan and `docs/integrations.md` still describe the
+ALL-of gate as the selection rule.
 
 Both paths share one rule, and the docs describe it.
 
