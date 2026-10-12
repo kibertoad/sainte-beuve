@@ -300,8 +300,8 @@ An AI review is filed under the service that backs its repository, read from
 the cat-factory workspace that links it, and in that workspace. The repository
 mirror described under "Repositories come from cat-factory" is what says which
 workspaces link it. The service id is the fallback for a repository no service
-backs, a monorepo for one, and a review on such a repository is refused while it
-is unset.
+backs, a monorepo for one, filed in the linking workspace that holds it, and a
+review on such a repository is refused while it is unset.
 
 The key spends one org's budget and the service is one org's repository frame,
 so a deployment-wide value would be lent across the tenancy boundary. That is the

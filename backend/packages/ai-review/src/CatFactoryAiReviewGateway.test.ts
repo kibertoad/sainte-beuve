@@ -15,7 +15,10 @@ interface Call {
   workspace: string | null
 }
 
-/** One canned answer, keyed by the path suffix the SDK asks for. */
+/**
+ * One canned answer, keyed by the path suffix the SDK asks for. A key of the
+ * form `<workspace> <suffix>` answers only a call that names that workspace.
+ */
 type Routes = Record<string, { status?: number; body: unknown }>
 
 function gatewayOver(
@@ -39,7 +42,11 @@ function gatewayOver(
         body: typeof raw === 'string' ? JSON.parse(raw) : null,
         workspace: new Headers(init?.headers).get('x-cat-factory-workspace'),
       })
-      const route = Object.entries(routes).find(([suffix]) => path.endsWith(suffix))
+      const workspace = new Headers(init?.headers).get('x-cat-factory-workspace')
+      const route = Object.entries(routes).find(([key]) => {
+        const [only, suffix] = key.includes(' ') ? key.split(' ') : [null, key]
+        return path.endsWith(suffix ?? '') && (only === null || only === workspace)
+      })
       if (route === undefined) {
         return new Response(JSON.stringify({ error: { code: 'not_found', message: path } }), {
           status: 404,
@@ -180,6 +187,11 @@ function repos(...entries: { repoId: number; serviceId: string | null; provider?
   }
 }
 
+/** One board service, as `GET /api/v1/services` lists it. */
+function service(serviceId: string) {
+  return { serviceId, title: serviceId, description: '', status: 'planned', type: 'service' }
+}
+
 describe('CatFactoryAiReviewGateway.requestReview', () => {
   it('files the task and starts it, and reports the handle the loop is tracked by', async () => {
     const { gateway, calls } = gatewayOver({
@@ -234,15 +246,48 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
   it('files under the default service when no service backs the repository', async () => {
     const { gateway, calls } = gatewayOver({
       '/repos': { body: repos({ repoId: 42, serviceId: null }) },
+      '/services': { body: { services: [] } },
       '/tasks': { body: task() },
       '/start': { body: task({ status: 'running' }) },
     })
 
     expect((await filing(gateway, ['ws-a/42'])).workspaceId).toBeNull()
-    expect(calls.slice(1).map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
+    expect(calls.slice(2).map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
       { path: '/api/v1/services/svc-1/tasks', workspace: null },
       { path: '/api/v1/tasks/task-1/start', workspace: null },
     ])
+  })
+
+  /**
+   * A key reaching several workspaces is refused a call that names none, so a
+   * monorepo's review could never be filed under the default service there.
+   */
+  it('files the default service in the linking workspace that holds it', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/repos': { body: repos({ repoId: 42, serviceId: null }) },
+      'ws-b /services': { body: { services: [service('svc-1')] } },
+      '/services': { body: { services: [service('svc-other')] } },
+      '/tasks': { body: task() },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    expect((await filing(gateway, ['ws-a/42', 'ws-b/42'])).workspaceId).toBe('ws-b')
+    expect(calls.slice(-2).map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
+      { path: '/api/v1/services/svc-1/tasks', workspace: 'ws-b' },
+      { path: '/api/v1/tasks/task-1/start', workspace: 'ws-b' },
+    ])
+  })
+
+  it('files where the repository is backed although another linking workspace refused', async () => {
+    const { gateway, calls } = gatewayOver({
+      'ws-a /repos': { status: 503, body: { error: { code: 'unavailable', message: 'down' } } },
+      'ws-b /repos': { body: repos({ repoId: 42, serviceId: 'svc-42' }) },
+      '/tasks': { body: task({ serviceId: 'svc-42' }) },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    expect((await filing(gateway, ['ws-a/42', 'ws-b/42'])).workspaceId).toBe('ws-b')
+    expect(calls.at(-2)?.path).toBe('/api/v1/services/svc-42/tasks')
   })
 
   it('refuses naming both fixes when nothing backs the repository and there is no default', async () => {
@@ -261,11 +306,14 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
    */
   it('does not fall back to the default when the workspace lookup is refused', async () => {
     const { gateway, calls } = gatewayOver({
+      'ws-b /repos': { body: repos({ repoId: 42, serviceId: null }) },
       '/repos': { status: 401, body: { error: { code: 'unauthorized', message: 'no such key' } } },
     })
 
-    await expect(filing(gateway, ['ws-a/42'])).rejects.toMatchObject({ code: 'forbidden' })
-    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos'])
+    await expect(filing(gateway, ['ws-a/42', 'ws-b/42'])).rejects.toMatchObject({
+      code: 'forbidden',
+    })
+    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos', '/api/v1/repos'])
   })
 
   it('asks about a run in the workspace it was filed in', async () => {
