@@ -8,6 +8,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import type {
   AttentionBus,
+  AttentionAskNotice,
   ChatGateway,
   GatewayFactory,
   Logger,
@@ -192,6 +193,7 @@ export function recordingVcs(): VcsGateway & {
     listOpenPullRequests: async () => [],
     searchOpenPullRequests: async () => [],
     lookupRepositories: async () => null,
+    pastReviewers: async () => [],
     ...noMerging(),
   }
 }
@@ -206,17 +208,47 @@ export function noMerging(): Pick<VcsGateway, 'pullRequestStatus' | 'merge'> {
   }
 }
 
+/** The attention-ask half of the chat port, for a fake that is never asked to DM one. */
+export function noAttentionDms(): Pick<ChatGateway, 'sendAttentionAsk' | 'updateAttentionAsk'> {
+  return {
+    sendAttentionAsk: () => Promise.reject(new Error('sendAttentionAsk is not stubbed')),
+    updateAttentionAsk: () => Promise.reject(new Error('updateAttentionAsk is not stubbed')),
+  }
+}
+
+/** One attention-ask DM a recording chat gateway was asked to send or update. */
+export interface RecordedAsk {
+  target: string
+  notice: AttentionAskNotice
+}
+
 /** A chat gateway that records what it posted where. */
-export function recordingChat(): ChatGateway & { posted: { target: string; kind: string }[] } {
+export function recordingChat(): ChatGateway & {
+  posted: { target: string; kind: string }[]
+  asks: RecordedAsk[]
+  askUpdates: RecordedAsk[]
+} {
   const posted: { target: string; kind: string }[] = []
+  const asks: RecordedAsk[] = []
+  const askUpdates: RecordedAsk[] = []
   return {
     posted,
+    asks,
+    askUpdates,
     announceReview: async (_review, channelId) => {
       posted.push({ target: channelId, kind: 'announcement' })
       return { messageId: 'ts-1' }
     },
     sendReminder: async (reminder, _review, target) => {
       posted.push({ target, kind: reminder.kind })
+    },
+    // A DM lands in a conversation of its own, named here after the user.
+    sendAttentionAsk: async (notice, target) => {
+      asks.push({ target, notice })
+      return { conversationId: `D-${target}`, messageId: `ts-${asks.length}` }
+    },
+    updateAttentionAsk: async (notice, message) => {
+      askUpdates.push({ target: message.conversationId, notice })
     },
   }
 }

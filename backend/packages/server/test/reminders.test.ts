@@ -18,6 +18,7 @@ import {
   patch,
   post,
   PR,
+  noAttentionDms,
   stubGateways,
 } from './helpers.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
@@ -34,6 +35,7 @@ function recordingChat(): ChatGateway & { delivered: { kind: string; target: str
     sendReminder: async (reminder, _review, target) => {
       delivered.push({ kind: reminder.kind, target })
     },
+    ...noAttentionDms(),
   }
 }
 
@@ -623,6 +625,7 @@ describe('a tick across tenancies', () => {
       sendReminder: async () => {
         order.push('nudge')
       },
+      ...noAttentionDms(),
     }
     const harness = buildHarness(
       {

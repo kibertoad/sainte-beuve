@@ -1,4 +1,4 @@
-import type { AttentionRecipient, Reviewer } from '@sainte-beuve/contracts'
+import type { Reviewer } from '@sainte-beuve/contracts'
 import { unaskableReason } from './attention.js'
 
 /**
@@ -26,7 +26,7 @@ export type RecipientRefusal =
   | { reason: 'requester' | 'paused' | 'author'; reviewer: Reviewer }
 
 export type RecipientsResolution =
-  | { ok: true; recipients: AttentionRecipient[] }
+  | { ok: true; reviewers: Reviewer[] }
   | { ok: false; refusal: RecipientRefusal }
 
 export function resolveAttentionRecipients(input: RecipientsInput): RecipientsResolution {
@@ -36,14 +36,14 @@ export function resolveAttentionRecipients(input: RecipientsInput): RecipientsRe
   }
   const directory = new Map(input.directory.map((reviewer) => [reviewer.id, reviewer]))
   const authors = new Set(input.authorIds)
-  const recipients: AttentionRecipient[] = []
+  const reviewers: Reviewer[] = []
   for (const reviewerId of wanted) {
     const reviewer = directory.get(reviewerId)
     if (reviewer === undefined) return { ok: false, refusal: { reason: 'unknown', reviewerId } }
     const reason =
       unaskableReason(reviewer, input.requestedById) ?? (authors.has(reviewerId) ? 'author' : null)
     if (reason !== null) return { ok: false, refusal: { reason, reviewer } }
-    recipients.push({ reviewerId, displayName: reviewer.displayName })
+    reviewers.push(reviewer)
   }
-  return { ok: true, recipients }
+  return { ok: true, reviewers }
 }

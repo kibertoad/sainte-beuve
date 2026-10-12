@@ -294,6 +294,7 @@ describe('a pasted GitHub credential', () => {
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
           lookupRepositories: async () => null,
+          pastReviewers: async () => [],
           ...noMerging(),
           identify: async () => ({
             subject: '4249249',
@@ -326,6 +327,7 @@ describe('a pasted GitHub credential', () => {
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
           lookupRepositories: async () => null,
+          pastReviewers: async () => [],
           ...noMerging(),
           identify: () => Promise.reject(refused),
         }),

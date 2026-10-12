@@ -35,19 +35,13 @@ describe('resolveAttentionRecipients', () => {
   it('names nobody when the requester named nobody, whatever the ask waits for', () => {
     expect(resolveAttentionRecipients(input({ recipientIds: [], neededCommitments: 3 }))).toEqual({
       ok: true,
-      recipients: [],
+      reviewers: [],
     })
   })
 
-  it('keeps the names in the order given, a repeated one once, with the directory name', () => {
+  it('keeps the names in the order given, a repeated one once, as their directory entries', () => {
     const resolution = resolveAttentionRecipients(input({ recipientIds: ['b', 'a', 'b'] }))
-    expect(resolution).toEqual({
-      ok: true,
-      recipients: [
-        { reviewerId: 'b', displayName: 'Reviewer b' },
-        { reviewerId: 'a', displayName: 'Reviewer a' },
-      ],
-    })
+    expect(resolution).toEqual({ ok: true, reviewers: [reviewer('b'), reviewer('a')] })
   })
 
   it('refuses waiting for more people than it names, counting a repeat once', () => {

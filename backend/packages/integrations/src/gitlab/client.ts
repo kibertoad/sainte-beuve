@@ -23,6 +23,9 @@ export const GITLAB_BASE_URL = 'https://gitlab.com'
 /** GitLab serves its REST API under this prefix on every install, hosted or not. */
 const API_PREFIX = '/api/v4'
 
+/** And its GraphQL endpoint here. */
+export const GITLAB_GRAPHQL_ROOT = '/api'
+
 /** A GitLab answer that was not a success, with the status kept as a field. */
 export class GitLabApiError extends UpstreamFailedError {
   readonly status: number
@@ -50,8 +53,10 @@ export function projectPath(owner: string, repo: string): string {
 
 export interface GitLabRequest {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
-  /** Path under `/api/v4`, e.g. `/projects/x/merge_requests`. */
+  /** Path under `root`, e.g. `/projects/x/merge_requests`. */
   path: string
+  /** The API root the path is under. The REST one, `/api/v4`, unless told. */
+  root?: string
   /** A personal access token or an OAuth token; GitLab accepts both as a bearer. */
   token: string
   body?: unknown
@@ -63,7 +68,7 @@ export interface GitLabRequest {
 
 /** One GitLab call, returning the parsed body. A 204 parses as null. */
 export async function gitlabRequest<T>(request: GitLabRequest): Promise<T> {
-  const url = `${trimBase(request.baseUrl)}${API_PREFIX}${request.path}`
+  const url = `${trimBase(request.baseUrl)}${request.root ?? API_PREFIX}${request.path}`
   let response: Response
   try {
     response = await withDeadline(request.fetchImpl)(url, {

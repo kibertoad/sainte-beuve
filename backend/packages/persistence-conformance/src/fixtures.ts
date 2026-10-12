@@ -197,6 +197,7 @@ export function attentionRequest(
     requestedById: 'reviewer-1',
     requestedByName: 'Reviewer 1',
     recipients: [],
+    chatDeliveries: [],
     requiredSkills: ['typescript'],
     sameTeamOnly: false,
     team: 'platform',
