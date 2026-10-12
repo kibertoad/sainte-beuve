@@ -139,7 +139,9 @@ can wait for no more people than it names. Tick nobody and the ask goes to
 everyone available who holds at least half of what is wanted: the picked skills,
 or the pull request's own when none are picked, and the repository's domains. It
 stays inside your team if you said so, and an ask on a repository that wants
-nothing in particular reaches everybody available.
+nothing in particular reaches everybody available. An ask that would reach
+nobody because nobody available holds half of what it wants is refused, so you
+can pick fewer skills or name people instead.
 Either way anybody can still volunteer, because a skill list is not in a
 position to overrule somebody's own judgement of what they can review.
 

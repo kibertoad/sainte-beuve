@@ -162,4 +162,20 @@ describe('what a broadcast ask is matched against', () => {
       { recipientId: zed.id, matchedSkills: [], matchedDomains: ['billing'] },
     ])
   })
+
+  it('refuses an ask whose wanted mix nobody available holds half of', async () => {
+    const asker = harnessFor('kibertoad')
+    await registerProject(asker, ['Backend', 'Frontend', 'Mobile'], [])
+    await addReviewer(asker, {
+      displayName: 'Backender',
+      handles: { github: 'backender' },
+      skills: ['Backend'],
+    })
+
+    const res = await asker.app.fetch(post(ATTENTION, { pullRequest: PR, title: 'Bill it' }))
+    expect(res.status).toBe(400)
+    expect(await asker.container.repositories.attention.list({ status: ['open'] })).toStrictEqual(
+      [],
+    )
+  })
 })

@@ -29,8 +29,7 @@ import {
 } from '../../integrations/reviewRequests.js'
 import { refreshAskDeliveries, sendAskDms, tellRequesterShort } from './askDeliveries.js'
 import { changeAsk } from './changeAsk.js'
-import { loadPullRequestContext, wantedFor } from '../reviewers/wanted.js'
-import { namedAdditions, namedRecipients, rankedCandidates } from './recipients.js'
+import { addressAsk, namedAdditions, rankedCandidates } from './recipients.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -60,13 +59,7 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
-    const [named, context] = await Promise.all([
-      namedRecipients(this.container, viewer, input),
-      loadPullRequestContext(this.container, input.pullRequest),
-    ])
-    // What the ask wants is captured with it, like the team: editing the
-    // repository's vocabulary later does not re-address an ask already out.
-    const wanted = wantedFor(input.requiredSkills, context)
+    const { named, wanted } = await addressAsk(this.container, viewer, input)
     const recipients = named.map((reviewer) => ({
       reviewerId: reviewer.id,
       displayName: reviewer.displayName,
