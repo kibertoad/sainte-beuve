@@ -6,6 +6,12 @@ export interface AttentionRepository {
   list(filter?: { status?: AttentionStatus[] }): Promise<AttentionRequest[]>
   getById(attentionId: string): Promise<AttentionRequest | null>
   create(request: AttentionRequest): Promise<AttentionRequest>
+  /**
+   * Merge the patch into the stored ask and answer with the row as it now
+   * stands. Atomic per call: two updates naming different fields both survive
+   * however they interleave, which is what lets an ask record its DMs while
+   * somebody commits to it.
+   */
   update(attentionId: string, patch: Partial<AttentionRequest>): Promise<AttentionRequest | null>
 }
 

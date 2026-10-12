@@ -22,7 +22,7 @@ import {
   requestCommittedReviewer,
   withdrawCommittedReviewer,
 } from '../../integrations/reviewRequests.js'
-import { deliverAsk, refreshAskDeliveries } from './askDeliveries.js'
+import { refreshAskDeliveries, sendAskDms } from './askDeliveries.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -58,7 +58,7 @@ export class AttentionService {
       displayName: reviewer.displayName,
     }))
     const now = clock.now()
-    const draft: AttentionRequest = {
+    const request = await repositories.attention.create({
       id: ids.next(),
       pullRequest: input.pullRequest,
       title: input.title,
@@ -79,14 +79,9 @@ export class AttentionService {
       updatedAt: now,
       resolvedAt: null,
       chatDeliveries: [],
-    }
-    // The DMs go out BEFORE the row is stored, so the one write carries where
-    // they landed. Stored first and patched after, a commit landing between
-    // the two writes would be overwritten by the patch, or overwrite it.
-    const chatDeliveries = await deliverAsk(this.container, draft, named)
-    const request = await repositories.attention.create({ ...draft, chatDeliveries })
+    })
     this.publish('opened', request)
-    return request
+    return sendAskDms(this.container, request, named)
   }
 
   /**

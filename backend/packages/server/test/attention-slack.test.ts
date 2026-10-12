@@ -123,6 +123,52 @@ describe('the Slack DMs of a named ask', () => {
     expect(request.chatDeliveries).toStrictEqual([])
   })
 
+  it('takes a commit pressed while the other DMs are still in flight, and closes that DM', async () => {
+    let committed: AttentionRequest | null = null
+    const racing: ChatGateway = {
+      ...chat,
+      sendAttentionAsk: async (notice, target) => {
+        const message = await chat.sendAttentionAsk(notice, target)
+        if (target === 'U-ada') committed = await commit(as(asker, 'ada'), notice.request.id)
+        return message
+      },
+    }
+    const request = await raise(buildHarness({ ...asker.container, chat: racing }), {
+      recipientIds: [ada.id, bo.id],
+      neededCommitments: 2,
+    })
+
+    expect(committed).not.toBeNull()
+    expect(request.commitments.map((entry) => entry.reviewerId)).toStrictEqual([ada.id])
+    expect(request.chatDeliveries.map((delivery) => delivery.reviewerId)).toStrictEqual([
+      ada.id,
+      bo.id,
+    ])
+    expect(chat.askUpdates.map((update) => update.target)).toStrictEqual(['D-U-ada'])
+  })
+
+  it('raises the ask when recording where its DMs landed fails', async () => {
+    const { repositories } = asker.container
+    const brokenUpdates = buildHarness({
+      ...asker.container,
+      repositories: {
+        ...repositories,
+        attention: {
+          list: (filter) => repositories.attention.list(filter),
+          getById: (id) => repositories.attention.getById(id),
+          create: (request) => repositories.attention.create(request),
+          update: async () => {
+            throw new Error('the attention store is down')
+          },
+        },
+      },
+    })
+    const request = await raise(brokenUpdates, { recipientIds: [ada.id] })
+    expect(request.status).toBe('open')
+    expect(chat.asks.map((ask) => ask.target)).toStrictEqual(['U-ada'])
+    expect(request.chatDeliveries).toStrictEqual([])
+  })
+
   it('raises the ask with no DMs when a read on the way to Slack fails', async () => {
     const { repositories } = asker.container
     const brokenProjects = buildHarness({
