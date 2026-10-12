@@ -211,6 +211,7 @@ async function release(commitmentId: string) {
               >
                 Hand back
               </UButton>
+              <AiReviewButton :pull-request="commitment.pullRequest" :title="commitment.title" />
               <UButton
                 :to="guidedReviewRoute(commitment.pullRequest)"
                 size="sm"

@@ -41,7 +41,7 @@ import { curationFor } from './reconcile.js'
 /** What a route answers when cat-factory is not configured. Only filing needs a service id. */
 const notConfigured = (needs: string) =>
   `cat-factory is not configured for this org: an admin sets its ${needs} and an API key with the \`decide\` scope on the Configuration screen`
-const NOT_CONFIGURED = notConfigured('base URL, a service id')
+export const NOT_CONFIGURED = notConfigured('base URL, a service id')
 const NO_ACCESS = notConfigured('base URL')
 
 /** The states a poll can still learn something from. Anything else is settled. */

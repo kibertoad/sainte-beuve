@@ -3,6 +3,7 @@ import {
   getAiReviewRunContract,
   listAiReviewRunsContract,
   requestAiReviewContract,
+  requestPullRequestAiReviewContract,
   resolveAiReviewContract,
   resumeAiReviewContract,
 } from '@sainte-beuve/contracts'
@@ -10,6 +11,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { AiReviewService } from './AiReviewService.js'
+import { requestPullRequestAiReview } from './pullRequestAiReview.js'
 
 /**
  * The AI-review loop: hand a pull request to cat-factory, read what it found,
@@ -29,6 +31,12 @@ export function aiReviewController(): Hono<AppEnv> {
     const service = new AiReviewService(c.get('container'))
     const { reviewId } = c.req.valid('param')
     return c.json(await service.request(reviewId, c.req.valid('json').instructions), 202)
+  })
+
+  // The same filing from a row that is not on the board yet: the workspace, My
+  // PRs and My Reviews. The run names the board row it was filed on.
+  buildHonoRoute(app, requestPullRequestAiReviewContract, async (c) => {
+    return c.json(await requestPullRequestAiReview(c.get('container'), c.req.valid('json')), 202)
   })
 
   buildHonoRoute(app, listAiReviewRunsContract, async (c) => {

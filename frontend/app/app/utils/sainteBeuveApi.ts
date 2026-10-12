@@ -1,5 +1,4 @@
 import type {
-  AiReviewResolution,
   CreateAttentionRequestInput,
   CreateProjectInput,
   PullRequestRef,
@@ -17,12 +16,10 @@ import {
   commitToAttentionContract,
   commitToPullRequestContract,
   createApiKeyContract,
-  dismissAiReviewFindingContract,
   getAuthStateContract,
   getViewerContract,
   getWorkspaceContract,
   issuePath,
-  listAiReviewRunsContract,
   listApiKeysContract,
   listAttentionContract,
   listProjectsContract,
@@ -30,10 +27,7 @@ import {
   listReviewsContract,
   releaseCommitmentContract,
   removeProjectContract,
-  requestAiReviewContract,
   requestAttentionContract,
-  resolveAiReviewContract,
-  resumeAiReviewContract,
   revokeApiKeyContract,
   signOutContract,
   startSessionSignInContract,
@@ -53,6 +47,7 @@ import { sendByApiContract, UnexpectedResponseError } from '@toad-contracts/fron
 import wretch from 'wretch'
 import type { RequestParams, SuccessBody } from './contractCall'
 import { capabilityCalls } from './capabilitiesApi'
+import { aiReviewCalls } from './aiReviewApi'
 import { guidedReviewCalls } from './guidedReviewApi'
 import { myPullRequestCalls } from './myPullRequestsApi'
 import { myReviewCalls } from './myReviewsApi'
@@ -334,25 +329,7 @@ export function createSainteBeuveApi(apiBase: string) {
     assignReviewers: (reviewId: string, count = 1) =>
       call(assignReviewersContract, { pathParams: { reviewId }, body: { count } }),
 
-    // The AI-review loop. Filing is addressed by review; everything after it by
-    // the delegated RUN, the way cat-factory's own decision surface is.
-    requestAiReview: (reviewId: string, instructions: string | null = null) =>
-      call(requestAiReviewContract, { pathParams: { reviewId }, body: { instructions } }),
-    /** Every delegated run for one review. Each in-flight one is POLLED to answer this. */
-    listAiReviewRuns: (reviewId: string) =>
-      call(listAiReviewRunsContract, { pathParams: { reviewId } }),
-    dismissAiReviewFinding: (runId: string, findingId: string) =>
-      call(dismissAiReviewFindingContract, { pathParams: { runId, findingId }, body: {} }),
-    /**
-     * Act on the curated selection. The answer is the run having ACCEPTED the
-     * instruction: cat-factory posts asynchronously, and what landed shows up on a
-     * later read as the curation's `postReport`.
-     */
-    resolveAiReview: (runId: string, action: AiReviewResolution, findingIds: string[]) =>
-      call(resolveAiReviewContract, { pathParams: { runId }, body: { action, findingIds } }),
-    resumeAiReview: (runId: string) =>
-      call(resumeAiReviewContract, { pathParams: { runId }, body: {} }),
-
+    ...aiReviewCalls(call),
     ...guidedReviewCalls(call),
     ...myPullRequestCalls(call),
     ...myReviewCalls(call),
