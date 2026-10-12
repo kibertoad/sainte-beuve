@@ -32,7 +32,7 @@ pull request is merged with its review findings fixed.
 | 9   | One matching rule for assignment and asks                     | 2    | 2          | Not started |                                                          |
 | 10  | cat-factory workspaces and users feed teams and reviewers     | 1    |            | Not started |                                                          |
 | 11  | GitLab webhook intake                                         | 5    |            | Not started |                                                          |
-| 12  | Challenge an AI review finding                                | 5    |            | Not started |                                                          |
+| 12  | Challenge an AI review finding                                | 5    |            | In review   | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
 
 Status is one of: Not started, In progress, In review, Merged.
 
