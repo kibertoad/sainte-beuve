@@ -24,7 +24,7 @@ pull request is merged with its review findings fixed.
 | 1   | Ranked reviewer recommendations, with the reason for each     | 2    |            | In review   | [#31](https://github.com/kibertoad/sainte-beuve/pull/31) |
 | 2   | Pick recommended reviewers and send each a named ask          | 3    | 1          | Not started |                                                          |
 | 3   | A named ask reaches the reviewer as a Slack DM                | 3    | 2          | Not started |                                                          |
-| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | Not started |                                                          |
+| 4   | Bonus for past reviews in the same repository                 | 2    | 1          | In review   | [#35](https://github.com/kibertoad/sainte-beuve/pull/35) |
 | 5   | An AI review files under its repository's cat-factory service | 5    |            | Not started |                                                          |
 | 6   | Start an AI review from any pull request row                  | 5    |            | Not started |                                                          |
 | 7   | Decline an ask, and re-ask the next candidate                 | 3    | 2          | Not started |                                                          |
