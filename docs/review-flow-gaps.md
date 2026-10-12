@@ -140,7 +140,8 @@ Workspaces become teams and directory users become reviewers, matched on their
 GitHub or GitLab account, which cat-factory publishes on a directory user from
 [kibertoad/cat-factory#2358](https://github.com/kibertoad/cat-factory/pull/2358).
 Until an instance serves that, workspaces still become teams and nobody is
-matched.
+matched. A new reviewer joins paused with no skills, so a first sync that adds
+many people sends no reviews their way before an admin sets them up.
 
 ### 11. GitLab intake
 

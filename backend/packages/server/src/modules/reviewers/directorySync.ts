@@ -1,8 +1,15 @@
-import type { ExternalPerson, ExternalRef, PeopleSync } from '@sainte-beuve/contracts'
+import type {
+  ExternalPerson,
+  ExternalRef,
+  IdentityProvider,
+  PeopleSync,
+  Reviewer,
+} from '@sainte-beuve/contracts'
 import {
   accountKey,
   type DirectoryPeoplePlan,
   type DirectoryTeamPlan,
+  handleMatchCandidates,
   planDirectoryPeople,
   planDirectoryTeams,
 } from '@sainte-beuve/reviewers'
@@ -34,14 +41,20 @@ export async function syncDirectoryPeople(
   let changed = await applyTeamPlan(container, teamPlan)
 
   const persons = personEntries.flatMap((entry) => entry.record ?? [])
+  const reviewers = await container.repositories.reviewers.list()
+  const [owners, hosts] = await Promise.all([
+    accountOwners(container, persons),
+    linkedHosts(container, handleMatchCandidates(source, reviewers, persons)),
+  ])
   const peoplePlan = planDirectoryPeople({
     source,
-    reviewers: await container.repositories.reviewers.list(),
+    reviewers,
     persons,
     everListed: personEntries.length > 0,
     memberships: membershipEntries.flatMap((entry) => entry.record ?? []),
     teamNameByGroup: teamPlan.nameByGroup,
-    accountOwners: await accountOwners(container, persons),
+    accountOwners: owners,
+    linkedHosts: hosts,
   })
   changed += await applyPeoplePlan(container, peoplePlan)
   return { changed, people: peoplePlan.summary }
@@ -74,21 +87,8 @@ async function applyPeoplePlan(container: AppContainer, plan: DirectoryPeoplePla
   const { reviewers, identities } = container.repositories
   const now = container.clock.now()
   for (const { reviewerId, patch } of plan.update) await reviewers.update(reviewerId, patch)
-  for (const { accounts, ...fields } of plan.create) {
-    const created = await reviewers.create({
-      ...fields,
-      id: container.ids.next(),
-      slackUserId: null,
-      skills: [],
-      domains: [],
-      availability: 'available',
-      role: 'member',
-      weight: 1,
-      outstandingReviews: 0,
-      createdAt: now,
-    })
-    for (const account of accounts) await identities.link(created.id, linked(account, now))
-  }
+  let created = 0
+  for (const newcomer of plan.create) if (await createNewcomer(container, newcomer)) created += 1
   for (const { reviewerId, account } of plan.link) {
     await identities.link(reviewerId, linked(account, now))
   }
@@ -98,7 +98,55 @@ async function applyPeoplePlan(container: AppContainer, plan: DirectoryPeoplePla
     // Leaving the directory is leaving the org, so it ends their sessions as a pause by an admin does.
     await sessions.revokeForReviewer(reviewerId)
   }
-  return plan.update.length + plan.create.length + plan.pause.length
+  return plan.update.length + created + plan.pause.length
+}
+
+/**
+ * Write one new reviewer, claiming their first host account BEFORE the row, as
+ * a sign-in does: two settles running at once (a push and the clock) both plan
+ * the same newcomer, and the claim is what decides which one writes them. A
+ * claim whose row never got written (a settle that died between the two) is
+ * finished under the claimed id. Answers whether this call wrote the row.
+ */
+async function createNewcomer(
+  container: AppContainer,
+  { accounts: [first, ...others], ...fields }: DirectoryPeoplePlan['create'][number],
+): Promise<boolean> {
+  const { reviewers, identities } = container.repositories
+  const now = container.clock.now()
+  const candidateId = container.ids.next()
+  const reviewerId = await identities.link(candidateId, linked(first, now))
+  if (reviewerId !== candidateId && (await reviewers.getById(reviewerId)) !== null) return false
+  await reviewers.create({
+    ...fields,
+    id: reviewerId,
+    slackUserId: null,
+    skills: [],
+    domains: [],
+    role: 'member',
+    weight: 1,
+    outstandingReviews: 0,
+    createdAt: now,
+  })
+  for (const account of others) await identities.link(reviewerId, linked(account, now))
+  return true
+}
+
+/**
+ * Let go of every team and reviewer one source follows, when the org stops
+ * following it. The rows stay, now the admins' to edit; a later connection,
+ * possibly to another instance, matches them afresh instead of reading a
+ * workspace or a person it never listed as one that went away.
+ */
+export async function detachDirectory(container: AppContainer, source: string): Promise<void> {
+  const { teams, reviewers } = container.repositories
+  for (const team of await teams.list()) {
+    if (team.external?.source === source) await teams.update(team.id, { external: null })
+  }
+  for (const reviewer of await reviewers.list()) {
+    if (reviewer.external?.source === source)
+      await reviewers.update(reviewer.id, { external: null })
+  }
 }
 
 function linked(account: ExternalPerson['accounts'][number], now: number) {
@@ -125,6 +173,23 @@ async function accountOwners(
       const owner = owners[at]
       return owner === null || owner === undefined ? [] : [[accountKey(account), owner] as const]
     }),
+  )
+}
+
+/** The hosts each of these reviewers has an account linked on. */
+async function linkedHosts(
+  container: AppContainer,
+  candidates: readonly Reviewer[],
+): Promise<Map<string, Set<IdentityProvider>>> {
+  const { identities } = container.repositories
+  const linkedPerReviewer = await Promise.all(
+    candidates.map((reviewer) => identities.listForReviewer(reviewer.id)),
+  )
+  return new Map(
+    candidates.map((reviewer, at) => [
+      reviewer.id,
+      new Set((linkedPerReviewer[at] ?? []).map((identity) => identity.provider)),
+    ]),
   )
 }
 

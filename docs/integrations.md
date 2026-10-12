@@ -455,14 +455,23 @@ account's people and workspaces:
   removed.
 - Each cat-factory user is matched to a reviewer: the one already following
   them, else the one their GitHub or GitLab account is linked to here, else the
-  one with that handle on that host. Somebody unmatched becomes a new reviewer,
-  and the account is linked to the reviewer, so their sign-in lands on that row.
+  one with that handle on that host and no other account linked on that host.
+  Somebody unmatched becomes a new reviewer, and the account is linked to the
+  reviewer, so their sign-in lands on that row.
+- A new reviewer joins paused, with no skills. A source can list hundreds of
+  people at once, and drawn straight away they would take reviews nobody chose
+  them for. The cat-factory screen counts the followed reviewers still paused
+  with no skills; an admin gives them skills and resumes them.
 - A followed reviewer the directory stops listing is paused and signed out,
   never deleted. Coming back does not resume them; an admin does.
 - The directory owns a followed reviewer's name, handles and team (one of the
-  teams their workspaces put them in). Changing those here answers 409 while the
-  sync is on, as renaming or deleting a followed team does. Skills, domains,
-  weight, availability, role and Slack stay this org's.
+  teams their workspaces put them in, which is what the reviewer form offers).
+  Changing those here answers 409 while the sync is on, as renaming or deleting
+  a followed team does. Skills, domains, weight, availability, role and Slack
+  stay this org's.
+- Clearing cat-factory, or pointing it at another instance, lets go of the
+  teams and reviewers it followed. They stay, now the admins' to edit, and a
+  later connection matches them afresh.
 
 Matching needs the host accounts cat-factory publishes on a directory user
 (`accounts`, from OpenAPI 1.83.0,
@@ -471,6 +480,17 @@ An instance without them lists every user with none: the workspaces still become
 teams, nobody is matched or added, and the cat-factory screen counts the people
 it could not match. Everyone is matched on the first sync after the instance
 upgrades, because the daily walk reads every user again.
+
+cat-factory lists users only to a key that reaches every workspace. A key
+limited to some workspaces is refused them (`403 account_scope_required`): its
+workspaces still become teams, nobody is matched or added, and the cat-factory
+screen says the key is why, from what `GET /api/v1/me` reports at each full
+walk.
+
+The teams and reviewers are brought to the mirror after a sync that moved the
+feed position or walked the snapshots. A catch-up that found nothing new since
+the last completed one writes nothing, so a reviewer an admin adds by hand is
+matched on the next change in cat-factory or the next daily walk.
 
 People, groups and memberships are mirrored in `external_directory`, keyed by
 source and kind, beside `external_repositories`. Turning the sync on for an org

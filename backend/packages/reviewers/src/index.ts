@@ -43,6 +43,7 @@ export {
   type DirectoryOwnedFields,
   type DirectoryPeopleInput,
   type DirectoryPeoplePlan,
+  handleMatchCandidates,
   planDirectoryPeople,
 } from './directoryPeople.js'
 export { type DirectoryTeamPlan, planDirectoryTeams } from './directoryTeams.js'

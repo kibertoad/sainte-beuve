@@ -9,6 +9,8 @@ export interface RepositorySyncState extends RepositorySync {
   cursor: number | null
   /** What the mirror held when it was last walked whole. See `DIRECTORY_MIRROR_VERSION`. */
   mirrorVersion: number | null
+  /** The feed position the last completed settle brought the org to. */
+  settledCursor: number | null
 }
 
 /**
@@ -21,12 +23,14 @@ export const DIRECTORY_MIRROR_VERSION = 2
 const EMPTY: RepositorySyncState = {
   cursor: null,
   mirrorVersion: null,
+  settledCursor: null,
   syncedAt: null,
   reconciledAt: null,
   webhook: 'pending',
   webhookUrl: null,
   error: null,
   people: null,
+  reach: null,
 }
 
 function stateId(source: string): string {
@@ -42,6 +46,7 @@ export async function readRepositorySyncState(
   return {
     cursor: numberOrNull(values.cursor),
     mirrorVersion: numberOrNull(values.mirrorVersion),
+    settledCursor: numberOrNull(values.settledCursor),
     syncedAt: numberOrNull(values.syncedAt),
     reconciledAt: numberOrNull(values.reconciledAt),
     webhook:
@@ -49,6 +54,7 @@ export async function readRepositorySyncState(
     webhookUrl: values.webhookUrl ?? null,
     error: values.error ?? null,
     people: peopleOf(values),
+    reach: values.reach === 'account' || values.reach === 'workspaces' ? values.reach : null,
   }
 }
 
@@ -75,6 +81,7 @@ export async function writeRepositorySyncState(
 export function repositorySyncOf({
   cursor: _cursor,
   mirrorVersion: _mirrorVersion,
+  settledCursor: _settledCursor,
   ...sync
 }: RepositorySyncState): RepositorySync {
   return sync
@@ -92,6 +99,7 @@ function flatPeople(people: PeopleSync | null): Record<string, number | null> {
     peopleListed: people?.listed ?? null,
     peopleLinked: people?.linked ?? null,
     peopleWithoutAccount: people?.withoutAccount ?? null,
+    peopleAwaitingSetup: people?.awaitingSetup ?? null,
   }
 }
 
@@ -102,6 +110,7 @@ function peopleOf(values: Record<string, string>): PeopleSync | null {
     listed,
     linked: numberOrNull(values.peopleLinked) ?? 0,
     withoutAccount: numberOrNull(values.peopleWithoutAccount) ?? 0,
+    awaitingSetup: numberOrNull(values.peopleAwaitingSetup) ?? 0,
   }
 }
 

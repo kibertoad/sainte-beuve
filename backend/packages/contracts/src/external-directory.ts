@@ -78,5 +78,10 @@ export const peopleSyncSchema = v.object({
   linked: v.number(),
   /** Listed people with no GitHub or GitLab account at the source, so nobody here can be matched to them. */
   withoutAccount: v.number(),
+  /**
+   * Of the linked ones, those paused with no skills, out of the draw until an
+   * admin sets them up. A reviewer the directory adds starts this way.
+   */
+  awaitingSetup: v.optional(v.number(), 0),
 })
 export type PeopleSync = v.InferOutput<typeof peopleSyncSchema>

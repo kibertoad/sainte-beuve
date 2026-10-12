@@ -238,7 +238,8 @@ assignment and a signed-in host account point at.
 
 With cat-factory configured, the pool follows its directory: every member of the
 account is a reviewer, matched on their GitHub or GitLab account, and every
-workspace is a team. Their name, handles and team are then set in cat-factory;
+workspace is a team. Somebody it adds joins paused, until an admin gives them
+skills and resumes them. Their name, handles and team are then set in cat-factory;
 skills, domains, weight and availability stay here. See
 [docs/integrations.md](./docs/integrations.md).
 

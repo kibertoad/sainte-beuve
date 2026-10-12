@@ -1,6 +1,11 @@
 import type { ExternalPerson, Reviewer } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
-import { accountKey, type DirectoryPeopleInput, planDirectoryPeople } from './directoryPeople.js'
+import {
+  accountKey,
+  type DirectoryPeopleInput,
+  handleMatchCandidates,
+  planDirectoryPeople,
+} from './directoryPeople.js'
 
 const SOURCE = 'cat-factory'
 
@@ -41,6 +46,7 @@ function input(overrides: Partial<DirectoryPeopleInput>): DirectoryPeopleInput {
     memberships: [],
     teamNameByGroup: new Map(),
     accountOwners: new Map(),
+    linkedHosts: new Map(),
     ...overrides,
   }
 }
@@ -95,6 +101,28 @@ describe('planDirectoryPeople', () => {
     expect(plan.create.map((step) => step.external.id)).toEqual(['u1'])
   })
 
+  it('never matches by handle a reviewer with another account linked on that host', () => {
+    const plan = planDirectoryPeople(
+      input({
+        reviewers: [reviewer('r1', { handles: { github: 'u1-gh', gitlab: null } })],
+        persons: [person('u1')],
+        linkedHosts: new Map([['r1', new Set(['github' as const])]]),
+      }),
+    )
+    expect(plan.update).toEqual([])
+    expect(plan.create.map((step) => step.external.id)).toEqual(['u1'])
+  })
+
+  it('names as handle candidates only unfollowed reviewers holding a listed username', () => {
+    const reviewers = [
+      reviewer('r1', { handles: { github: 'U1-GH', gitlab: null } }),
+      reviewer('r2', { handles: { github: 'u1-gh', gitlab: null }, ...followed('u1') }),
+      reviewer('r3', { handles: { github: null, gitlab: 'u1-gh' } }),
+    ]
+    const candidates = handleMatchCandidates(SOURCE, reviewers, [person('u1')])
+    expect(candidates.map((r) => r.id)).toEqual(['r1'])
+  })
+
   it('creates a reviewer for somebody unmatched with a host account', () => {
     const plan = planDirectoryPeople(
       input({
@@ -108,11 +136,12 @@ describe('planDirectoryPeople', () => {
         displayName: 'u1-gh',
         handles: { github: 'u1-gh', gitlab: null },
         team: 'Core',
+        availability: 'paused',
         external: { source: SOURCE, id: 'u1' },
         accounts: person('u1').accounts,
       },
     ])
-    expect(plan.summary).toEqual({ listed: 1, linked: 1, withoutAccount: 0 })
+    expect(plan.summary).toEqual({ listed: 1, linked: 1, withoutAccount: 0, awaitingSetup: 1 })
   })
 
   it('counts somebody with no host account rather than guessing who they are', () => {
@@ -124,7 +153,23 @@ describe('planDirectoryPeople', () => {
     )
     expect(plan.create).toEqual([])
     expect(plan.update).toEqual([])
-    expect(plan.summary).toEqual({ listed: 1, linked: 0, withoutAccount: 1 })
+    expect(plan.summary).toEqual({ listed: 1, linked: 0, withoutAccount: 1, awaitingSetup: 0 })
+  })
+
+  it('counts followed reviewers still paused with no skills as awaiting setup', () => {
+    const owned = (id: string) => [accountKey({ provider: 'github', subject: `gh-${id}` }), id]
+    const plan = planDirectoryPeople(
+      input({
+        reviewers: [
+          reviewer('u1', { ...followed('u1'), availability: 'paused' }),
+          reviewer('u2', { ...followed('u2'), availability: 'paused', skills: ['go'] }),
+          reviewer('u3', followed('u3')),
+        ],
+        persons: [person('u1'), person('u2'), person('u3')],
+        accountOwners: new Map([owned('u1'), owned('u2'), owned('u3')] as [string, string][]),
+      }),
+    )
+    expect(plan.summary.awaitingSetup).toBe(1)
   })
 
   it("keeps a person's team while it is still one of theirs, else takes the first by name", () => {
