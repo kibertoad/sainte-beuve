@@ -3,6 +3,7 @@ import type {
   IdentityProvider,
   LinkedIdentity,
   Project,
+  ProjectRef,
   Reminder,
   ReminderStatus,
   Reviewer,
@@ -14,6 +15,7 @@ import type { ApiKeyRepository, SessionRepository } from './auth.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
 import type { ExternalRepositoryRepository } from './external-repositories.js'
 import type { TeamRepository } from './teams.js'
+import type { PullRequestAddress } from './vcs.js'
 import type { AttentionRepository, ReviewCommitmentRepository } from './attention.js'
 
 /**
@@ -75,23 +77,23 @@ export interface ReviewRequestRepository {
     order?: ReviewListOrder
   }): Promise<ReviewRequest[]>
   getById(reviewId: string): Promise<ReviewRequest | null>
-  /** Look up by pull request so a webhook replay updates the row instead of duplicating it. */
-  getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null>
+  /**
+   * Look up by pull request so a webhook replay updates the row instead of
+   * duplicating it. Matched on `pullRequestKey`: the host is part of it, and
+   * the path is compared without case.
+   */
+  getByPullRequest(ref: PullRequestAddress): Promise<ReviewRequest | null>
   /**
    * One repository's reviews in the named statuses, created at or after `since`,
    * newest first with the id as the tie-break, capped at `limit`. What a
    * reviewer's familiarity with a repository is counted from.
    *
-   * The `provider` is part of the key, unlike `getByPullRequest`: the same
-   * owner and repo on the other host is another repository, and its history
-   * would credit people with reviews of code they never read.
+   * Matched on `projectRefKey`: the same owner and repo on the other host is
+   * another repository, and its history would credit people with reviews of
+   * code they never read.
    */
   listForRepository(
-    repository: { provider: string; owner: string; repo: string },
+    repository: ProjectRef,
     filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
   ): Promise<ReviewRequest[]>
   create(review: ReviewRequest): Promise<ReviewRequest>

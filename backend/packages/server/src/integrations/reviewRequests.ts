@@ -136,7 +136,6 @@ async function isAssignedOnBoard(
   const review = await container.repositories.reviews.getByPullRequest(pullRequest)
   return (
     review !== null &&
-    review.pullRequest.provider === pullRequest.provider &&
     ACTIVE_REVIEW_STATUSES.includes(review.status) &&
     review.assignedReviewerIds.includes(reviewerId)
   )

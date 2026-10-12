@@ -50,12 +50,12 @@ import { epochMs, orgId, payload } from './columns.js'
  *
  * THE PAYLOAD IS THE ROW. `data` holds the contract object and the columns
  * beside it are indexes derived from it at write time: the status a filter
- * reads, the `due_at` the reminder tick scans, the `(owner, repo, number)` a
- * webhook replay looks a review up by. The ports are coarse on purpose
- * (`listDue`, not a query builder), so that list of indexes is short and
- * closed, and a column per contract field would be a mapper to keep in step
- * with contracts that still move every slice, plus a JSON column anyway for the
- * arrays and the nested objects.
+ * reads, the `due_at` the reminder tick scans, the `pull_request_key` a webhook
+ * replay looks a review up by. The ports are coarse on purpose (`listDue`, not
+ * a query builder), so that list of indexes is short and closed, and a column
+ * per contract field would be a mapper to keep in step with contracts that
+ * still move every slice, plus a JSON column anyway for the arrays and the
+ * nested objects.
  *
  * The payload is not an opaque blob at either end. The compiler knows its shape
  * through the `payload` column type below, so a write from a stale contract does
@@ -105,9 +105,10 @@ export const reviewRequests = pgTable(
     orgId: orgId(),
     id: text('id').notNull(),
     status: text('status').notNull(),
-    prOwner: text('pr_owner').notNull(),
-    prRepo: text('pr_repo').notNull(),
-    prNumber: integer('pr_number').notNull(),
+    /** `pullRequestKey`: `provider:owner/repo#number`, the path lowercased. */
+    pullRequestKey: text('pull_request_key').notNull(),
+    /** `projectRefKey` of the same pull request: `provider:owner/repo`, lowercased. */
+    repoKey: text('repo_key').notNull(),
     createdAt: epochMs('created_at').notNull(),
     data: payload<ReviewRequest>('data', 'review_requests', reviewRequestSchema).notNull(),
   },
@@ -130,14 +131,13 @@ export const reviewRequests = pgTable(
     index('review_requests_created_idx').on(table.orgId, table.createdAt.desc(), table.id.desc()),
     // A webhook replay looks a review up by the pull request it is about, so
     // this is the index that keeps an intake from scanning the board.
-    index('review_requests_pr_idx').on(table.orgId, table.prOwner, table.prRepo, table.prNumber),
+    index('review_requests_pr_idx').on(table.orgId, table.pullRequestKey),
     // One repository's history, newest first: the read a reviewer's familiarity
     // with a repository is counted from. Ordered like the board's own indexes so
     // the capped read stops at its limit instead of sorting every row.
     index('review_requests_repo_idx').on(
       table.orgId,
-      table.prOwner,
-      table.prRepo,
+      table.repoKey,
       table.createdAt.desc(),
       table.id.desc(),
     ),
