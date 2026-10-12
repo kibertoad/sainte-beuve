@@ -54,7 +54,7 @@ export function slackAppManifest(input: SlackManifestInput): {
             command: '/review',
             url: requestUrl,
             description: 'Reviews waiting on you, and what to do with one',
-            usage_hint: '[take | reroll | snooze | ai] <id>',
+            usage_hint: '[take | reroll | ai] <id>, or snooze <id> [hours]',
             should_escape: false,
           },
         ],

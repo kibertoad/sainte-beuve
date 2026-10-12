@@ -22,7 +22,7 @@ const card = ref<{ token: DraftHolder; signingSecret: DraftHolder } | null>(null
   <IntegrationScreen
     title="Slack"
     description="Where review requests are announced and reminders are sent."
-    :pending="pending"
+    :pending="pending || manifest.pending.value"
     :error="error"
     :loaded="data != null"
     @refresh="refreshAll()"
