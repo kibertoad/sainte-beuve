@@ -47,7 +47,13 @@ defineExpose({
   signingSecret: { clearDraft: () => secretField.value?.clearDraft() },
 })
 
-const requestUrl = computed(() => `${props.apiBase}${props.connection.requestPath}`)
+// The manifest's URL when there is one, so the screen never quotes two: Slack
+// posts to `API_BASE_URL`, which need not be the origin this SPA calls.
+const requestUrl = computed(() =>
+  props.manifest?.status === 'ready'
+    ? props.manifest.requestUrl
+    : `${props.apiBase}${props.connection.requestPath}`,
+)
 
 const badge = computed(() => slackBadge(props.connection))
 </script>
