@@ -12,7 +12,7 @@ import type {
   ProjectRepository,
   ReviewCommitmentRepository,
 } from '@sainte-beuve/kernel'
-import { ConflictError, projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
+import { insertOrRead, projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import { clone, patched } from './clone.js'
 import { byText, newestFirst, oldestFirst } from './order.js'
 
@@ -161,21 +161,26 @@ export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepos
   }
 
   /**
-   * Synchronous from the check to the write, so no other caller runs between
-   * them: the same guarantee the durable stores' unique index gives.
+   * `insert` is synchronous from the check to the write, so no other caller runs
+   * between them: the same guarantee the durable stores' unique index gives. A
+   * taken id loses like a taken key, as `ON CONFLICT DO NOTHING` does there.
    */
   async createOrGet(
     commitment: ReviewCommitment,
   ): Promise<{ commitment: ReviewCommitment; created: boolean }> {
-    const existing = this.held(commitment.reviewerId, pullRequestKey(commitment.pullRequest))
-    if (existing !== undefined) return { commitment: clone(existing), created: false }
-    if (this.rows.has(commitment.id)) {
-      throw new ConflictError(`Commitment ${commitment.id} is already taken`, {
-        commitmentId: commitment.id,
-      })
-    }
-    this.rows.set(commitment.id, clone(commitment))
-    return { commitment: clone(commitment), created: true }
+    const key = pullRequestKey(commitment.pullRequest)
+    const { value, created } = await insertOrRead(commitment, {
+      describe: `The commitment of ${commitment.reviewerId} on ${key}`,
+      insert: async () => {
+        if (this.rows.has(commitment.id) || this.held(commitment.reviewerId, key) !== undefined) {
+          return false
+        }
+        this.rows.set(commitment.id, clone(commitment))
+        return true
+      },
+      read: async () => this.find(commitment.reviewerId, commitment.pullRequest),
+    })
+    return { commitment: clone(value), created }
   }
 
   async setRequestedHandle(
@@ -194,8 +199,9 @@ export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepos
   }
 
   private held(reviewerId: string, key: string): ReviewCommitment | undefined {
-    return [...this.rows.values()].find(
-      (row) => row.reviewerId === reviewerId && pullRequestKey(row.pullRequest) === key,
-    )
+    for (const row of this.rows.values()) {
+      if (row.reviewerId === reviewerId && pullRequestKey(row.pullRequest) === key) return row
+    }
+    return undefined
   }
 }

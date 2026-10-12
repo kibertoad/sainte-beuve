@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { ConflictError } from '@sainte-beuve/kernel'
 import { type ConformanceCase, conformanceCase } from './case.js'
 import { commitment, pullRequest } from './fixtures.js'
 
@@ -117,6 +118,24 @@ export const commitmentCases: readonly ConformanceCase[] = [
     assert.strictEqual((await repos.commitments.find('r1', pullRequest()))?.id, 'c1')
     assert.strictEqual((await repos.commitments.find('r2', pullRequest()))?.id, 'c2')
   }),
+
+  conformanceCase(
+    'a promise whose id is taken is a conflict, and writes nothing',
+    async (repos) => {
+      await repos.commitments.createOrGet(commitment('c1'))
+      const elsewhere = commitment('c1', { pullRequest: pullRequest({ number: 13 }) })
+      await assert.rejects(repos.commitments.createOrGet(elsewhere), (error: unknown) => {
+        assert.ok(error instanceof ConflictError)
+        assert.match(error.message, /already taken/)
+        return true
+      })
+      assert.deepStrictEqual(await repos.commitments.getById('c1'), commitment('c1'))
+      assert.strictEqual(
+        await repos.commitments.find('reviewer-1', pullRequest({ number: 13 })),
+        null,
+      )
+    },
+  ),
 
   conformanceCase('withdrawing a promise removes it, and frees its key', async (repos) => {
     await repos.commitments.createOrGet(commitment('c1'))

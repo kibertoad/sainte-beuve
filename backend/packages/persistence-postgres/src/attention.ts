@@ -1,6 +1,6 @@
 import type { AttentionRequest, AttentionStatus, ReviewCommitment } from '@sainte-beuve/contracts'
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
-import { insertOrRead, pullRequestKey, writeAtRevision } from '@sainte-beuve/kernel'
+import { ConflictError, insertOrRead, pullRequestKey, writeAtRevision } from '@sainte-beuve/kernel'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
@@ -158,7 +158,7 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
           .returning({ id: reviewCommitments.id })
         return firstOr(inserted) !== null
       },
-      read: () => this.find(commitment.reviewerId, commitment.pullRequest),
+      read: () => this.holderOf(commitment),
     })
     return { commitment: value, created }
   }
@@ -183,5 +183,17 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
     await this.db
       .delete(reviewCommitments)
       .where(and(eq(reviewCommitments.orgId, this.orgId), eq(reviewCommitments.id, commitmentId)))
+  }
+
+  /**
+   * The commitment that holds this one's key. An insert that lost while no row
+   * holds the key lost on the id, which no retry can win.
+   */
+  private async holderOf(commitment: ReviewCommitment): Promise<ReviewCommitment | null> {
+    const held = await this.find(commitment.reviewerId, commitment.pullRequest)
+    if (held !== null || (await this.getById(commitment.id)) === null) return held
+    throw new ConflictError(`Commitment ${commitment.id} is already taken`, {
+      commitmentId: commitment.id,
+    })
   }
 }
