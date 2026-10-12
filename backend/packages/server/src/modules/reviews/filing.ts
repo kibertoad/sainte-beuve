@@ -48,10 +48,12 @@ export async function fileWithCatFactory(
  * The keys cat-factory's directory lists a pull request's repository under, one
  * per workspace that links it, read from this org's mirror of the directory.
  *
- * Matched on the host's repository id when the project came from the
- * directory, because that survives a rename the mirror has not caught up with;
- * otherwise on the owner and name. An org that has not connected cat-factory
- * holds no mirror and gets no keys.
+ * Matched on the provider, then on the host's repository id when the project
+ * came from the directory, because that survives a rename the mirror has not
+ * caught up with; otherwise on the owner and name. An org that has not
+ * connected cat-factory holds no mirror and gets no keys. Sorted, because the
+ * stores list in no set order and the gateway files in the first workspace
+ * that backs the repository, so the same repository lands in the same one.
  */
 async function directoryKeysFor(
   container: AppContainer,
@@ -65,15 +67,14 @@ async function directoryKeysFor(
   const externalId = project?.external?.source === CAT_FACTORY_SOURCE ? project.external.id : null
   return entries
     .filter(({ repository }) => {
-      if (repository === null) return false
+      if (repository === null || repository.provider !== pullRequest.provider) return false
       if (externalId !== null) return repository.id === externalId
       return (
-        repository.provider === pullRequest.provider &&
-        sameName(repository.owner, pullRequest.owner) &&
-        sameName(repository.repo, pullRequest.repo)
+        sameName(repository.owner, pullRequest.owner) && sameName(repository.repo, pullRequest.repo)
       )
     })
     .map((entry) => entry.key)
+    .sort()
 }
 
 /** GitHub and GitLab both treat owner and repository names case-insensitively. */

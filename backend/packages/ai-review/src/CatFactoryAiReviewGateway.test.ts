@@ -165,7 +165,7 @@ function filing(gateway: CatFactoryAiReviewGateway, directoryKeys: readonly stri
 }
 
 /** A workspace's linked repositories, as `GET /api/v1/repos` lists them. */
-function repos(...entries: { repoId: number; serviceId: string | null }[]) {
+function repos(...entries: { repoId: number; serviceId: string | null; provider?: string }[]) {
   return {
     repos: entries.map((entry) => ({
       defaultBranch: 'main',
@@ -213,6 +213,22 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
       { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-a' },
       { path: '/api/v1/tasks/task-1/start', workspace: 'ws-a' },
     ])
+  })
+
+  it('does not take a project on another host that shares the repository id', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/repos': {
+        body: repos(
+          { repoId: 42, serviceId: 'svc-gitlab', provider: 'gitlab' },
+          { repoId: 42, serviceId: 'svc-42' },
+        ),
+      },
+      '/tasks': { body: task({ serviceId: 'svc-42' }) },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    await filing(gateway, ['ws-a/42'])
+    expect(calls[1]?.path).toBe('/api/v1/services/svc-42/tasks')
   })
 
   it('files under the default service when no service backs the repository', async () => {

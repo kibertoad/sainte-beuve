@@ -199,7 +199,9 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     const locations = directoryKeys
       .map(locationOf)
       .filter((location): location is DirectoryLocation => location !== null)
-    const backed = await Promise.all(locations.map((location) => this.backing(location, ref)))
+    const backed = await Promise.all(
+      locations.map((location) => this.backing(location, pullRequest)),
+    )
     const found = backed.find((placement): placement is Placement => placement !== null)
     if (found !== undefined) return found
     const fallback = this.options.serviceId
@@ -210,14 +212,24 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     )
   }
 
-  /** The service backing one linked repository, or null when none does. */
-  private async backing(location: DirectoryLocation, ref: string): Promise<Placement | null> {
+  /**
+   * The service backing one linked repository, or null when none does. Matched
+   * on the provider as well as the id, because a GitHub repository and a GitLab
+   * project can share a numeric id inside one workspace.
+   */
+  private async backing(
+    location: DirectoryLocation,
+    pullRequest: PullRequestRef,
+  ): Promise<Placement | null> {
     try {
       const { repos } = await this.clientFor(location.workspaceId).repos.list()
-      const serviceId = repos.find((repo) => repo.repoId === location.repoId)?.serviceId ?? null
+      const linked = repos.find(
+        (repo) => repo.repoId === location.repoId && repo.provider === pullRequest.provider,
+      )
+      const serviceId = linked?.serviceId ?? null
       return serviceId === null ? null : { serviceId, workspaceId: location.workspaceId }
     } catch (err) {
-      throw refusalFor(err, `find the service that backs ${ref}`)
+      throw refusalFor(err, `find the service that backs ${formatPullRequest(pullRequest)}`)
     }
   }
 
