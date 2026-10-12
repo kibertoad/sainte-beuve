@@ -148,7 +148,7 @@ function becameReady(payload: GitLabEventPayload, action: string): boolean {
 /** What a review request opened from this merge request would carry. */
 interface Subject {
   title: string
-  author: string
+  author: string | null
   skills: string[]
 }
 
@@ -181,7 +181,9 @@ function fromNote(payload: GitLabEventPayload, context: GitLabIntentContext): In
   const ref = mergeRequestRef(payload, merge?.iid, merge?.url)
   const verb = parseMentionCommand(payload.object_attributes?.note ?? '', bot)
   if (ref === null || verb === null) return []
-  return [{ kind: 'command', pullRequest: ref, requester, verb }]
+  // The Note Hook names the merge request's author only by id, so the intake
+  // asks the host for it if this note opens the row.
+  return [{ kind: 'command', pullRequest: ref, requester, author: null, verb }]
 }
 
 /** Who wrote the note, unless it was the bot itself, which never answers itself. */
@@ -243,9 +245,8 @@ function titles(labels: GitLabLabel[] | undefined): string[] {
  * carries the AUTHOR only as a numeric id; its `user` is whoever acted, which is
  * the author exactly when the action is opening it.
  */
-function authorFor(payload: GitLabEventPayload, action: string): string {
-  if (action !== 'open') return 'unknown'
-  return payload.user?.username ?? 'unknown'
+function authorFor(payload: GitLabEventPayload, action: string): string | null {
+  return action === 'open' ? (payload.user?.username ?? null) : null
 }
 
 /**

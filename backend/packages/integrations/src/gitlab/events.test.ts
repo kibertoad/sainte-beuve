@@ -107,8 +107,8 @@ describe('interpretGitLabDelivery: merge requests', () => {
     expect(interpretGitLabDelivery(labelled, CONTEXT)).toMatchObject([
       // The actor of an update is not the author, and the payload carries the
       // author only as an id.
-      { kind: 'track', route: true, review: { authorLogin: 'unknown' } },
-      { kind: 'ai_review', pullRequest: REF },
+      { kind: 'track', route: true, review: { authorLogin: null } },
+      { kind: 'ai_review', pullRequest: REF, author: null },
     ])
   })
 
@@ -119,7 +119,7 @@ describe('interpretGitLabDelivery: merge requests', () => {
     })
     expect(interpretGitLabDelivery(opened, CONTEXT)).toMatchObject([
       { kind: 'track', route: true, review: { authorLogin: 'ada' } },
-      { kind: 'ai_review', pullRequest: REF },
+      { kind: 'ai_review', pullRequest: REF, author: 'ada' },
     ])
   })
 
@@ -188,7 +188,8 @@ describe('interpretGitLabDelivery: merge requests', () => {
 describe('interpretGitLabDelivery: notes', () => {
   it('reads a mention with a verb as that command, from whoever wrote it', () => {
     expect(interpretGitLabDelivery(note('@review-bot reroll please'), CONTEXT)).toStrictEqual([
-      { kind: 'command', pullRequest: REF, requester: 'grace', verb: 'reroll' },
+      // The note's author asked; the merge request's author is the host's to say.
+      { kind: 'command', pullRequest: REF, requester: 'grace', author: null, verb: 'reroll' },
     ])
   })
 

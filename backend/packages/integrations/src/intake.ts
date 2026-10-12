@@ -24,14 +24,29 @@ export type BotVerb = 'review' | 'reroll' | 'ai' | 'status'
  *
  * `unapprove` is an approval taken back. Only GitLab says so as an event of its
  * own, and it puts a review the approval had settled back on the clock.
+ *
+ * An author is null where the payload does not name one (a GitLab hook names
+ * whoever acted, not the author), and the intake asks the host before it opens
+ * a row with it.
  */
 export type IntakeIntent =
-  | { kind: 'track'; review: CreateReviewRequest; route: boolean }
+  | { kind: 'track'; review: IntakeReview; route: boolean }
   | { kind: 'close'; pullRequest: PullRequestRef }
   | { kind: 'resolve'; pullRequest: PullRequestRef; status: 'approved' | 'changes_requested' }
   | { kind: 'unapprove'; pullRequest: PullRequestRef }
-  | { kind: 'ai_review'; pullRequest: PullRequestRef }
-  | { kind: 'command'; pullRequest: PullRequestRef; requester: string; verb: BotVerb }
+  | { kind: 'ai_review'; pullRequest: PullRequestRef; author: string | null }
+  | {
+      kind: 'command'
+      pullRequest: PullRequestRef
+      requester: string
+      author: string | null
+      verb: BotVerb
+    }
+
+/** The review request a delivery would open, with the author the payload named, if any. */
+export type IntakeReview = Omit<CreateReviewRequest, 'authorLogin'> & {
+  authorLogin: string | null
+}
 
 /** The pull request or merge request an intent is about. */
 export function intentPullRequest(intent: IntakeIntent): PullRequestRef {
@@ -107,10 +122,10 @@ export function labelIntent(
   ref: PullRequestRef,
   added: string | undefined,
   rules: ReviewLabelRules,
-  pr: { title: string; author: string; skills: string[] },
+  pr: { title: string; author: string | null; skills: string[] },
 ): IntakeIntent | null {
   if (added === undefined) return null
-  if (added === rules.aiReview) return { kind: 'ai_review', pullRequest: ref }
+  if (added === rules.aiReview) return { kind: 'ai_review', pullRequest: ref, author: pr.author }
   if (added !== rules.review) return null
   return { kind: 'track', route: true, review: reviewRequest(ref, pr.title, pr.author, pr.skills) }
 }
@@ -118,9 +133,9 @@ export function labelIntent(
 export function reviewRequest(
   pullRequest: PullRequestRef,
   title: string,
-  authorLogin: string,
+  authorLogin: string | null,
   requiredSkills: string[],
-): CreateReviewRequest {
+): IntakeReview {
   return {
     pullRequest,
     title,

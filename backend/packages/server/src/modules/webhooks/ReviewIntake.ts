@@ -1,11 +1,12 @@
-import type { PullRequestRef, ReviewRequest } from '@sainte-beuve/contracts'
+import type { CreateReviewRequest, PullRequestRef, ReviewRequest } from '@sainte-beuve/contracts'
 import { vcsDisplayName } from '@sainte-beuve/contracts'
 import { formatPullRequest, getErrorMessage, isDomainError, upstreamOf } from '@sainte-beuve/kernel'
-import type { IntakeIntent } from '@sainte-beuve/integrations'
+import type { IntakeIntent, IntakeReview } from '@sainte-beuve/integrations'
 import { PAST_REVIEW_STATUSES } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 import { AiReviewService } from '../reviews/AiReviewService.js'
+import { readPullRequestAuthor } from '../reviews/pullRequestAuthor.js'
 import { ReviewService } from '../reviews/ReviewService.js'
 import { botReply } from './botReplies.js'
 
@@ -69,7 +70,7 @@ export class ReviewIntake {
 
   async perform(intent: IntakeIntent): Promise<IntakeOutcome> {
     if (intent.kind === 'track') return this.track(intent)
-    if (intent.kind === 'ai_review') return this.delegate(intent.pullRequest)
+    if (intent.kind === 'ai_review') return this.delegate(intent)
     if (intent.kind === 'command') return this.command(intent)
     // An event about a pull request nobody tracked is not a fault: a repository
     // has open pull requests that predate the intake, and closing one of those
@@ -89,9 +90,10 @@ export class ReviewIntake {
 
   private async track(intent: Extract<IntakeIntent, { kind: 'track' }>): Promise<IntakeOutcome> {
     const service = new ReviewService(this.container)
+    const draft = await this.withAuthor(intent.review)
     const { review, created, result } = intent.route
-      ? await service.trackAndAssign(intent.review, 1)
-      : { ...(await service.track(intent.review)), result: null }
+      ? await service.trackAndAssign(draft, 1)
+      : { ...(await service.track(draft)), result: null }
     if (result === null) {
       return { action: created ? 'tracked' : 'already_tracked', reviewId: review.id }
     }
@@ -108,9 +110,11 @@ export class ReviewIntake {
    * nobody registered the PR first would be an implementation detail leaking into
    * a team's workflow.
    */
-  private async delegate(pullRequest: PullRequestRef): Promise<IntakeOutcome> {
+  private async delegate(
+    intent: Extract<IntakeIntent, { kind: 'ai_review' }>,
+  ): Promise<IntakeOutcome> {
     const { review } = await new ReviewService(this.container).track(
-      blankReview(pullRequest, 'unknown'),
+      await this.withAuthor(blankReview(intent.pullRequest, intent.author)),
     )
     try {
       const run = await new AiReviewService(this.container).request(review.id, null)
@@ -146,7 +150,9 @@ export class ReviewIntake {
     const reviews = new ReviewService(this.container)
     try {
       if (intent.verb === 'status') return this.status(intent.pullRequest)
-      const { review } = await reviews.track(blankReview(intent.pullRequest, intent.requester))
+      const { review } = await reviews.track(
+        await this.withAuthor(blankReview(intent.pullRequest, intent.author)),
+      )
       if (intent.verb === 'ai') {
         const run = await new AiReviewService(this.container).request(review.id, null)
         return { body: botReply.aiRequested(run), reviewId: review.id }
@@ -205,6 +211,19 @@ export class ReviewIntake {
     return { body: botReply.status(review, reviewers), reviewId: review.id }
   }
 
+  /**
+   * The review request with an author, asking the host when the payload named
+   * none. Only for a row about to be opened: a tracked review keeps the author it
+   * has, and tracking it again writes nothing, so it costs no request.
+   */
+  private async withAuthor(review: IntakeReview): Promise<CreateReviewRequest> {
+    if (review.authorLogin !== null) return { ...review, authorLogin: review.authorLogin }
+    const existing = await this.tracked(review.pullRequest)
+    const authorLogin =
+      existing?.authorLogin ?? (await readPullRequestAuthor(this.container, review.pullRequest))
+    return { ...review, authorLogin }
+  }
+
   private async tracked(pullRequest: PullRequestRef): Promise<ReviewRequest | null> {
     return this.container.repositories.reviews.getByPullRequest(pullRequest)
   }
@@ -237,7 +256,7 @@ function statusAfter(
   return review.assignedReviewerIds.length > 0 ? 'assigned' : 'open'
 }
 
-function blankReview(pullRequest: PullRequestRef, authorLogin: string) {
+function blankReview(pullRequest: PullRequestRef, authorLogin: string | null): IntakeReview {
   return {
     pullRequest,
     // A comment or a label carries no title, and a delivery for one event must

@@ -229,7 +229,7 @@ function fromComment(
   const verb = parseBotCommand(payload.comment?.body ?? '', bot)
   const ref = pullRequestRef(payload, issue.number, issue.pull_request.html_url ?? issue.html_url)
   if (requester === null || verb === null || ref === null) return null
-  return { kind: 'command', pullRequest: ref, requester, verb }
+  return { kind: 'command', pullRequest: ref, requester, author: authorOf(issue), verb }
 }
 
 /** GitHub's suffix on the login a GitHub App authors its comments under. */
@@ -285,8 +285,8 @@ export function parseBotCommand(body: string, botLogin: string): BotVerb | null 
   return bare === null ? null : parseMentionCommand(body, bare, BOT_SUFFIX)
 }
 
-function authorOf(subject: { user?: GitHubActor | null }): string {
-  return subject.user?.login ?? 'unknown'
+function authorOf(subject: { user?: GitHubActor | null }): string | null {
+  return subject.user?.login ?? null
 }
 
 function skillsOf(labels: GitHubLabel[] | undefined, context: GitHubIntentContext): string[] {

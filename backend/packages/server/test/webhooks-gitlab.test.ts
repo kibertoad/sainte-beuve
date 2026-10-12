@@ -1,4 +1,4 @@
-import type { ReviewRequest } from '@sainte-beuve/contracts'
+import type { PullRequestStatus, ReviewRequest } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { withOrg } from '../src/container.js'
 import {
@@ -86,6 +86,18 @@ async function store(
   })
 }
 
+function mergeRequestStatus(authorLogin: string): PullRequestStatus {
+  return {
+    state: 'open',
+    url: MR_URL,
+    authorLogin,
+    draft: false,
+    approval: 'pending',
+    mergeability: 'mergeable',
+    headSha: 'sha-7',
+  }
+}
+
 async function tracked(harness: TestHarness): Promise<ReviewRequest[]> {
   return harness.container.repositories.reviews.list()
 }
@@ -95,7 +107,8 @@ describe('GitLab webhook intake', () => {
   let vcs: ReturnType<typeof recordingVcs>
 
   beforeEach(async () => {
-    vcs = recordingVcs()
+    // The host names the author, which a hook about a label or a note does not.
+    vcs = { ...recordingVcs(), pullRequestStatus: async () => mergeRequestStatus('ada') }
     harness = buildHarness(
       { gateways: stubGateways({ vcsFromToken: () => vcs }) },
       { encryptionKey: KEY },
@@ -149,6 +162,31 @@ describe('GitLab webhook intake', () => {
     const res = await deliver(harness, labelled('needs-review'))
     expect(await res.json()).toMatchObject({ action: 'assigned' })
     expect(vcs.requested).toStrictEqual([['peer']])
+  })
+
+  it('reads the author from GitLab for a merge request first seen through a label', async () => {
+    await addReviewer(harness, { displayName: 'Ada', handles: { gitlab: 'ada' } })
+    await addReviewer(harness, { displayName: 'Peer', handles: { gitlab: 'peer' } })
+    await deliver(harness, labelled('needs-review'))
+    expect((await tracked(harness))[0]?.authorLogin).toBe('ada')
+    // The author is kept off their own review.
+    expect(vcs.requested).toStrictEqual([['peer']])
+  })
+
+  it('records the author, not the commenter, for a merge request first seen through a note', async () => {
+    await addReviewer(harness, { displayName: 'Grace', handles: { gitlab: 'grace' } })
+    await addReviewer(harness, { displayName: 'Peer', handles: { gitlab: 'peer' } })
+    await deliver(harness, note('@review-bot review'))
+    expect((await tracked(harness))[0]?.authorLogin).toBe('ada')
+  })
+
+  it('keeps the verdict when an approved merge request is merged', async () => {
+    await addReviewer(harness, { displayName: 'Peer', handles: { gitlab: 'peer' } })
+    await deliver(harness, labelled('needs-review'))
+    await deliver(harness, mergeRequest('approved'))
+    const res = await deliver(harness, mergeRequest('merge'))
+    expect(await res.json()).toMatchObject({ action: 'ignored:settled' })
+    expect((await tracked(harness))[0]?.status).toBe('approved')
   })
 
   it('closes the review when the merge request is merged', async () => {

@@ -56,6 +56,7 @@ export { verifyGitLabToken } from './gitlab/webhooks.js'
 export {
   type BotVerb,
   type IntakeIntent,
+  type IntakeReview,
   intentPullRequest,
   labelIntent,
   parseMentionCommand,
