@@ -1,5 +1,5 @@
 import type { AttentionDelivery, AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
-import { matchTargetFor, scoreCandidate } from '@sainte-beuve/reviewers'
+import { matchTargetFor, matchesOf } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveChat } from '../../integrations/resolve.js'
 
@@ -64,7 +64,7 @@ async function deliverAsk(
   const { chat, target } = reached
   const sent = await Promise.allSettled(
     reachable.map(async (reviewer): Promise<AttentionDelivery> => {
-      const { matchedSkills, matchedDomains } = scoreCandidate(reviewer, target)
+      const { matchedSkills, matchedDomains } = matchesOf(reviewer, target)
       const notice = { request, recipientId: reviewer.id, matchedSkills, matchedDomains }
       const message = await chat.gateway.sendAttentionAsk(notice, reviewer.slackUserId ?? '')
       return { reviewerId: reviewer.id, ...message }

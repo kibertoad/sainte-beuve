@@ -45,6 +45,11 @@ function matchLine(entry: ReviewerRecommendation): string {
   return `Matches ${matched} of ${wantedCount.value}`
 }
 
+function historyLine(entry: ReviewerRecommendation): string {
+  const past = entry.reasons.pastReviews
+  return past === 1 ? 'Reviewed this repository once' : `Reviewed this repository ${past} times`
+}
+
 function loadLine(entry: ReviewerRecommendation): string {
   const open = entry.reasons.outstandingReviews
   if (open === 0) return 'No open reviews'
@@ -101,6 +106,7 @@ function loadLine(entry: ReviewerRecommendation): string {
           </div>
           <div class="flex flex-col text-xs text-muted sm:shrink-0 sm:text-right">
             <span>{{ matchLine(entry) }}</span>
+            <span v-if="entry.reasons.pastReviews > 0">{{ historyLine(entry) }}</span>
             <span>{{ loadLine(entry) }}</span>
           </div>
         </li>
