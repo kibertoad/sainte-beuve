@@ -43,7 +43,9 @@ Status is one of: Not started, In progress, In review, Merged.
 `selectReviewers` in `@sainte-beuve/reviewers` makes a weighted random draw and
 the board assigns the result outright. `scoreCandidates` already scores every
 eligible reviewer, but no route returns those scores and no screen shows them, so
-an author cannot see who fits best or why.
+an author cannot see who fits best or why. A `ScoredCandidate` counts the skills
+and domains a reviewer matched without naming them, so the reason is not there
+to return yet.
 
 A route returns the candidates for a pull request ranked by score, each with the
 skills and domains it matched and the load it carries, and the Ask for attention
