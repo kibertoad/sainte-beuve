@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "23ecbed6-ee8f-4465-8448-aaa3a18a1c16",
-  "prevIds": ["0dd7e97a-19ab-4933-8ab4-a5b11cd79807"],
+  "id": "6e599e34-981a-4957-a81e-da752e374470",
+  "prevIds": ["3325c28c-26a8-4070-b7be-9fa99f168b75"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -623,6 +623,19 @@
       "generated": null,
       "identity": null,
       "name": "subject",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_tokens"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "subject_is_bot",
       "entityType": "columns",
       "schema": "public",
       "table": "integration_tokens"
