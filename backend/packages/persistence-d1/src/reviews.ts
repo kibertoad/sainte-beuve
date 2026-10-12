@@ -95,6 +95,33 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
   }
 
+  async listForRepository(
+    repository: { provider: string; owner: string; repo: string },
+    filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
+  ): Promise<ReviewRequest[]> {
+    if (filter.status.length === 0) return []
+    // `review_requests_repo_idx` answers the owner, repo and date range in order;
+    // the host lives only in the payload, so it is checked on the rows that range
+    // already narrowed to one repository's.
+    const rows = await this.db.all(
+      `SELECT data FROM review_requests
+WHERE org_id = ? AND pr_owner = ? AND pr_repo = ? AND created_at >= ?
+  AND status IN (${placeholders(filter.status.length)})
+  AND json_extract(data, '$.pullRequest.provider') = ?
+ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [
+        this.orgId,
+        repository.owner,
+        repository.repo,
+        filter.since,
+        ...filter.status,
+        repository.provider,
+        filter.limit,
+      ],
+    )
+    return decodeRows(reviewRequestSchema, 'review_requests', rows)
+  }
+
   async create(review: ReviewRequest): Promise<ReviewRequest> {
     await this.write(review)
     return review

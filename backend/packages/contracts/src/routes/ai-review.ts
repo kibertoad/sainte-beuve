@@ -4,6 +4,7 @@ import {
   aiReviewRunSchema,
   challengeAiReviewFindingSchema,
   requestAiReviewSchema,
+  requestPullRequestAiReviewSchema,
   resolveAiReviewSchema,
 } from '../ai-review.js'
 import { errorResponses, singleStringParam, stringParams } from './_shared.js'
@@ -29,6 +30,19 @@ export const requestAiReviewContract = defineApiContract({
   requestPathParamsSchema: reviewIdParams,
   pathResolver: ({ reviewId }) => `/reviews/${reviewId}/ai-review`,
   requestBodySchema: requestAiReviewSchema,
+  responsesByStatusCode: { 202: aiReviewRunSchema, ...errorResponses },
+})
+
+/**
+ * File an AI review on a pull request, tracking it on the board first when it
+ * is not there yet. The run that comes back names its board row (`reviewId`),
+ * which is where it is curated. Idempotent on the row, never on the run: each
+ * call is another billed job, under the same limit as every other way to ask.
+ */
+export const requestPullRequestAiReviewContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/ai-review',
+  requestBodySchema: requestPullRequestAiReviewSchema,
   responsesByStatusCode: { 202: aiReviewRunSchema, ...errorResponses },
 })
 

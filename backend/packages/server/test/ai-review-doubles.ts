@@ -51,11 +51,15 @@ export function aiFinding(
  * to it rather than by scripting a sequence of responses.
  */
 export interface StubAiReview extends AiReviewGateway {
-  requested: { title: string; instructions: string | null }[]
+  requested: { title: string; instructions: string | null; directoryKeys: readonly string[] }[]
   dismissed: { runId: string; findingId: string }[]
   resolved: { runId: string; action: AiReviewResolution; findingIds: string[] }[]
   resumed: string[]
   challenged: { runId: string; findingId: string; question: string | null }[]
+  /** The workspace filing answers with. Null is the key's only workspace. */
+  filedIn: string | null
+  /** The workspace every poll and curation verb named, in order. */
+  workspaces: (string | null)[]
   /** How many times it has been polled, so a case can assert a read asked nothing. */
   polls: number
   /** The cat-factory task id of every poll, in order. What a rotation is asserted on. */
@@ -73,6 +77,19 @@ export interface StubAiReview extends AiReviewGateway {
   pollFails: boolean
 }
 
+/**
+ * A dismissal answered the way cat-factory answers it: synchronously, with the
+ * decision the drop left behind. A case can then assert what the verb's own
+ * answer wrote, with no poll in between.
+ */
+function afterDismissal(
+  state: AiReviewCuration | null,
+  findingId: string,
+): AiReviewCuration | null {
+  if (state === null) return null
+  return { ...state, findings: state.findings.filter((finding) => finding.findingId !== findingId) }
+}
+
 export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview {
   const stub: StubAiReview = {
     requested: [],
@@ -80,6 +97,8 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
     resolved: [],
     resumed: [],
     challenged: [],
+    filedIn: null,
+    workspaces: [],
     polls: 0,
     polled: [],
     onPoll: null,
@@ -93,43 +112,54 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
       ...report,
     },
     requestReview: async (input) => {
-      stub.requested.push({ title: input.title, instructions: input.instructions })
+      const { title, instructions, directoryKeys } = input
+      stub.requested.push({ title, instructions, directoryKeys })
       // Numbered, not fixed: a case about the clock's rotation files several
       // reviews and asserts WHICH of them a given tick polled.
       const taskId = `cf-task-${stub.requested.length}`
-      return { taskId, url: `https://cat-factory.example.com/tasks/${taskId}` }
+      return {
+        taskId,
+        url: `https://cat-factory.example.com/tasks/${taskId}`,
+        workspaceId: stub.filedIn,
+      }
     },
-    getStatus: async (taskId) => {
+    getStatus: async ({ taskId, workspaceId }) => {
+      stub.workspaces.push(workspaceId)
       stub.polls += 1
       stub.polled.push(taskId)
       await stub.onPoll?.(taskId)
       if (stub.pollFails) throw new UpstreamFailedError('cat-factory could not be reached')
       return stub.report
     },
-    dismissFinding: async (input) => {
-      stub.dismissed.push(input)
-      // Answered the way cat-factory answers it: synchronously, with the decision
-      // the drop left behind. A case can then assert what the verb's own answer
-      // wrote, with no poll in between.
-      const state = stub.report.curation
-      if (state === null) return null
-      return {
-        ...state,
-        findings: state.findings.filter((finding) => finding.findingId !== input.findingId),
-      }
-    },
-    resolveReview: async (input) => {
-      stub.resolved.push(input)
-    },
-    resumeReview: async (input) => {
-      stub.resumed.push(input.runId)
-    },
-    challengeFinding: async (input) => {
-      stub.challenged.push(input)
-      stub.report = challenged(stub.report, input)
-    },
+    ...curationVerbs(() => stub),
   }
   return stub
+}
+
+/** The curation half of the stub, recording each verb and the workspace it named. */
+function curationVerbs(
+  stubOf: () => StubAiReview,
+): Pick<AiReviewGateway, 'dismissFinding' | 'resolveReview' | 'resumeReview' | 'challengeFinding'> {
+  return {
+    dismissFinding: async ({ workspaceId, ...input }) => {
+      stubOf().workspaces.push(workspaceId)
+      stubOf().dismissed.push(input)
+      return afterDismissal(stubOf().report.curation, input.findingId)
+    },
+    resolveReview: async ({ workspaceId, ...input }) => {
+      stubOf().workspaces.push(workspaceId)
+      stubOf().resolved.push(input)
+    },
+    resumeReview: async ({ runId, workspaceId }) => {
+      stubOf().workspaces.push(workspaceId)
+      stubOf().resumed.push(runId)
+    },
+    challengeFinding: async ({ workspaceId, ...input }) => {
+      stubOf().workspaces.push(workspaceId)
+      stubOf().challenged.push(input)
+      stubOf().report = challenged(stubOf().report, input)
+    },
+  }
 }
 
 /**

@@ -7,17 +7,14 @@ import type {
 } from '@sainte-beuve/kernel'
 import { projectRefKey } from '@sainte-beuve/kernel'
 import { asc, eq } from 'drizzle-orm'
+import { PostgresAiReviewRunRepository } from './ai-review-runs.js'
 import { PostgresAttentionRepository, PostgresReviewCommitmentRepository } from './attention.js'
 import { PostgresApiKeyRepository, PostgresSessionRepository } from './auth.js'
 import type { PostgresDatabase } from './database.js'
 import { PostgresExternalRepositoryRepository } from './external-repositories.js'
 import { PostgresOrgRepository } from './orgs.js'
 import { PostgresReviewerRepository } from './reviewers.js'
-import {
-  PostgresAiReviewRunRepository,
-  PostgresReminderRepository,
-  PostgresReviewRequestRepository,
-} from './reviews.js'
+import { PostgresReminderRepository, PostgresReviewRequestRepository } from './reviews.js'
 import { firstOr } from './rows.js'
 import { apiKeys, projects, sessions } from './schema.js'
 import { PostgresTeamRepository } from './teams.js'

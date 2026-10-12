@@ -79,7 +79,7 @@ const OLDER_SHAPE = {
 
 /**
  * An AI-review run payload from before the reminder ladder had a rung for a parked
- * review: it has no `parkedAt` key at all.
+ * review: it has no `parkedAt` key at all, and no `catFactoryWorkspaceId` either.
  *
  * The field the ladder counts the wait from, and payload-only on purpose, which is
  * exactly why it needs a default rather than only a `v.nullable`. Every run
@@ -188,6 +188,19 @@ export const storedRowConformanceCases: readonly StoredRowCase[] = [
     assert.strictEqual(read?.status, 'awaiting_selection')
     assert.strictEqual(read?.parkedAt, null)
   }),
+
+  storedRowCase(
+    'heals a run filed before it recorded its cat-factory workspace',
+    async (harness) => {
+      // Such a run was filed in the key's only workspace, which is what null means,
+      // so every later call about it goes out naming no workspace, as it did then.
+      await harness.writeRawAiReviewRun('run-old', 'review-1', RUN_BEFORE_PARKED_AT)
+
+      const read = await harness.repositories.aiReviewRuns.getById('run-old')
+
+      assert.strictEqual(read?.catFactoryWorkspaceId, null)
+    },
+  ),
 
   storedRowCase('heals such a run on the reads the reminder ladder makes', async (harness) => {
     // The two the ladder and the clock go through. A default that only healed a

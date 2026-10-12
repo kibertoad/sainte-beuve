@@ -50,6 +50,7 @@ const { busy: askBusy, run: runAsk } = useApiAction({ refresh: attention.refresh
 const asking = ref<OpenPullRequest | null>(null)
 
 async function ask(request: {
+  recipientIds: string[]
   requiredSkills: string[]
   sameTeamOnly: boolean
   neededCommitments: number
@@ -211,6 +212,11 @@ async function release(commitmentId: string) {
               >
                 Hand back
               </UButton>
+              <AiReviewButton
+                v-if="commitment.projectId !== null"
+                :pull-request="commitment.pullRequest"
+                :title="commitment.title"
+              />
               <UButton
                 :to="guidedReviewRoute(commitment.pullRequest)"
                 size="sm"

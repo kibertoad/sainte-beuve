@@ -16,6 +16,15 @@ defineProps<{
   /** What to say when there is nothing, which is the state most people are in. */
   empty: string
 }>()
+
+/**
+ * Whether the row's repository is a registered project. My PRs and My Reviews
+ * carry a `projectId` that is null for one nobody linked, and an AI review needs
+ * the repository linked in cat-factory, which is what registers it here.
+ */
+function isLinked(pr: OpenPullRequest): boolean {
+  return !('projectId' in pr) || pr.projectId !== null
+}
 </script>
 
 <template>
@@ -57,6 +66,12 @@ defineProps<{
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <slot name="actions" :pull-request="pr" />
+          <AiReviewButton
+            v-if="isLinked(pr)"
+            :pull-request="pr.pullRequest"
+            :title="pr.title"
+            :author-login="pr.authorLogin"
+          />
           <UButton
             :to="guidedReviewRoute(pr.pullRequest)"
             size="sm"
