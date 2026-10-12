@@ -1,4 +1,5 @@
-import type { Reviewer, ShortfallReason } from '@sainte-beuve/contracts'
+import type { Reviewer, ReviewRequest, ShortfallReason, VcsProvider } from '@sainte-beuve/contracts'
+import { handleOf } from '@sainte-beuve/contracts'
 
 /**
  * Reviewer selection: a load-aware weighted random pick that favours the
@@ -47,6 +48,8 @@ export interface ScoredCandidate {
   matchedSkills: string[]
   /** The wanted domains this reviewer knows, as the review spelled them, each once. */
   matchedDomains: string[]
+  /** The share of the wanted skills and domains this reviewer holds, from 0 to 1. */
+  affinity: number
   /** The reviewer's share of the draw. Higher is likelier; never zero for a candidate. */
   weight: number
 }
@@ -99,6 +102,32 @@ export function hasAllSkills(reviewer: Reviewer, requiredSkills: readonly string
   return requiredSkills.every((skill) => owned.has(normalizeSkill(skill)))
 }
 
+/**
+ * The reviewers a review rules out of its own pool: whoever is already on it,
+ * and its author. The author is matched on the handle for the pull request's
+ * OWN host, because the same person is spelled differently on each.
+ */
+export function excludedFromReview(
+  review: Pick<ReviewRequest, 'pullRequest' | 'authorLogin' | 'assignedReviewerIds'>,
+  candidates: readonly Reviewer[],
+): string[] {
+  return [
+    ...review.assignedReviewerIds,
+    ...reviewersWithHandles(candidates, review.pullRequest.provider, [review.authorLogin]),
+  ]
+}
+
+/** The ids of the reviewers whose handle on `provider` is one of `logins`. */
+export function reviewersWithHandles(
+  candidates: readonly Reviewer[],
+  provider: VcsProvider,
+  logins: readonly string[],
+): string[] {
+  return candidates
+    .filter((r) => logins.some((login) => isSameHandle(handleOf(r.handles, provider), login)))
+    .map((r) => r.id)
+}
+
 /** Whether the router may hand a review to this reviewer at all. */
 export function isEligible(reviewer: Reviewer, excluded: ReadonlySet<string>): boolean {
   if (excluded.has(reviewer.id)) return false
@@ -122,16 +151,21 @@ function distinct(list: readonly string[]): string[] {
   return [...new Set(list.map(normalizeSkill))]
 }
 
-/** The entries of `wanted` that appear in `held`, compared case-insensitively, each once. */
-function heldOf(held: readonly string[], wanted: readonly string[]): string[] {
-  const owned = new Set(held.map(normalizeSkill))
+/** The entries of a list as first spelled, each once, compared case-insensitively. */
+export function distinctAsSpelled(list: readonly string[]): string[] {
   const seen = new Set<string>()
-  return wanted.filter((entry) => {
+  return list.filter((entry) => {
     const key = normalizeSkill(entry)
-    if (seen.has(key) || !owned.has(key)) return false
+    if (seen.has(key)) return false
     seen.add(key)
     return true
   })
+}
+
+/** The entries of `wanted` that appear in `held`, compared case-insensitively, each once. */
+function heldOf(held: readonly string[], wanted: readonly string[]): string[] {
+  const owned = new Set(held.map(normalizeSkill))
+  return distinctAsSpelled(wanted).filter((entry) => owned.has(normalizeSkill(entry)))
 }
 
 /**
@@ -147,6 +181,7 @@ export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredC
     reviewer,
     matchedSkills,
     matchedDomains,
+    affinity,
     weight: drawWeight(reviewer) * (1 + MATCH_PREFERENCE * affinity),
   }
 }

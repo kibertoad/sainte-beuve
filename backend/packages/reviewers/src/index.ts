@@ -60,7 +60,9 @@ export {
 } from './attention.js'
 export {
   diagnoseShortfall,
+  distinctAsSpelled,
   drawWeight,
+  excludedFromReview,
   hasAllSkills,
   isEligible,
   isSameHandle,
@@ -68,6 +70,7 @@ export {
   type MatchTarget,
   matchTargetFor,
   normalizeSkill,
+  reviewersWithHandles,
   type ScoredCandidate,
   scoreCandidate,
   scoreCandidates,

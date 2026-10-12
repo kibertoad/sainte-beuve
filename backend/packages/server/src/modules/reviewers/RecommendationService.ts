@@ -4,18 +4,23 @@ import type {
   ReviewerRecommendations,
   ReviewRequest,
 } from '@sainte-beuve/contracts'
-import { handleOf } from '@sainte-beuve/contracts'
-import { isSameHandle, matchTargetFor, rankCandidates } from '@sainte-beuve/reviewers'
+import {
+  type ScoredCandidate,
+  distinctAsSpelled,
+  excludedFromReview,
+  matchTargetFor,
+  rankCandidates,
+  reviewersWithHandles,
+} from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 
 /**
- * Who should review a pull request, best first.
+ * Who an author asking for attention should pick for a pull request, best first.
  *
  * The pull request's board row, when it has one, supplies what the caller did
  * not: the skills it already wants, its author and whoever is already on it.
- * The caller is left out too, because the question is who ELSE should look,
- * and the author asking for attention on their own pull request is the usual
- * caller.
+ * The people the host lists for it are left out as well, and the caller is
+ * never recommended, because an ask never reaches the person who raised it.
  */
 export class RecommendationService {
   constructor(private readonly container: AppContainer) {}
@@ -41,33 +46,47 @@ export class RecommendationService {
     const { ranked, shortfallReason } = rankCandidates({
       ...target,
       candidates,
-      excludeReviewerIds: [viewer.id, ...excludedBy(review, candidates)],
+      audience: { requestedById: viewer.id, team: viewer.team, sameTeamOnly: input.sameTeamOnly },
+      excludeReviewerIds: excluded(input, review, candidates),
       limit: input.limit,
     })
     return {
-      wanted: { skills: [...target.skills], domains: [...target.domains] },
-      recommendations: ranked.map((candidate) => ({
-        reviewerId: candidate.reviewer.id,
-        displayName: candidate.reviewer.displayName,
-        team: candidate.reviewer.team,
-        score: candidate.weight,
-        reasons: {
-          matchedSkills: candidate.matchedSkills,
-          matchedDomains: candidate.matchedDomains,
-          outstandingReviews: candidate.reviewer.outstandingReviews,
-        },
-      })),
+      wanted: {
+        skills: distinctAsSpelled(target.skills),
+        domains: distinctAsSpelled(target.domains),
+      },
+      recommendations: ranked.map(toRecommendation),
       shortfallReason,
     }
   }
 }
 
-/** The people a board row rules out: whoever is on it, and its author by their handle on its host. */
-function excludedBy(review: ReviewRequest | null, candidates: readonly Reviewer[]): string[] {
-  if (review === null) return []
-  const provider = review.pullRequest.provider
-  const authors = candidates
-    .filter((r) => isSameHandle(handleOf(r.handles, provider), review.authorLogin))
-    .map((r) => r.id)
-  return [...review.assignedReviewerIds, ...authors]
+/** Whoever the board row or the host already has on the pull request, and its author. */
+function excluded(
+  input: RecommendReviewers,
+  review: ReviewRequest | null,
+  candidates: readonly Reviewer[],
+): string[] {
+  const onBoard = review === null ? [] : excludedFromReview(review, candidates)
+  if (input.people === null) return onBoard
+  const { authorLogin, requestedReviewerLogins } = input.people
+  const onHost = reviewersWithHandles(candidates, input.pullRequest.provider, [
+    authorLogin,
+    ...requestedReviewerLogins,
+  ])
+  return [...onBoard, ...onHost]
+}
+
+function toRecommendation(candidate: ScoredCandidate) {
+  return {
+    reviewerId: candidate.reviewer.id,
+    displayName: candidate.reviewer.displayName,
+    team: candidate.reviewer.team,
+    fit: candidate.affinity,
+    reasons: {
+      matchedSkills: candidate.matchedSkills,
+      matchedDomains: candidate.matchedDomains,
+      outstandingReviews: candidate.reviewer.outstandingReviews,
+    },
+  }
 }

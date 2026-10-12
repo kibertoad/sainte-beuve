@@ -23,7 +23,7 @@ import { ReviewerService } from './ReviewerService.js'
  *
  * The LIST is everybody's: the board shows who a review went to, and an
  * attention request is addressed by skill, so a member who could not read the
- * directory could not read either. The two WRITES are an admin's — they decide
+ * directory could not read either. The two WRITES are an admin's: they decide
  * who is in the pool, who holds which skills, and, since this slice, who else
  * may administer the org. The recommendation is everybody's for the same reason
  * as the list: it ranks people the caller can already read.

@@ -47,7 +47,7 @@ an author cannot see who fits best or why. A `ScoredCandidate` counts the skills
 and domains a reviewer matched without naming them, so the reason is not there
 to return yet.
 
-A route returns the candidates for a pull request ranked by score, each with the
+A route returns the candidates for a pull request ranked by how well they fit, each with the
 skills and domains it matched and the load it carries, and the Ask for attention
 modal shows that list.
 
