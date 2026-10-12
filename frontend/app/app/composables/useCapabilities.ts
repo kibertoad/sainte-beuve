@@ -12,6 +12,8 @@ export function useCapabilities() {
   })
   return {
     available: (name: CapabilityName): boolean => data.value?.[name] ?? true,
+    /** Only what the backend has said is on, for a capability that hides something when it is. */
+    confirmed: (name: CapabilityName): boolean => data.value?.[name] === true,
     refresh,
   }
 }

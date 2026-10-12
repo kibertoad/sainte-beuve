@@ -4,6 +4,7 @@ import {
   disconnectVcsSignInContract,
   getConnectionsContract,
   setCatFactoryConfigContract,
+  syncCatFactoryRepositoriesContract,
   startGitHubAppInstallContract,
   startVcsSignInContract,
 } from '@sainte-beuve/contracts'
@@ -84,6 +85,12 @@ function mountCatFactory(app: Hono<AppEnv>): void {
   buildHonoRoute(app, clearCatFactoryConfigContract, async (c) => {
     await requireAdmin(c, NOT_AN_ADMIN)
     return c.json(await new CatFactoryConnectionService(c.get('container')).clear(), 200)
+  })
+
+  buildHonoRoute(app, syncCatFactoryRepositoriesContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
+    const service = new CatFactoryConnectionService(c.get('container'))
+    return c.json(await service.syncRepositories(), 200)
   })
 
   // Admin-only like the rest: it spends the org's stored key on a call out.

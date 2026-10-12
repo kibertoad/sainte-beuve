@@ -54,6 +54,20 @@ export function slackWebhookPath(orgSlug: string): string {
 }
 
 /**
+ * cat-factory's directory pushes (`x-cat-factory-signature`) for one org.
+ * Mounted as a pattern; built with {@link catFactoryWebhookPath}.
+ *
+ * The org is in the URL for the reason the Slack one is: an account-level push
+ * names no repository this deployment could place it by, and the secret this
+ * org registered with cat-factory is what makes naming the org safe.
+ */
+export const CAT_FACTORY_WEBHOOK_PATH = '/webhooks/cat-factory/:org'
+
+export function catFactoryWebhookPath(orgSlug: string): string {
+  return `/webhooks/cat-factory/${orgSlug}`
+}
+
+/**
  * Where a host returns the browser after a sign-in. One path per host, so an
  * OAuth client registered against one cannot have its code spent by the other's
  * callback, and each is a fixed string an operator types into a settings page.

@@ -76,7 +76,7 @@ function reasonOf(err: unknown): { reason?: string } {
 export function refusalFor(
   err: unknown,
   what: string,
-  scope: 'decide' | 'write' = 'decide',
+  scope: 'read' | 'write' | 'decide' | 'admin' = 'decide',
 ): DomainError {
   const detail = `${what}: ${getErrorMessage(err)}`
   // Every refusal below names cat-factory as its source, so a public surface can

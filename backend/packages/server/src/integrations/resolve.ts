@@ -2,6 +2,7 @@ import type {
   CatFactoryConfig,
   IntegrationId,
   VcsAuthMethod,
+  RepositorySyncSecretKey,
   VcsOauthCredentialKey,
   VcsProvider,
 } from '@sainte-beuve/contracts'
@@ -318,7 +319,7 @@ export async function catFactoryAccess(
  */
 export async function openCredential(
   container: AppContainer,
-  key: IntegrationId | VcsOauthCredentialKey,
+  key: IntegrationId | VcsOauthCredentialKey | RepositorySyncSecretKey,
 ): Promise<string | null> {
   const { secrets, repositories, logger } = container
   if (secrets === null) return null

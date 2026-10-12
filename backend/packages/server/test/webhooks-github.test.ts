@@ -252,8 +252,8 @@ describe('GitHub webhook intake', () => {
   })
 
   it('delegates to cat-factory when the AI-review label lands on an untracked PR', async () => {
-    const delegating = await registered(
-      await connectCatFactory(
+    const delegating = await connectCatFactory(
+      await registered(
         buildHarness({
           ...catFactoryWired({ aiReview: stubAiReview() }),
           github: harness.container.github,
@@ -411,8 +411,8 @@ describe('GitHub webhook intake, by who is asking', () => {
 
   it('files one AI review at a time, and says so on the pull request', async () => {
     const catFactory = stubAiReview()
-    const delegating = await registered(
-      await connectCatFactory(
+    const delegating = await connectCatFactory(
+      await registered(
         buildHarness({
           ...catFactoryWired({ aiReview: catFactory }),
           vcs: environmentVcs(vcs),
@@ -444,8 +444,8 @@ describe('GitHub webhook intake, by who is asking', () => {
         { upstream: 'cat-factory' },
       )
     }
-    const delegating = await registered(
-      await connectCatFactory(
+    const delegating = await connectCatFactory(
+      await registered(
         buildHarness({
           ...catFactoryWired({ aiReview: catFactory }),
           vcs: environmentVcs(vcs),

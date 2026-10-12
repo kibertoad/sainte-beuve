@@ -65,7 +65,10 @@ const INTEGRATION_TRAITS: Record<IntegrationId, IntegrationTraits> = {
   'gitlab-pat': { label: 'GitLab token', capabilities: [] },
   'slack-bot-token': { label: 'Slack bot token', capabilities: [] },
   'slack-signing-secret': { label: 'Slack signing secret', capabilities: [] },
-  'cat-factory': { label: 'cat-factory key', capabilities: ['aiReview', 'guidedReview'] },
+  'cat-factory': {
+    label: 'cat-factory key',
+    capabilities: ['aiReview', 'guidedReview', 'repositoryDirectory'],
+  },
 }
 
 /**
@@ -98,6 +101,16 @@ export type VcsOauthCredentialKey = v.InferOutput<typeof vcsOauthCredentialKeySc
  */
 export function vcsOauthCredentialKey(provider: VcsProvider): VcsOauthCredentialKey {
   return provider === 'github' ? 'github-oauth' : 'gitlab-oauth'
+}
+
+/**
+ * The store key of the secret an external repository source signs its pushes
+ * with. This deployment mints it, so it is never pasted and not on the list above.
+ */
+export type RepositorySyncSecretKey = `repository-sync-secret:${string}`
+
+export function repositorySyncSecretKey(source: string): RepositorySyncSecretKey {
+  return `repository-sync-secret:${source}`
 }
 
 /** The store key a pasted token for one host is held under. */

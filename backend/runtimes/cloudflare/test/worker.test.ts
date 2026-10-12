@@ -192,6 +192,7 @@ describe('sainte-beuve worker', () => {
         suggested: null,
         aiReviewReady: false,
         guidedReviewReady: false,
+        repositorySync: null,
       },
     })
   })

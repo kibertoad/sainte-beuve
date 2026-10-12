@@ -96,7 +96,8 @@ dropped (`ignored:unregistered`), the default org included. A GitHub App can be
 installed by anybody who finds it, and falling back to the default org would hand
 whoever installed it on their own repository that org's reviewers, its
 installation tokens and its cat-factory budget. Register each repository on the
-Repositories screen; a single-tenant deployment does this too.
+Repositories screen, or link it in cat-factory when the org follows its
+workspaces; a single-tenant deployment does this too.
 
 **Only the repository's own people are listened to.** A comment command and a
 submitted review count only when GitHub reports the author's
@@ -314,6 +315,46 @@ cat-factory until an admin saves them.
 `GET /api/v1/capabilities` answers whether the org can run an AI review and a
 guided review, for any member. The board and the guided review page read it to
 warn before a button fails.
+
+### Repositories come from cat-factory
+
+Once an org has a base URL and a key, its repository list is the set of
+repositories linked in its cat-factory workspaces. Linking one there registers it
+here, unlinking it removes it, and a rename on the host follows without losing
+the project's skills, domains or merge settings, because a project is matched by
+the host's repository id. Adding and removing a repository on the Repositories
+screen is refused while this is on; editing a project is not.
+
+The first sync adopts every project already registered for a repository
+cat-factory links, and **removes every project it does not link**. The
+`repositoryDirectory` capability says whether an org is in this mode.
+
+It reads cat-factory's account directory (`/api/v1/directory/*`) through
+`@cat-factory/directory-sync`:
+
+| When                                   | What runs                                                    |
+| -------------------------------------- | ------------------------------------------------------------ |
+| the first tick after it is set up      | a full walk of the directory snapshots                       |
+| every five minutes, on the clock       | the change feed, from where the last sync stopped            |
+| once a day, on the clock               | the full walk again, which repairs anything the feed missed  |
+| cat-factory pushes a change            | the push is verified and applied, then the feed is caught up |
+| **Sync now** on the cat-factory screen | the full walk, and the webhook registration                  |
+
+Pushes arrive at `POST /webhooks/cat-factory/<org-slug>`, signed with a secret
+this deployment mints and stores sealed. sainte-beuve registers that URL with
+cat-factory itself during a full walk, which needs `API_BASE_URL` to be a public
+HTTPS address and a key with the `admin` scope that reaches every workspace. A
+key that cannot register one still works: the feed is followed on the clock, and
+the screen says changes are polled. Every refusal on that route is the same 403,
+for the reason the Slack one is.
+
+Changing the base URL or clearing the settings removes the webhook, the mirrored
+directory and the push secret. The projects stay, and are an admin's to manage
+again.
+
+What is mirrored is held in `external_repositories`, keyed by source, so another
+system that lists repositories can feed the same projects through the same
+planner (`planProjectSync`) without a table of its own.
 
 ## Registering it
 

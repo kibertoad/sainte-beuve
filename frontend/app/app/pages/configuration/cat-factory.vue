@@ -44,7 +44,8 @@ async function clearConfig() {
     title: 'Clear the cat-factory settings?',
     description:
       'The settings and the stored key are both removed. AI review and guided review stop ' +
-      'working for this org until they are entered again.',
+      'working for this org until they are entered again. The repositories stay, and are ' +
+      'registered and removed on the Repositories screen again.',
     confirmLabel: 'Clear the settings',
   })
   if (!confirmed) return
@@ -54,6 +55,14 @@ async function clearConfig() {
     'cat-factory-config',
   )
   await capabilities.refresh()
+}
+
+async function syncRepositories() {
+  await run(
+    () => api.syncCatFactoryRepositories(),
+    'Could not sync the repositories',
+    'cat-factory-sync',
+  )
 }
 </script>
 
@@ -76,6 +85,12 @@ async function clearConfig() {
       @clear="clearConfig()"
       @save-key="save('cat-factory', $event, card?.key ?? null)"
       @clear-key="clear('cat-factory')"
+    />
+    <RepositorySyncCard
+      v-if="data?.connections.catFactory.repositorySync"
+      :sync="data.connections.catFactory.repositorySync"
+      :busy="busy === 'cat-factory-sync'"
+      @sync="syncRepositories()"
     />
   </IntegrationScreen>
 </template>

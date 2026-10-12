@@ -14,6 +14,7 @@ import {
 } from '../../integrations/catFactoryConfig.js'
 import { resolveCapabilities } from '../../integrations/capabilities.js'
 import { openCredential } from '../../integrations/resolve.js'
+import { RepositorySyncService } from '../projects/RepositorySyncService.js'
 import { type CheckedKey, catFactoryCheck } from './catFactoryCheck.js'
 
 const NO_ADAPTERS = 'This deployment wired no gateway factory, so it cannot reach cat-factory'
@@ -27,15 +28,17 @@ export class CatFactoryConnectionService {
   constructor(private readonly container: AppContainer) {}
 
   async read(): Promise<CatFactoryConnection> {
-    const [config, capabilities] = await Promise.all([
+    const [config, capabilities, repositorySync] = await Promise.all([
       readCatFactoryConfig(this.container),
       resolveCapabilities(this.container),
+      new RepositorySyncService(this.container).status(),
     ])
     return {
       config,
       suggested: this.container.catFactorySuggestion,
       aiReviewReady: capabilities.aiReview,
       guidedReviewReady: capabilities.guidedReview,
+      repositorySync,
     }
   }
 
@@ -46,13 +49,24 @@ export class CatFactoryConnectionService {
    */
   async save(config: CatFactoryConfig): Promise<CatFactoryConnection> {
     const stored = await readCatFactoryConfig(this.container)
-    if (stored !== null && stored.baseUrl !== originOf(config.baseUrl)) await this.dropKey()
+    if (stored !== null && stored.baseUrl !== originOf(config.baseUrl)) {
+      // Another instance is another directory: what was mirrored from the old one goes too.
+      await new RepositorySyncService(this.container).forget()
+      await this.dropKey()
+    }
     await writeCatFactoryConfig(this.container, config)
+    return this.read()
+  }
+
+  /** Bring the repositories in step with cat-factory now, and ask it to push from here on. */
+  async syncRepositories(): Promise<CatFactoryConnection> {
+    await new RepositorySyncService(this.container).syncNow()
     return this.read()
   }
 
   /** The key goes with the settings, so a later save cannot bind it to another instance. */
   async clear(): Promise<CatFactoryConnection> {
+    await new RepositorySyncService(this.container).forget()
     await this.dropKey()
     await clearCatFactoryConfig(this.container)
     return this.read()

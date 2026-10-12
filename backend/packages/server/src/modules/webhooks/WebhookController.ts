@@ -1,4 +1,5 @@
 import {
+  CAT_FACTORY_WEBHOOK_PATH,
   DEFAULT_ORG_SLUG,
   GITHUB_WEBHOOK_PATH,
   SLACK_ORG_WEBHOOK_PATH,
@@ -6,11 +7,13 @@ import {
 } from '@sainte-beuve/contracts'
 import type { SlackSignatureHeaders } from '@sainte-beuve/integrations'
 import { readSlackSignatureHeaders } from '@sainte-beuve/integrations'
+import { ForbiddenError } from '@sainte-beuve/kernel'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { type AppContainer, withOrg } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import { OrgService } from '../orgs/OrgService.js'
+import { RepositorySyncService } from '../projects/RepositorySyncService.js'
 import { GitHubWebhookService } from './GitHubWebhookService.js'
 import type { SlackIntake } from './SlackWebhookService.js'
 import { SlackWebhookService, unverifiedSlackRequest } from './SlackWebhookService.js'
@@ -94,7 +97,33 @@ export function webhookController(): Hono<AppEnv> {
     )
   })
 
+  mountCatFactoryPush(app)
   return app
+}
+
+/**
+ * cat-factory's directory pushes, for the org the URL names. Every refusal is
+ * the same 403 for the reason the Slack route gives, and which one it was goes
+ * to the log.
+ */
+function mountCatFactoryPush(app: Hono<AppEnv>): void {
+  app.post(CAT_FACTORY_WEBHOOK_PATH, async (c) => {
+    const container = c.get('container')
+    const refuse = (reason: string): Error => {
+      container.logger.debug({ path: c.req.path, reason }, 'refused a cat-factory push')
+      return new ForbiddenError('This cat-factory push could not be verified')
+    }
+    if (!c.req.header('x-cat-factory-signature') || !c.req.header('x-cat-factory-timestamp')) {
+      throw refuse('the request carried no cat-factory signature')
+    }
+    const org = await new OrgService(container).bySlugOrNull(c.req.param('org'))
+    if (org === null) throw refuse('the URL named an org this deployment does not hold')
+    const service = new RepositorySyncService(withOrg(container, org.id))
+    const outcome = await service.receive(c.req.raw.headers, await c.req.text())
+    if (outcome === null) throw refuse('the org follows no cat-factory directory')
+    if (!outcome.ok) throw refuse(outcome.reason)
+    return c.body(null, 204)
+  })
 }
 
 /**

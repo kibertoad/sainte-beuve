@@ -22,6 +22,7 @@ import type {
   ReviewRequest,
   VcsProvider,
 } from '@sainte-beuve/contracts'
+import type { RepositoryDirectoryGateway } from './repository-directory.js'
 
 /**
  * Outbound ports: the three systems sainte-beuve talks to. Each is OPTIONAL on the
@@ -349,6 +350,8 @@ export interface GatewayFactory {
   guidedReview(access: CatFactoryAccess): GuidedReviewGateway
   /** Asks an instance what a key may do there, for the Configuration screen's check. */
   catFactoryProbe(access: CatFactoryAccess): CatFactoryProbe
+  /** The account directory the org's repository list is mirrored from. */
+  catFactoryDirectory(access: CatFactoryAccess): RepositoryDirectoryGateway
   /** The sign-in round trip for one host. Null when no OAuth client is configured for it. */
   signIn(provider: VcsProvider): VcsIdentityGateway | null
 }

@@ -391,3 +391,5 @@ export const teams = pgTable(
     uniqueIndex('teams_name_idx').on(table.orgId, table.nameKey),
   ],
 )
+
+export { externalRepositories } from './external-schema.js'

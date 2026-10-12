@@ -74,6 +74,14 @@ export type {
   StoredIntegrationToken,
   StoredSession,
 } from './ports/repositories.js'
+export type { ExternalRepositoryRepository } from './ports/external-repositories.js'
+export type {
+  DirectoryDeliveryOutcome,
+  DirectorySyncReport,
+  ExternalRepositoryEntry,
+  RepositoryDirectoryGateway,
+  RepositoryDirectoryStore,
+} from './ports/repository-directory.js'
 export type { OrgRepository, PersistenceProvider, TenancyDirectory } from './ports/tenancy.js'
 export type { TeamRepository } from './ports/teams.js'
 export type { RoundTripState, StateSigner } from './ports/state.js'

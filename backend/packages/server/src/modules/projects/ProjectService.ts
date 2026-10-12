@@ -1,8 +1,15 @@
-import type { CreateProject, Project, UpdateProject } from '@sainte-beuve/contracts'
+import type {
+  CreateProject,
+  ExternalRepositoryRef,
+  Project,
+  ProjectRef,
+  UpdateProject,
+} from '@sainte-beuve/contracts'
 import { DEFAULT_PROJECT_SKILLS } from '@sainte-beuve/contracts'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
 import { mergeVocabulary } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { catFactoryAccess } from '../../integrations/resolve.js'
 import { OrgService } from '../orgs/OrgService.js'
 
 /**
@@ -23,14 +30,41 @@ export class ProjectService {
   }
 
   async add(input: CreateProject): Promise<Project> {
-    const { repositories, clock, ids } = this.container
-    const existing = await repositories.projects.getByRef(input)
+    await this.refuseWhileManagedElsewhere()
+    const existing = await this.container.repositories.projects.getByRef(input)
     if (existing !== null) {
       throw new ConflictError(`${input.owner}/${input.repo} is already registered`, {
         projectId: existing.id,
       })
     }
     await this.refuseIfAnotherOrgClaimedIt(input)
+    return this.create({ ...input, domains: await this.inOrgVocabulary(input.domains) })
+  }
+
+  /**
+   * Register a repository an external source lists, with the defaults an admin
+   * gets. Null when another org claimed it first: the source cannot override
+   * that rule, and the next sync asks again.
+   */
+  async addListed(
+    input: ProjectRef & { external: ExternalRepositoryRef },
+  ): Promise<Project | null> {
+    const holder = await this.container.stores.tenancy.findOrgIdForProject(input)
+    if (holder !== null && holder !== this.container.orgId) {
+      this.container.logger.warn(
+        { owner: input.owner, repo: input.repo, source: input.external.source },
+        'a synced repository is registered by another org, so it was not added',
+      )
+      return null
+    }
+    return this.create({ ...input, webUrl: null, domains: [] })
+  }
+
+  private create(
+    input: ProjectRef &
+      Pick<CreateProject, 'webUrl' | 'skills' | 'domains'> & { external?: ExternalRepositoryRef },
+  ): Promise<Project> {
+    const { repositories, clock, ids } = this.container
     return repositories.projects.create({
       id: ids.next(),
       provider: input.provider,
@@ -40,11 +74,26 @@ export class ProjectService {
       // Absent means the defaults; an explicit empty list means a team that
       // wants no skill vocabulary, and the two must not collapse into one.
       skills: input.skills ?? [...DEFAULT_PROJECT_SKILLS],
-      domains: await this.inOrgVocabulary(input.domains),
+      domains: input.domains,
       mergeComments: null,
       restrictDirectMerge: false,
+      ...(input.external === undefined ? {} : { external: input.external }),
       createdAt: clock.now(),
     })
+  }
+
+  /**
+   * While cat-factory is configured it decides which repositories the org
+   * watches, so adding or removing one here would be undone by the next sync.
+   */
+  private async refuseWhileManagedElsewhere(): Promise<void> {
+    if ((await catFactoryAccess(this.container)) === null) return
+    throw new ConflictError(
+      "This org's repositories come from its cat-factory workspaces. Link or unlink the " +
+        'repository in cat-factory and it follows here; skills, domains and merge settings ' +
+        'stay editable.',
+      { reason: 'repositories_managed_externally' },
+    )
   }
 
   /**
@@ -105,6 +154,7 @@ export class ProjectService {
    * people made and un-registering a repository is not a way to withdraw one.
    */
   async remove(projectId: string): Promise<Project[]> {
+    await this.refuseWhileManagedElsewhere()
     const { repositories } = this.container
     assertFound(await repositories.projects.getById(projectId), `No project ${projectId}`)
     await repositories.projects.delete(projectId)

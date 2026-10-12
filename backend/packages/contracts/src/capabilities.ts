@@ -10,6 +10,11 @@ export const capabilitiesSchema = v.object({
   aiReview: v.boolean(),
   /** cat-factory has a key and an instance, so a guided review can be opened. */
   guidedReview: v.boolean(),
+  /**
+   * cat-factory has a key and an instance, so the org's repositories are the
+   * ones linked in its cat-factory workspaces rather than registered here.
+   */
+  repositoryDirectory: v.boolean(),
 })
 export type Capabilities = v.InferOutput<typeof capabilitiesSchema>
 
