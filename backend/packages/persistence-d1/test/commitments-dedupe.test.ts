@@ -58,9 +58,6 @@ beforeAll(async () => {
   // A tie on the time is broken on the id.
   await seedCommitment({ id: 'tie-b', key: 'github:platform/api#13' })
   await seedCommitment({ id: 'tie-a', key: 'github:platform/api#13' })
-  // A key spelled with case is the same pull request.
-  await seedCommitment({ id: 'lower', key: 'github:platform/api#14', createdAt: 1_000 })
-  await seedCommitment({ id: 'upper', key: 'github:Platform/API#14', createdAt: 2_000 })
   // Another host, another person, another org: none of them a duplicate.
   await seedCommitment({ id: 'gitlab', key: 'gitlab:platform/api#12' })
   await seedCommitment({ id: 'other-person', reviewerId: 'r2' })
@@ -75,7 +72,6 @@ it('keeps the earliest commitment per person and pull request', async () => {
   expect(rows).toStrictEqual([
     { org_id: 'org-a', id: 'gitlab', pull_request_key: 'gitlab:platform/api#12' },
     { org_id: 'org-a', id: 'kept', pull_request_key: 'github:platform/api#12' },
-    { org_id: 'org-a', id: 'lower', pull_request_key: 'github:platform/api#14' },
     { org_id: 'org-a', id: 'other-person', pull_request_key: 'github:platform/api#12' },
     { org_id: 'org-a', id: 'tie-a', pull_request_key: 'github:platform/api#13' },
     { org_id: 'org-b', id: 'other-org', pull_request_key: 'github:platform/api#12' },

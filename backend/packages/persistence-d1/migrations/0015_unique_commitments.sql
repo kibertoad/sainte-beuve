@@ -2,17 +2,15 @@
 -- kernel's `pullRequestKey`, so two clicks landing together write one row.
 --
 -- The index cannot build over the duplicates such a race already left, so they
--- are folded first. Each key is lowercased as `pullRequestKey` writes it. The
--- earliest row of each (org, reviewer, pull request) is kept, ties broken on
--- the id; when it holds no host request and a later row does, it takes that
--- request over, so the reviewer it names can still be withdrawn on release.
+-- are folded first. Every key was written by `pullRequestKey`, which already
+-- lowercases the path, so the keys are compared as stored. The earliest row of
+-- each (org, reviewer, pull request) is kept, ties broken on the id; when it
+-- holds no host request and a later row does, it takes that request over, so
+-- the reviewer it names can still be withdrawn on release.
 -- The later rows are then deleted.
 --
 -- The Postgres adapter carries the same change as
 -- `migrations/20261012153000_unique_commitments/migration.sql`.
-UPDATE review_commitments SET pull_request_key = lower(pull_request_key)
-WHERE pull_request_key <> lower(pull_request_key);
-
 UPDATE review_commitments AS keeper
 SET data = json_set(keeper.data, '$.requestedHandle', (
   SELECT json_extract(donor.data, '$.requestedHandle') FROM review_commitments AS donor
