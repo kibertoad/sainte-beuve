@@ -13,6 +13,7 @@ import {
   type TeamActor,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { repositoryDirectoryAccess } from '../../integrations/resolve.js'
 
 /**
  * An org's teams, and the reviewers that name them.
@@ -51,6 +52,7 @@ export class TeamService {
   async update(teamId: string, patch: UpdateTeam): Promise<Team> {
     const team = await this.find(teamId)
     this.authorise({ kind: 'change', team, newOwnerId: patch.ownerId })
+    if (patch.name !== undefined && patch.name !== team.name) await this.refuseIfFollowed(team)
     if (patch.ownerId !== undefined) await this.assertReviewer(patch.ownerId)
     if (patch.name !== undefined) await this.assertNameFree(patch.name, teamId)
     const updated = assertFound(
@@ -65,6 +67,7 @@ export class TeamService {
   async delete(teamId: string): Promise<Team[]> {
     const team = await this.find(teamId)
     this.authorise({ kind: 'change', team })
+    await this.refuseIfFollowed(team)
     await this.container.repositories.teams.delete(teamId)
     await this.renameOnReviewers(team.name, null)
     return this.list()
@@ -74,6 +77,21 @@ export class TeamService {
     const team = await this.container.repositories.teams.getById(teamId)
     if (team === null) throw new NotFoundError(`No team ${teamId}`)
     return team
+  }
+
+  /**
+   * A team a directory keeps is named and removed there, so a rename or a
+   * delete here would be undone by the next sync. Its owner and merge comments
+   * stay editable.
+   */
+  private async refuseIfFollowed(team: Team): Promise<void> {
+    if (team.external === null || team.external === undefined) return
+    if ((await repositoryDirectoryAccess(this.container)) === null) return
+    throw new ConflictError(
+      `"${team.name}" is a cat-factory workspace, so it is renamed or removed there. ` +
+        'Its owner and merge comments stay editable here.',
+      { reason: 'team_managed_externally' },
+    )
   }
 
   private authorise(action: TeamAction): void {
@@ -93,12 +111,21 @@ export class TeamService {
   }
 
   private async renameOnReviewers(from: string, to: string | null): Promise<void> {
-    const { reviewers } = this.container.repositories
-    const key = from.trim().toLowerCase()
-    for (const reviewer of await reviewers.list()) {
-      if (reviewer.team?.trim().toLowerCase() === key)
-        await reviewers.update(reviewer.id, { team: to })
-    }
+    await renameTeamOnReviewers(this.container, from, to)
+  }
+}
+
+/** Write a team's new name, or null for a deleted team, onto every reviewer naming the old one. */
+export async function renameTeamOnReviewers(
+  container: AppContainer,
+  from: string,
+  to: string | null,
+): Promise<void> {
+  const { reviewers } = container.repositories
+  const key = from.trim().toLowerCase()
+  for (const reviewer of await reviewers.list()) {
+    if (reviewer.team?.trim().toLowerCase() === key)
+      await reviewers.update(reviewer.id, { team: to })
   }
 }
 

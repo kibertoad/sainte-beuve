@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { externalRefSchema } from './external.js'
 import { domainSchema, roleSchema } from './orgs.js'
 import { NO_VCS_HANDLES, vcsHandlesSchema } from './vcs.js'
 
@@ -72,6 +73,12 @@ export const reviewerSchema = v.object({
   ),
   /** Reviews currently assigned and not yet resolved. Selection reads it; nothing else does. */
   outstandingReviews: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
+   * The person an external directory lists, set on a reviewer that directory
+   * follows. While the sync is on, the directory owns the name, the handles and
+   * the team; skills, domains, weight, availability and Slack stay here.
+   */
+  external: v.optional(v.nullable(externalRefSchema)),
   createdAt: v.number(),
 })
 export type Reviewer = v.InferOutput<typeof reviewerSchema>

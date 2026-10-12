@@ -52,6 +52,7 @@ org gets there — no port method takes one, and no service passes one.
 | `integration_configs`   | `(org_id, integration_id)`    | `updated_at`                                                                                                                    |
 | `projects`              | `(org_id, id)`                | `ref_key` (UNIQUE per org), `created_at`                                                                                        |
 | `external_repositories` | `(org_id, source, key)`       | `seq`                                                                                                                           |
+| `external_directory`    | `(org_id, source, kind, key)` | `seq`                                                                                                                           |
 | `identities`            | `(org_id, provider, subject)` | `reviewer_id`                                                                                                                   |
 | `attention_requests`    | `(org_id, id)`                | `status`, `created_at`                                                                                                          |
 | `review_commitments`    | `(org_id, id)`                | `reviewer_id`, `pull_request_key`, `created_at`                                                                                 |

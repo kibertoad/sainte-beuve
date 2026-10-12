@@ -13,7 +13,8 @@
 // review may be filed (`aiAdmission`), and who may change a review from a chat
 // command (`commands`). What merging one of your own pull requests from here
 // may look like (`merging`), and which pull requests are yours to review
-// (`reviewing`).
+// (`reviewing`). Which reviewers and teams an external directory's people and
+// groups are (`directoryPeople`, `directoryTeams`).
 
 export {
   AI_REVIEW_FILING_TIMEOUT_MS,
@@ -30,6 +31,14 @@ export {
   type ChatCommandVerb,
   decideChatCommand,
 } from './commands.js'
+export {
+  accountKey,
+  type DirectoryOwnedFields,
+  type DirectoryPeopleInput,
+  type DirectoryPeoplePlan,
+  planDirectoryPeople,
+} from './directoryPeople.js'
+export { type DirectoryTeamPlan, planDirectoryTeams } from './directoryTeams.js'
 export { decideEnrolment, type EnrolmentDecision, type EnrolmentInput } from './enrolment.js'
 export {
   decideDirectMerge,

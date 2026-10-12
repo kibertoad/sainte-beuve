@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { peopleSyncSchema } from './external-directory.js'
 
 // ---------------------------------------------------------------------------
 // cat-factory connection wire contracts.
@@ -58,6 +59,8 @@ export const repositorySyncSchema = v.object({
   webhookUrl: v.nullable(v.string()),
   /** Why the last sync or webhook registration failed, cleared by the next one that worked. */
   error: v.nullable(v.string()),
+  /** The people and teams the same directory keeps in step. Null until a sync has read them. */
+  people: v.optional(v.nullable(peopleSyncSchema), null),
 })
 export type RepositorySync = v.InferOutput<typeof repositorySyncSchema>
 

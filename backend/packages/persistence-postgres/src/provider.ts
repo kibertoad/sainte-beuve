@@ -10,6 +10,7 @@ import { asc, eq } from 'drizzle-orm'
 import { PostgresAttentionRepository, PostgresReviewCommitmentRepository } from './attention.js'
 import { PostgresApiKeyRepository, PostgresSessionRepository } from './auth.js'
 import type { PostgresDatabase } from './database.js'
+import { PostgresExternalDirectoryRepository } from './external-directory.js'
 import { PostgresExternalRepositoryRepository } from './external-repositories.js'
 import { PostgresOrgRepository } from './orgs.js'
 import { PostgresReviewerRepository } from './reviewers.js'
@@ -70,6 +71,7 @@ class PostgresPersistence implements PersistenceProvider {
       apiKeys: new PostgresApiKeyRepository(db, orgId),
       teams: new PostgresTeamRepository(db, orgId),
       externalRepositories: new PostgresExternalRepositoryRepository(db, orgId),
+      externalDirectory: new PostgresExternalDirectoryRepository(db, orgId),
     }
   }
 

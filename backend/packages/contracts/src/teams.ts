@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { externalRefSchema } from './external.js'
 import { mergeCommentListSchema, mergeCommentOverrideSchema } from './merging.js'
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,11 @@ export const teamSchema = v.object({
   ownerId: v.nullable(v.string()),
   /** Replaces the org's merge comments for pull requests by this team's members. */
   mergeComments: mergeCommentOverrideSchema,
+  /**
+   * The group an external directory lists, set on a team that directory keeps.
+   * While the sync is on, the directory owns its name and its members.
+   */
+  external: v.optional(v.nullable(externalRefSchema)),
   createdAt: v.number(),
 })
 export type Team = v.InferOutput<typeof teamSchema>

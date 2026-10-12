@@ -38,6 +38,12 @@ const { skills: knownSkills, domains: knownDomains } = useKnownVocabulary({
   domains: () => reviewers.value.flatMap((reviewer) => reviewer.domains),
 })
 const { busy, run } = useApiAction({ refresh })
+const capabilities = useCapabilities()
+
+/** Whether cat-factory owns this reviewer's name, handles and team right now. */
+function managed(reviewer: Reviewer): boolean {
+  return capabilities.confirmed('repositoryDirectory') && reviewer.external != null
+}
 
 /** Whether the add form is open, and which row is being edited. Never both. */
 const adding = ref(false)
@@ -169,6 +175,7 @@ function togglePause(reviewer: Reviewer) {
             :known-skills="knownSkills"
             :known-domains="knownDomains"
             :reviewer="editing"
+            :managed="managed(reviewer)"
             :busy="busy === reviewer.id"
             submit-label="Save"
             @submit="save"
@@ -181,7 +188,12 @@ function togglePause(reviewer: Reviewer) {
           class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
         >
           <div class="min-w-0">
-            <p class="font-medium">{{ reviewer.displayName }}</p>
+            <p class="flex flex-wrap items-center gap-2 font-medium">
+              {{ reviewer.displayName }}
+              <UBadge v-if="managed(reviewer)" variant="outline" color="neutral" size="sm">
+                cat-factory
+              </UBadge>
+            </p>
             <p class="text-sm text-muted">
               {{ handles(reviewer) }}
               <template v-if="reviewer.team"> &middot; {{ reviewer.team }}</template>

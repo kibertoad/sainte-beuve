@@ -392,4 +392,4 @@ export const teams = pgTable(
   ],
 )
 
-export { externalRepositories } from './external-schema.js'
+export { externalDirectory, externalRepositories } from './external-schema.js'

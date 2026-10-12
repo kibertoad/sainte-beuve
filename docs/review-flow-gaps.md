@@ -129,12 +129,14 @@ Both paths share one rule, and the docs describe it.
 
 ### 10. cat-factory workspaces and users
 
-The directory sync reads users, workspaces and memberships and drops them. All
-the repositories a key reaches become one flat list.
+The directory sync read users, workspaces and memberships and dropped them, so
+the reviewer pool and the teams were kept by hand.
 
-Workspaces map to teams and directory users to reviewers, matched on their host
-accounts, so the pool and the teams follow cat-factory the way the repositories
-already do.
+Workspaces become teams and directory users become reviewers, matched on their
+GitHub or GitLab account, which cat-factory publishes on a directory user from
+[kibertoad/cat-factory#2358](https://github.com/kibertoad/cat-factory/pull/2358).
+Until an instance serves that, workspaces still become teams and nobody is
+matched.
 
 ### 11. GitLab intake
 

@@ -3,7 +3,7 @@ import type {
   ExternalRepositoryEntry,
   GuidedReviewGateway,
   RepositoryDirectoryGateway,
-  RepositoryDirectoryStore,
+  DirectoryMirrorStore,
 } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import { runReminderTick } from '../src/reminders/tick.js'
@@ -36,7 +36,7 @@ function directory(listing: ExternalRepositoryEntry[]) {
   let seq = 0
   const registered: { webhookId: string; url: string; secret: string }[] = []
   const removed: string[] = []
-  const sync = async (store: RepositoryDirectoryStore, reconciled: boolean) => {
+  const sync = async (store: DirectoryMirrorStore, reconciled: boolean) => {
     seq += 1
     const listed = new Set(listing.map((entry) => entry.key))
     for (const key of await store.liveKeys()) {

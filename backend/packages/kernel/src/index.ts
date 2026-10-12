@@ -75,15 +75,17 @@ export type {
   StoredSession,
 } from './ports/repositories.js'
 export type { ExternalRepositoryRepository } from './ports/external-repositories.js'
+export type { ExternalDirectoryRepository } from './ports/external-directory.js'
 export type {
   DirectoryDeliveryOutcome,
+  DirectoryMirrorStore,
   DirectorySyncReport,
+  ExternalDirectoryEntryInput,
   ExternalRepositoryEntry,
   RepositoryDirectoryGateway,
-  RepositoryDirectoryStore,
 } from './ports/repository-directory.js'
 export type { OrgRepository, PersistenceProvider, TenancyDirectory } from './ports/tenancy.js'
-export type { TeamRepository } from './ports/teams.js'
+export type { TeamPatch, TeamRepository } from './ports/teams.js'
 export type { RoundTripState, StateSigner } from './ports/state.js'
 export { UPSTREAM_TIMEOUT_MS, withDeadline } from './upstream.js'
 export {

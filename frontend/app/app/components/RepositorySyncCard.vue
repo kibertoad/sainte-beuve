@@ -25,11 +25,12 @@ function when(at: number | null): string {
       class="flex flex-col-reverse gap-2 mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
     >
       <div class="min-w-0">
-        <p class="font-medium">Repositories</p>
+        <p class="font-medium">Repositories and people</p>
         <p class="text-sm text-muted">
           This org watches the repositories linked in its cat-factory workspaces. Link or unlink one
           there and it follows here; a repository cat-factory does not link is removed from the
-          list. Skills, domains and merge settings stay editable on the Repositories screen.
+          list. Its workspaces become teams and its members become reviewers, matched on their
+          GitHub or GitLab account. Skills, domains, weight and merge settings stay editable here.
         </p>
       </div>
       <UBadge :color="webhook.color" variant="subtle" class="self-start sm:shrink-0">
@@ -42,6 +43,10 @@ function when(at: number | null): string {
       <dd>{{ when(sync.syncedAt) }}</dd>
       <dt class="text-muted">Last full check</dt>
       <dd>{{ when(sync.reconciledAt) }}</dd>
+      <template v-if="sync.people">
+        <dt class="text-muted">People</dt>
+        <dd>{{ sync.people.linked }} of {{ sync.people.listed }} in the reviewer pool</dd>
+      </template>
       <template v-if="sync.webhookUrl">
         <dt class="text-muted">Push URL</dt>
         <dd class="break-all font-mono text-xs">{{ sync.webhookUrl }}</dd>
@@ -57,6 +62,11 @@ function when(at: number | null): string {
       title="The last sync did not complete"
       :description="sync.error"
     />
+    <p v-if="sync.people && sync.people.withoutAccount > 0" class="mt-3 text-sm text-muted">
+      {{ sync.people.withoutAccount }} of them have no GitHub or GitLab account in cat-factory, so
+      nobody here can be matched to them. They join the pool once they sign in to cat-factory
+      through GitHub or GitLab.
+    </p>
     <p v-if="sync.webhook === 'failed'" class="mt-3 text-sm text-muted">
       Changes are still picked up every few minutes. Pushes need a key with the
       <code>admin</code> scope that reaches every workspace, and a public HTTPS address for this

@@ -1,19 +1,14 @@
-import {
-  type DirectoryRecord,
-  type DirectoryStore,
-  DirectorySyncer,
-  type SyncResult,
-} from '@cat-factory/directory-sync'
+import { type DirectoryStore, DirectorySyncer, type SyncResult } from '@cat-factory/directory-sync'
 import { CatFactoryClient } from '@cat-factory/sdk'
 import {
   type CatFactoryAccess,
-  type RepositoryDirectoryGateway,
   type DirectoryDeliveryOutcome,
+  type DirectoryMirrorStore,
   type DirectorySyncReport,
-  type ExternalRepositoryEntry,
-  type RepositoryDirectoryStore,
+  type RepositoryDirectoryGateway,
   withDeadline,
 } from '@sainte-beuve/kernel'
+import { mirrorEntryOf, mirrorListOf } from './directoryEntries.js'
 import { refusalFor } from './refusals.js'
 
 export interface CatFactoryDirectoryOptions extends CatFactoryAccess {
@@ -24,10 +19,10 @@ export interface CatFactoryDirectoryOptions extends CatFactoryAccess {
 }
 
 /**
- * The repositories linked in an account's cat-factory workspaces, kept in step
- * through `@cat-factory/directory-sync`. Only repository records reach the
- * store; the users, workspaces and memberships the directory also carries are
- * read past and dropped.
+ * An account's cat-factory directory, kept in step through
+ * `@cat-factory/directory-sync`: the repositories its workspaces link, and its
+ * users, workspaces and workspace memberships as people, groups and
+ * memberships. See `mirrorEntryOf` for the mapping.
  */
 export class CatFactoryDirectoryGateway implements RepositoryDirectoryGateway {
   private readonly client: CatFactoryClient
@@ -43,20 +38,20 @@ export class CatFactoryDirectoryGateway implements RepositoryDirectoryGateway {
     this.now = options.now ?? Date.now
   }
 
-  catchUp(store: RepositoryDirectoryStore): Promise<DirectorySyncReport> {
+  catchUp(store: DirectoryMirrorStore): Promise<DirectorySyncReport> {
     return this.relay('follow the directory change feed', () =>
       this.syncer(store).catchUp().then(reportOf),
     )
   }
 
-  reconcile(store: RepositoryDirectoryStore): Promise<DirectorySyncReport> {
+  reconcile(store: DirectoryMirrorStore): Promise<DirectorySyncReport> {
     return this.relay('read the directory snapshots', () =>
       this.syncer(store).reconcile().then(reportOf),
     )
   }
 
   async receive(
-    store: RepositoryDirectoryStore,
+    store: DirectoryMirrorStore,
     delivery: { headers: Headers; rawBody: string; secret: string },
   ): Promise<DirectoryDeliveryOutcome> {
     const result = await this.relay('apply a directory push', () =>
@@ -86,10 +81,10 @@ export class CatFactoryDirectoryGateway implements RepositoryDirectoryGateway {
     )
   }
 
-  private syncer(store: RepositoryDirectoryStore, webhookSecret?: string): DirectorySyncer {
+  private syncer(store: DirectoryMirrorStore, webhookSecret?: string): DirectorySyncer {
     return new DirectorySyncer({
       client: this.client,
-      store: repositoriesOnly(store),
+      store: mirrorOf(store),
       now: this.now,
       ...(webhookSecret === undefined ? {} : { webhookSecret }),
     })
@@ -112,28 +107,21 @@ function reportOf(result: SyncResult): DirectorySyncReport {
   return { cursor: result.cursor, reconciled: result.reconciled }
 }
 
-/** The directory store the syncer writes to, holding repository records only. */
-function repositoriesOnly(store: RepositoryDirectoryStore): DirectoryStore {
+/** The directory store the syncer writes to: the mirror's two lists behind one cursor. */
+function mirrorOf(store: DirectoryMirrorStore): DirectoryStore {
   return {
     getCursor: () => store.getCursor(),
     setCursor: (seq) => store.setCursor(seq),
     apply: async (record) => {
-      const entry = entryOf(record)
-      if (entry !== null) await store.apply(entry)
+      const mirrored = mirrorEntryOf(record)
+      if (mirrored === null) return
+      if (mirrored.list === 'repositories') await store.apply(mirrored.entry)
+      else await store.applyDirectory(mirrored.entry)
     },
-    listKeys: async (entityType) => (entityType === 'repo' ? store.liveKeys() : []),
-  }
-}
-
-function entryOf(record: DirectoryRecord): ExternalRepositoryEntry | null {
-  if (record.entityType !== 'repo') return null
-  const repo = record.entity
-  return {
-    key: record.key,
-    seq: record.seq,
-    repository:
-      repo === null
-        ? null
-        : { provider: repo.provider, owner: repo.owner, repo: repo.name, id: String(repo.repoId) },
+    listKeys: async (entityType) => {
+      const list = mirrorListOf(entityType)
+      if (list === null) return []
+      return list.list === 'repositories' ? store.liveKeys() : store.liveDirectoryKeys(list.kind)
+    },
   }
 }
