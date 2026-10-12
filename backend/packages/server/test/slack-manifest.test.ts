@@ -84,4 +84,20 @@ describe('the Slack app manifest', () => {
       missing: expect.stringContaining('https'),
     })
   })
+
+  it('refuses an https origin on this machine, which Slack cannot reach', async () => {
+    const result = await manifestOf(buildHarness({ apiBaseUrl: 'https://localhost:8788' }))
+    expect(result).toStrictEqual({
+      status: 'unavailable',
+      missing: expect.stringContaining('public https URL'),
+    })
+  })
+
+  it('names a malformed API_BASE_URL in the same sentence slot', async () => {
+    const result = await manifestOf(buildHarness({ apiBaseUrl: 'https://api.example.com/v1' }))
+    expect(result).toStrictEqual({
+      status: 'unavailable',
+      missing: expect.stringContaining('API_BASE_URL is an origin with no path'),
+    })
+  })
 })

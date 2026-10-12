@@ -1,5 +1,7 @@
 import type { SlackAppManifestResult } from '@sainte-beuve/contracts'
 import { slackAppManifest } from '@sainte-beuve/integrations'
+import { ConfigurationError } from '@sainte-beuve/kernel'
+import { isLoopback } from '../../config/authMode.js'
 import type { AppContainer } from '../../container.js'
 import { configuredOrigin } from '../../http/callbackOrigin.js'
 import { OrgService } from '../orgs/OrgService.js'
@@ -13,13 +15,26 @@ import { OrgService } from '../orgs/OrgService.js'
  * and then answers nothing.
  */
 export async function slackManifest(container: AppContainer): Promise<SlackAppManifestResult> {
-  if (container.apiBaseUrl === null) return { status: 'unavailable', missing: NO_API_BASE_URL }
-  const apiOrigin = configuredOrigin(container.apiBaseUrl)
-  if (!apiOrigin.startsWith('https://')) {
-    return { status: 'unavailable', missing: notHttps(apiOrigin) }
-  }
+  const origin = slackOrigin(container.apiBaseUrl)
+  if ('missing' in origin) return { status: 'unavailable', missing: origin.missing }
   const org = await new OrgService(container).current()
-  return { status: 'ready', ...slackAppManifest({ apiOrigin, org }) }
+  return { status: 'ready', ...slackAppManifest({ apiOrigin: origin.apiOrigin, org }) }
+}
+
+/** `API_BASE_URL` as an origin Slack can post to, or the sentence saying why it is not one. */
+function slackOrigin(apiBaseUrl: string | null): { apiOrigin: string } | { missing: string } {
+  if (apiBaseUrl === null) return { missing: NO_API_BASE_URL }
+  let url: URL
+  try {
+    url = new URL(configuredOrigin(apiBaseUrl))
+  } catch (error) {
+    if (error instanceof ConfigurationError) return { missing: error.message }
+    throw error
+  }
+  if (url.protocol !== 'https:' || isLoopback(url.hostname)) {
+    return { missing: notReachable(url.origin) }
+  }
+  return { apiOrigin: url.origin }
 }
 
 const NO_API_BASE_URL =
@@ -27,9 +42,10 @@ const NO_API_BASE_URL =
   'not say where it is served: set API_BASE_URL to its public https origin, such as ' +
   'https://api.sainte-beuve.example.com.'
 
-function notHttps(origin: string): string {
+function notReachable(origin: string): string {
   return (
-    `Slack only posts to an https URL, and API_BASE_URL is ${origin}: serve the API over https ` +
-    '(a tunnel will do on a laptop) and set API_BASE_URL to that origin.'
+    `Slack only posts to a public https URL, and API_BASE_URL is ${origin}: serve the API ` +
+    'over https on a public host (a tunnel will do on a laptop) and set API_BASE_URL to that ' +
+    'origin.'
   )
 }

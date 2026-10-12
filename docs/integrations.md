@@ -565,9 +565,10 @@ it:
    no announcement channel yet.
 
 The manifest is built on `API_BASE_URL`, because Slack keeps the URL and posts
-to it from then on. Slack only accepts an https URL, so a deployment without
-`API_BASE_URL`, or with an `http` one, gets a line on the screen naming what to
-set instead of a manifest. Locally that means a tunnel (see below).
+to it from then on. Slack only posts to a public https URL, so a deployment
+without `API_BASE_URL`, or with an `http` or loopback one, gets a line on the
+screen naming what to set instead of a manifest. Locally that means a tunnel
+(see below).
 
 The manifest sets the following, which is also the reference for an app made
 by hand or for checking one that already exists:
