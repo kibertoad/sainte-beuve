@@ -2,16 +2,46 @@ import type { AiReviewRun } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { stubAiReview } from './ai-review-doubles.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
-import { buildHarness, openReview, PR, post } from './helpers.js'
+import type { VcsGateway } from '@sainte-beuve/kernel'
+import {
+  buildHarness,
+  environmentVcs,
+  noMerging,
+  openReview,
+  PR,
+  post,
+  recordingVcs,
+} from './helpers.js'
 
 /**
  * Filing an AI review from a row that is not on the board yet: the workspace,
  * My PRs and My Reviews send the pull request rather than a review id.
  */
-async function wired() {
+async function wired(vcs: VcsGateway | null = null) {
   const catFactory = stubAiReview()
-  const harness = await connectCatFactory(buildHarness(catFactoryWired({ aiReview: catFactory })))
+  const harness = await connectCatFactory(
+    buildHarness({
+      ...catFactoryWired({ aiReview: catFactory }),
+      ...(vcs === null ? {} : { vcs: environmentVcs(vcs) }),
+    }),
+  )
   return { harness, catFactory }
+}
+
+/** A host that reports `authorLogin` as the pull request's author. */
+function hostReportingAuthor(authorLogin: string): VcsGateway {
+  return {
+    ...recordingVcs(),
+    pullRequestStatus: async () => ({
+      state: 'open',
+      url: PR.url,
+      authorLogin,
+      draft: false,
+      approval: 'pending',
+      mergeability: 'mergeable',
+      headSha: 'abc123',
+    }),
+  }
 }
 
 const BODY = { pullRequest: PR, title: 'Add the thing', authorLogin: 'octocat' }
@@ -44,8 +74,20 @@ describe('filing an AI review by pull request', () => {
     expect(((await res.json()) as AiReviewRun).reviewId).toBe(existing.id)
   })
 
-  it('records an unknown author when the row that asked did not know it', async () => {
-    const { harness } = await wired()
+  it('asks the host for the author when the row that asked did not know it', async () => {
+    const { harness } = await wired(hostReportingAuthor('octocat'))
+
+    const res = await harness.app.fetch(
+      post('/api/v1/ai-review', { pullRequest: PR, title: 'Add the thing' }),
+    )
+
+    expect(res.status).toBe(202)
+    const review = await harness.container.repositories.reviews.getByPullRequest(PR)
+    expect(review?.authorLogin).toBe('octocat')
+  })
+
+  it('still files, with an unknown author, when the host cannot say who wrote it', async () => {
+    const { harness, catFactory } = await wired({ ...recordingVcs(), ...noMerging() })
 
     const res = await harness.app.fetch(
       post('/api/v1/ai-review', { pullRequest: PR, title: 'Add the thing' }),
@@ -54,6 +96,7 @@ describe('filing an AI review by pull request', () => {
     expect(res.status).toBe(202)
     const review = await harness.container.repositories.reviews.getByPullRequest(PR)
     expect(review?.authorLogin).toBe('unknown')
+    expect(catFactory.requested).toHaveLength(1)
   })
 
   it('meets the same limit as the board button: one run in flight per review', async () => {

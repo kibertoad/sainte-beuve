@@ -64,9 +64,14 @@ export class AiReviewService {
 
   constructor(private readonly container: AppContainer) {}
 
-  async request(reviewId: string, instructions: string | null): Promise<AiReviewRun> {
+  async request(
+    reviewId: string,
+    instructions: string | null,
+    filing?: Resolved<AiReviewGateway, CredentialSource>,
+  ): Promise<AiReviewRun> {
     const { repositories, clock, ids } = this.container
-    const resolved = requireCapability(await resolveAiReview(this.container), NOT_CONFIGURED)
+    const resolved =
+      filing ?? requireCapability(await resolveAiReview(this.container), NOT_CONFIGURED)
     const review = assertFound(
       await repositories.reviews.getById(reviewId),
       `No review request ${reviewId}`,

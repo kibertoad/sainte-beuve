@@ -272,7 +272,7 @@ export const requestPullRequestAiReviewSchema = v.object({
   ...requestAiReviewSchema.entries,
   pullRequest: pullRequestRefSchema,
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300)),
-  /** Null when the row that asked does not know it, as a commitment does not. */
+  /** Null when the row that asked does not know it (a commitment): the host is asked instead. */
   authorLogin: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
 })
 export type RequestPullRequestAiReview = v.InferOutput<typeof requestPullRequestAiReviewSchema>
