@@ -237,12 +237,6 @@ describe('GitHub webhook intake', () => {
     expect((await tracked(harness))[0]).toMatchObject({ status: 'approved' })
   })
 
-  it('closes the review when the pull request closes', async () => {
-    await deliver(harness, 'pull_request', pullRequestPayload('opened'))
-    await deliver(harness, 'pull_request', pullRequestPayload('closed'))
-    expect((await tracked(harness))[0]).toMatchObject({ status: 'closed' })
-  })
-
   it('ignores an event about a pull request nobody tracked', async () => {
     // A repository has open pull requests that predate the App, and closing one
     // of those is simply not our business.
@@ -485,5 +479,36 @@ describe('GitHub label on a review already tracked', () => {
     const live = reminders.filter((r) => r.status === 'scheduled')
     expect(live).toHaveLength(1)
     expect(live[0]?.reviewerId).toBe(review?.assignedReviewerIds[0])
+  })
+})
+
+describe('GitHub pull request closing', () => {
+  let harness: TestHarness
+
+  beforeEach(async () => {
+    harness = await registered(
+      buildHarness({ vcs: environmentVcs(recordingVcs()), github: GITHUB }),
+    )
+  })
+
+  it('keeps the verdict when an approved pull request merges', async () => {
+    await deliver(harness, 'pull_request', pullRequestPayload('opened'))
+    await deliver(
+      harness,
+      'pull_request_review',
+      pullRequestPayload('submitted', {
+        review: { state: 'approved', author_association: 'MEMBER' },
+      }),
+    )
+    const res = await deliver(harness, 'pull_request', pullRequestPayload('closed'))
+
+    expect(await res.json()).toMatchObject({ action: 'ignored:settled' })
+    expect((await tracked(harness))[0]).toMatchObject({ status: 'approved' })
+  })
+
+  it('closes the review when the pull request closes', async () => {
+    await deliver(harness, 'pull_request', pullRequestPayload('opened'))
+    await deliver(harness, 'pull_request', pullRequestPayload('closed'))
+    expect((await tracked(harness))[0]).toMatchObject({ status: 'closed' })
   })
 })
