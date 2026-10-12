@@ -53,15 +53,15 @@ the repository. The Ask for attention modal shows that list.
 
 The modal lets the author tick reviewers from the ranked list. A request with
 named recipients reaches exactly those people, after the server checks each one
-is in the directory, available and not the requester. The fit and team gate
-applies only to a request with none.
+is in the directory, available, and neither the requester nor the pull
+request's author. The fit and team gate applies only to a request with none.
 
 ### 3. Slack delivery of a named ask
 
 When the org has Slack configured, each named recipient with a Slack id gets a
 DM saying who asks, for which pull request and what of the ask they match, with
-a commit button. The DM is updated as the ask moves on. Slack failing costs the
-DM and never the ask.
+commit and decline buttons. The DM is updated as the ask moves on. Slack failing
+costs the DM and never the ask.
 
 ### 4. Past reviews in the same repository
 
@@ -72,7 +72,7 @@ the board's history and the host's verdicts. A recommendation names the count.
 ### 5. Per-repository cat-factory service
 
 `CatFactoryAiReviewGateway` reads the workspaces that link the repository from
-the org's directory mirror, asks each which service backs it, and files the
+the org's repository mirror, asks each which service backs it, and files the
 review there. The service id an org sets on the Configuration screen is the
 fallback for a repository no service backs, such as a monorepo.
 
@@ -100,9 +100,10 @@ made it and no active board assignment names the same person.
 
 Board assignment, the recommendations and an attention request without named
 recipients all measure the same share of wanted skills and domains. The board
-weights its draw by it, the recommendations sort on it, and a broadcast reaches
-whoever holds at least `ATTENTION_FIT_FLOOR` of it. The README, the
-implementation plan and `docs/integrations.md` describe that rule.
+weights its draw by it and the recommendations sort on it, both raised by the
+bonus for past reviews in the repository, and a broadcast reaches whoever holds
+at least `ATTENTION_FIT_FLOOR` of it. The README and the implementation plan
+describe that rule, and `docs/integrations.md` the board's draw.
 
 ### 10. cat-factory workspaces and users
 
@@ -123,9 +124,9 @@ one host-neutral label vocabulary (`ReviewLabelRules`).
 ### 12. Challenging a finding
 
 A challenge action on a finding of a parked AI review sends it to cat-factory's
-investigator, and the verdict (upheld, amended, retracted or failed) shows on
-the finding. A retracted finding is unticked so it never reaches the pull
-request.
+investigator, and the verdict (upheld, amended or retracted) shows on the
+finding. A retracted finding is unticked so it never reaches the pull request.
+An investigator that fails leaves the finding standing, to be challenged again.
 
 ### 13. A guided review names its workspace
 
