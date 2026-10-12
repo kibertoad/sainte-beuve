@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "c12cb535-893a-4532-9e71-4e6f4d7fec77",
-  "prevIds": ["5723edd2-894e-457a-82d5-2bef88d48745"],
+  "id": "717a866c-a50a-4c2b-982f-694304c04c05",
+  "prevIds": ["bca7dbce-f011-42ad-a87f-2bc79f921a61"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -369,6 +369,19 @@
       "generated": null,
       "identity": null,
       "name": "data",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attention_requests"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "revision",
       "entityType": "columns",
       "schema": "public",
       "table": "attention_requests"
