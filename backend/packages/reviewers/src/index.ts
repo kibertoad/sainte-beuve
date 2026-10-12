@@ -62,7 +62,14 @@ export {
   isInAttentionAudience,
   outstandingCommitments,
   selectAttentionAudience,
+  unaskableReason,
 } from './attention.js'
+export {
+  type RecipientRefusal,
+  type RecipientsInput,
+  type RecipientsResolution,
+  resolveAttentionRecipients,
+} from './recipients.js'
 export {
   countPastReviews,
   familiarityBonus,

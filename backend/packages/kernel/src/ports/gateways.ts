@@ -11,19 +11,15 @@ import type {
   GuidedReviewTarget,
   GuidedReviewThreadView,
   OpenGuidedReviewThreadInput,
-  OpenPullRequest,
   PostGuidedReviewDraftsInput,
-  ProjectRef,
   PullRequestRef,
-  PullRequestStatus,
   Reminder,
-  RepositoryLookup,
   RequestGuidedReviewDraftsInput,
   ReviewRequest,
   VcsProvider,
 } from '@sainte-beuve/contracts'
-import type { EpochMs } from '../domain/types.js'
 import type { RepositoryDirectoryGateway } from './repository-directory.js'
+import type { VcsGateway, VcsIdentityGateway } from './vcs.js'
 
 /**
  * Outbound ports: the three systems sainte-beuve talks to. Each is OPTIONAL on the
@@ -31,17 +27,6 @@ import type { RepositoryDirectoryGateway } from './repository-directory.js'
  * that needs one answers 503 naming what is not configured, rather than failing
  * deep inside a service with a null read.
  */
-
-/**
- * What a host search looks for: pull requests `username` opened, was asked to
- * review, or has reviewed. A reviewed one excludes the person's own.
- */
-export type PullRequestSearchRole = 'authored' | 'review_requested' | 'reviewed'
-
-export interface PullRequestSearch {
-  username: string
-  role: PullRequestSearchRole
-}
 
 /** Chat delivery (Slack today). */
 export interface ChatGateway {
@@ -51,138 +36,23 @@ export interface ChatGateway {
   sendReminder(reminder: Reminder, review: ReviewRequest, target: string): Promise<void>
 }
 
-/**
- * One account on a source-control host.
- *
- * The `subject` is what an identity is keyed on, and the `username` is not: a
- * handle is renameable and reusable by whoever claims it next, while both hosts
- * hand out a numeric id that never moves. A gateway that reported only the
- * handle would let a rename detach a person from their own workspace, and let
- * the next holder of the name inherit it.
- */
-export interface VcsAccount {
-  /** The host's stable id for the account, as a string. */
-  subject: string
-  /** The handle the host attributes pull requests to. */
-  username: string
-  displayName: string | null
-  avatarUrl: string | null
-}
-
-/** How many of a project's pull requests one handle gave a verdict on. */
-export interface ReviewerTally {
-  login: string
-  reviews: number
-}
-
-/** A pull request by the coordinates every host addresses it by. */
-export type PullRequestAddress = ProjectRef & { number: number }
-
-/**
- * Source control. One interface for every host: GitHub calls the objects pull
- * requests and GitLab calls them merge requests, and the translation happens
- * inside the adapter so that nothing above this line carries a branch on which
- * host a project is on.
- */
-export interface VcsGateway {
-  /**
-   * Mirror the assignment onto the pull request, so the VCS stays the source of
-   * truth. Answers the logins this call put a request on: one the host already
-   * listed, or has no account for, is left out where the host can tell.
-   */
-  requestReviewers(pr: PullRequestRef, logins: string[]): Promise<string[]>
-  /**
-   * Take the review request back off people who are no longer on the hook. The
-   * other half of `requestReviewers`: a reroll that only added the replacement
-   * would leave the previous reviewer with a pending request on the pull request
-   * and the notifications that come with it.
-   */
-  removeRequestedReviewers(pr: PullRequestRef, logins: string[]): Promise<void>
-  /**
-   * The handles the host is still waiting on a review from: requested, and not
-   * answered yet. Somebody who has already reviewed is not in it, so a caller
-   * that withdraws only from this list never takes back a request somebody has
-   * acted on.
-   */
-  pendingReviewers(pr: PullRequestRef): Promise<string[]>
-  /** Post a nudge or an AI-review verdict as a pull-request comment. */
-  comment(pr: PullRequestRef, body: string): Promise<void>
-  /**
-   * Every open pull request in one project, with its author and the reviewers
-   * the host has been asked for.
-   *
-   * One call answers both workspace lists. Both hosts return the author and the
-   * requested reviewers on the same page, so asking once per role would double
-   * the rate-limit cost of a workspace read to learn what the first answer
-   * already held, and the two halves would be from different moments.
-   */
-  listOpenPullRequests(project: ProjectRef): Promise<OpenPullRequest[]>
-  /**
-   * The open pull requests anywhere this credential can see where `username`
-   * plays `role`, newest activity first, at most one page of the host's search.
-   * Requested reviewers are not filled in. A credential with no person behind it
-   * (a GitHub App installation) answers an empty list without a request.
-   */
-  searchOpenPullRequests(search: PullRequestSearch): Promise<OpenPullRequest[]>
-  /**
-   * One pull request's approval and whether the host would merge it now. Not
-   * part of the list read, because neither host puts approvals on its list.
-   */
-  pullRequestStatus(pr: PullRequestAddress): Promise<PullRequestStatus>
-  /**
-   * Merge it with the method the repository's own settings allow. Refused with
-   * a `ConflictError` when the host will not merge it, or when its head is no
-   * longer `expectedHeadSha`.
-   */
-  merge(pr: PullRequestAddress, expectedHeadSha: string): Promise<void>
-  /**
-   * The repositories under `owner` whose names contain `query`, as far as this
-   * credential can see, at most one short page. Null when the credential cannot
-   * search an owner at all: a GitHub App installation token is minted for one
-   * repository, and there is none yet.
-   */
-  lookupRepositories(owner: string, query: string): Promise<RepositoryLookup | null>
-  /**
-   * The account this gateway's credential acts as, for a screen that has to say
-   * who a deployment is reaching the host as, and for the workspace, which has
-   * nothing else to decide whose pull requests to show. `null` when the
-   * credential has no person behind it, which is what a GitHub App installation
-   * token is: it acts as the App, not as anybody.
-   */
-  identify(): Promise<VcsAccount | null>
-  /**
-   * Who gave a verdict on the project's pull requests updated since `since`,
-   * each pull request counted once per reviewer, over at most one page of the
-   * most recently updated. A verdict is an approval or a request for changes;
-   * GitLab records only approvals.
-   */
-  pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]>
-}
-
-/**
- * The user-facing half of a VCS connection: the browser round trip that turns a
- * sign-in into a credential this deployment holds.
- *
- * Separate from {@link VcsGateway} because the two are configured
- * independently. An OAuth client can be registered on a deployment that has no
- * credential yet (that is the point: it is how the credential arrives), and a
- * deployment given a token by hand needs no OAuth client at all.
- */
-export interface VcsIdentityGateway {
-  /** Where to send the browser to authorise. `state` comes back on the callback. */
-  authorizeUrl(input: { redirectUri: string; state: string }): string
-  /** Turn the callback's `code` into a durable credential, and say whose it is. */
-  exchangeCode(input: {
-    code: string
-    redirectUri: string
-  }): Promise<{ token: string; account: VcsAccount }>
-}
-
 /** The handle a delegated AI review is tracked by. */
 export interface AiReviewHandle {
   taskId: string
   /** Deep link into the cat-factory instance that accepted the task, when it gives one. */
   url: string | null
+  /**
+   * The cat-factory workspace the task was filed in, or null when it went to the
+   * key's only workspace. Every later call about the run names it again: a key
+   * reaching several workspaces is refused a call that names none.
+   */
+  workspaceId: string | null
+}
+
+/** The workspace a run was filed in, which every call about it names. */
+export interface AiReviewWorkspace {
+  /** See {@link AiReviewHandle.workspaceId}. */
+  workspaceId: string | null
 }
 
 /**
@@ -216,14 +86,24 @@ export interface AiReviewReport {
  * whose findings the caller is looking at.
  */
 export interface AiReviewGateway {
-  /** Hand a pull request to cat-factory. Resolves once the task is accepted, not once it runs. */
+  /**
+   * Hand a pull request to cat-factory. Resolves once the task is accepted, not
+   * once it runs.
+   *
+   * The task goes under the service that backs the pull request's repository,
+   * found through `directoryKeys`: the keys the org's repository mirror holds
+   * that repository under, one per workspace linking it. When no service backs
+   * it, the task goes to the default service, and with no default it is refused
+   * naming both fixes.
+   */
   requestReview(input: {
     pullRequest: PullRequestRef
     title: string
     instructions: string | null
+    directoryKeys: readonly string[]
   }): Promise<AiReviewHandle>
   /** Poll one delegated run. The Worker cron and the Node scheduler both drive this. */
-  getStatus(taskId: string): Promise<AiReviewReport>
+  getStatus(input: { taskId: string } & AiReviewWorkspace): Promise<AiReviewReport>
   /**
    * Drop one finding from the parked review. The review stays parked.
    *
@@ -232,22 +112,22 @@ export interface AiReviewGateway {
    * upstream calls to be told what this answer already says. Null for a run that
    * came back carrying no review to curate.
    */
-  dismissFinding(input: { runId: string; findingId: string }): Promise<AiReviewCuration | null>
+  dismissFinding(
+    input: { runId: string; findingId: string } & AiReviewWorkspace,
+  ): Promise<AiReviewCuration | null>
   /**
    * Record the curated selection and act on it. ASYNCHRONOUS: it resolves once
    * cat-factory has ACCEPTED the instruction, and what actually landed arrives on
    * a later poll as `postReport`.
    */
-  resolveReview(input: {
-    runId: string
-    action: AiReviewResolution
-    findingIds: string[]
-  }): Promise<void>
+  resolveReview(
+    input: { runId: string; action: AiReviewResolution; findingIds: string[] } & AiReviewWorkspace,
+  ): Promise<void>
   /**
    * Re-dispatch the slices a stalled review never got back. Which ones is derived
    * from what the run observed, so there is nothing to pass.
    */
-  resumeReview(input: { runId: string }): Promise<void>
+  resumeReview(input: { runId: string } & AiReviewWorkspace): Promise<void>
 }
 
 /**
@@ -308,9 +188,12 @@ export interface CatFactoryAccess {
   apiKey: string
 }
 
-/** What filing an AI review needs on top of access: the service, and optionally a pipeline. */
+/** What filing an AI review needs on top of access: a default service, and optionally a pipeline. */
 export interface CatFactoryReviewTarget extends CatFactoryAccess {
-  /** Null for a gateway that only polls and curates runs already filed. Filing refuses without one. */
+  /**
+   * The service a review goes under when no service backs its repository in
+   * cat-factory. Null files a review only under its repository's own service.
+   */
   serviceId: string | null
   /** Null runs the review task's own pinned pipeline. */
   pipelineId: string | null
@@ -365,7 +248,7 @@ export interface GatewayFactory {
    * configured, which is always the case for a host with no App concept.
    */
   vcsAsApp(provider: VcsProvider): VcsGateway | null
-  /** The AI reviewer, for one org's cat-factory key, instance and service. */
+  /** The AI reviewer, for one org's cat-factory key, instance and default service. */
   aiReview(target: CatFactoryReviewTarget): AiReviewGateway
   /**
    * The guided reviewer, from the same key and instance. It needs no service id,

@@ -588,6 +588,7 @@ describe('a tick across tenancies', () => {
       catFactoryTaskId: `cf-task-${orgId}`,
       catFactoryRunId: 'cf-run-1',
       catFactoryUrl: null,
+      catFactoryWorkspaceId: null,
       summary: null,
       failureReason: null,
       curation: null,

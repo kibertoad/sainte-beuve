@@ -45,6 +45,7 @@ function parkedRun(overrides: Partial<AiReviewRun> = {}): AiReviewRun {
     catFactoryTaskId: 'cf-task-1',
     catFactoryRunId: 'cf-run-1',
     catFactoryUrl: null,
+    catFactoryWorkspaceId: null,
     summary: null,
     failureReason: null,
     curation: null,

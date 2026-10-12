@@ -32,6 +32,11 @@ where the review is curated, and the button takes you to it. It posts nothing.
 It comes back and waits, and the row opens on what it found: each finding with
 its severity, the file and line it is about, and the fix it suggests.
 
+The review is filed under the cat-factory service that backs the pull request's
+repository, in the workspace that links it. A repository no service backs (a
+monorepo, say) goes under the default service the org sets on the Configuration
+screen, and with none set the button says which of the two to fix.
+
 You are the gate. Tick the ones worth saying out loud (the blockers and the highs
 start ticked), **Dismiss** the noise, and then choose:
 
@@ -109,21 +114,28 @@ and how many they already have open beside their name. Past reviews are read
 from GitHub or GitLab when a credential for the host is configured (a verdict on
 one of the repository's 100 most recently updated pull requests), and from the
 board's own finished reviews otherwise; each person gets the larger of the two
-counts, since both describe the same history. They are ranked on how much of those skills and the repository's domains a
-person holds, raised for those past reviews, and open reviews only order people
-who rank equally on those: you can see the load and weigh it yourself, and a
-busy expert still outranks an idle stranger. Past reviews count with diminishing
-returns and never outweigh the whole wanted mix, so the regular of a repository
-is preferred without being handed every review in it. An automatic assignment
-draws with the same preference, so the list and the router favour the same
-people. The list is the people an ask could reach, so it never names you, the
-author, anybody already on the pull request or paused, and it keeps to your team
-when the ask does.
+counts, since both describe the same history. They are ranked on how much of
+those skills and the repository's domains a person holds, raised for those past
+reviews, and open reviews only order people who rank equally on those: you can
+see the load and weigh it yourself, and a busy expert still outranks an idle
+stranger. Past reviews count with diminishing returns and never outweigh the
+whole wanted mix, so the regular of a repository is preferred without being
+handed every review in it. An automatic assignment draws with the same
+preference, so the list and the router favour the same people. The list is the
+people an ask could reach, so it never names you, the author, anybody already on
+the pull request or paused, and it keeps to your team when the ask does.
 
-Everyone available who holds all of those skills is asked, two ways at once. A
-page already open is pushed the request over server-sent events; a page opened
-an hour later fetches the same thing over REST. Neither is a fallback for the
-other, and both carry the same payload.
+Tick people in that list and the ask goes to them by name: exactly those
+people, whatever skills they hold, and each of them sees who else was asked. It
+can wait for no more people than it names. Tick nobody and everyone available
+who holds all of the skills is asked instead, inside your team if you said so.
+Either way anybody can still volunteer, because a skill list is not in a
+position to overrule somebody's own judgement of what they can review.
+
+The ask is delivered two ways at once. A page already open is pushed the
+request over server-sent events; a page opened an hour later fetches the same
+thing over REST. Neither is a fallback for the other, and both carry the same
+payload.
 
 The ask ANSWERS ITSELF. Once enough people have said they will review, it is
 resolved and disappears from everybody's inbox, including the people who never

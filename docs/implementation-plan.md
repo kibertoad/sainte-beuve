@@ -163,7 +163,6 @@ provider)` from that host's own credential. Above the adapter there is no
 
 | Placeholder                             | Why it exists now                                                                                                                                                                                                                                              |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                                                        |
 | No announcement channel per org         | `SLACK_CHANNEL_ID` names a channel in the deployment's own workspace, so it is the default org's and is not lent across the boundary. A named org posts and nudges over its own bot token and has nowhere to announce until it can store a channel of its own. |
 | A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                                                         |
 | No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                                             |
@@ -329,8 +328,6 @@ What is left:
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
-- Per-repository cat-factory service mapping, replacing the one service id an
-  org sets on the Configuration screen.
 - Challenging a finding (cat-factory dispatches an investigator that upholds or
   retracts it). It is a fourth verb on the same surface; the loop is usable
   without it and the screen has nowhere to put the verdict yet.
@@ -713,9 +710,8 @@ The placeholders above are the list. The loudest is now that a stored credential
 is never re-checked, so one revoked after it was entered reads as connected until
 a call fails; a probe would fix it. Beside it, a named org has no announcement
 channel it can store, so a second org that connected its own Slack app nudges by
-DM and announces nowhere; and cat-factory is still one service id for every
-repository. [review-flow-gaps.md](./review-flow-gaps.md) tracks what the review
-flow itself still lacks, in the order it blocks.
+DM and announces nowhere. [review-flow-gaps.md](./review-flow-gaps.md) tracks what
+the review flow itself still lacks, in the order it blocks.
 
 ## Decisions worth recording
 

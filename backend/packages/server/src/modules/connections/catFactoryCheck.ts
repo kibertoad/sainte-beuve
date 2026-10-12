@@ -52,8 +52,8 @@ interface ListedId {
 const SERVICE: ListedId = {
   field: 'serviceId',
   among: (report) => report.services.map((s) => ({ id: s.id, name: s.title })),
-  absent: 'No service id, so AI reviews stay off until one is chosen.',
-  found: (name) => `AI reviews are filed under ${name}.`,
+  absent: 'No default service, so a repository no service backs cannot be reviewed.',
+  found: (name) => `A repository no service backs is reviewed under ${name}.`,
   noun: 'service',
 }
 

@@ -19,7 +19,7 @@ import { type ScoredCandidate, type ScoringTarget, scoreCandidate } from './sele
 export interface RankingInput extends ScoringTarget {
   candidates: readonly Reviewer[]
   /** Who is asking, and whether the ask stays in their team. */
-  audience: Omit<AttentionAudienceRule, 'requiredSkills'>
+  audience: Omit<AttentionAudienceRule, 'requiredSkills' | 'recipientIds'>
   /** Reviewer ids that must not be recommended: the author, and anyone already on or asked. */
   excludeReviewerIds: readonly string[]
   limit: number
@@ -52,7 +52,7 @@ export function compareCandidates(left: ScoredCandidate, right: ScoredCandidate)
 
 export function rankCandidates(input: RankingInput): RankingResult {
   const excluded = new Set(input.excludeReviewerIds)
-  const rule: AttentionAudienceRule = { ...input.audience, requiredSkills: [] }
+  const rule: AttentionAudienceRule = { ...input.audience, recipientIds: [], requiredSkills: [] }
   const ranked = input.candidates
     .filter((reviewer) => !excluded.has(reviewer.id) && isInAttentionAudience(reviewer, rule))
     .map((reviewer) => scoreCandidate(reviewer, input))

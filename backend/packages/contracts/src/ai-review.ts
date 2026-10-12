@@ -205,6 +205,13 @@ export const aiReviewRunSchema = v.object({
   catFactoryRunId: v.nullable(v.string()),
   /** Deep link into the cat-factory instance that ran it. */
   catFactoryUrl: v.nullable(webUrlSchema),
+  /**
+   * The cat-factory workspace the task was filed in, which every later call
+   * about it names. Null for a task filed in the key's only workspace. It has a
+   * default for the reason `parkedAt` gives: a run stored before the field
+   * existed has no key for it.
+   */
+  catFactoryWorkspaceId: v.optional(v.nullable(v.string()), null),
   /** Short verdict text once the run completes. The full output lives in cat-factory. */
   summary: v.nullable(v.string()),
   failureReason: v.nullable(v.string()),

@@ -33,6 +33,7 @@ export {
 export type {
   AiReviewGateway,
   AiReviewHandle,
+  AiReviewWorkspace,
   AiReviewReport,
   CatFactoryAccess,
   CatFactoryProbe,
@@ -42,6 +43,8 @@ export type {
   GatewayFactory,
   GuidedReviewGateway,
   GuidedReviewWatchEvent,
+} from './ports/gateways.js'
+export type {
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
@@ -49,7 +52,7 @@ export type {
   VcsAccount,
   VcsGateway,
   VcsIdentityGateway,
-} from './ports/gateways.js'
+} from './ports/vcs.js'
 export type {
   IntegrationConfigRepository,
   StoredIntegrationConfig,
