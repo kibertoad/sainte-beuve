@@ -75,3 +75,13 @@ export function createAttentionLedger(): AttentionLedger {
     },
   }
 }
+
+/** Whether this person turned the ask down. Nobody is a decliner while the page does not know who is looking. */
+export function declinedBy(request: AttentionRequest, viewerId: string | null): boolean {
+  return viewerId !== null && request.declines.some((entry) => entry.reviewerId === viewerId)
+}
+
+/** Whether an ask belongs on this person's list: still open, and not one they turned down. */
+export function listedFor(request: AttentionRequest, viewerId: string | null): boolean {
+  return request.status === 'open' && !declinedBy(request, viewerId)
+}

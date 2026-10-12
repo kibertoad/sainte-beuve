@@ -179,6 +179,22 @@ export const attentionCases: readonly ConformanceCase[] = [
     )
   }),
 
+  conformanceCase(
+    'an ask keeps who declined it, whether it asks on and who the host lists',
+    async (repos) => {
+      const people = { authorLogin: 'octo', requestedReviewerLogins: ['hubot'] }
+      await repos.attention.create(attentionRequest('a1', { keepAsking: true, people }))
+      const declines = [
+        { reviewerId: 'r1', displayName: 'One', reason: 'On leave', declinedAt: 2_000 },
+      ]
+      await repos.attention.update('a1', { declines, updatedAt: 2_000 })
+      const stored = await repos.attention.getById('a1')
+      assert.deepStrictEqual(stored?.declines, declines)
+      assert.strictEqual(stored?.keepAsking, true)
+      assert.deepStrictEqual(stored?.people, people)
+    },
+  ),
+
   conformanceCase('lists the asks newest first, ties on the id', async (repos) => {
     await repos.attention.create(attentionRequest('a1', { createdAt: 1_000 }))
     await repos.attention.create(attentionRequest('a2', { createdAt: 2_000 }))

@@ -5,7 +5,7 @@
 -- nullable, backfilled from each row (the provider from its payload, `github`
 -- for a payload that names none) and then tightened, so a table that has rows
 -- takes them. The D1 adapter carries the same change as
--- `migrations/0011_review_requests_keys.sql`.
+-- `migrations/0012_review_requests_keys.sql`.
 ALTER TABLE "review_requests" ADD COLUMN "pull_request_key" text;--> statement-breakpoint
 ALTER TABLE "review_requests" ADD COLUMN "repo_key" text;--> statement-breakpoint
 UPDATE "review_requests" SET "repo_key" = coalesce("data"->'pullRequest'->>'provider', 'github') || ':' || lower("pr_owner") || '/' || lower("pr_repo");--> statement-breakpoint

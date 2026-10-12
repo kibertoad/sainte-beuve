@@ -46,6 +46,11 @@ export interface ChatGateway {
   sendAttentionAsk(notice: AttentionAskNotice, target: string): Promise<ChatMessageRef>
   /** Re-render a delivered ask in the state its request is in now. */
   updateAttentionAsk(notice: AttentionAskNotice, message: ChatMessageRef): Promise<void>
+  /**
+   * DM the requester that declines left their named ask short of people to
+   * answer it, and nobody was asked on. `target` is their Slack user id.
+   */
+  sendAttentionShort(request: AttentionRequest, target: string): Promise<void>
 }
 
 /** The handle a delegated AI review is tracked by. */

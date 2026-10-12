@@ -51,6 +51,7 @@ export async function connectCatFactory<T extends { container: AppContainer }>(
     sealed: await cipher.encrypt('cf_live_test.secret', 'cat-factory'),
     hint: 'cret',
     subject: null,
+    subjectIsBot: false,
     updatedAt: container.clock.now(),
   })
   return harness

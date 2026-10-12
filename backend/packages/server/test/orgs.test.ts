@@ -50,7 +50,7 @@ function stubSignIn(username: string, subject: string): VcsIdentityGateway {
     authorizeUrl: ({ state }) => `https://github.com/login/oauth/authorize?state=${state}`,
     exchangeCode: async ({ code }) => ({
       token: `gho_${code}_token`,
-      account: { subject, username, displayName: username, avatarUrl: null },
+      account: { subject, username, displayName: username, avatarUrl: null, bot: false },
     }),
   }
 }
@@ -687,6 +687,9 @@ function attentionIn(id: string) {
     requestedByName: 'Somebody',
     recipients: [],
     chatDeliveries: [],
+    declines: [],
+    keepAsking: false,
+    people: null,
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,

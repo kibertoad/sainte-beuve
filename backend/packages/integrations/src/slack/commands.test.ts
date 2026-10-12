@@ -96,6 +96,13 @@ describe('parseSlackRequest', () => {
     })
   })
 
+  it('reads the decline button on an attention ask as declining that ask', () => {
+    expect(parseSlackRequest(interaction(SLACK_ACTIONS.attentionDecline, 'att-1'))).toMatchObject({
+      intent: { kind: 'attention_decline', attentionId: 'att-1' },
+      surface: 'action',
+    })
+  })
+
   it('carries the surface and the URL an answer may go to', () => {
     // The two surfaces are answered in different places: a slash command in the
     // HTTP response, a button on its `response_url`, because Slack reads a

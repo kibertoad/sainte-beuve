@@ -183,6 +183,11 @@ export interface StoredIntegrationToken {
    * not.
    */
   subject: string | null
+  /**
+   * Whether the host marks the subject as a machine account (see
+   * `VcsAccount.bot`). False when the credential names nobody.
+   */
+  subjectIsBot: boolean
   updatedAt: EpochMs
 }
 

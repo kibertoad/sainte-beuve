@@ -111,7 +111,6 @@ const GITHUB = {
   appSlug: null,
   webhookSecret: SECRET,
   botLogin: 'sainte-beuve-bot',
-  labels: { review: 'needs-review', aiReview: 'ai-review', skillPrefix: 'skill:' },
 }
 
 describe('GitHub webhook intake', () => {

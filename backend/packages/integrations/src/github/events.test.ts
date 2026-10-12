@@ -1,4 +1,4 @@
-import type { GitHubLabelRules } from '@sainte-beuve/contracts'
+import type { ReviewLabelRules } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   type GitHubEventPayload,
@@ -12,7 +12,7 @@ import {
 // it does nothing" is a unit test rather than a thing somebody finds out in a
 // repository, and it needs no store, no token and no HTTP.
 
-const LABELS: GitHubLabelRules = {
+const LABELS: ReviewLabelRules = {
   review: 'needs-review',
   aiReview: 'ai-review',
   skillPrefix: 'skill:',
@@ -95,11 +95,11 @@ describe('interpretGitHubDelivery: pull requests', () => {
     ).toStrictEqual({ kind: 'close', pullRequest: REF })
   })
 
-  it('marks the author unknown rather than dropping a PR from a deleted account', () => {
+  it('leaves the author to be asked for rather than dropping a PR from a deleted account', () => {
     const orphan = pullRequest({ pull_request: { ...pullRequest().pull_request!, user: null } })
     expect(
       interpretGitHubDelivery({ event: 'pull_request', payload: orphan }, CONTEXT),
-    ).toMatchObject({ review: { authorLogin: 'unknown' } })
+    ).toMatchObject({ review: { authorLogin: null } })
   })
 
   it('ignores an event about something with no repository on it', () => {
@@ -120,7 +120,7 @@ describe('interpretGitHubDelivery: labels', () => {
     const labeled = pullRequest({ action: 'labeled', label: { name: 'ai-review' } })
     expect(
       interpretGitHubDelivery({ event: 'pull_request', payload: labeled }, CONTEXT),
-    ).toStrictEqual({ kind: 'ai_review', pullRequest: REF })
+    ).toStrictEqual({ kind: 'ai_review', pullRequest: REF, author: 'kibertoad' })
   })
 
   it('does nothing for a label that matches no rule', () => {
@@ -211,6 +211,9 @@ describe('interpretGitHubDelivery: bot mentions', () => {
       kind: 'command',
       pullRequest: REF,
       requester: 'reviewer',
+      // The pull request's author, not whoever asked: a reviewer asking must not
+      // be kept off the review as though they wrote it.
+      author: 'kibertoad',
       verb: 'reroll',
     })
   })

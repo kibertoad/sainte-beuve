@@ -17,7 +17,7 @@ import {
 // has rows, so the rows are written against the schema before it and the
 // migration is applied over them, the way a deployment upgrades.
 
-const KEYS_MIGRATION = '20261012113719_review_requests_keys'
+const KEYS_MIGRATION = '20261012114308_review_requests_keys'
 
 let client: PGlite
 let db: PostgresDatabase

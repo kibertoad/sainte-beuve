@@ -55,6 +55,7 @@ export async function storeCredential(
     sealed: await cipher.encrypt(token, key),
     hint: hintOf(token),
     subject: account.username,
+    subjectIsBot: account.bot,
     updatedAt: container.clock.now(),
   })
 }

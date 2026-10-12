@@ -11,7 +11,7 @@
 -- payload that names none.
 --
 -- The Postgres adapter carries the same change as
--- `migrations/20261012113719_review_requests_keys/migration.sql`.
+-- `migrations/20261012114308_review_requests_keys/migration.sql`.
 CREATE TABLE review_requests_keys (
   org_id TEXT NOT NULL,
   id TEXT NOT NULL,

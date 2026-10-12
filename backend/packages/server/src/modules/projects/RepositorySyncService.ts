@@ -189,6 +189,7 @@ export class RepositorySyncService {
       sealed: await secrets.encrypt(secret, key),
       hint: secret.slice(-4),
       subject: null,
+      subjectIsBot: false,
       updatedAt: clock.now(),
     })
     return secret

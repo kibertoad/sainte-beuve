@@ -64,10 +64,12 @@ export {
 } from './teams.js'
 export {
   type AttentionAudienceRule,
+  askedOrAnsweredIds,
   audienceRuleOf,
+  declineRefusal,
+  hasDeclined,
   isAttentionSatisfied,
   isInAttentionAudience,
-  outstandingCommitments,
   selectAttentionAudience,
   unaskableReason,
 } from './attention.js'
@@ -75,8 +77,18 @@ export {
   type RecipientRefusal,
   type RecipientsInput,
   type RecipientsResolution,
+  askableRecipients,
   resolveAttentionRecipients,
 } from './recipients.js'
+export {
+  type AttentionChange,
+  type AttentionPatch,
+  askMoreChange,
+  commitmentChange,
+  declineChange,
+  deliveriesChange,
+  nextToAsk,
+} from './attentionChanges.js'
 export {
   countPastReviews,
   familiarityBonus,

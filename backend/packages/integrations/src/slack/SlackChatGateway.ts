@@ -1,4 +1,4 @@
-import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
+import type { AttentionRequest, Reminder, ReviewRequest } from '@sainte-beuve/contracts'
 import {
   type AttentionAskNotice,
   type ChatGateway,
@@ -7,7 +7,7 @@ import {
   getErrorMessage,
   withDeadline,
 } from '@sainte-beuve/kernel'
-import { attentionAskMessage } from './attentionMessage.js'
+import { attentionAskMessage, attentionShortMessage } from './attentionMessage.js'
 import { announcementMessage, reminderMessage, type SlackMessage } from './message.js'
 
 /**
@@ -93,6 +93,10 @@ export class SlackChatGateway implements ChatGateway {
       ts: message.messageId,
       ...attentionAskMessage(notice, this.options.appBaseUrl),
     })
+  }
+
+  async sendAttentionShort(request: AttentionRequest, target: string): Promise<void> {
+    await this.postMessage(target, attentionShortMessage(request, this.options.appBaseUrl))
   }
 
   private async postMessage(channel: string, message: SlackMessage): Promise<SlackResponse> {

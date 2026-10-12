@@ -69,6 +69,7 @@ describe('review board API', () => {
         secrets: false,
         githubWebhooks: false,
         slackInteractivity: false,
+        gitlabWebhooks: false,
       },
     })
   })

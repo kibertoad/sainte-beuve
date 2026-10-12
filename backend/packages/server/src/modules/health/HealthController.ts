@@ -2,7 +2,12 @@ import { Hono } from 'hono'
 import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import { resolveCapabilities } from '../../integrations/capabilities.js'
-import { resolveChat, resolveSlackSigningSecret, resolveVcs } from '../../integrations/resolve.js'
+import {
+  resolveChat,
+  resolveGitLabWebhookSecret,
+  resolveSlackSigningSecret,
+  resolveVcs,
+} from '../../integrations/resolve.js'
 import { ConnectionsService } from '../connections/ConnectionsService.js'
 
 /**
@@ -28,14 +33,16 @@ export function healthController(): Hono<AppEnv> {
 
   app.get('/health', async (c) => {
     const container = c.get('container')
-    const [chat, github, gitlab, catFactory, slackSigning, persistenceReady] = await Promise.all([
-      resolveChat(container),
-      resolveVcs(container, 'github'),
-      resolveVcs(container, 'gitlab'),
-      resolveCapabilities(container),
-      resolveSlackSigningSecret(container),
-      storeAnswers(container),
-    ])
+    const [chat, github, gitlab, catFactory, slackSigning, gitlabSecret, persistenceReady] =
+      await Promise.all([
+        resolveChat(container),
+        resolveVcs(container, 'github'),
+        resolveVcs(container, 'gitlab'),
+        resolveCapabilities(container),
+        resolveSlackSigningSecret(container),
+        resolveGitLabWebhookSecret(container),
+        storeAnswers(container),
+      ])
     const body = {
       status: persistenceReady ? 'ok' : 'degraded',
       ...shape(container),
@@ -56,6 +63,8 @@ export function healthController(): Hono<AppEnv> {
         // on without a redeploy, and a flag read off the process environment
         // would report the deployment as it was configured rather than as it is.
         slackInteractivity: slackSigning !== null,
+        // The same org, and the same reason: the secret is stored per org.
+        gitlabWebhooks: gitlabSecret !== null,
       },
     }
     return c.json(body, persistenceReady ? 200 : 503)

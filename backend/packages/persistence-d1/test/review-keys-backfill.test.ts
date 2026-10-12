@@ -3,11 +3,11 @@ import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import { beforeAll, expect, it } from 'vitest'
 import { createD1Store } from '../src/index.js'
 
-// `0011_review_requests_keys.sql` rebuilds a board that already has rows, so the
+// `0012_review_requests_keys.sql` rebuilds a board that already has rows, so the
 // rows are written against the schema before it and the migration is applied
 // over them, the way a deployment upgrades.
 
-const KEYS_MIGRATION = '0011'
+const KEYS_MIGRATION = '0012'
 
 interface Seed {
   id: string

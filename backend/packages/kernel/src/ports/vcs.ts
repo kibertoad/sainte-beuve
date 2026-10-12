@@ -36,6 +36,12 @@ export interface VcsAccount {
   username: string
   displayName: string | null
   avatarUrl: string | null
+  /**
+   * Whether the host marks the account as a machine rather than a person: a
+   * GitLab project or group access token's user, a GitLab service account, a
+   * GitHub App's bot.
+   */
+  bot: boolean
 }
 
 /** How many of a project's pull requests one handle gave a verdict on. */

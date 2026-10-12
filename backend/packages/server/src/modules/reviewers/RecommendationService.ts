@@ -28,6 +28,19 @@ export class RecommendationService {
   constructor(private readonly container: AppContainer) {}
 
   async recommend(viewer: Reviewer, input: RecommendReviewers): Promise<ReviewerRecommendations> {
+    const { target, ranked, shortfallReason } = await this.rank(viewer, input)
+    return {
+      wanted: {
+        skills: distinctAsSpelled(target.skills),
+        domains: distinctAsSpelled(target.domains),
+      },
+      recommendations: ranked.map(toRecommendation),
+      shortfallReason,
+    }
+  }
+
+  /** The ranking `recommend` answers with, each candidate with their directory entry. */
+  async rank(viewer: Reviewer, input: RecommendReviewers) {
     const { repositories } = this.container
     const { pullRequest } = input
     const [candidates, project, review, history] = await Promise.all([
@@ -51,14 +64,7 @@ export class RecommendationService {
       pastReviews: pastReviewCounts(history, candidates, pullRequest.provider),
       limit: input.limit,
     })
-    return {
-      wanted: {
-        skills: distinctAsSpelled(target.skills),
-        domains: distinctAsSpelled(target.domains),
-      },
-      recommendations: ranked.map(toRecommendation),
-      shortfallReason,
-    }
+    return { target, ranked, shortfallReason }
   }
 }
 
