@@ -1,7 +1,12 @@
 import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { recommendReviewersSchema, reviewerRecommendationsSchema } from '../recommendations.js'
-import { createReviewerSchema, reviewerSchema, updateReviewerSchema } from '../reviewers.js'
+import {
+  createReviewerSchema,
+  reviewerSchema,
+  reviewerTeamChoicesSchema,
+  updateReviewerSchema,
+} from '../reviewers.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -31,6 +36,13 @@ export const updateReviewerContract = defineApiContract({
   pathResolver: ({ reviewerId }) => `/reviewers/${reviewerId}`,
   requestBodySchema: updateReviewerSchema,
   responsesByStatusCode: { 200: reviewerSchema, ...errorResponses },
+})
+
+export const getReviewerTeamChoicesContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: reviewerIdParams,
+  pathResolver: ({ reviewerId }) => `/reviewers/${reviewerId}/team-choices`,
+  responsesByStatusCode: { 200: reviewerTeamChoicesSchema, ...errorResponses },
 })
 
 /**

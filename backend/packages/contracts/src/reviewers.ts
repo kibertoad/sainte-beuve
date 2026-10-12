@@ -123,3 +123,15 @@ export const updateReviewerSchema = v.partial(
   }),
 )
 export type UpdateReviewer = v.InferOutput<typeof updateReviewerSchema>
+
+/**
+ * The teams a reviewer may be put in. Every team, unless a directory follows
+ * them: then the teams their groups there give them, and a team outside the
+ * list is refused.
+ */
+export const reviewerTeamChoicesSchema = v.object({
+  teams: v.array(v.string()),
+  /** Whether a directory narrows the list. */
+  managed: v.boolean(),
+})
+export type ReviewerTeamChoices = v.InferOutput<typeof reviewerTeamChoicesSchema>

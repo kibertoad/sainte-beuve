@@ -22,7 +22,10 @@ const props = defineProps<{
   knownSkills: readonly string[]
   /** The org's domains. A reviewer picks from them; a new one is named on a repository. */
   knownDomains: readonly string[]
-  /** cat-factory owns this person's name, handles and team, so those are shown read-only. */
+  /**
+   * cat-factory owns this person's name and handles, shown read-only, and `teams`
+   * is then the teams of their cat-factory workspaces.
+   */
   managed?: boolean
   busy: boolean
   submitLabel: string
@@ -111,7 +114,7 @@ function submit() {
       variant="subtle"
       icon="i-lucide-git-fork"
       title="This person comes from cat-factory"
-      description="Their name, handles and team follow their cat-factory profile and workspaces. Everything else is set here."
+      description="Their name and handles follow their cat-factory profile, and their team is one of their cat-factory workspaces. Everything else is set here."
     />
     <UFormField label="Name">
       <UInput
@@ -122,14 +125,9 @@ function submit() {
       />
     </UFormField>
     <UFormField label="Team" description="Optional. What an ask can be kept inside.">
-      <USelect
-        v-model="team"
-        :items="teamOptions"
-        value-key="value"
-        class="w-full sm:w-64"
-        :disabled="managed"
-      />
-      <template #help>
+      <USelect v-model="team" :items="teamOptions" value-key="value" class="w-full sm:w-64" />
+      <template v-if="managed" #help>The teams of their cat-factory workspaces.</template>
+      <template v-else #help>
         Teams are managed on the
         <ULink to="/configuration/organization" class="underline">Organization screen</ULink>.
       </template>

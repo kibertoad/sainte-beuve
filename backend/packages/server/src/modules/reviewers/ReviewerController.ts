@@ -1,5 +1,6 @@
 import {
   createReviewerContract,
+  getReviewerTeamChoicesContract,
   listReviewersContract,
   recommendReviewersContract,
   updateReviewerContract,
@@ -34,6 +35,11 @@ export function reviewerController(): Hono<AppEnv> {
   buildHonoRoute(app, listReviewersContract, async (c) => {
     const service = new ReviewerService(c.get('container'))
     return c.json({ reviewers: await service.list() }, 200)
+  })
+
+  buildHonoRoute(app, getReviewerTeamChoicesContract, async (c) => {
+    const service = new ReviewerService(c.get('container'))
+    return c.json(await service.teamChoices(c.req.valid('param').reviewerId), 200)
   })
 
   buildHonoRoute(app, recommendReviewersContract, async (c) => {
