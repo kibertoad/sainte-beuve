@@ -578,9 +578,11 @@ by hand or for checking one that already exists:
   which `chat:write` covers: the app never opens a conversation itself, so it
   needs no `im:write`. `chat:write.public` lets the announcement reach a channel
   the bot has not been invited to, and `commands` is what a slash command needs.
-- **App Home**: **Messages Tab** on and read-only. That tab is where the app's
-  DMs land, so with it off a person is never shown the attention asks and
-  reminders sent to them. Nothing reads a reply, so it does not take one.
+- **App Home**: **Messages Tab** on, with "Allow users to send Slash commands
+  and messages from the messages tab" ticked. That tab is where the app's DMs
+  land, so with it off a person is never shown the attention asks and reminders
+  sent to them, and a read-only tab refuses the `/review` typed under one. A
+  plain message sent there is not read.
 - **Interactivity & Shortcuts**: on, Request URL as the Configuration screen
   shows it: `https://<your-api>/webhooks/slack/<org-slug>`. The default org's
   slug is `default`, and it also answers on `https://<your-api>/webhooks/slack`.

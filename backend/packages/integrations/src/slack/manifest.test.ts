@@ -40,6 +40,14 @@ describe('slackAppManifest', () => {
     expect(manifest.display_information.name).toHaveLength(35)
   })
 
+  it('cuts by character, so an emoji at the limit stays whole', () => {
+    const { manifest } = slackAppManifest({
+      apiOrigin: API,
+      org: { slug: 'cats', name: 'Nineteen characters\u{1F431} and more' },
+    })
+    expect(manifest.display_information.name).toBe('sainte-beuve (Nineteen characters\u{1F431})')
+  })
+
   it('asks for the scopes the gateway and the command use, and no others', () => {
     const { manifest } = slackAppManifest({ apiOrigin: API, org: { slug: 'acme', name: 'Acme' } })
     expect(manifest.oauth_config.scopes.bot).toStrictEqual([
@@ -49,9 +57,12 @@ describe('slackAppManifest', () => {
     ])
   })
 
-  it('keeps the Messages tab on, where the DMs land, under a name Slack accepts for a bot', () => {
+  it('keeps the Messages tab on and open to /review, under a name Slack accepts for a bot', () => {
     const { manifest } = slackAppManifest({ apiOrigin: API, org: { slug: 'acme', name: 'Acme' } })
-    expect(manifest.features.app_home.messages_tab_enabled).toBe(true)
+    expect(manifest.features.app_home).toMatchObject({
+      messages_tab_enabled: true,
+      messages_tab_read_only_enabled: false,
+    })
     expect(manifest.features.bot_user.display_name).toMatch(/^[a-z0-9._-]+$/)
   })
 })

@@ -40,12 +40,13 @@ export function slackAppManifest(input: SlackManifestInput): {
         description: 'Review requests, reminders and the /review command.',
       },
       features: {
-        // The Messages tab is where the bot's DMs land. Read-only, because
-        // nothing reads what a person writes back.
+        // The Messages tab is where the bot's DMs land. Not read-only: Slack's
+        // read-only tab also refuses slash commands, and the DM holding a
+        // reminder is where `/review take <id>` gets typed.
         app_home: {
           home_tab_enabled: false,
           messages_tab_enabled: true,
-          messages_tab_read_only_enabled: true,
+          messages_tab_read_only_enabled: false,
         },
         bot_user: { display_name: APP_NAME, always_online: false },
         slash_commands: [
@@ -73,6 +74,7 @@ export function slackAppManifest(input: SlackManifestInput): {
 function appName(org: SlackManifestInput['org']): string {
   if (org.slug === DEFAULT_ORG_SLUG) return APP_NAME
   const room = APP_NAME_LIMIT - APP_NAME.length - ' ()'.length
-  const name = org.name.length > room ? org.name.slice(0, room).trimEnd() : org.name
+  // By code point, so a cut never leaves half of an emoji behind.
+  const name = Array.from(org.name).slice(0, room).join('').trimEnd()
   return `${APP_NAME} (${name})`
 }
