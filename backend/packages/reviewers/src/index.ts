@@ -42,7 +42,12 @@ export {
   searchesBeyondProjects,
   unlinkedPullRequests,
 } from './merging.js'
-export { assembleReviewLists, type ReviewLists, type ReviewListsInput } from './reviewing.js'
+export {
+  assembleReviewLists,
+  placeCommitments,
+  type ReviewLists,
+  type ReviewListsInput,
+} from './reviewing.js'
 export {
   decideTeamAction,
   ownerOfNewTeam,
@@ -71,17 +76,22 @@ export {
 } from './familiarity.js'
 export {
   diagnoseShortfall,
+  distinctAsSpelled,
   drawWeight,
+  excludedFromReview,
   hasAllSkills,
   isEligible,
   isSameHandle,
   MATCH_PREFERENCE,
+  matchPreference,
   type MatchTarget,
   matchTargetFor,
   normalizeSkill,
+  reviewersWithHandles,
   type ScoredCandidate,
   scoreCandidate,
   scoreCandidates,
+  type ScoringTarget,
   type SelectionInput,
   type SelectionResult,
   selectReviewers,

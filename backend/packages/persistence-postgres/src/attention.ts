@@ -127,6 +127,22 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
     return commitment
   }
 
+  /** An UPDATE rather than the upsert, so a row released since the read stays gone. */
+  async setRequestedHandle(
+    commitmentId: string,
+    requestedHandle: string | null,
+  ): Promise<ReviewCommitment | null> {
+    const current = await this.getById(commitmentId)
+    if (current === null) return null
+    const next = { ...current, requestedHandle }
+    const updated = await this.db
+      .update(reviewCommitments)
+      .set({ data: next })
+      .where(and(eq(reviewCommitments.orgId, this.orgId), eq(reviewCommitments.id, commitmentId)))
+      .returning({ id: reviewCommitments.id })
+    return firstOr(updated) === null ? null : next
+  }
+
   async delete(commitmentId: string): Promise<void> {
     await this.db
       .delete(reviewCommitments)

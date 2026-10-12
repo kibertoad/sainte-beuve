@@ -63,20 +63,19 @@ export type {
 } from './ports/auth.js'
 export type {
   AiReviewRunRepository,
-  AttentionRepository,
   IdentityRepository,
   IntegrationTokenRepository,
   PersistenceKind,
   ProjectRepository,
   ReminderRepository,
   Repositories,
-  ReviewCommitmentRepository,
   ReviewerRepository,
   ReviewListOrder,
   ReviewRequestRepository,
   StoredIntegrationToken,
 } from './ports/repositories.js'
 export type { ExternalRepositoryRepository } from './ports/external-repositories.js'
+export type { AttentionRepository, ReviewCommitmentRepository } from './ports/attention.js'
 export type {
   DirectoryDeliveryOutcome,
   DirectorySyncReport,

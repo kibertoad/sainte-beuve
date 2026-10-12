@@ -1,14 +1,11 @@
 import type {
   AiReviewRun,
-  AttentionRequest,
-  AttentionStatus,
   IdentityProvider,
   LinkedIdentity,
   Project,
   Reminder,
   ReminderStatus,
   Reviewer,
-  ReviewCommitment,
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
@@ -17,6 +14,7 @@ import type { ApiKeyRepository, SessionRepository } from './auth.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
 import type { ExternalRepositoryRepository } from './external-repositories.js'
 import type { TeamRepository } from './teams.js'
+import type { AttentionRepository, ReviewCommitmentRepository } from './attention.js'
 
 /**
  * Persistence ports. There are three implementations (in-memory in
@@ -259,34 +257,6 @@ export interface IdentityRepository {
    * write is an upsert for its own row and a no-op for anybody else's.
    */
   link(reviewerId: string, identity: LinkedIdentity): Promise<string>
-}
-
-export interface AttentionRepository {
-  list(filter?: { status?: AttentionStatus[] }): Promise<AttentionRequest[]>
-  getById(attentionId: string): Promise<AttentionRequest | null>
-  create(request: AttentionRequest): Promise<AttentionRequest>
-  update(attentionId: string, patch: Partial<AttentionRequest>): Promise<AttentionRequest | null>
-}
-
-export interface ReviewCommitmentRepository {
-  listByReviewer(reviewerId: string): Promise<ReviewCommitment[]>
-  getById(commitmentId: string): Promise<ReviewCommitment | null>
-  /**
-   * What one person already promised about one pull request, so a second click
-   * is a no-op.
-   *
-   * The `provider` is part of the key, not decoration: `platform/api#12` on
-   * GitHub and `platform/api#12` on GitLab are two different changes, and a
-   * lookup that matched on the path alone would answer the second with the
-   * first, leave no commitment row for it, and put the wrong host's pull
-   * request on somebody's workspace.
-   */
-  find(
-    reviewerId: string,
-    pullRequest: { provider: string; owner: string; repo: string; number: number },
-  ): Promise<ReviewCommitment | null>
-  create(commitment: ReviewCommitment): Promise<ReviewCommitment>
-  delete(commitmentId: string): Promise<void>
 }
 
 /**

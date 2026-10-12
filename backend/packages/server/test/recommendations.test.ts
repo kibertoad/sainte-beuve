@@ -66,6 +66,7 @@ describe('reviewer recommendations', () => {
 
     expect(result.wanted).toStrictEqual({ skills: ['payments'], domains: ['billing'] })
     expect(names(result)).toStrictEqual(['Expert', 'Generalist'])
+    expect(result.recommendations[0]?.fit).toBe(1)
     expect(result.recommendations[0]?.reasons).toStrictEqual({
       matchedSkills: ['payments'],
       matchedDomains: ['billing'],
@@ -115,6 +116,52 @@ describe('reviewer recommendations', () => {
     expect((await assignReviewer(h, review.id)).status).toBe(200)
 
     expect(names(await recommend(h))).toStrictEqual(['Free'])
+  })
+
+  it('leaves out the author and the requested reviewers the host lists, with no board row', async () => {
+    const h = harness()
+    await addReviewer(h, { displayName: 'Author', handles: { github: 'author' } })
+    await addReviewer(h, { displayName: 'Requested', handles: { github: 'Requested' } })
+    await addReviewer(h, { displayName: 'Free', handles: { github: 'free' } })
+
+    const result = await recommend(h, {
+      people: { authorLogin: 'AUTHOR', requestedReviewerLogins: ['requested'] },
+    })
+
+    expect(names(result)).toStrictEqual(['Free'])
+  })
+
+  it("keeps to the caller's team when the ask does", async () => {
+    const h = harness()
+    for (const name of ['Core', 'Web']) {
+      await h.container.repositories.teams.create({
+        id: `team-${name}`,
+        name,
+        ownerId: null,
+        mergeComments: null,
+        createdAt: 0,
+      })
+    }
+    await addReviewer(h, { displayName: 'Me', handles: { github: 'me' }, team: 'Core' })
+    await addReviewer(h, { displayName: 'Teammate', handles: { github: 'mate' }, team: 'Core' })
+    await addReviewer(h, { displayName: 'Outsider', handles: { github: 'out' }, team: 'Web' })
+
+    expect(names(await recommend(h, { sameTeamOnly: true }))).toStrictEqual(['Teammate'])
+    expect(names(await recommend(h))).toStrictEqual(['Outsider', 'Teammate'])
+  })
+
+  it('counts each wanted skill once, however it is spelled', async () => {
+    const h = harness()
+    await addReviewer(h, {
+      displayName: 'Expert',
+      handles: { github: 'exp' },
+      skills: ['payments'],
+    })
+
+    const result = await recommend(h, { requiredSkills: ['payments', 'Payments'] })
+
+    expect(result.wanted.skills).toStrictEqual(['payments'])
+    expect(result.recommendations[0]?.fit).toBe(1)
   })
 
   it('says why the list is empty', async () => {

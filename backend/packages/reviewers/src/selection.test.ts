@@ -74,7 +74,7 @@ describe('drawWeight', () => {
 })
 
 describe('match scoring', () => {
-  const target = { skills: ['typescript'], domains: ['billing'] }
+  const target = { skills: ['typescript'], domains: ['billing'], pastReviews: NO_PAST_REVIEWS }
 
   it('weights skills and domains alike, by the share of the mix a reviewer holds', () => {
     const scored = scoreCandidates(
@@ -86,7 +86,6 @@ describe('match scoring', () => {
       ],
       target,
       [],
-      NO_PAST_REVIEWS,
     ).map((candidate) => [candidate.reviewer.id, candidate.weight])
     expect(scored).toStrictEqual([
       ['both', 1 + MATCH_PREFERENCE],
@@ -103,17 +102,14 @@ describe('match scoring', () => {
       domains: ['billing'],
       outstandingReviews: 1,
     })
-    expect(scoreCandidates([busy], target, [], NO_PAST_REVIEWS)[0]?.weight).toBe(
-      (1 + MATCH_PREFERENCE) / 2,
-    )
+    expect(scoreCandidates([busy], target, [])[0]?.weight).toBe((1 + MATCH_PREFERENCE) / 2)
   })
 
   it('leaves the draw to load and weight when the review wants nothing', () => {
     const scored = scoreCandidates(
       [reviewer({ id: 'a', skills: ['go'] })],
-      { skills: [], domains: [] },
+      { skills: [], domains: [], pastReviews: NO_PAST_REVIEWS },
       [],
-      NO_PAST_REVIEWS,
     )
     expect(scored[0]?.weight).toBe(1)
   })
@@ -124,11 +120,11 @@ describe('familiarity in the draw', () => {
     const regular = reviewer({ id: 'regular', skills: ['go'], outstandingReviews: 1 })
     const scored = scoreCandidates(
       [regular],
-      { skills: ['go'], domains: [] },
+      { skills: ['go'], domains: [], pastReviews: new Map([['regular', 3]]) },
       [],
-      new Map([['regular', 3]]),
     )
     expect(scored[0]?.pastReviews).toBe(3)
+    expect(scored[0]?.preference).toBe(1 + MATCH_PREFERENCE + familiarityBonus(3))
     expect(scored[0]?.weight).toBe((1 + MATCH_PREFERENCE + familiarityBonus(3)) / 2)
   })
 
