@@ -3,8 +3,8 @@ import type { AppContainer } from '../../container.js'
 import { CAT_FACTORY_SOURCE } from './RepositorySyncService.js'
 
 /**
- * The keys cat-factory's directory lists a repository under, one
- * per workspace that links it, read from this org's mirror of the directory.
+ * The keys cat-factory's directory lists a repository under, one per workspace
+ * that links it, read from this org's mirror of the directory.
  *
  * Matched on the provider, then on the host's repository id when the project
  * came from the directory, because that survives a rename the mirror has not
@@ -29,9 +29,7 @@ export async function catFactoryDirectoryKeys(
     .filter(({ repository }) => {
       if (repository === null || repository.provider !== ref.provider) return false
       if (externalId !== null) return repository.id === externalId
-      return (
-        sameName(repository.owner, ref.owner) && sameName(repository.repo, ref.repo)
-      )
+      return sameName(repository.owner, ref.owner) && sameName(repository.repo, ref.repo)
     })
     .map((entry) => entry.key)
     .sort()
@@ -40,10 +38,4 @@ export async function catFactoryDirectoryKeys(
 /** GitHub and GitLab both treat owner and repository names case-insensitively. */
 function sameName(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase()
-}
-
-/** Every key this org's mirror holds a linked repository under, across all its workspaces. */
-export async function orgDirectoryKeys(container: AppContainer): Promise<string[]> {
-  const entries = await container.repositories.externalRepositories.list(CAT_FACTORY_SOURCE)
-  return entries.filter((entry) => entry.repository !== null).map((entry) => entry.key)
 }

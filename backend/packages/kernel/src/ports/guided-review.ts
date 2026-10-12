@@ -12,7 +12,6 @@ import type {
   PostGuidedReviewDraftsInput,
   RequestGuidedReviewDraftsInput,
 } from '@sainte-beuve/contracts'
-import type { CatFactoryAccess } from './gateways.js'
 
 /**
  * What a guided review's upstream stream yields: the frames a screen receives,
@@ -33,10 +32,9 @@ export type GuidedReviewWatchEvent = GuidedReviewStreamEvent | { kind: 'timeout'
  * cat-factory workspace's credentials, because the key belongs to no person.
  *
  * A session lives in one cat-factory workspace, and a key reaching several is
- * refused a call that names none. `find` and `open` take the keys the org's
+ * refused a call that names none. Every call carries the keys the org's
  * repository mirror holds the pull request's repository under, one per
- * workspace linking it; a call by session id is made in the workspace that
- * holds the session.
+ * workspace linking it, and the gateway reads the workspace out of those.
  */
 export interface GuidedReviewGateway {
   /** The session this deployment holds for a pull request, or null. Spends nothing. */
@@ -49,40 +47,46 @@ export interface GuidedReviewGateway {
     target: GuidedReviewTarget,
     directoryKeys: readonly string[],
   ): Promise<GuidedReviewSessionView>
-  get(sessionId: string): Promise<GuidedReviewSessionView>
+  get(session: GuidedReviewSessionRef): Promise<GuidedReviewSessionView>
   /** Regenerate the overview at the pull request's current head. */
-  refresh(sessionId: string): Promise<GuidedReviewSessionView>
-  openThread(sessionId: string, input: OpenGuidedReviewThreadInput): Promise<GuidedReviewThreadView>
-  getThread(sessionId: string, threadId: string): Promise<GuidedReviewThreadView>
+  refresh(session: GuidedReviewSessionRef): Promise<GuidedReviewSessionView>
+  openThread(
+    session: GuidedReviewSessionRef,
+    input: OpenGuidedReviewThreadInput,
+  ): Promise<GuidedReviewThreadView>
+  getThread(session: GuidedReviewSessionRef, threadId: string): Promise<GuidedReviewThreadView>
   ask(
-    sessionId: string,
+    session: GuidedReviewSessionRef,
     threadId: string,
     input: AskGuidedReviewInput,
   ): Promise<GuidedReviewExchange>
   requestDrafts(
-    sessionId: string,
+    session: GuidedReviewSessionRef,
     threadId: string,
     input: RequestGuidedReviewDraftsInput,
   ): Promise<GuidedReviewExchange>
   editDraft(
-    sessionId: string,
+    session: GuidedReviewSessionRef,
     draftId: string,
     input: EditGuidedReviewDraftInput,
   ): Promise<GuidedReviewCommentDraft>
-  postDrafts(sessionId: string, input: PostGuidedReviewDraftsInput): Promise<GuidedReviewPostResult>
+  postDrafts(
+    session: GuidedReviewSessionRef,
+    input: PostGuidedReviewDraftsInput,
+  ): Promise<GuidedReviewPostResult>
   /**
    * The session's changes as cat-factory pushes them, until it caps the
    * connection or `signal` aborts. Rejects on the first iteration if the stream
    * cannot be opened.
    */
-  watch(sessionId: string, signal: AbortSignal): AsyncIterable<GuidedReviewWatchEvent>
+  watch(session: GuidedReviewSessionRef, signal: AbortSignal): AsyncIterable<GuidedReviewWatchEvent>
 }
 
-/** What the guided reviewer needs on top of access: where its sessions can live. */
-export interface CatFactoryGuidedReviewAccess extends CatFactoryAccess {
-  /**
-   * Every key the org's repository mirror holds, across all its workspaces,
-   * read only when a call by session id needs to find the session's workspace.
-   */
-  directoryKeys: () => Promise<readonly string[]>
+/**
+ * A session, and the mirror keys of its pull request's repository, which name
+ * the workspaces it can live in. No keys names the key's only workspace.
+ */
+export interface GuidedReviewSessionRef {
+  sessionId: string
+  directoryKeys: readonly string[]
 }

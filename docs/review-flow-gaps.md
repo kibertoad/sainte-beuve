@@ -160,5 +160,5 @@ refuses a workspace-scoped call that names none when the key reaches several
 workspaces, so the guided review fails for every repository of such an org.
 
 Opening and looking up a session use the workspaces the org's repository mirror
-links the repository in. A call by session id names the org's only workspace, or
-reads the session in each when there are several and uses the one that answers.
+links the repository in. A call about a session names its pull request too, and
+is made in the workspace those same keys name.

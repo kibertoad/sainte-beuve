@@ -18,10 +18,7 @@ type Answer = { status?: number; body: unknown }
  * one workspace gives; every other workspace then gets the 404 cat-factory
  * answers for a session it does not hold.
  */
-function gatewayOver(
-  routes: Record<string, Answer>,
-  orgKeys?: readonly string[],
-): {
+function gatewayOver(routes: Record<string, Answer>): {
   gateway: CatFactoryGuidedReviewGateway
   calls: Call[]
 } {
@@ -29,7 +26,6 @@ function gatewayOver(
   const gateway = new CatFactoryGuidedReviewGateway({
     baseUrl: 'https://cat-factory.example.com',
     apiKey: 'cf_live_key.secret',
-    ...(orgKeys === undefined ? {} : { directoryKeys: async () => orgKeys }),
     fetch: async (input, init) => {
       const url = new URL(String(input))
       const method = init?.method ?? 'GET'
@@ -82,6 +78,11 @@ function view(overrides: Record<string, unknown> = {}) {
 }
 
 const target = { provider: 'github', owner: 'acme', repo: 'widgets', number: 7 } as const
+
+/** Session `grs-1`, in whichever workspaces `directoryKeys` name: none names the key's only one. */
+function grs1(directoryKeys: readonly string[] = []) {
+  return { sessionId: 'grs-1', directoryKeys }
+}
 
 describe('CatFactoryGuidedReviewGateway', () => {
   it('finds the session for a pull request among same-numbered ones in other repositories', async () => {
@@ -150,7 +151,7 @@ describe('CatFactoryGuidedReviewGateway', () => {
       },
     })
 
-    await expect(gateway.ask('grs-1', 'thr-1', { content: 'Why?' })).rejects.toMatchObject({
+    await expect(gateway.ask(grs1(), 'thr-1', { content: 'Why?' })).rejects.toMatchObject({
       code: 'conflict',
       details: { reason: 'thread_busy' },
     })
@@ -163,7 +164,7 @@ describe('CatFactoryGuidedReviewGateway', () => {
       },
     })
 
-    await gateway.editDraft('grs-1', 'drf-1', { rev: 1, body: 'Tighter' })
+    await gateway.editDraft(grs1(), 'drf-1', { rev: 1, body: 'Tighter' })
 
     expect(calls[0]?.body).toEqual({ rev: 1, body: 'Tighter' })
   })
@@ -182,7 +183,7 @@ describe('CatFactoryGuidedReviewGateway', () => {
       },
     })
 
-    await expect(gateway.postDrafts('grs-1', { draftIds: ['drf-1'] })).rejects.toMatchObject({
+    await expect(gateway.postDrafts(grs1(), { draftIds: ['drf-1'] })).rejects.toMatchObject({
       code: 'conflict',
       details: { reason: 'session_stale' },
     })
@@ -203,7 +204,7 @@ describe('CatFactoryGuidedReviewGateway', () => {
     })
 
     const events = []
-    for await (const event of gateway.watch('grs-1', new AbortController().signal)) {
+    for await (const event of gateway.watch(grs1(), new AbortController().signal)) {
       events.push(event)
     }
 
@@ -234,11 +235,11 @@ function keyIn(workspaceId: string, repoId: number): string {
 const noSessions = { body: { sessions: [], nextCursor: null } }
 
 describe('CatFactoryGuidedReviewGateway workspaces', () => {
-  it('names no workspace when the org mirrors no repository, as a single-workspace key expects', async () => {
-    const { gateway, calls } = gatewayOver({ 'GET /api/v1/guided-reviews': noSessions }, [])
+  it('names no workspace for a repository the mirror lists nowhere, as a single-workspace key expects', async () => {
+    const { gateway, calls } = gatewayOver({ 'GET /api/v1/guided-reviews': noSessions })
 
     await gateway.find(target, [])
-    await gateway.editDraft('grs-1', 'drf-1', { rev: 1, body: 'x' }).catch(() => null)
+    await gateway.editDraft(grs1(), 'drf-1', { rev: 1, body: 'x' }).catch(() => null)
 
     expect(calls.map((call) => call.workspace)).toStrictEqual([null, null])
   })
@@ -263,11 +264,12 @@ describe('CatFactoryGuidedReviewGateway workspaces', () => {
 
     await gateway.open(target, [keyIn('ws-b', 1), keyIn('ws-a', 2)])
 
-    expect(calls.map((call) => `${call.workspace} ${call.method}`)).toStrictEqual([
+    expect(calls.map((call) => `${call.workspace} ${call.method}`).toSorted()).toStrictEqual([
       'ws-a GET',
-      'ws-b GET',
       'ws-a POST',
+      'ws-b GET',
     ])
+    expect(calls.at(-1)).toMatchObject({ workspace: 'ws-a', method: 'POST' })
   })
 
   it('answers the session already open in another linking workspace instead of opening a second', async () => {
@@ -283,30 +285,42 @@ describe('CatFactoryGuidedReviewGateway workspaces', () => {
     expect(calls.some((call) => call.method === 'POST')).toBe(false)
   })
 
-  it("names the org's only workspace on a call by session id, without reading the session first", async () => {
-    const { gateway, calls } = gatewayOver(
-      { 'ws-a PATCH /api/v1/guided-reviews/grs-1/comment-drafts/drf-1': { body: { id: 'drf-1' } } },
-      [keyIn('ws-a', 1), keyIn('ws-a', 2)],
-    )
+  it('opens nothing while a linking workspace refuses the lookup, since it may hold the session', async () => {
+    const { gateway, calls } = gatewayOver({
+      'ws-a GET /api/v1/guided-reviews': {
+        status: 403,
+        body: { error: { code: 'forbidden', message: 'not a member' } },
+      },
+      'ws-b GET /api/v1/guided-reviews': noSessions,
+    })
 
-    await gateway.editDraft('grs-1', 'drf-1', { rev: 1, body: 'Tighter' })
+    await expect(gateway.open(target, [keyIn('ws-a', 1), keyIn('ws-b', 2)])).rejects.toMatchObject({
+      code: 'forbidden',
+    })
+    expect(calls.some((call) => call.method === 'POST')).toBe(false)
+  })
+
+  it('names the one linking workspace on a call by session id, without reading the session first', async () => {
+    const { gateway, calls } = gatewayOver({
+      'ws-a PATCH /api/v1/guided-reviews/grs-1/comment-drafts/drf-1': { body: { id: 'drf-1' } },
+    })
+
+    await gateway.editDraft(grs1([keyIn('ws-a', 1)]), 'drf-1', { rev: 1, body: 'Tighter' })
 
     expect(calls.map((call) => `${call.workspace} ${call.method}`)).toStrictEqual(['ws-a PATCH'])
   })
 
-  it('finds the workspace holding a session once, and asks there after', async () => {
-    const { gateway, calls } = gatewayOver(
-      {
-        'ws-b GET /api/v1/guided-reviews/grs-1': { body: view() },
-        'ws-b POST /api/v1/guided-reviews/grs-1/threads/thr-1/messages': {
-          body: { thread: { id: 'thr-1' } },
-        },
+  it('finds which linking workspace holds a session once, and asks there after', async () => {
+    const { gateway, calls } = gatewayOver({
+      'ws-b GET /api/v1/guided-reviews/grs-1': { body: view() },
+      'ws-b POST /api/v1/guided-reviews/grs-1/threads/thr-1/messages': {
+        body: { thread: { id: 'thr-1' } },
       },
-      [keyIn('ws-a', 1), keyIn('ws-b', 2)],
-    )
+    })
+    const linked = grs1([keyIn('ws-a', 1), keyIn('ws-b', 2)])
 
-    await expect(gateway.get('grs-1')).resolves.toMatchObject({ session: { id: 'grs-1' } })
-    await gateway.ask('grs-1', 'thr-1', { content: 'Why?' })
+    await expect(gateway.get(linked)).resolves.toMatchObject({ session: { id: 'grs-1' } })
+    await gateway.ask(linked, 'thr-1', { content: 'Why?' })
 
     expect(calls.map((call) => `${call.workspace} ${call.method}`)).toStrictEqual([
       'ws-a GET',
@@ -315,25 +329,37 @@ describe('CatFactoryGuidedReviewGateway workspaces', () => {
     ])
   })
 
-  it('passes a refusal through rather than reading it as the session being elsewhere', async () => {
-    const { gateway } = gatewayOver(
-      {
-        'ws-a GET /api/v1/guided-reviews/grs-1': {
-          status: 401,
-          body: { error: { code: 'unauthorized', message: 'revoked' } },
-        },
-        'ws-b GET /api/v1/guided-reviews/grs-1': { body: view() },
+  it('takes the workspace that answered with the session over one that refused the read', async () => {
+    const { gateway } = gatewayOver({
+      'ws-a GET /api/v1/guided-reviews/grs-1': {
+        status: 403,
+        body: { error: { code: 'forbidden', message: 'not a member' } },
       },
-      [keyIn('ws-a', 1), keyIn('ws-b', 2)],
-    )
+      'ws-b GET /api/v1/guided-reviews/grs-1': { body: view() },
+    })
 
-    await expect(gateway.get('grs-1')).rejects.toMatchObject({ code: 'forbidden' })
+    await expect(gateway.get(grs1([keyIn('ws-a', 1), keyIn('ws-b', 2)]))).resolves.toMatchObject({
+      session: { id: 'grs-1' },
+    })
   })
 
-  it('reads as not found when no workspace of the org holds the session', async () => {
-    const { gateway } = gatewayOver({}, [keyIn('ws-a', 1), keyIn('ws-b', 2)])
+  it('passes a refusal through when no workspace answered with the session', async () => {
+    const { gateway } = gatewayOver({
+      'ws-a GET /api/v1/guided-reviews/grs-1': {
+        status: 401,
+        body: { error: { code: 'unauthorized', message: 'revoked' } },
+      },
+    })
 
-    await expect(gateway.get('grs-1')).rejects.toMatchObject({
+    await expect(gateway.get(grs1([keyIn('ws-a', 1), keyIn('ws-b', 2)]))).rejects.toMatchObject({
+      code: 'forbidden',
+    })
+  })
+
+  it('reads as not found when no linking workspace holds the session', async () => {
+    const { gateway } = gatewayOver({})
+
+    await expect(gateway.get(grs1([keyIn('ws-a', 1), keyIn('ws-b', 2)]))).rejects.toMatchObject({
       code: 'not_found',
       details: { upstream: 'cat-factory' },
     })

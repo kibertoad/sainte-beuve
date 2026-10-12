@@ -49,8 +49,8 @@ export type {
   VcsIdentityGateway,
 } from './ports/gateways.js'
 export type {
-  CatFactoryGuidedReviewAccess,
   GuidedReviewGateway,
+  GuidedReviewSessionRef,
   GuidedReviewWatchEvent,
 } from './ports/guided-review.js'
 export type {

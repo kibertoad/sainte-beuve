@@ -10,7 +10,7 @@ import type {
   ReviewRequest,
   VcsProvider,
 } from '@sainte-beuve/contracts'
-import type { CatFactoryGuidedReviewAccess, GuidedReviewGateway } from './guided-review.js'
+import type { GuidedReviewGateway } from './guided-review.js'
 import type { RepositoryDirectoryGateway } from './repository-directory.js'
 
 /**
@@ -320,7 +320,7 @@ export interface GatewayFactory {
    * because cat-factory finds the repository from the pull request's own
    * coordinates.
    */
-  guidedReview(access: CatFactoryGuidedReviewAccess): GuidedReviewGateway
+  guidedReview(access: CatFactoryAccess): GuidedReviewGateway
   /** Asks an instance what a key may do there, for the Configuration screen's check. */
   catFactoryProbe(access: CatFactoryAccess): CatFactoryProbe
   /** The account directory the org's repository list is mirrored from. */

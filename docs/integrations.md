@@ -306,9 +306,10 @@ review on such a repository is refused while it is unset.
 A guided review needs no service, but it lives in a workspace too, and a key
 reaching several workspaces is refused a call that names none. It is opened in
 the workspace that links the repository, the first by id when several do, and
-one already open in any of them is reused. A call that names only the session
-is made in the org's single workspace, or, with several, in the one that answers
-for the session: cat-factory answers 404 in every other.
+one already open in any of them is reused. A call about a session names its
+pull request as well, so it is made in the workspace that links the repository
+without a lookup first. Only a repository linked in several workspaces makes it
+read the session in each, and cat-factory answers 404 in all but one.
 
 The key spends one org's budget and the service is one org's repository frame,
 so a deployment-wide value would be lent across the tenancy boundary. That is the
