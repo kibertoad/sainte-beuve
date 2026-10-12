@@ -588,6 +588,8 @@ describe('an attention ask answered from Slack', () => {
       sameTeamOnly: false,
       neededCommitments: 1,
       note: null,
+      keepAsking: false,
+      people: null,
     })
   }
 
@@ -605,6 +607,22 @@ describe('an attention ask answered from Slack', () => {
     const stored = await harness.container.repositories.attention.getById(raised.id)
     expect(stored?.status).toBe('resolved')
     expect(await harness.container.repositories.commitments.find(peer.id, PR)).not.toBeNull()
+  })
+
+  it('declines an attention ask from the button on its DM', async () => {
+    const asker = await addReviewer(harness, { displayName: 'Asker' })
+    const peer = await addReviewer(harness, { displayName: 'Peer', slackUserId: 'U-peer' })
+    const raised = await ask(asker, [peer.id])
+    const posted = captureFollowUps()
+
+    const res = await signed(harness, button(SLACK_ACTIONS.attentionDecline, raised.id))
+    expect(res.text).toBe('')
+    expect(posted).toStrictEqual([
+      { url: RESPONSE_URL, text: expect.stringContaining('You passed on reviewing') },
+    ])
+    const stored = await harness.container.repositories.attention.getById(raised.id)
+    expect(stored?.status).toBe('open')
+    expect(stored?.declines.map((entry) => entry.reviewerId)).toStrictEqual([peer.id])
   })
 
   it('says an attention ask is over when its button is pressed after it resolved', async () => {

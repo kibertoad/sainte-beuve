@@ -1,7 +1,9 @@
 import type { AttentionDelivery, AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
-import { matchTargetFor, matchesOf } from '@sainte-beuve/reviewers'
+import { recipientShortfall } from '@sainte-beuve/contracts'
+import { deliveriesChange, hasDeclined, matchTargetFor, matchesOf } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveChat } from '../../integrations/resolve.js'
+import { changeAsk } from './changeAsk.js'
 
 /**
  * The chat DMs a named ask goes out as, and their updates as the ask moves on.
@@ -15,13 +17,14 @@ import { resolveChat } from '../../integrations/resolve.js'
  */
 
 /**
- * DM the recipients of an ask that is already stored, record where the messages
- * landed, and answer with the ask as it then stands.
+ * DM people an ask that is already stored names, whether it was just raised or
+ * just asked them, record where the messages landed next to the ones already
+ * sent, and answer with the ask as it then stands.
  *
  * The row comes first so a button never points at an ask the store does not
- * hold yet. A commit that lands while the DMs are in flight is not lost either:
- * the store merges the two writes, and whichever comes second sees the other,
- * so either the commit refreshes the recorded DMs or this does.
+ * hold yet. A commit or a decline that lands while the DMs are in flight is not
+ * lost either: the store merges the two writes, and whichever comes second sees
+ * the other, so either the answer refreshes the recorded DMs or this does.
  */
 export async function sendAskDms(
   container: AppContainer,
@@ -30,15 +33,16 @@ export async function sendAskDms(
 ): Promise<AttentionRequest> {
   const chatDeliveries = await deliverAsk(container, request, recipients)
   if (chatDeliveries.length === 0) return request
-  let recorded: AttentionRequest | null
+  let recorded: AttentionRequest
   try {
-    recorded = await container.repositories.attention.update(request.id, { chatDeliveries })
+    recorded = await changeAsk(container, request.id, (stored) =>
+      deliveriesChange(stored, chatDeliveries),
+    )
   } catch (err) {
     container.logger.warn({ err, attentionId: request.id }, 'could not record the DMs of an ask')
     return request
   }
-  if (recorded === null) return request
-  await refreshDeliveries(container, recorded, recorded.chatDeliveries.filter(isStale(recorded)))
+  await refreshDeliveries(container, recorded, chatDeliveries.filter(isStale(recorded)))
   return recorded
 }
 
@@ -82,8 +86,8 @@ async function deliverAsk(
 
 /**
  * Re-render the DMs of an ask that changed: every one of them when it resolved
- * or was withdrawn, or only `reviewerId`'s when they committed and it is still
- * open, since nobody else's message has anything new to say.
+ * or was withdrawn, or only `reviewerId`'s when they committed or declined and
+ * it is still open, since nobody else's message has anything new to say.
  */
 export async function refreshAskDeliveries(
   container: AppContainer,
@@ -96,11 +100,15 @@ export async function refreshAskDeliveries(
   await refreshDeliveries(container, request, due)
 }
 
-/** Whether a DM no longer says what the ask says: it closed, or this recipient committed. */
+/**
+ * Whether a DM no longer says what the ask says: it closed, or this recipient
+ * committed or declined.
+ */
 function isStale(request: AttentionRequest): (delivery: AttentionDelivery) => boolean {
   return (delivery) =>
     request.status !== 'open' ||
-    request.commitments.some((entry) => entry.reviewerId === delivery.reviewerId)
+    request.commitments.some((entry) => entry.reviewerId === delivery.reviewerId) ||
+    hasDeclined(request, delivery.reviewerId)
 }
 
 async function refreshDeliveries(
@@ -126,6 +134,37 @@ async function refreshDeliveries(
       'could not update the DM of an attention ask',
     )
   })
+}
+
+/**
+ * DM the requester that their named ask can no longer fill from the people it
+ * names, when the decline that answered `before` made it shorter and nobody
+ * was asked on. Only the decline that moves the shortfall tells them, so each
+ * person they lose is one message and a repeated decline is none.
+ */
+export async function tellRequesterShort(
+  container: AppContainer,
+  before: AttentionRequest,
+  after: AttentionRequest,
+): Promise<void> {
+  if (after.status !== 'open' || recipientShortfall(after) <= recipientShortfall(before)) return
+  const reached = await quietly(container, after, async () => {
+    const [chat, requester] = await Promise.all([
+      resolveChat(container),
+      container.repositories.reviewers.getById(after.requestedById),
+    ])
+    const target = requester?.slackUserId ?? null
+    return chat === null || target === null ? null : { chat, target }
+  })
+  if (reached === null) return
+  try {
+    await reached.chat.gateway.sendAttentionShort(after, reached.target)
+  } catch (err) {
+    container.logger.warn(
+      { err, attentionId: after.id },
+      'could not DM the requester of a short ask',
+    )
+  }
 }
 
 /** `read`'s answer, or null with a warning when it throws. */

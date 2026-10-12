@@ -204,6 +204,9 @@ export class SlackWebhookService {
     if (intent.kind === 'help') return HELP
     if (intent.kind === 'list') return this.list()
     if (intent.kind === 'attention_commit') return this.commitToAsk(intent.attentionId, slackUserId)
+    if (intent.kind === 'attention_decline') {
+      return this.declineAsk(intent.attentionId, slackUserId)
+    }
     const review = await this.require(intent.reviewId)
     // Every verb past here WRITES, so it is asked who typed it before anything
     // else. See `decideChatCommand` in @sainte-beuve/reviewers.
@@ -264,6 +267,17 @@ export class SlackWebhookService {
     if (actor === null) return refusalFor('not_in_directory', slackUserId)
     const request = await new AttentionService(this.container).commit(actor, attentionId)
     return `You will review ${describe(request)}. It is on your workspace.`
+  }
+
+  /**
+   * "Not me" from an attention ask's DM, through the same service as the
+   * inbox's button, so the ask moves on exactly as it does from the SPA.
+   */
+  private async declineAsk(attentionId: string, slackUserId: string): Promise<string> {
+    const actor = await this.actorFor(slackUserId)
+    if (actor === null) return refusalFor('not_in_directory', slackUserId)
+    const request = await new AttentionService(this.container).decline(actor, attentionId, null)
+    return `You passed on reviewing ${describe(request)}.`
   }
 
   /** "I will take it", by the row the Slack user maps to. */

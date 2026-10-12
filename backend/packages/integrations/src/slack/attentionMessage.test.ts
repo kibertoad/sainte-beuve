@@ -1,7 +1,7 @@
 import type { AttentionRequest } from '@sainte-beuve/contracts'
 import type { AttentionAskNotice } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
-import { attentionAskMessage } from './attentionMessage.js'
+import { attentionAskMessage, attentionShortMessage } from './attentionMessage.js'
 import { SLACK_ACTIONS } from './commands.js'
 
 // The DM a named ask arrives as, in each state the ask passes through. A button
@@ -25,6 +25,9 @@ function request(overrides: Partial<AttentionRequest> = {}): AttentionRequest {
     requestedByName: 'Igor',
     recipients: [{ reviewerId: 'rev-ada', displayName: 'Ada' }],
     chatDeliveries: [],
+    declines: [],
+    keepAsking: false,
+    people: null,
     requiredSkills: [],
     sameTeamOnly: false,
     team: null,
@@ -56,7 +59,7 @@ function buttons(message: ReturnType<typeof attentionAskMessage>): unknown[] {
 const ADA_COMMITTED = { reviewerId: 'rev-ada', displayName: 'Ada', committedAt: 2 }
 
 describe('attentionAskMessage', () => {
-  it('says who asks for what, with a commit button carrying the ask id', () => {
+  it('says who asks for what, with commit and decline buttons carrying the ask id', () => {
     const message = attentionAskMessage(notice(), undefined)
     expect(message.text).toBe(`Igor asks you to review ${LINK} Add a health check`)
     expect(buttons(message)).toStrictEqual([
@@ -66,6 +69,12 @@ describe('attentionAskMessage', () => {
         action_id: SLACK_ACTIONS.attentionCommit,
         value: 'att-1',
         style: 'primary',
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Not me' },
+        action_id: SLACK_ACTIONS.attentionDecline,
+        value: 'att-1',
       },
     ])
   })
@@ -115,6 +124,13 @@ describe('attentionAskMessage', () => {
     expect(buttons(message)).toStrictEqual([])
   })
 
+  it('says this person passed once they declined, with no button', () => {
+    const declines = [{ reviewerId: 'rev-ada', displayName: 'Ada', reason: null, declinedAt: 2 }]
+    const message = attentionAskMessage(notice({ request: request({ declines }) }), undefined)
+    expect(message.text).toBe(`You passed on reviewing ${LINK}.`)
+    expect(buttons(message)).toStrictEqual([])
+  })
+
   it('names who took a resolved ask, and thanks whoever was one of them', () => {
     const resolved = request({ status: 'resolved', commitments: [ADA_COMMITTED] })
     expect(attentionAskMessage(notice({ request: resolved }), undefined).text).toBe(
@@ -135,5 +151,26 @@ describe('attentionAskMessage', () => {
     )
     expect(message.text).toBe(`Igor withdrew the ask to review ${LINK}.`)
     expect(buttons(message)).toStrictEqual([])
+  })
+})
+
+describe('attentionShortMessage', () => {
+  const declines = [
+    { reviewerId: 'rev-ada', displayName: 'Ada', reason: 'On <leave>', declinedAt: 2 },
+    { reviewerId: 'rev-bo', displayName: 'Bo', reason: null, declinedAt: 3 },
+  ]
+
+  it('says who passed and why, and points at the inbox to ask on', () => {
+    const message = attentionShortMessage(request({ declines }), 'https://sainte-beuve.example')
+    expect(message.text).toBe(
+      `Not enough of the people you asked to review ${LINK} are left to answer. ` +
+        'Passed: Ada (On &lt;leave&gt;), Bo. ' +
+        '<https://sainte-beuve.example|Ask the next best match> from your inbox.',
+    )
+    expect(buttons(message)).toStrictEqual([])
+  })
+
+  it('leaves the link out when the deployment has no address for the app', () => {
+    expect(attentionShortMessage(request({ declines }), undefined).text).not.toContain('inbox')
   })
 })

@@ -322,6 +322,15 @@ The loop runs: file, read the findings, curate, post. What it decided, in short:
   holds when a report carries none, or the post report and the findings would be
   destroyed at the moment somebody wants to read what landed, and nothing could
   recover them.
+- **A challenge is a verdict, bought once.** cat-factory's investigator re-reads
+  the source behind one finding and upholds, amends or retracts it. Each finding
+  may be challenged once (again only after a failure), one at a time, and at most
+  five findings per review. The run records each finding it challenged
+  (`challengedFindingIds`, on the payload, so no migration), because a dismissal
+  removes the finding and its verdict from the curation and would otherwise hand
+  the challenge back. A retracted finding is unticked and a resolution naming it
+  is refused, because cat-factory drops it from the selection silently. A verdict
+  re-parks the review, and that is a new park the ladder nudges about.
 
 What is left:
 
@@ -331,9 +340,6 @@ What is left:
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
-- Challenging a finding (cat-factory dispatches an investigator that upholds or
-  retracts it). It is a fourth verb on the same surface; the loop is usable
-  without it and the screen has nowhere to put the verdict yet.
 
 ### Slice 5: durable persistence (done)
 

@@ -56,6 +56,25 @@ export function curationFor(
  */
 function supersedes(held: AiReviewCuration, reported: AiReviewCuration): boolean {
   if (held.postAttempts !== reported.postAttempts) return held.postAttempts > reported.postAttempts
+  if (forgetsAChallenge(held, reported)) return true
   if (held.lastActivityAt === null || reported.lastActivityAt === null) return false
   return held.lastActivityAt > reported.lastActivityAt
+}
+
+/**
+ * Whether a report shows no challenge on a finding the row holds one for.
+ *
+ * cat-factory never clears a finding's challenge: it moves from investigating
+ * to a verdict or a failure, and a dismissal removes the finding outright. So a
+ * report that has the finding without its challenge was read before the
+ * challenge was filed. The heartbeat cannot tell this case: filing a challenge
+ * restarts the step, which clears `lastActivityAt`.
+ */
+function forgetsAChallenge(held: AiReviewCuration, reported: AiReviewCuration): boolean {
+  const challenged = new Set(
+    held.findings.filter((finding) => finding.challenge !== null).map((f) => f.findingId),
+  )
+  return reported.findings.some(
+    (finding) => finding.challenge === null && challenged.has(finding.findingId),
+  )
 }

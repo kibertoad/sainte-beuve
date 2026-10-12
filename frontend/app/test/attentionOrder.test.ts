@@ -1,6 +1,6 @@
 import type { AttentionRequest } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
-import { createAttentionLedger } from '../app/utils/attentionOrder'
+import { createAttentionLedger, declinedBy } from '../app/utils/attentionOrder'
 
 // The rule that keeps two events which raced each other on the way to this page
 // from landing in the wrong order. The failure it exists for is one-way: an ask
@@ -79,5 +79,20 @@ describe('createAttentionLedger', () => {
 
     expect(ledger.isStale(row({ id: 'ask-old', updatedAt: STAMP }))).toBe(false)
     expect(ledger.isStale(row({ id: 'ask-499', updatedAt: STAMP - 1 }))).toBe(true)
+  })
+})
+
+describe('declinedBy', () => {
+  const declined = row({
+    declines: [{ reviewerId: 'ada', displayName: 'Ada', reason: null, declinedAt: STAMP }],
+  })
+
+  it('names the person who turned the ask down, and nobody else', () => {
+    expect(declinedBy(declined, 'ada')).toBe(true)
+    expect(declinedBy(declined, 'bo')).toBe(false)
+  })
+
+  it('names nobody while the page does not know who is looking', () => {
+    expect(declinedBy(declined, null)).toBe(false)
   })
 })

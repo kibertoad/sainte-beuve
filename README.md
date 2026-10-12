@@ -48,6 +48,12 @@ start ticked), **Dismiss** the noise, and then choose:
 - **Finish without posting** closes the review having said nothing, which is the
   right answer more often than it sounds.
 
+Not sure a finding is right? **Challenge** it, with your doubt or without one.
+cat-factory sends an investigator back to the source behind that finding, and the
+verdict lands on it: upheld, amended (with the new wording or severity), or
+retracted, which unticks it and keeps it off the pull request. Each finding can
+be challenged once, one at a time, and a review gets five, dismissed ones included.
+
 Posting reports back. If seven comments went out and two bounced, the row says
 which two and why, against the attempt number, and posting again skips what
 already landed rather than commenting twice. And if the reviewer wedges with
@@ -145,6 +151,16 @@ and an **I will review it** button that commits exactly as the inbox does. The
 DM follows the ask, so it says when you committed and closes when the ask is
 answered or withdrawn, rather than leave a button on an ask that is over. An ask
 the skill gate addresses is not sent as DMs, since it can reach the whole pool.
+
+Anybody an ask reached can say **Not me**, in the inbox (with an optional
+reason) or on the DM. The ask leaves their inbox and the requester sees who
+passed and why, so a no is never mistaken for an unread ask. When declines leave
+a named ask with fewer people to answer than it still waits for, it moves on to
+the next best match from the same ranking the dialog showed, skipping everyone
+already asked and the pull request's author. It does that by itself when you
+left **If somebody declines, ask the next best match** ticked. Otherwise you get
+a DM saying the ask is short, and **Ask the next best match** in your inbox asks
+them. Somebody who declined and then volunteers after all is simply committed.
 
 The ask ANSWERS ITSELF. Once enough people have said they will review, it is
 resolved and disappears from everybody's inbox, including the people who never

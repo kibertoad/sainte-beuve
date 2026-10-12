@@ -46,6 +46,11 @@ export interface ChatGateway {
   sendAttentionAsk(notice: AttentionAskNotice, target: string): Promise<ChatMessageRef>
   /** Re-render a delivered ask in the state its request is in now. */
   updateAttentionAsk(notice: AttentionAskNotice, message: ChatMessageRef): Promise<void>
+  /**
+   * DM the requester that declines left their named ask short of people to
+   * answer it, and nobody was asked on. `target` is their Slack user id.
+   */
+  sendAttentionShort(request: AttentionRequest, target: string): Promise<void>
 }
 
 /** The handle a delegated AI review is tracked by. */
@@ -140,6 +145,14 @@ export interface AiReviewGateway {
    * from what the run observed, so there is nothing to pass.
    */
   resumeReview(input: { runId: string } & AiReviewWorkspace): Promise<void>
+  /**
+   * Dispatch cat-factory's investigator to re-examine one finding, with the
+   * curator's concern when there is one. ASYNCHRONOUS like `resolveReview`: the
+   * verdict lands on the finding on a later poll.
+   */
+  challengeFinding(
+    input: { runId: string; findingId: string; question: string | null } & AiReviewWorkspace,
+  ): Promise<void>
 }
 
 /** Where an org's cat-factory is, and the key it reaches it with. */

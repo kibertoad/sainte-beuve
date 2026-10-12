@@ -21,6 +21,7 @@ export type SlackIntent =
   | { kind: 'snooze'; reviewId: string; hours: number }
   | { kind: 'ai_review'; reviewId: string }
   | { kind: 'attention_commit'; attentionId: string }
+  | { kind: 'attention_decline'; attentionId: string }
   | { kind: 'help' }
 
 export interface SlackRequest {
@@ -44,13 +45,15 @@ export interface SlackRequest {
 
 /**
  * The action ids the bot's buttons carry: the announcement's three, and the
- * commit button on an attention ask's DM, whose value is the ask's id.
+ * commit and decline buttons on an attention ask's DM, whose value is the
+ * ask's id.
  */
 export const SLACK_ACTIONS = {
   claim: 'review_claim',
   reroll: 'review_reroll',
   snooze: 'review_snooze',
   attentionCommit: 'attention_commit',
+  attentionDecline: 'attention_decline',
 } as const
 
 /** How long a snooze pushes the next nudge out when nobody names a number. */
@@ -161,6 +164,9 @@ function readPayload(raw: string): InteractionPayload | null {
 function intentForAction(actionId: string, value: string): SlackIntent | null {
   if (actionId === SLACK_ACTIONS.attentionCommit) {
     return { kind: 'attention_commit', attentionId: value }
+  }
+  if (actionId === SLACK_ACTIONS.attentionDecline) {
+    return { kind: 'attention_decline', attentionId: value }
   }
   if (actionId === SLACK_ACTIONS.claim) return { kind: 'claim', reviewId: value }
   if (actionId === SLACK_ACTIONS.reroll) return { kind: 'reroll', reviewId: value }
