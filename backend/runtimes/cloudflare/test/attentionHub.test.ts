@@ -269,6 +269,7 @@ function requestFor(id: string): AttentionRequest {
     keepAsking: false,
     people: null,
     requiredSkills: [],
+    domains: [],
     sameTeamOnly: false,
     team: null,
     neededCommitments: 1,

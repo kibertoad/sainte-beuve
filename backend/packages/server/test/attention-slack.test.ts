@@ -81,7 +81,7 @@ describe('the Slack DMs of a named ask', () => {
     ])
   })
 
-  it('DMs nobody for an ask the skill gate addresses', async () => {
+  it('DMs nobody for an ask nobody was named on', async () => {
     await raise(asker, { requiredSkills: ['Backend'] })
     expect(chat.asks).toStrictEqual([])
   })
@@ -171,19 +171,24 @@ describe('the Slack DMs of a named ask', () => {
 
   it('raises the ask with no DMs when a read on the way to Slack fails', async () => {
     const { repositories } = asker.container
-    const brokenProjects = buildHarness({
-      ...asker.container,
-      repositories: {
-        ...repositories,
-        projects: {
-          ...repositories.projects,
-          getByRef: async () => {
-            throw new Error('the project store is down')
+    const brokenTokens = buildHarness(
+      {
+        chat,
+        vcs: environmentVcs(viewerVcs('kibertoad')),
+        repositories: {
+          ...repositories,
+          integrationTokens: {
+            ...repositories.integrationTokens,
+            get: async (key) => {
+              if (key === 'slack-bot-token') throw new Error('the token store is down')
+              return repositories.integrationTokens.get(key)
+            },
           },
         },
       },
-    })
-    const request = await raise(brokenProjects, { recipientIds: [ada.id] })
+      { encryptionKey: btoa('0123456789abcdef0123456789abcdef') },
+    )
+    const request = await raise(brokenTokens, { recipientIds: [ada.id] })
     expect(request.chatDeliveries).toStrictEqual([])
     expect(chat.asks).toStrictEqual([])
   })

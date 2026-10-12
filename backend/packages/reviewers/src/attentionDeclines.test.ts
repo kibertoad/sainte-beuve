@@ -35,6 +35,7 @@ function ask(overrides: Partial<AttentionRequest> = {}): AttentionRequest {
     keepAsking: false,
     people: null,
     requiredSkills: [],
+    domains: [],
     sameTeamOnly: false,
     team: null,
     neededCommitments: 1,

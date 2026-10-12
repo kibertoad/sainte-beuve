@@ -1,5 +1,6 @@
 import type {
   AttentionRequest,
+  CreateAttentionRequest,
   PullRequestPeople,
   PullRequestRef,
   Reviewer,
@@ -7,20 +8,24 @@ import type {
 import { MAX_ATTENTION_RECIPIENTS, MAX_RECOMMENDATIONS } from '@sainte-beuve/contracts'
 import { ValidationError } from '@sainte-beuve/kernel'
 import {
+  type MatchTarget,
   type RecipientRefusal,
   type RecipientsResolution,
   askableRecipients,
   askedOrAnsweredIds,
   resolveAttentionRecipients,
   reviewersWithHandles,
+  selectAttentionAudience,
+  wantedOf,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { RecommendationService } from '../reviewers/RecommendationService.js'
+import { loadPullRequestContext, wantedFor } from '../reviewers/wanted.js'
 
 /**
- * Who an ask is addressed to by name: the people a requester picks, checked
- * against the directory as it stands now, and the ranked matches an ask moves
- * on to when it has to.
+ * Who an ask is addressed to: the people a requester picks, checked against
+ * the directory as it stands now, the mix an ask nobody was named on is matched
+ * on, and the ranked matches an ask moves on to when it has to.
  */
 
 interface NamedAsk {
@@ -28,8 +33,56 @@ interface NamedAsk {
   people: PullRequestPeople | null
 }
 
+const NOTHING_WANTED: MatchTarget = { skills: [], domains: [] }
+
+/**
+ * Who a new ask is addressed to and what it wants: the people it names, and
+ * the skills and domains captured with it. Captured like the team, so editing
+ * the repository's vocabulary later does not re-address an ask already out.
+ */
+export async function addressAsk(
+  container: AppContainer,
+  requester: Reviewer,
+  input: CreateAttentionRequest,
+): Promise<{ named: Reviewer[]; wanted: MatchTarget }> {
+  const [named, context] = await Promise.all([
+    namedRecipients(container, requester, input),
+    loadPullRequestContext(container, input.pullRequest),
+  ])
+  const wanted = wantedFor(input.requiredSkills, context)
+  if (named.length === 0) await refuseUnreachable(container, requester, { ...input, wanted })
+  return { named, wanted }
+}
+
+/**
+ * Refuse an ask nobody was named on when what it wants is what leaves its
+ * audience empty: stored, it would sit in no inbox while somebody who could
+ * have been asked never hears of it.
+ */
+async function refuseUnreachable(
+  container: AppContainer,
+  requester: Reviewer,
+  ask: { sameTeamOnly: boolean; wanted: MatchTarget },
+): Promise<void> {
+  const directory = await container.repositories.reviewers.list()
+  const rule = {
+    recipientIds: [],
+    sameTeamOnly: ask.sameTeamOnly,
+    team: requester.team,
+    requestedById: requester.id,
+    declinedIds: [],
+  }
+  const askable = selectAttentionAudience(directory, { ...rule, wanted: NOTHING_WANTED })
+  if (askable.length === 0) return
+  if (selectAttentionAudience(askable, { ...rule, wanted: ask.wanted }).length > 0) return
+  throw new ValidationError(
+    'Nobody available holds at least half of what this ask wants. Pick fewer skills, or name people to ask.',
+    { skills: ask.wanted.skills, domains: ask.wanted.domains },
+  )
+}
+
 /** The people a requester names when raising an ask. */
-export async function namedRecipients(
+async function namedRecipients(
   container: AppContainer,
   requester: Reviewer,
   input: NamedAsk & { recipientIds: readonly string[]; neededCommitments: number },
@@ -75,10 +128,11 @@ export async function namedAdditions(
 
 /**
  * The best matches for an ask, best first, ranked as the recommendations rank
- * them for the requester: the same skills, the same team filter and the same
- * people left out. The people an ask moves on to are then the ones the
- * requester would have seen next on the list. Whoever the ask has already been
- * to is still in the list; `nextToAsk` passes over them against the stored ask.
+ * them for the requester: against the skills and domains the ask stored, with
+ * the same team filter and the same people left out. The people an ask moves
+ * on to are then the ones the requester would have seen next on the list.
+ * Whoever the ask has already been to is still in the list; `nextToAsk` passes
+ * over them against the stored ask.
  */
 export async function rankedCandidates(
   container: AppContainer,
@@ -89,13 +143,17 @@ export async function rankedCandidates(
   // The team captured when the ask was raised, as the gate uses, so a requester
   // who changed team since does not move the ask to another team's list.
   const asRaised = { ...requester, team: request.team }
-  const { ranked } = await new RecommendationService(container).rank(asRaised, {
-    pullRequest: request.pullRequest,
-    requiredSkills: request.requiredSkills,
-    sameTeamOnly: request.sameTeamOnly,
-    people: request.people,
-    limit: MAX_RECOMMENDATIONS,
-  })
+  const { ranked } = await new RecommendationService(container).rank(
+    asRaised,
+    {
+      pullRequest: request.pullRequest,
+      requiredSkills: request.requiredSkills,
+      sameTeamOnly: request.sameTeamOnly,
+      people: request.people,
+      limit: MAX_RECOMMENDATIONS,
+    },
+    wantedOf(request),
+  )
   return ranked.map((candidate) => candidate.reviewer)
 }
 

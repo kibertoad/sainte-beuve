@@ -156,13 +156,13 @@ function submit() {
         </p>
 
         <UFormField
-          label="Skills a reviewer needs"
+          label="Skills the change wants"
           :description="
             skills.length === 0
-              ? 'This repository has no skill vocabulary. Add one on the Repositories screen, or ask everybody available.'
+              ? 'This repository has no skill vocabulary. Add one on the Repositories screen. Until then the ask is matched on the pull request\'s own skills and the repository\'s domains, or reaches everybody available if there are none.'
               : named
                 ? 'Ranks the matches below. The people you tick are asked whatever skills they hold.'
-                : 'Everyone available who holds all of these will be asked, unless you tick people below. Pick none to ask everybody.'
+                : 'Everyone available who holds at least half of these and the repository\'s domains will be asked, unless you tick people below. Pick none to match on the pull request\'s own skills.'
           "
         >
           <div class="flex flex-wrap gap-2">
@@ -178,7 +178,7 @@ function submit() {
 
         <UFormField
           label="Best matches"
-          description="Ranked on how much of the wanted skills and domains each person holds, then on fewer open reviews. With no skill picked, the pull request's own are wanted. Tick people to ask only them; with nobody ticked the ask goes to everyone holding all the picked skills."
+          description="Ranked on how much of the wanted skills and domains each person holds, then on fewer open reviews. With no skill picked, the pull request's own are wanted. Tick people to ask only them; with nobody ticked the ask goes to everyone holding at least half of what is wanted."
         >
           <ReviewerRecommendations
             v-model:selected="recipientIds"

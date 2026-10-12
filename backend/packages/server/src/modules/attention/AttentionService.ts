@@ -18,6 +18,7 @@ import {
   commitmentChange,
   declineChange,
   declineRefusal,
+  distinctAsSpelled,
   hasDeclined,
   isInAttentionAudience,
 } from '@sainte-beuve/reviewers'
@@ -28,7 +29,7 @@ import {
 } from '../../integrations/reviewRequests.js'
 import { refreshAskDeliveries, sendAskDms, tellRequesterShort } from './askDeliveries.js'
 import { changeAsk } from './changeAsk.js'
-import { namedAdditions, namedRecipients, rankedCandidates } from './recipients.js'
+import { addressAsk, namedAdditions, rankedCandidates } from './recipients.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -58,7 +59,7 @@ export class AttentionService {
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
     const { repositories, clock, ids } = this.container
-    const named = await namedRecipients(this.container, viewer, input)
+    const { named, wanted } = await addressAsk(this.container, viewer, input)
     const recipients = named.map((reviewer) => ({
       reviewerId: reviewer.id,
       displayName: reviewer.displayName,
@@ -71,7 +72,8 @@ export class AttentionService {
       requestedById: viewer.id,
       requestedByName: viewer.displayName,
       recipients,
-      requiredSkills: input.requiredSkills,
+      requiredSkills: distinctAsSpelled(wanted.skills),
+      domains: distinctAsSpelled(wanted.domains),
       sameTeamOnly: input.sameTeamOnly,
       // The requester's team is captured HERE rather than read at delivery
       // time, so somebody changing team does not silently re-address an ask
@@ -87,7 +89,7 @@ export class AttentionService {
       chatDeliveries: [],
       declines: [],
       // Asking on means asking the next named person, which an ask sent by
-      // skill has no use for: it already reaches everybody who matches.
+      // fit has no use for: it already reaches everybody who matches.
       keepAsking: input.keepAsking && recipients.length > 0,
       people: input.people,
     })
@@ -188,7 +190,7 @@ export class AttentionService {
   /**
    * The requester asking more people on a named ask: the ones they name, or
    * else the next best matches, as many as the ask is short and at least one.
-   * An ask sent by skill already reaches everybody who matches, and naming
+   * An ask sent by fit already reaches everybody who matches, and naming
    * people on it would narrow it to them, so that is refused.
    */
   async askMore(
@@ -202,7 +204,7 @@ export class AttentionService {
     }
     if (request.recipients.length === 0) {
       throw new ValidationError(
-        'This ask goes to everybody who holds its skills, so there is nobody to add',
+        'This ask goes to everybody who fits it, so there is nobody to add',
         { attentionId },
       )
     }

@@ -156,6 +156,14 @@ function askedLine(request: AttentionRequest): string {
               {{ skill }}
             </UBadge>
             <UBadge
+              v-for="domain in request.domains"
+              :key="`domain:${domain}`"
+              size="sm"
+              variant="outline"
+            >
+              {{ domain }}
+            </UBadge>
+            <UBadge
               v-if="request.sameTeamOnly && request.recipients.length === 0"
               size="sm"
               variant="subtle"

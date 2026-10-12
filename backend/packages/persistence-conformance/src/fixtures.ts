@@ -209,6 +209,7 @@ export function attentionRequest(
     keepAsking: false,
     people: null,
     requiredSkills: ['typescript'],
+    domains: ['billing'],
     sameTeamOnly: false,
     team: 'platform',
     neededCommitments: 1,

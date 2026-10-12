@@ -6,7 +6,7 @@ import { type ScoredCandidate, type ScoringTarget, scoreCandidate } from './sele
  * Reviewer recommendation: who an author asking for attention should pick,
  * best first.
  *
- * The pool is the attention audience without its skill gate, because a pick
+ * The pool is the attention audience without its fit floor, because a pick
  * becomes an ask: the requester is never in it, a paused reviewer is not, a
  * weight of 0 does not keep anybody out, and "only my team" narrows it. The
  * candidates are scored as the router scores them, then ranked on the
@@ -19,7 +19,7 @@ import { type ScoredCandidate, type ScoringTarget, scoreCandidate } from './sele
 export interface RankingInput extends ScoringTarget {
   candidates: readonly Reviewer[]
   /** Who is asking, and whether the ask stays in their team. */
-  audience: Omit<AttentionAudienceRule, 'requiredSkills' | 'recipientIds' | 'declinedIds'>
+  audience: Omit<AttentionAudienceRule, 'wanted' | 'recipientIds' | 'declinedIds'>
   /** Reviewer ids that must not be recommended: the author, and anyone already on or asked. */
   excludeReviewerIds: readonly string[]
   limit: number
@@ -55,7 +55,7 @@ export function rankCandidates(input: RankingInput): RankingResult {
   const rule: AttentionAudienceRule = {
     ...input.audience,
     recipientIds: [],
-    requiredSkills: [],
+    wanted: { skills: [], domains: [] },
     declinedIds: [],
   }
   const ranked = input.candidates

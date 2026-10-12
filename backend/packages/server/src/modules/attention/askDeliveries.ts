@@ -1,6 +1,6 @@
 import type { AttentionDelivery, AttentionRequest, Reviewer } from '@sainte-beuve/contracts'
 import { recipientShortfall } from '@sainte-beuve/contracts'
-import { deliveriesChange, hasDeclined, matchTargetFor, matchesOf } from '@sainte-beuve/reviewers'
+import { deliveriesChange, hasDeclined, matchesOf, wantedOf } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveChat } from '../../integrations/resolve.js'
 import { changeAsk } from './changeAsk.js'
@@ -58,15 +58,10 @@ async function deliverAsk(
 ): Promise<AttentionDelivery[]> {
   const reachable = recipients.filter((reviewer) => reviewer.slackUserId !== null)
   if (reachable.length === 0) return []
-  const reached = await quietly(container, request, async () => {
-    const [chat, project] = await Promise.all([
-      resolveChat(container),
-      container.repositories.projects.getByRef(request.pullRequest),
-    ])
-    return chat === null ? null : { chat, target: matchTargetFor(request, project) }
-  })
-  if (reached === null) return []
-  const { chat, target } = reached
+  const chat = await quietly(container, request, () => resolveChat(container))
+  if (chat === null) return []
+  // The reasons a DM gives are what the ask stored, as its audience is.
+  const target = wantedOf(request)
   const sent = await Promise.allSettled(
     reachable.map(async (reviewer): Promise<AttentionDelivery> => {
       const { matchedSkills, matchedDomains } = matchesOf(reviewer, target)

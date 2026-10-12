@@ -5,16 +5,17 @@ import type {
   ReviewRequest,
 } from '@sainte-beuve/contracts'
 import {
+  type MatchTarget,
   type ScoredCandidate,
   distinctAsSpelled,
   excludedFromReview,
-  matchTargetFor,
   pastReviewCounts,
   rankCandidates,
   reviewersWithHandles,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { readReviewHistory } from './pastReviews.js'
+import { wantedFor } from './wanted.js'
 
 /**
  * Who an author asking for attention should pick for a pull request, best first.
@@ -39,23 +40,21 @@ export class RecommendationService {
     }
   }
 
-  /** The ranking `recommend` answers with, each candidate with their directory entry. */
-  async rank(viewer: Reviewer, input: RecommendReviewers) {
-    const { repositories } = this.container
+  /**
+   * The ranking `recommend` answers with, each candidate with their directory
+   * entry. Against `wanted` when it is given, as an ask stores what it was
+   * matched on; otherwise against what the caller picked or the pull request wants.
+   */
+  async rank(viewer: Reviewer, input: RecommendReviewers, wanted: MatchTarget | null = null) {
     const { pullRequest } = input
-    const [candidates, project, review, history] = await Promise.all([
+    const { repositories } = this.container
+    const [candidates, review, project, history] = await Promise.all([
       repositories.reviewers.list(),
-      repositories.projects.getByRef(pullRequest),
       repositories.reviews.getByPullRequest(pullRequest),
+      wanted === null ? repositories.projects.getByRef(pullRequest) : null,
       readReviewHistory(this.container, pullRequest),
     ])
-    const target = matchTargetFor(
-      {
-        requiredSkills:
-          input.requiredSkills.length > 0 ? input.requiredSkills : (review?.requiredSkills ?? []),
-      },
-      project,
-    )
+    const target = wanted ?? wantedFor(input.requiredSkills, { project, review })
     const { ranked, shortfallReason } = rankCandidates({
       ...target,
       candidates,

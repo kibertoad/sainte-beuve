@@ -14,7 +14,7 @@ import {
 } from './helpers.js'
 
 // An ask that names its reviewers: it reaches exactly those people, whatever
-// the skill gate would have said, and the names are checked on the way in.
+// the fit floor would have said, and the names are checked on the way in.
 
 const ATTENTION = '/api/v1/attention'
 
@@ -58,7 +58,7 @@ describe('an ask that names its reviewers', () => {
     })
   })
 
-  it('reaches the people it names and nobody the skill gate would add', async () => {
+  it('reaches the people it names and nobody the fit floor would add', async () => {
     const res = await raise(asker, { recipientIds: [named.id], requiredSkills: ['Backend'] })
     expect(res.status).toBe(201)
     const request = (await res.json()) as AttentionRequest
