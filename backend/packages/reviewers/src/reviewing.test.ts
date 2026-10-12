@@ -44,6 +44,18 @@ function input(overrides: Partial<ReviewListsInput>): ReviewListsInput {
   }
 }
 
+function commitmentOn(open: OpenPullRequest): ReviewCommitment {
+  return {
+    id: 'c1',
+    reviewerId: 'r1',
+    pullRequest: open.pullRequest,
+    title: 'A change',
+    attentionRequestId: null,
+    requestedHandle: null,
+    createdAt: 0,
+  }
+}
+
 const numbers = (rows: { pullRequest: { number: number } }[]) =>
   rows.map((row) => row.pullRequest.number)
 
@@ -68,15 +80,21 @@ describe('assembleReviewLists', () => {
     expect(numbers(lists.reviewed)).toStrictEqual([3])
   })
 
+  it('lists a pull request committed to under committed alone', () => {
+    // The commitment put the request on the host, so the host search finds it too.
+    const lists = assembleReviewLists(
+      input({
+        requestedFound: [pr('api', 1), pr('api', 2)],
+        commitments: [commitmentOn(pr('api', 1))],
+      }),
+      {},
+    )
+    expect(numbers(lists.requested)).toStrictEqual([2])
+    expect(numbers(lists.committed)).toStrictEqual([1])
+  })
+
   it('keeps to the linked repositories and the owner on request', () => {
-    const commitment: ReviewCommitment = {
-      id: 'c1',
-      reviewerId: 'r1',
-      pullRequest: pr('web', 4).pullRequest,
-      title: 'A change',
-      attentionRequestId: null,
-      createdAt: 0,
-    }
+    const commitment = commitmentOn(pr('web', 4))
     const found = input({
       requestedFound: [pr('api', 1), pr('web', 2), pr('cli', 5, 'other')],
       commitments: [commitment],

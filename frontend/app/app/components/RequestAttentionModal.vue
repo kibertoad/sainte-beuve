@@ -62,10 +62,11 @@ const skills = computed(() => {
   return project?.skills ?? []
 })
 
-const recommendations = useReviewerRecommendations(
-  computed(() => props.pullRequest?.pullRequest ?? null),
-  selectedSkills,
-)
+const recommendations = useReviewerRecommendations({
+  pullRequest: toRef(props, 'pullRequest'),
+  requiredSkills: selectedSkills,
+  sameTeamOnly,
+})
 
 // Somebody ticked and then ranked out of the list by a new skill choice would
 // be asked without being on screen, so a fresh ranking drops them.
@@ -148,13 +149,14 @@ function submit() {
 
         <UFormField
           label="Best matches"
-          description="Ranked on the skills picked above, or the repository's when none are, and on its domains. Open reviews lower a reviewer's rank. Tick people to ask only them."
+          description="Ranked on how much of the wanted skills and domains each person holds, then on fewer open reviews. With no skill picked, the pull request's own are wanted. Tick people to ask only them; with nobody ticked the ask goes to everyone holding all the picked skills."
         >
           <ReviewerRecommendations
             v-model:selected="recipientIds"
             :result="recommendations.result.value"
             :pending="recommendations.pending.value"
             :failure="recommendations.failure.value"
+            :same-team-only="sameTeamOnly"
           />
         </UFormField>
 

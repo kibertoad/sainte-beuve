@@ -31,7 +31,9 @@ export interface ReviewLists {
  * A pull request the host asks the viewer to look at again is still in the
  * reviewed search, and it belongs under `requested`, where the next move is
  * theirs. The project read and the search overlap for every registered
- * repository the search can see, so a row is kept once, by its URL.
+ * repository the search can see, so a row is kept once, by its URL. A
+ * commitment requests its reviewer on the host, so a pull request they
+ * committed to is listed under `committed` and not again under `requested`.
  */
 export function assembleReviewLists(input: ReviewListsInput, query: MyReviewsQuery): ReviewLists {
   const projectIdOf = projectIndex(input.projects)
@@ -44,7 +46,10 @@ export function assembleReviewLists(input: ReviewListsInput, query: MyReviewsQue
     projectId: projectIdOf(pr.pullRequest),
   })
 
-  const requested = uniqueByUrl([...input.requestedInProjects, ...input.requestedFound])
+  const committedUrls = new Set(input.commitments.map((c) => c.pullRequest.url))
+  const requested = uniqueByUrl([...input.requestedInProjects, ...input.requestedFound]).filter(
+    (pr) => !committedUrls.has(pr.pullRequest.url),
+  )
   const requestedUrls = new Set(requested.map((pr) => pr.pullRequest.url))
   const reviewed = uniqueByUrl(input.reviewedFound).filter(
     (pr) => !requestedUrls.has(pr.pullRequest.url),
