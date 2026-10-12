@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "6e599e34-981a-4957-a81e-da752e374470",
-  "prevIds": ["3325c28c-26a8-4070-b7be-9fa99f168b75"],
+  "id": "bca7dbce-f011-42ad-a87f-2bc79f921a61",
+  "prevIds": ["5723edd2-894e-457a-82d5-2bef88d48745"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -986,7 +986,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "pr_owner",
+      "name": "pull_request_key",
       "entityType": "columns",
       "schema": "public",
       "table": "review_requests"
@@ -999,20 +999,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "pr_repo",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "review_requests"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "pr_number",
+      "name": "repo_key",
       "entityType": "columns",
       "schema": "public",
       "table": "review_requests"
@@ -1728,21 +1715,7 @@
           "opclass": null
         },
         {
-          "value": "pr_owner",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "pr_repo",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "pr_number",
+          "value": "pull_request_key",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -1770,14 +1743,7 @@
           "opclass": null
         },
         {
-          "value": "pr_owner",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "pr_repo",
+          "value": "repo_key",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,

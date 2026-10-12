@@ -113,10 +113,8 @@ async function directoryFor(
     repositories.reviewers.list(),
     repositories.reviews.getByPullRequest(pullRequest),
   ])
-  // The board looks a row up by owner, repo and number alone, so a row from
-  // the other host under the same names is not this pull request.
   const logins = [
-    ...(boardRow?.pullRequest.provider === pullRequest.provider ? [boardRow.authorLogin] : []),
+    ...(boardRow === null ? [] : [boardRow.authorLogin]),
     ...(ask.people === null ? [] : [ask.people.authorLogin]),
   ]
   return { directory, authorIds: reviewersWithHandles(directory, pullRequest.provider, logins) }

@@ -34,6 +34,7 @@ pull request is merged with its review findings fixed.
 | 11  | GitLab webhook intake                                         | 5    |            | In review   | [#40](https://github.com/kibertoad/sainte-beuve/pull/40) |
 | 12  | Challenge an AI review finding                                | 5    |            | In review   | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
 | 13  | A guided review names its cat-factory workspace               | 5    | 5          | In review   | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
+| 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | In review   | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
 | 15  | Attention answers are written atomically                      | 3    |            | In review   | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
 
 Status is one of: Not started, In progress, In review, Merged.
@@ -165,6 +166,18 @@ workspaces, so the guided review fails for every repository of such an org.
 Opening and looking up a session use the workspaces the org's repository mirror
 links the repository in. A call about a session names its pull request too, and
 is made in the workspace those same keys name.
+
+### 14. Board lookups by host
+
+`ReviewRequestRepository.getByPullRequest` matches a pull request on owner, repo
+and number alone. A GitHub pull request and a GitLab merge request with the same
+names resolve to each other's board row, so an intake for one can update the
+other's review or refuse to track it.
+
+A board row is looked up by the kernel's `pullRequestKey` and a repository's
+history by `projectRefKey`, the keys projects and commitments already use, so
+the host is part of each and the path is compared without case. Both durable
+stores carry them as columns, backfilled from each row.
 
 ### 15. Atomic answers to an ask
 

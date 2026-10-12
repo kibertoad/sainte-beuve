@@ -1,6 +1,7 @@
 import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type {
   AiReviewRun,
+  ProjectRef,
   Reminder,
   ReminderStatus,
   Reviewer,
@@ -11,6 +12,7 @@ import type {
   AiReviewRunRepository,
   EpochMs,
   IntegrationTokenRepository,
+  PullRequestAddress,
   ReminderRepository,
   Repositories,
   ReviewerRepository,
@@ -18,6 +20,7 @@ import type {
   ReviewRequestRepository,
   StoredIntegrationToken,
 } from '@sainte-beuve/kernel'
+import { projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
 import { clone, patched } from './clone.js'
 import { InMemoryIntegrationConfigRepository } from './config-stores.js'
@@ -122,35 +125,26 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
     return row === undefined ? null : clone(row)
   }
 
-  async getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null> {
+  async getByPullRequest(ref: PullRequestAddress): Promise<ReviewRequest | null> {
+    const wanted = pullRequestKey(ref)
     for (const row of this.rows.values()) {
-      const pr = row.pullRequest
-      if (pr.owner === ref.owner && pr.repo === ref.repo && pr.number === ref.number) {
-        return clone(row)
-      }
+      if (pullRequestKey(row.pullRequest) === wanted) return clone(row)
     }
     return null
   }
 
   async listForRepository(
-    repository: { provider: string; owner: string; repo: string },
+    repository: ProjectRef,
     filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
   ): Promise<ReviewRequest[]> {
+    const wanted = projectRefKey(repository)
     return [...this.rows.values()]
-      .filter((row) => {
-        const pr = row.pullRequest
-        return (
-          pr.provider === repository.provider &&
-          pr.owner === repository.owner &&
-          pr.repo === repository.repo &&
+      .filter(
+        (row) =>
+          projectRefKey(row.pullRequest) === wanted &&
           filter.status.includes(row.status) &&
-          row.createdAt >= filter.since
-        )
-      })
+          row.createdAt >= filter.since,
+      )
       .sort(newestFirst((row) => row.createdAt))
       .slice(0, filter.limit)
       .map(clone)

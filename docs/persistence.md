@@ -45,7 +45,7 @@ org gets there — no port method takes one, and no service passes one.
 | ----------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `orgs`                  | `id`                          | `slug` (UNIQUE), `created_at`                                                                                                   |
 | `reviewers`             | `(org_id, id)`                | `outstanding_reviews`, `created_at`                                                                                             |
-| `review_requests`       | `(org_id, id)`                | `status`, `pr_owner`, `pr_repo`, `pr_number`, `created_at`                                                                      |
+| `review_requests`       | `(org_id, id)`                | `status`, `pull_request_key`, `repo_key`, `created_at`                                                                          |
 | `reminders`             | `(org_id, id)`                | `review_id`, `status`, `due_at`, `claimed_at`                                                                                   |
 | `ai_review_runs`        | `(org_id, id)`                | `review_id`, `status`, `requested_at`, `last_polled_at`                                                                         |
 | `integration_tokens`    | `(org_id, integration_id)`    | `sealed`, `hint`, `subject`, `subject_is_bot`, `updated_at` (no payload)                                                        |
@@ -75,8 +75,8 @@ buy nothing. See [auth.md](./auth.md) for what a session and a key are.
 Every table stores its contract object as JSON in one `data` column. The scalar
 columns beside it are indexes derived from that payload at write time: the
 status a filter reads, the `due_at` the reminder tick scans, the
-`(owner, repo, number)` a webhook replay looks a review up by. A read decodes
-the payload and ignores them.
+`pull_request_key` a webhook replay looks a review up by. A read decodes the
+payload and ignores them.
 
 This is a trade, and it is the shape the ports asked for. They are coarse by
 design (`listDue`, not a query builder), so the set of columns a store has to
