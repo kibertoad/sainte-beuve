@@ -33,6 +33,11 @@ export type IntakeIntent =
   | { kind: 'ai_review'; pullRequest: PullRequestRef }
   | { kind: 'command'; pullRequest: PullRequestRef; requester: string; verb: BotVerb }
 
+/** The pull request or merge request an intent is about. */
+export function intentPullRequest(intent: IntakeIntent): PullRequestRef {
+  return intent.kind === 'track' ? intent.review.pullRequest : intent.pullRequest
+}
+
 const VERBS: Record<string, BotVerb> = {
   review: 'review',
   assign: 'review',

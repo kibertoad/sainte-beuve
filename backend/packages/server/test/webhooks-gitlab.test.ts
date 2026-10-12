@@ -1,5 +1,6 @@
 import type { ReviewRequest } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { withOrg } from '../src/container.js'
 import {
   addReviewer,
   buildHarness,
@@ -238,6 +239,29 @@ describe('GitLab intake, per org', () => {
     const res = await deliver(harness, mergeRequest('open'), { path: '/webhooks/gitlab/acme' })
     expect(res.status).toBe(202)
     expect(await res.json()).toMatchObject({ action: 'ignored:unregistered' })
+    expect(await tracked(harness)).toStrictEqual([])
+  })
+
+  it('acts for an org that registered a project an older org also holds', async () => {
+    const orgId = await makeOrg('acme')
+    await store(harness, orgId, { integrationId: 'gitlab-webhook-secret', value: SECRET })
+    const acme = withOrg(harness.container, orgId)
+    await acme.repositories.projects.create({
+      id: 'project-acme',
+      provider: 'gitlab',
+      owner: 'acme/platform',
+      repo: 'api',
+      webUrl: null,
+      skills: [],
+      domains: [],
+      mergeComments: null,
+      restrictDirectMerge: false,
+      createdAt: harness.clock.now() + 1,
+    })
+
+    const res = await deliver(harness, mergeRequest('open'), { path: '/webhooks/gitlab/acme' })
+    expect(await res.json()).toMatchObject({ action: 'tracked' })
+    expect(await acme.repositories.reviews.list()).toHaveLength(1)
     expect(await tracked(harness)).toStrictEqual([])
   })
 })

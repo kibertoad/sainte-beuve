@@ -69,8 +69,8 @@ export interface WorkerEnv {
   /** The login the bot answers to when @-mentioned in a pull-request comment. */
   GITHUB_BOT_LOGIN?: string
   /**
-   * The labels that drive the board, on GitLab as well as GitHub; the prefix is
-   * the one they were introduced under. Defaults in `DEFAULT_REVIEW_LABELS`.
+   * The labels that drive the board, on GitLab as well as GitHub despite the
+   * prefix. Defaults in `DEFAULT_REVIEW_LABELS`.
    */
   GITHUB_LABEL_REVIEW?: string
   GITHUB_LABEL_AI_REVIEW?: string

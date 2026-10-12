@@ -121,9 +121,8 @@ export interface NodeConfig {
   github: GitHubConfig
   gitlab: GitLabConfig
   /**
-   * The labels that drive the board on every host. Their variables keep the
-   * `GITHUB_` prefix they were introduced under, so a deployment that set them
-   * needs no change now that GitLab reads them too.
+   * The labels that drive the board on every host, GitLab included, although
+   * their variables are named `GITHUB_LABEL_*`.
    */
   labels: ReviewLabelRules
   slack: { botToken: string | null; signingSecret: string | null; channelId: string | null }

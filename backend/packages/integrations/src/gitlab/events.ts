@@ -111,29 +111,38 @@ function fromMergeRequest(
   const action = attributes.action ?? ''
   const settle = STATE_ACTIONS[action]
   if (settle !== undefined) return [settle(ref)]
-  const subject = subjectOf(payload, action, context)
-  if (action === 'open' || action === 'reopen') {
-    // A draft is not a review request; leaving draft arrives as an `update`.
-    return isDraft(attributes) ? [] : [tracked(ref, subject, false)]
-  }
-  return action === 'update' ? fromUpdate(payload, ref, subject, context) : []
+  if (action !== 'open' && action !== 'reopen' && action !== 'update') return []
+  return fromActivity(payload, ref, action, context)
 }
 
-/** An update: leaving draft tracks, and each label it added may ask for something. */
-function fromUpdate(
+/** An open, reopen or update: becoming ready tracks, and each label it added may ask for something. */
+function fromActivity(
   payload: GitLabEventPayload,
   ref: PullRequestRef,
-  subject: Subject,
+  action: string,
   context: GitLabIntentContext,
 ): IntakeIntent[] {
+  const subject = subjectOf(payload, action, context)
   const intents: IntakeIntent[] = []
-  const stillDraft = payload.object_attributes !== undefined && isDraft(payload.object_attributes)
-  if (leftDraft(payload) && !stillDraft) intents.push(tracked(ref, subject, false))
-  for (const added of addedLabels(payload)) {
+  for (const added of addedLabels(payload, action)) {
     const intent = labelIntent(ref, added, context.labels, subject)
     if (intent !== null) intents.push(intent)
   }
+  // The review label already tracks it, routed; an unrouted track first would only be undone.
+  if (becameReady(payload, action) && !intents.some((i) => i.kind === 'track')) {
+    intents.unshift(tracked(ref, subject, false))
+  }
   return intents
+}
+
+/**
+ * Whether this event made the merge request ready for review. A draft is not a
+ * review request, and leaving draft arrives as an `update`.
+ */
+function becameReady(payload: GitLabEventPayload, action: string): boolean {
+  const attributes = payload.object_attributes
+  if (attributes === undefined || isDraft(attributes)) return false
+  return action === 'update' ? leftDraft(payload) : true
 }
 
 /** What a review request opened from this merge request would carry. */
@@ -212,9 +221,14 @@ function leftDraft(payload: GitLabEventPayload): boolean {
   )
 }
 
-/** The labels this update added: the current set minus the previous one. */
-function addedLabels(payload: GitLabEventPayload): string[] {
-  const change = payload.changes?.labels
+/**
+ * The labels this event added. GitLab reports the labels a merge request was
+ * created with only in `labels`, never as a change, so on `open` all of them
+ * are new. An update adds the current set minus the previous one.
+ */
+function addedLabels(payload: GitLabEventPayload, action: string): string[] {
+  if (action === 'open') return titles(payload.labels)
+  const change = action === 'update' ? payload.changes?.labels : undefined
   if (change === undefined) return []
   const before = new Set(titles(change.previous))
   return titles(change.current).filter((title) => !before.has(title))

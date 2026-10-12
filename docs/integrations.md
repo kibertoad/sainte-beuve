@@ -203,6 +203,9 @@ wrong token are one 403, so the status code cannot be used to list tenancies.
 | the AI-review label is added                  | Handed to cat-factory, or acked and logged when it is not configured   |
 | a comment on a merge request mentions the bot | The command in it runs, and the bot answers on the merge request       |
 
+A label the merge request was created with counts as added, as it does on
+GitHub, where each one arrives as its own `labeled` event.
+
 Approval follows GitLab's own rules: `approved` and `unapproved` are the merge
 request as a whole becoming, or ceasing to be, approved. One person approving
 under rules that want two settles nothing, the way a bare GitHub review comment

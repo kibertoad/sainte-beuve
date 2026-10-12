@@ -1,7 +1,11 @@
 import type { PullRequestRef } from '@sainte-beuve/contracts'
 import { ForbiddenError, UnavailableError } from '@sainte-beuve/kernel'
 import type { GitLabEventPayload, IntakeIntent } from '@sainte-beuve/integrations'
-import { interpretGitLabDelivery, verifyGitLabToken } from '@sainte-beuve/integrations'
+import {
+  intentPullRequest,
+  interpretGitLabDelivery,
+  verifyGitLabToken,
+} from '@sainte-beuve/integrations'
 import { isSameHandle } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { resolveGitLabBotUsername, resolveGitLabWebhookSecret } from '../../integrations/resolve.js'
@@ -74,7 +78,7 @@ export class GitLabWebhookService {
     })
     const first = intents[0]
     if (first === undefined) return IGNORED
-    if (!(await this.registered(refOf(first)))) return UNREGISTERED
+    if (!(await this.registered(intentPullRequest(first)))) return UNREGISTERED
     return this.performAll(intents)
   }
 
@@ -109,9 +113,14 @@ export class GitLabWebhookService {
     return reviewers.some((reviewer) => isSameHandle(reviewer.handles.gitlab, username))
   }
 
+  /**
+   * Whether THIS org registered the project. Asked of the org's own store
+   * rather than of `findOrgIdForProject`, which names only the oldest claim: the
+   * URL and the token already placed the delivery, and a second org that
+   * registered the same project must not have its deliveries dropped.
+   */
   private async registered(ref: PullRequestRef): Promise<boolean> {
-    const orgId = await this.container.stores.tenancy.findOrgIdForProject(ref)
-    if (orgId === this.container.orgId) return true
+    if ((await this.container.repositories.projects.getByRef(ref)) !== null) return true
     this.container.logger.info(
       { org: this.intake.orgSlug, owner: ref.owner, repo: ref.repo },
       'a GitLab delivery for a project this org did not register was ignored',
@@ -139,8 +148,4 @@ export class GitLabWebhookService {
       return null
     }
   }
-}
-
-function refOf(intent: IntakeIntent): PullRequestRef {
-  return intent.kind === 'track' ? intent.review.pullRequest : intent.pullRequest
 }

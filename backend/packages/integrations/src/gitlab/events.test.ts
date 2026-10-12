@@ -112,6 +112,35 @@ describe('interpretGitLabDelivery: merge requests', () => {
     ])
   })
 
+  it('routes and delegates on labels a merge request was opened with', () => {
+    // GitLab reports labels set at creation only in `labels`, never in `changes`.
+    const opened = mergeRequest('open', {
+      labels: [{ title: 'needs-review' }, { title: 'ai-review' }],
+    })
+    expect(interpretGitLabDelivery(opened, CONTEXT)).toMatchObject([
+      { kind: 'track', route: true, review: { authorLogin: 'ada' } },
+      { kind: 'ai_review', pullRequest: REF },
+    ])
+  })
+
+  it('does not route again on the labels a reopened merge request still carries', () => {
+    const reopened = mergeRequest('reopen', { labels: [{ title: 'needs-review' }] })
+    expect(interpretGitLabDelivery(reopened, CONTEXT)).toMatchObject([
+      { kind: 'track', route: false },
+    ])
+  })
+
+  it('tracks once, routed, when an update leaves draft and adds the review label', () => {
+    const ready = mergeRequest('update', {
+      labels: [{ title: 'needs-review' }],
+      changes: {
+        draft: { previous: true, current: false },
+        labels: { previous: [], current: [{ title: 'needs-review' }] },
+      },
+    })
+    expect(interpretGitLabDelivery(ready, CONTEXT)).toMatchObject([{ kind: 'track', route: true }])
+  })
+
   it('does nothing for a label that was already there or matches no rule', () => {
     const relabelled = mergeRequest('update', {
       changes: {

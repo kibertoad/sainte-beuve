@@ -1,6 +1,10 @@
 import { ForbiddenError } from '@sainte-beuve/kernel'
 import type { GitHubDelivery, IntakeIntent } from '@sainte-beuve/integrations'
-import { interpretGitHubDelivery, verifyGitHubSignature } from '@sainte-beuve/integrations'
+import {
+  intentPullRequest,
+  interpretGitHubDelivery,
+  verifyGitHubSignature,
+} from '@sainte-beuve/integrations'
 import { type AppContainer, withOrg } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { IGNORED, type IntakeOutcome, ReviewIntake, UNREGISTERED } from './ReviewIntake.js'
@@ -66,7 +70,7 @@ export class GitHubWebhookService {
    * none did. See above: null is acked and dropped, never defaulted.
    */
   private async containerFor(intent: IntakeIntent): Promise<AppContainer | null> {
-    const ref = intent.kind === 'track' ? intent.review.pullRequest : intent.pullRequest
+    const ref = intentPullRequest(intent)
     const orgId = await this.container.stores.tenancy.findOrgIdForProject(ref)
     if (orgId === null) {
       // Info rather than warn: an App installed on more repositories than an org
