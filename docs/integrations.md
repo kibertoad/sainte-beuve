@@ -326,8 +326,11 @@ the host's repository id. Adding and removing a repository on the Repositories
 screen is refused while this is on; editing a project is not.
 
 The first sync adopts every project already registered for a repository
-cat-factory links, and **removes every project it does not link**. The
-`repositoryDirectory` capability says whether an org is in this mode.
+cat-factory links, and **removes every project it does not link**. While the
+directory has never listed a single repository nothing is removed, and the
+screen says so: a key that reaches no workspace looks exactly like that, and
+must not empty the list. The `repositoryDirectory` capability says whether an
+org is in this mode.
 
 It reads cat-factory's account directory (`/api/v1/directory/*`) through
 `@cat-factory/directory-sync`:
@@ -354,7 +357,11 @@ stay, and are an admin's to manage again until a key is back in place.
 
 What is mirrored is held in `external_repositories`, keyed by source, so another
 system that lists repositories can feed the same projects through the same
-planner (`planProjectSync`) without a table of its own.
+planner (`planProjectSync`) without a table of its own. An entry is written in
+one statement that keeps a newer `seq`, so a push and the clock syncing at once
+cannot put back a state the other already moved past. Two projects that swap
+names on the host pass through a parking name, so no rename lands on a name
+another project still holds.
 
 ## Registering it
 

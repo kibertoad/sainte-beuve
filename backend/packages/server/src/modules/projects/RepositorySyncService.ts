@@ -25,6 +25,15 @@ const CATCH_UP_EVERY_MS = 5 * 60_000
 const RECONCILE_EVERY_MS = 24 * 60 * 60_000
 
 /**
+ * Said instead of removing every project when the source has never listed a
+ * repository: that is far more often a key that reaches no workspace than an org
+ * with nothing linked. An unlink leaves a dropped entry, so it still removes.
+ */
+const NOTHING_LISTED =
+  'cat-factory lists no repository in any workspace this key reaches, so no project was ' +
+  'removed. Link a repository in cat-factory, or check which workspaces the key belongs to.'
+
+/**
  * Keeps an org's projects to the repositories linked in its cat-factory
  * workspaces, for as long as cat-factory is configured.
  *
@@ -116,26 +125,31 @@ export class RepositorySyncService {
 
   /** Bring the projects to what the mirror now lists, and note when that happened. */
   private async settle(reconciled: boolean): Promise<number> {
-    const changed = await this.applyPlan()
+    const { changed, warning } = await this.applyPlan()
     const now = this.container.clock.now()
-    await this.record({ syncedAt: now, error: null, ...(reconciled ? { reconciledAt: now } : {}) })
+    await this.record({
+      syncedAt: now,
+      error: warning,
+      ...(reconciled ? { reconciledAt: now } : {}),
+    })
     return changed
   }
 
-  private async applyPlan(): Promise<number> {
+  private async applyPlan(): Promise<{ changed: number; warning: string | null }> {
     const { projects, externalRepositories } = this.container.repositories
-    const plan = planProjectSync(
-      CAT_FACTORY_SOURCE,
-      await projects.list(),
-      await externalRepositories.list(CAT_FACTORY_SOURCE),
-    )
+    const entries = await externalRepositories.list(CAT_FACTORY_SOURCE)
+    const plan = planProjectSync(CAT_FACTORY_SOURCE, await projects.list(), entries)
+    if (plan.remove.length > 0 && entries.length === 0) {
+      return { changed: 0, warning: NOTHING_LISTED }
+    }
     for (const projectId of plan.remove) await projects.delete(projectId)
     for (const { projectId, ...ref } of plan.rename) await projects.update(projectId, ref)
     for (const { projectId, external } of plan.adopt) await projects.update(projectId, { external })
     const service = new ProjectService(this.container)
     let created = 0
     for (const listed of plan.create) if ((await service.addListed(listed)) !== null) created += 1
-    return plan.remove.length + plan.rename.length + plan.adopt.length + created
+    const renamed = new Set(plan.rename.map((step) => step.projectId)).size
+    return { changed: plan.remove.length + renamed + plan.adopt.length + created, warning: null }
   }
 
   private async registerWebhook(gateway: RepositoryDirectoryGateway): Promise<void> {

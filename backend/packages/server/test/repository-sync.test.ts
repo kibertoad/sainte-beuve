@@ -170,6 +170,27 @@ describe('repositories from cat-factory', () => {
     expect(adopted).toMatchObject({ id: payments?.id, external: { source: 'cat-factory' } })
   })
 
+  it('removes nothing while the directory has never listed a repository, and says why', async () => {
+    const fake = directory([])
+    const harness = buildHarness({
+      ...catFactoryWired({}),
+      apiBaseUrl: 'https://reviews.example.com',
+      gateways: stubGateways({
+        aiReview: () => stubAiReview(),
+        guidedReview: () => ({}) as GuidedReviewGateway,
+        catFactoryDirectory: () => fake.gateway,
+      }),
+    })
+    await harness.app.fetch(
+      post('/api/v1/projects', { provider: 'github', owner: 'acme', repo: 'payments' }),
+    )
+    await connectCatFactory(harness)
+    const res = await harness.app.fetch(post(SYNC_PATH, {}))
+    const connection = (await res.json()) as CatFactoryConnection
+    expect(names(await projects(harness))).toEqual(['acme/payments'])
+    expect(connection.repositorySync?.error).toMatch(/no project was removed/)
+  })
+
   it('asks cat-factory to push to this org, and reports that it did', async () => {
     const { harness, registered } = await syncing([])
     const res = await harness.app.fetch(post(SYNC_PATH, {}))
