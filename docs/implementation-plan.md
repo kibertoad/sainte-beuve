@@ -721,7 +721,8 @@ is never re-checked, so one revoked after it was entered reads as connected unti
 a call fails; a probe would fix it. Beside it, a named org has no announcement
 channel it can store, so a second org that connected its own Slack app nudges by
 DM and announces nowhere. [review-flow-gaps.md](./review-flow-gaps.md) tracks the
-gaps the review flow itself had, in the order they block it, and every one is merged.
+gaps in the review flow itself, in the order they block it, with the pull request
+that closes each.
 
 ## Decisions worth recording
 
