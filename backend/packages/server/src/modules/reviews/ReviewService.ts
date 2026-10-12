@@ -10,7 +10,7 @@ import type { ReviewListOrder } from '@sainte-beuve/kernel'
 import { ConflictError, assertFound } from '@sainte-beuve/kernel'
 import {
   buildBoard,
-  isSameHandle,
+  excludedFromReview,
   isSettledReview,
   matchTargetFor,
   selectReviewers,
@@ -226,9 +226,6 @@ export class ReviewService {
     input: { count: number; exclude: string[]; release?: string[] },
   ): Promise<AssignReviewersResult> {
     const { repositories, random } = this.container
-    // The author is matched on the handle for the pull request's OWN host: the
-    // same person is spelled differently on each, and comparing against the
-    // wrong one would put them in their own review's candidate pool.
     const provider = review.pullRequest.provider
     const [candidates, project] = await Promise.all([
       repositories.reviewers.list(),
@@ -241,13 +238,7 @@ export class ReviewService {
         // The author and whoever is already on the hook are excluded here rather
         // than by the caller: a client that forgot would otherwise get a reviewer
         // reviewing their own pull request, which the router must never produce.
-        excludeReviewerIds: [
-          ...input.exclude,
-          ...review.assignedReviewerIds,
-          ...candidates
-            .filter((r) => isSameHandle(handleOf(r.handles, provider), review.authorLogin))
-            .map((r) => r.id),
-        ],
+        excludeReviewerIds: [...input.exclude, ...excludedFromReview(review, candidates)],
         count: input.count,
       },
       random,

@@ -56,6 +56,12 @@ const skills = computed(() => {
   return project?.skills ?? []
 })
 
+const recommendations = useReviewerRecommendations({
+  pullRequest: toRef(props, 'pullRequest'),
+  requiredSkills: selectedSkills,
+  sameTeamOnly,
+})
+
 const counts = Array.from({ length: MAX_NEEDED_COMMITMENTS }, (_, index) => index + 1)
 
 watch(
@@ -106,10 +112,22 @@ function submit() {
         </UFormField>
 
         <UFormField
+          label="Best matches"
+          description="Ranked on how much of the wanted skills and domains each person holds, then on fewer open reviews. With no skill picked, the pull request's own are wanted. The ask itself goes to everyone holding all the picked skills."
+        >
+          <ReviewerRecommendations
+            :result="recommendations.result.value"
+            :pending="recommendations.pending.value"
+            :failure="recommendations.failure.value"
+            :same-team-only="sameTeamOnly"
+          />
+        </UFormField>
+
+        <UFormField
           label="Reviewers wanted"
           description="The ask resolves and disappears from everybody's inbox once this many people commit."
         >
-          <USelect v-model="neededCommitments" :items="counts" class="w-24" />
+          <USelect v-model="neededCommitments" :items="counts" class="w-full sm:w-24" />
         </UFormField>
 
         <UCheckbox
