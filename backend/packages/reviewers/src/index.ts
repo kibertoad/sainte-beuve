@@ -87,6 +87,7 @@ export {
   type AttentionChange,
   type AttentionPatch,
   askMoreChange,
+  cancelChange,
   commitmentChange,
   declineChange,
   deliveriesChange,

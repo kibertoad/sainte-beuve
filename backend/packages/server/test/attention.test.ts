@@ -142,6 +142,23 @@ describe('answering an attention request', () => {
     expect(await inbox(asker)).toStrictEqual([])
   })
 
+  it('counts two commitments that land at the same moment', async () => {
+    const asker = harnessFor('kibertoad')
+    const request = await raise(asker, { neededCommitments: 2 })
+    const peer = buildHarness({ ...asker.container, vcs: environmentVcs(viewerVcs('peer')) })
+    const other = buildHarness({ ...asker.container, vcs: environmentVcs(viewerVcs('other')) })
+
+    // Both read the ask before either writes.
+    await Promise.all([
+      peer.app.fetch(post(`${ATTENTION}/${request.id}/commit`, {})),
+      other.app.fetch(post(`${ATTENTION}/${request.id}/commit`, {})),
+    ])
+
+    const stored = await asker.container.repositories.attention.getById(request.id)
+    expect(stored?.commitments).toHaveLength(2)
+    expect(stored?.status).toBe('resolved')
+  })
+
   it('refuses to let the requester answer their own ask', async () => {
     const asker = harnessFor('kibertoad')
     const request = await raise(asker)

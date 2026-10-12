@@ -9,6 +9,7 @@ import {
 } from './attention.js'
 import {
   askMoreChange,
+  cancelChange,
   commitmentChange,
   declineChange,
   deliveriesChange,
@@ -156,6 +157,16 @@ describe('the changes an answer makes', () => {
     const patch = commitmentChange(ask({ status: 'cancelled' }), committed('ada'))
     expect(patch).not.toHaveProperty('status')
     expect(patch).not.toHaveProperty('declines')
+  })
+
+  it('changes nothing for a commitment already on the ask', () => {
+    const first = { ...committed('ada'), committedAt: 0 }
+    expect(commitmentChange(ask({ commitments: [first] }), committed('ada'))).toBeNull()
+  })
+
+  it('cancels an open ask, and leaves one that already ended alone', () => {
+    expect(cancelChange(ask(), 9)).toEqual({ status: 'cancelled', updatedAt: 9 })
+    expect(cancelChange(ask({ status: 'resolved' }), 9)).toBeNull()
   })
 
   it('asks as many as a decline leaves a keep-asking ask short, from the stored ask', () => {

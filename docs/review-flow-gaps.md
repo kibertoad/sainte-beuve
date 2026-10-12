@@ -35,6 +35,7 @@ pull request is merged with its review findings fixed.
 | 12  | Challenge an AI review finding                                | 5    |            | Merged    | [#39](https://github.com/kibertoad/sainte-beuve/pull/39) |
 | 13  | A guided review names its cat-factory workspace               | 5    | 5          | Merged    | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
 | 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | Merged    | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
+| 15  | Attention answers are written atomically                      | 3    |            | Merged    | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -177,3 +178,15 @@ A board row is looked up by the kernel's `pullRequestKey` and a repository's
 history by `projectRefKey`, the keys projects and commitments already use, so
 the host is part of each and the path is compared without case. Both durable
 stores carry them as columns, backfilled from each row.
+
+### 15. Atomic answers to an ask
+
+An answer to an ask reads the request, works out its change from that read, and
+writes the fields it names. Two answers naming the same field in that gap both
+build on the same read, so the second write drops the first: two commitments,
+two declines, two people added, or two batches of recorded DMs.
+
+The attention store changes a request only through `change`, which re-reads and
+remakes the decision when another write landed in between: a `revision` column
+in Postgres and D1, and a read and write with nothing awaited between them in
+memory.

@@ -23,8 +23,8 @@ import { changeAsk } from './changeAsk.js'
  *
  * The row comes first so a button never points at an ask the store does not
  * hold yet. A commit or a decline that lands while the DMs are in flight is not
- * lost either: the store merges the two writes, and whichever comes second sees
- * the other, so either the answer refreshes the recorded DMs or this does.
+ * lost either: the store reruns whichever change comes second on the row the
+ * other left, so either the answer refreshes the recorded DMs or this does.
  */
 export async function sendAskDms(
   container: AppContainer,
@@ -35,9 +35,10 @@ export async function sendAskDms(
   if (chatDeliveries.length === 0) return request
   let recorded: AttentionRequest
   try {
-    recorded = await changeAsk(container, request.id, (stored) =>
+    const changed = await changeAsk(container, request.id, (stored) =>
       deliveriesChange(stored, chatDeliveries),
     )
+    recorded = changed.request
   } catch (err) {
     container.logger.warn({ err, attentionId: request.id }, 'could not record the DMs of an ask')
     return request

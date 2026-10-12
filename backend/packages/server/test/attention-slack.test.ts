@@ -149,7 +149,7 @@ describe('the Slack DMs of a named ask', () => {
 
   it('raises the ask when recording where its DMs landed fails', async () => {
     const { repositories } = asker.container
-    const brokenUpdates = buildHarness({
+    const brokenChanges = buildHarness({
       ...asker.container,
       repositories: {
         ...repositories,
@@ -157,13 +157,13 @@ describe('the Slack DMs of a named ask', () => {
           list: (filter) => repositories.attention.list(filter),
           getById: (id) => repositories.attention.getById(id),
           create: (request) => repositories.attention.create(request),
-          update: async () => {
+          change: async () => {
             throw new Error('the attention store is down')
           },
         },
       },
     })
-    const request = await raise(brokenUpdates, { recipientIds: [ada.id] })
+    const request = await raise(brokenChanges, { recipientIds: [ada.id] })
     expect(request.status).toBe('open')
     expect(chat.asks.map((ask) => ask.target)).toStrictEqual(['U-ada'])
     expect(request.chatDeliveries).toStrictEqual([])
