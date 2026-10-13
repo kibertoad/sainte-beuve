@@ -292,15 +292,15 @@ export class GitHubVcsGateway implements VcsGateway {
   async approve(
     pr: PullRequestAddress,
     input: { headSha: string; body: string },
-  ): Promise<{ approvalId: string | null }> {
+  ): Promise<{ approvalId: string | null; bodyPosted: boolean }> {
     return githubApprove(pr, input, await this.contextFor(pr))
   }
 
   async withdrawApproval(
     pr: PullRequestAddress,
     input: { approvalId: string | null; message: string },
-  ): Promise<void> {
-    await githubWithdrawApproval(pr, input, await this.contextFor(pr))
+  ): Promise<{ messagePosted: boolean }> {
+    return githubWithdrawApproval(pr, input, await this.contextFor(pr))
   }
 
   private async contextFor(pr: PullRequestAddress): Promise<GitHubCallContext> {

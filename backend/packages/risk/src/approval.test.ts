@@ -30,6 +30,7 @@ function context(
     },
     assessedHeadSha: 'abc',
     pullRequest: OPEN,
+    repositoryHeld: true,
     approver: { username: 'approver-bot' },
     aiReview: null,
     ...overrides,
@@ -39,6 +40,14 @@ function context(
 describe('planApproval', () => {
   it('approves a pull request within policy', () => {
     expect(planApproval(context())).toEqual({ kind: 'approve' })
+  })
+
+  it('never approves in a repository this org does not hold', () => {
+    expect(planApproval(context({ repositoryHeld: false }))).toEqual({
+      kind: 'hold',
+      status: 'within_policy',
+      reason: 'its repository is not registered to this org',
+    })
   })
 
   it('holds one outside policy for a person', () => {

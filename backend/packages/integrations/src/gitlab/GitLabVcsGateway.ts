@@ -316,15 +316,15 @@ export class GitLabVcsGateway implements VcsGateway {
   async approve(
     pr: PullRequestAddress,
     input: { headSha: string; body: string },
-  ): Promise<{ approvalId: string | null }> {
+  ): Promise<{ approvalId: string | null; bodyPosted: boolean }> {
     return gitlabApprove(pr, input, this.options)
   }
 
   async withdrawApproval(
     pr: PullRequestAddress,
-    input: { approvalId: string | null; message: string },
-  ): Promise<void> {
-    await gitlabWithdrawApproval(pr, input, this.options)
+    _input: { approvalId: string | null; message: string },
+  ): Promise<{ messagePosted: boolean }> {
+    return gitlabWithdrawApproval(pr, this.options)
   }
 
   private async call<T>(request: {

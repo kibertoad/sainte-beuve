@@ -73,7 +73,7 @@ describe('githubApprove', () => {
       { headSha: 'abc', body: 'Within policy.' },
       { token: 't', fetchImpl },
     )
-    expect(approval).toEqual({ approvalId: '9001' })
+    expect(approval).toEqual({ approvalId: '9001', bodyPosted: true })
     expect(calls[1]).toMatchObject({
       method: 'POST',
       url: 'https://api.github.com/repos/acme/api/pulls/7/reviews',

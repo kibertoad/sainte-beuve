@@ -60,7 +60,7 @@ export async function githubApprove(
   pr: PullRequestAddress,
   input: { headSha: string; body: string },
   context: GitHubCallContext,
-): Promise<{ approvalId: string | null }> {
+): Promise<{ approvalId: string | null; bodyPosted: boolean }> {
   const pull = await githubRequest<{ head: { sha: string } }>({
     ...context,
     path: repoPath(pr, `/pulls/${pr.number}`),
@@ -74,20 +74,24 @@ export async function githubApprove(
     path: repoPath(pr, `/pulls/${pr.number}/reviews`),
     body: { commit_id: input.headSha, event: 'APPROVE', body: input.body },
   })
-  return { approvalId: String(review.id) }
+  return { approvalId: String(review.id), bodyPosted: true }
 }
 
-/** Dismiss the approval by its review id. One with no id has nothing to dismiss. */
+/**
+ * Dismiss the approval by its review id, the message going with the dismissal.
+ * One with no id has nothing to dismiss, and the message is left to the caller.
+ */
 export async function githubWithdrawApproval(
   pr: PullRequestAddress,
   input: { approvalId: string | null; message: string },
   context: GitHubCallContext,
-): Promise<void> {
-  if (input.approvalId === null) return
+): Promise<{ messagePosted: boolean }> {
+  if (input.approvalId === null) return { messagePosted: false }
   await githubRequest({
     ...context,
     method: 'PUT',
     path: repoPath(pr, `/pulls/${pr.number}/reviews/${input.approvalId}/dismissals`),
     body: { message: input.message, event: 'DISMISS' },
   })
+  return { messagePosted: true }
 }

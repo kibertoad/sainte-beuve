@@ -12,6 +12,7 @@ import { type Approver, resolveApprover } from '../../integrations/riskResolve.j
 import { AiReviewCurationService } from '../reviews/AiReviewCurationService.js'
 import { AiReviewService } from '../reviews/AiReviewService.js'
 import { ReviewService } from '../reviews/ReviewService.js'
+import { approveOnHost } from './hostApproval.js'
 
 /** What a step changes on the assessment row. */
 export type AssessmentPatch = Partial<
@@ -46,10 +47,9 @@ async function approve(
   approver: Approver,
 ): Promise<AssessmentPatch> {
   const { review, headSha, aiReviewRunId } = assessed
-  if (aiReviewRunId !== null) await finishAiReview(container, aiReviewRunId)
   let approval: { approvalId: string | null }
   try {
-    approval = await approver.gateway.approve(review.pullRequest, {
+    approval = await approveOnHost(container, approver, review, {
       headSha,
       body: approvalBody(assessed, aiReviewRunId !== null),
     })
@@ -62,13 +62,30 @@ async function approve(
       holdReason: `the approval was refused: ${getErrorMessage(err)}`,
     }
   }
-  await new ReviewService(container).updateStatus(review.id, 'approved')
   return {
     status: 'approved',
     approvedAs: approver.username,
     approvalId: approval.approvalId,
     holdReason: null,
   }
+}
+
+/**
+ * What an approval recorded on its row settles: the board row, and the clean AI
+ * review it waited on. Logged rather than thrown, since the host already holds
+ * the approval and a retried step would only approve a second time.
+ */
+export async function settleApproval(
+  container: AppContainer,
+  review: ReviewRequest,
+  aiReviewRunId: string | null,
+): Promise<void> {
+  try {
+    await new ReviewService(container).updateStatus(review.id, 'approved')
+  } catch (err) {
+    container.logger.warn({ err, reviewId: review.id }, 'an approved review could not be marked')
+  }
+  if (aiReviewRunId !== null) await finishAiReview(container, aiReviewRunId)
 }
 
 /** Close a clean AI review without posting, so it does not wait on a curator. Best effort. */
@@ -99,6 +116,17 @@ async function fileAiReview(
 }
 
 /**
+ * Whether this org holds the claim on the pull request's repository. Anybody in
+ * an org can track any pull request, and the approver may be the deployment's
+ * GitHub App, which reaches every org's repositories: without the claim, one
+ * org's policy could approve another org's code.
+ */
+async function holdsRepository(container: AppContainer, review: ReviewRequest): Promise<boolean> {
+  const holder = await container.stores.tenancy.findOrgIdForProject(review.pullRequest)
+  return holder === container.orgId
+}
+
+/**
  * Take the next step for an assessed pull request: hold it, file the AI review
  * the policy asks for, or approve it as the org's approver.
  */
@@ -117,6 +145,7 @@ export async function advance(
     ? await resolveApprover(container, review.pullRequest.provider)
     : null
   const step = planApproval({
+    repositoryHeld: wantsApprover && (await holdsRepository(container, review)),
     provider: review.pullRequest.provider,
     policy: context.policy,
     verdict,

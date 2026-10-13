@@ -24,6 +24,11 @@ export interface ApprovalContext {
   /** The commit the verdict is about. */
   assessedHeadSha: string
   pullRequest: Pick<PullRequestStatus, 'state' | 'draft' | 'headSha' | 'authorLogin'>
+  /**
+   * Whether this org holds the claim on the repository. An approval of a pull
+   * request in a repository another org registered, or nobody did, is never ours.
+   */
+  repositoryHeld: boolean
   /** The account approvals go out as, or null when the org has none on this host. */
   approver: { username: string | null } | null
   /** The AI review the policy asked for, once it has settled on findings; null before. */
@@ -39,6 +44,7 @@ function blocker(context: ApprovalContext): string | null {
   const { pullRequest, approver, provider } = context
   if (pullRequest.state !== 'open') return 'the pull request is no longer open'
   if (pullRequest.draft) return 'the pull request is a draft'
+  if (!context.repositoryHeld) return 'its repository is not registered to this org'
   if (approver === null) {
     return `no approver is configured for ${vcsDisplayName(provider)}`
   }

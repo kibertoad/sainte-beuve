@@ -79,10 +79,11 @@ function host(author = 'author') {
     changedFiles: async () => ({ files: state.files, truncated: false }),
     approve: async (_pr, input) => {
       approvals.push(input)
-      return { approvalId: `approval-${approvals.length}` }
+      return { approvalId: `approval-${approvals.length}`, bodyPosted: true }
     },
     withdrawApproval: async (_pr, input) => {
       withdrawals.push(input)
+      return { messagePosted: true }
     },
   }
   return { gateway, state, approvals, withdrawals }
@@ -122,8 +123,16 @@ function appHarness(
   return { harness, github, settle: deferred.settle }
 }
 
+/** The org's policy, set after it registers the repository PR #7 is in, which approving needs. */
 async function setPolicy(harness: TestHarness, policy: RiskPolicyInput): Promise<Response> {
+  await holdRepository(harness)
   return harness.app.fetch(put('/api/v1/settings/risk-policy', policy))
+}
+
+async function holdRepository(harness: TestHarness): Promise<void> {
+  await harness.app.fetch(
+    post('/api/v1/projects', { provider: PR.provider, owner: PR.owner, repo: PR.repo }),
+  )
 }
 
 async function assessmentOf(
@@ -290,6 +299,36 @@ describe('assessing and approving unattended', () => {
     expect(reader.approvals).toEqual([])
   })
 
+  it('never approves a pull request in a repository this org does not hold', async () => {
+    const { harness, github, settle } = appHarness()
+    await harness.app.fetch(put('/api/v1/settings/risk-policy', APPROVING))
+    const reviewId = await opened(harness)
+    await settle()
+    expect(await assessmentOf(harness, reviewId)).toMatchObject({
+      status: 'within_policy',
+      holdReason: 'its repository is not registered to this org',
+    })
+    expect(github.approvals).toEqual([])
+  })
+
+  it('posts the note beside an approval the host carries no text on', async () => {
+    const github = host()
+    const comments: string[] = []
+    github.gateway.approve = async (_pr, input) => {
+      github.approvals.push(input)
+      return { approvalId: null, bodyPosted: false }
+    }
+    github.gateway.comment = async (_pr, body) => {
+      comments.push(body)
+    }
+    const { harness, settle } = appHarness(github)
+    await setPolicy(harness, APPROVING)
+    const reviewId = await opened(harness)
+    await settle()
+    expect((await assessmentOf(harness, reviewId))?.status).toBe('approved')
+    expect(comments).toEqual([expect.stringContaining('within the native risk policy')])
+  })
+
   it('never approves a pull request its approver opened', async () => {
     const { harness, github, settle } = appHarness(host('sainte-beuve[bot]'))
     await setPolicy(harness, APPROVING)
@@ -323,6 +362,34 @@ describe('new commits', () => {
     })
     expect((await reviewOf(harness, reviewId)).status).toBe('open')
     expect(github.approvals).toHaveLength(1)
+  })
+
+  it('arriving while the approval is being posted take that approval back', async () => {
+    const github = host()
+    let harness: TestHarness | null = null
+    const approve = github.gateway.approve
+    github.gateway.approve = async (pr, input) => {
+      const approval = await approve(pr, input)
+      // The push lands between the host's approval and the row recording it.
+      github.state.head = 'sha-2'
+      github.state.files = RISKY
+      await new ReviewIntake(harness!.container).perform({ kind: 'assess', pullRequest: PR })
+      return approval
+    }
+    const built = appHarness(github)
+    harness = built.harness
+    await setPolicy(harness, APPROVING)
+    const reviewId = await opened(harness)
+    await built.settle()
+
+    expect(github.withdrawals).toEqual([
+      { approvalId: 'approval-1', message: expect.stringContaining('withdrawn') },
+    ])
+    expect(await assessmentOf(harness, reviewId)).toMatchObject({
+      status: 'requires_review',
+      headSha: 'sha-2',
+    })
+    expect((await reviewOf(harness, reviewId)).status).toBe('open')
   })
 
   it('on a pull request the board does not track are not ours', async () => {
@@ -395,6 +462,7 @@ describe('the clock', () => {
       approvedAs: null,
       approvalId: null,
       attempts: 0,
+      revision: 'queued',
       requestedAt: harness.clock.now(),
       updatedAt: harness.clock.now(),
     })
@@ -404,6 +472,17 @@ describe('the clock', () => {
     expect((await runReminderTick(harness.container)).riskAssessmentsDriven).toBe(1)
     expect(github.approvals).toHaveLength(1)
     expect((await assessmentOf(harness, review.id))?.status).toBe('approved')
+  })
+
+  it('lets one driver at a row, however many reach it at once', async () => {
+    const { harness, github, settle } = appHarness()
+    await setPolicy(harness, APPROVING)
+    const reviewId = await opened(harness)
+    // The request's own step and a second delivery's, racing on one row.
+    await new ReviewIntake(harness.container).perform({ kind: 'assess', pullRequest: PR })
+    await settle()
+    expect(github.approvals).toHaveLength(1)
+    expect((await assessmentOf(harness, reviewId))?.status).toBe('approved')
   })
 })
 
@@ -448,6 +527,8 @@ describe('with cat-factory', () => {
       github: APP_WIRING,
       gateways: stubGateways({ vcsAsApp: () => github.gateway, ...gateways }),
     })
+    // Before cat-factory is connected, since its directory decides the repositories after.
+    await holdRepository(harness)
     await connectCatFactory(harness)
     return { harness, github, settle: deferred.settle }
   }

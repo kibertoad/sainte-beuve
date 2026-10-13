@@ -71,37 +71,34 @@ describe('gitlabChangedFiles', () => {
 })
 
 describe('gitlabApprove', () => {
-  it('approves at the assessed commit and leaves the reason as a note', async () => {
-    const { fetchImpl, calls } = scripted([{ body: {} }, { body: {} }])
-    await gitlabApprove(MR, { headSha: 'abc', body: 'Within policy.' }, { token: 't', fetchImpl })
+  it('approves at the assessed commit and leaves the body to the caller', async () => {
+    const { fetchImpl, calls } = scripted([{ body: {} }])
+    const answer = await gitlabApprove(MR, { headSha: 'abc' }, { token: 't', fetchImpl })
+    expect(answer).toEqual({ approvalId: null, bodyPosted: false })
     expect(calls.map((call) => [call.method, new URL(call.url).pathname, call.body])).toEqual([
       ['POST', '/api/v4/projects/acme%2Fplatform%2Fapi/merge_requests/7/approve', { sha: 'abc' }],
-      [
-        'POST',
-        '/api/v4/projects/acme%2Fplatform%2Fapi/merge_requests/7/notes',
-        { body: 'Within policy.' },
-      ],
     ])
   })
 
-  it('reads a moved head as a conflict and leaves no note', async () => {
+  it('reads a moved head as a conflict', async () => {
     const { fetchImpl, calls } = scripted([
       { status: 409, body: { message: 'SHA does not match' } },
     ])
     await expect(
-      gitlabApprove(MR, { headSha: 'abc', body: 'x' }, { token: 't', fetchImpl }),
+      gitlabApprove(MR, { headSha: 'abc' }, { token: 't', fetchImpl }),
     ).rejects.toBeInstanceOf(ConflictError)
     expect(calls).toHaveLength(1)
   })
 })
 
 describe('gitlabWithdrawApproval', () => {
-  it('unapproves as the token and says why in a note', async () => {
-    const { fetchImpl, calls } = scripted([{ body: {} }, { body: {} }])
-    await gitlabWithdrawApproval(MR, { message: 'New commits.' }, { token: 't', fetchImpl })
+  it('unapproves as the token and leaves the message to the caller', async () => {
+    const { fetchImpl, calls } = scripted([{ body: {} }])
+    expect(await gitlabWithdrawApproval(MR, { token: 't', fetchImpl })).toEqual({
+      messagePosted: false,
+    })
     expect(calls.map((call) => [call.method, new URL(call.url).pathname])).toEqual([
       ['POST', '/api/v4/projects/acme%2Fplatform%2Fapi/merge_requests/7/unapprove'],
-      ['POST', '/api/v4/projects/acme%2Fplatform%2Fapi/merge_requests/7/notes'],
     ])
   })
 })

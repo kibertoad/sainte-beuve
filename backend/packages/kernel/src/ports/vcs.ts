@@ -153,16 +153,24 @@ export interface VcsGateway {
    * the approval (from the author, from an account without access) fails the
    * call with its own refusal. Answers the host's id for the approval where it
    * has one, which is what withdrawing it later names.
+   *
+   * `body` travels with the approval only on a host whose approval carries text
+   * (`bodyPosted`). Where it does not (GitLab), the caller posts it as a comment,
+   * so a failed comment never reads as a refused approval.
    */
   approve(
     pr: PullRequestAddress,
     input: { headSha: string; body: string },
-  ): Promise<{ approvalId: string | null }>
-  /** Take back an approval this gateway's account gave, saying why. */
+  ): Promise<{ approvalId: string | null; bodyPosted: boolean }>
+  /**
+   * Take back an approval this gateway's account gave. `message` travels with
+   * the withdrawal where the host's dismissal carries text (`messagePosted`);
+   * elsewhere the caller posts it as a comment.
+   */
   withdrawApproval(
     pr: PullRequestAddress,
     input: { approvalId: string | null; message: string },
-  ): Promise<void>
+  ): Promise<{ messagePosted: boolean }>
 }
 
 /**

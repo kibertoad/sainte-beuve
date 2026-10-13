@@ -21,6 +21,8 @@ interface GitLabDiff {
   renamed_file: boolean
   deleted_file: boolean
   diff?: string
+  too_large?: boolean
+  collapsed?: boolean
 }
 
 function mergeRequestPath(pr: PullRequestAddress): string {
@@ -44,6 +46,15 @@ function countLines(patch: string | undefined): { additions: number; deletions: 
   return { additions, deletions }
 }
 
+/**
+ * GitLab leaves the patch out of a diff it judged too large, so its lines cannot
+ * be counted. A rename with no edits is the one change with an honest empty patch.
+ */
+function unreadable(diff: GitLabDiff): boolean {
+  if (diff.too_large === true || diff.collapsed === true) return true
+  return (diff.diff ?? '') === '' && !diff.renamed_file
+}
+
 function toChangedFile(diff: GitLabDiff): ChangedFile {
   return {
     path: diff.new_path,
@@ -58,27 +69,29 @@ export async function gitlabChangedFiles(
   context: GitLabCallContext,
 ): Promise<{ files: ChangedFile[]; truncated: boolean }> {
   const files: ChangedFile[] = []
+  let unread = false
   for (let page = 1; page <= MAX_DIFF_PAGES; page += 1) {
     const batch = await gitlabRequest<GitLabDiff[]>({
       ...context,
       path: `${mergeRequestPath(pr)}/diffs?per_page=${DIFFS_PER_PAGE}&page=${page}`,
     })
     files.push(...batch.map(toChangedFile))
-    if (batch.length < DIFFS_PER_PAGE) return { files, truncated: false }
+    unread ||= batch.some(unreadable)
+    if (batch.length < DIFFS_PER_PAGE) return { files, truncated: unread }
   }
   return { files, truncated: true }
 }
 
 /**
  * Approve at `headSha`, which GitLab itself refuses with a 409 when the source
- * branch has moved. The body goes up as a note beside the approval, since an
- * approval on GitLab carries no text.
+ * branch has moved. A GitLab approval carries no text, so the body is left to
+ * the caller to post as a note.
  */
 export async function gitlabApprove(
   pr: PullRequestAddress,
-  input: { headSha: string; body: string },
+  input: { headSha: string },
   context: GitLabCallContext,
-): Promise<{ approvalId: string | null }> {
+): Promise<{ approvalId: string | null; bodyPosted: boolean }> {
   try {
     await gitlabRequest({
       ...context,
@@ -90,26 +103,17 @@ export async function gitlabApprove(
     if (gitlabApiStatusOf(err) === 409 && err instanceof Error) throw new ConflictError(err.message)
     throw err
   }
-  await gitlabRequest({
-    ...context,
-    method: 'POST',
-    path: `${mergeRequestPath(pr)}/notes`,
-    body: { body: input.body },
-  })
-  return { approvalId: null }
+  return { approvalId: null, bodyPosted: false }
 }
 
-/** GitLab keeps one approval per account, so the token's own is the one taken back. */
+/**
+ * GitLab keeps one approval per account, so the token's own is the one taken
+ * back. An unapproval carries no text either, so the message is the caller's.
+ */
 export async function gitlabWithdrawApproval(
   pr: PullRequestAddress,
-  input: { message: string },
   context: GitLabCallContext,
-): Promise<void> {
+): Promise<{ messagePosted: boolean }> {
   await gitlabRequest({ ...context, method: 'POST', path: `${mergeRequestPath(pr)}/unapprove` })
-  await gitlabRequest({
-    ...context,
-    method: 'POST',
-    path: `${mergeRequestPath(pr)}/notes`,
-    body: { body: input.message },
-  })
+  return { messagePosted: false }
 }

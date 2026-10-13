@@ -15,11 +15,11 @@ import {
 import { aiReviewOutcome } from '@sainte-beuve/risk'
 import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
-import { resolveApprover } from '../../integrations/riskResolve.js'
 import { OrgService } from '../orgs/OrgService.js'
 import { AiReviewService } from '../reviews/AiReviewService.js'
 import { ReviewService } from '../reviews/ReviewService.js'
-import { advance, type AssessmentPatch } from './advance.js'
+import { advance, type AssessmentPatch, settleApproval } from './advance.js'
+import { withdrawOnHost } from './hostApproval.js'
 import { scorePullRequest } from './scoring.js'
 
 /** How many times one assessment is tried before it is reported as failed. */
@@ -34,7 +34,17 @@ export const DRIVE_LEASE_MS = 3 * 60_000
 const WITHDRAWN =
   'New commits arrived after sainte-beuve approved this pull request, so the approval was withdrawn until the new head is assessed.'
 
+const SUPERSEDED =
+  'New commits arrived while sainte-beuve was approving this pull request, so the approval was withdrawn until the new head is assessed.'
+
 const IN_FLIGHT = new Set<RiskAssessment['status']>(RISK_ASSESSMENT_IN_FLIGHT_STATUSES)
+
+/** What a step knows about its pull request when it decides the next one. */
+interface StepContext {
+  policy: RiskPolicy
+  status: PullRequestStatus
+  aiReview: 'clean' | 'blocked' | null
+}
 
 /**
  * Assessing the board's pull requests against the org's risk policy, and
@@ -45,6 +55,11 @@ const IN_FLIGHT = new Set<RiskAssessment['status']>(RISK_ASSESSMENT_IN_FLIGHT_ST
  * asked for. A step is started off the request that queued it (`defer`), so a
  * webhook is answered before a model is called, and the reminder clock drives
  * whatever is left in flight after the lease.
+ *
+ * Every write is a check and set on the row's revision. A step claims its row
+ * before it runs, so two drivers never both act on it, and a step whose row was
+ * restarted under it (new commits) writes nothing and takes back an approval it
+ * gave on the old head.
  */
 export class RiskAssessmentService {
   constructor(private readonly container: AppContainer) {}
@@ -96,17 +111,15 @@ export class RiskAssessmentService {
     const rows = await repositories.riskAssessments.listInFlight(limit)
     let driven = 0
     for (const row of rows.filter((candidate) => candidate.updatedAt <= due)) {
-      await this.step(row)
-      driven += 1
+      if ((await this.step(row)) !== null) driven += 1
     }
     return driven
   }
 
-  /** Run one step for a review's assessment, if it is still in flight. */
-  async drive(reviewId: string): Promise<RiskAssessment | null> {
+  /** Run one step for a review's assessment, if it is still in flight and nobody else claimed it. */
+  async drive(reviewId: string): Promise<void> {
     const row = await this.container.repositories.riskAssessments.get(reviewId)
-    if (row === null || !IN_FLIGHT.has(row.status)) return row
-    return this.step(row)
+    if (row !== null && IN_FLIGHT.has(row.status)) await this.step(row)
   }
 
   private async start(review: ReviewRequest, policy: RiskPolicy): Promise<RiskAssessment> {
@@ -127,6 +140,7 @@ export class RiskAssessmentService {
       approvedAs: null,
       approvalId: null,
       attempts: 0,
+      revision: this.container.ids.next(),
       requestedAt: now,
       updatedAt: now,
     }
@@ -135,19 +149,12 @@ export class RiskAssessmentService {
     return row
   }
 
+  /** New commits on an approved pull request: the approval goes, and the board row back on the clock. */
   private async withdraw(held: RiskAssessment, review: ReviewRequest): Promise<void> {
-    const approver = await resolveApprover(this.container, review.pullRequest.provider)
-    try {
-      await approver?.gateway.withdrawApproval(review.pullRequest, {
-        approvalId: held.approvalId,
-        message: WITHDRAWN,
-      })
-    } catch (err) {
-      this.container.logger.warn(
-        { err, reviewId: review.id },
-        'an automatic approval could not be withdrawn',
-      )
-    }
+    await withdrawOnHost(this.container, review, {
+      approvalId: held.approvalId,
+      message: WITHDRAWN,
+    })
     if (review.status === 'approved') {
       const reopened = review.assignedReviewerIds.length > 0 ? 'assigned' : 'open'
       await new ReviewService(this.container).updateStatus(review.id, reopened)
@@ -155,14 +162,19 @@ export class RiskAssessmentService {
     await this.save(held, { status: 'requires_review', holdReason: WITHDRAWN, approvalId: null })
   }
 
-  /** One step, with a failure recorded on the row rather than thrown. */
-  private async step(stale: RiskAssessment): Promise<RiskAssessment> {
-    // Stamped first, so the clock leaves a row alone while this step runs.
+  /**
+   * One step, with a failure recorded on the row rather than thrown. Null when
+   * another driver claimed the row first, or new commits restarted it.
+   */
+  private async step(stale: RiskAssessment): Promise<RiskAssessment | null> {
+    // The claim: it also stamps the row, so the clock leaves it alone while this runs.
     const row = await this.save(stale, {})
+    if (row === null) return null
     try {
       const review = await this.container.repositories.reviews.getById(row.reviewId)
-      if (review === null)
-        return this.save(row, { status: 'failed', holdReason: 'its review is gone' })
+      if (review === null) {
+        return await this.save(row, { status: 'failed', holdReason: 'its review is gone' })
+      }
       return row.status === 'pending'
         ? await this.score(row, review)
         : await this.settleAiReview(row, review)
@@ -171,7 +183,7 @@ export class RiskAssessmentService {
     }
   }
 
-  private async score(row: RiskAssessment, review: ReviewRequest): Promise<RiskAssessment> {
+  private async score(row: RiskAssessment, review: ReviewRequest): Promise<RiskAssessment | null> {
     const policy = await this.policy()
     const vcs = await this.vcs(review)
     const status = await vcs.pullRequestStatus(review.pullRequest)
@@ -193,13 +205,14 @@ export class RiskAssessmentService {
       aiReviewRunId: null,
       attempts: row.attempts + 1,
     })
+    if (assessed === null) return null
     return this.advanced(assessed, review, { policy, status, aiReview: null })
   }
 
   private async settleAiReview(
     row: RiskAssessment,
     review: ReviewRequest,
-  ): Promise<RiskAssessment> {
+  ): Promise<RiskAssessment | null> {
     if (row.aiReviewRunId === null) return this.save(row, { status: 'pending' })
     const policy = await this.policy()
     const run = await new AiReviewService(this.container).get(row.aiReviewRunId)
@@ -212,12 +225,8 @@ export class RiskAssessmentService {
   private async advanced(
     row: RiskAssessment,
     review: ReviewRequest,
-    context: {
-      policy: RiskPolicy
-      status: PullRequestStatus
-      aiReview: 'clean' | 'blocked' | null
-    },
-  ): Promise<RiskAssessment> {
+    context: StepContext,
+  ): Promise<RiskAssessment | null> {
     if (row.verdict === null || row.headSha === null) return this.save(row, { status: 'pending' })
     const patch: AssessmentPatch = await advance(
       this.container,
@@ -231,13 +240,38 @@ export class RiskAssessmentService {
       context,
     )
     const next = await this.save(row, patch)
+    if (patch.status === 'approved') {
+      if (next === null) await this.retract(row, review, patch)
+      else await settleApproval(this.container, review, row.aiReviewRunId)
+      return next
+    }
     // New commits: assess the new head straight away, within the attempt budget.
-    if (next.status === 'pending' && next.attempts < MAX_ATTEMPTS)
+    if (next?.status === 'pending' && next.attempts < MAX_ATTEMPTS) {
       this.container.defer(this.drive(row.reviewId))
+    }
     return next
   }
 
-  private async failed(row: RiskAssessment, err: unknown): Promise<RiskAssessment> {
+  /**
+   * An approval whose row was restarted under it was about code that may no
+   * longer be the head, so it is taken back. One a second driver also recorded
+   * at the same head is left alone: on GitLab, taking back one account's
+   * approval takes back both.
+   */
+  private async retract(
+    row: RiskAssessment,
+    review: ReviewRequest,
+    patch: AssessmentPatch,
+  ): Promise<void> {
+    const current = await this.container.repositories.riskAssessments.get(row.reviewId)
+    if (current?.status === 'approved' && current.headSha === row.headSha) return
+    await withdrawOnHost(this.container, review, {
+      approvalId: patch.approvalId ?? null,
+      message: SUPERSEDED,
+    })
+  }
+
+  private async failed(row: RiskAssessment, err: unknown): Promise<RiskAssessment | null> {
     const attempts = row.attempts + 1
     const reason = getErrorMessage(err)
     this.container.logger.warn(
@@ -249,12 +283,14 @@ export class RiskAssessmentService {
       : this.save(row, { holdReason: reason, attempts })
   }
 
-  private async save(row: RiskAssessment, patch: Partial<RiskAssessment>): Promise<RiskAssessment> {
-    return this.container.repositories.riskAssessments.put({
-      ...row,
-      ...patch,
-      updatedAt: this.container.clock.now(),
-    })
+  /** Write over the revision `row` was read at. Null when somebody else wrote first. */
+  private async save(
+    row: RiskAssessment,
+    patch: Partial<RiskAssessment>,
+  ): Promise<RiskAssessment | null> {
+    const { repositories, clock, ids } = this.container
+    const next = { ...row, ...patch, revision: ids.next(), updatedAt: clock.now() }
+    return (await repositories.riskAssessments.replace(next, row.revision)) ? next : null
   }
 
   private async vcs(review: ReviewRequest): Promise<VcsGateway> {
