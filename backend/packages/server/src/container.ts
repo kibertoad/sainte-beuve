@@ -307,7 +307,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     // Worker holds its own at module level and passes it in here.
     ...attentionBuses(options.bus ?? new InMemoryAttentionBus()),
     realtime: options.realtime ?? 'memory',
-    defer: options.defer ?? swallowing(options.logger),
+    defer: logging(options.logger, options.defer),
     gateways: options.gateways ?? null,
     secrets: secrets.cipher,
     states: secrets.states,
@@ -348,10 +348,15 @@ export function withOrg(container: AppContainer, orgId: string): AppContainer {
   }
 }
 
-/** Runs the work unawaited, logging a failure rather than leaving it unhandled. */
-function swallowing(logger: Logger): Deferral {
+/**
+ * Hands the work to the runtime's deferral (or runs it unawaited), logging a
+ * failure on every runtime rather than leaving it unhandled.
+ */
+function logging(logger: Logger, runtime: Deferral | undefined): Deferral {
   return (work) => {
-    void work.catch((err: unknown) => logger.error({ err }, 'deferred work failed'))
+    const logged = work.catch((err: unknown) => logger.error({ err }, 'deferred work failed'))
+    if (runtime === undefined) void logged
+    else runtime(logged)
   }
 }
 
