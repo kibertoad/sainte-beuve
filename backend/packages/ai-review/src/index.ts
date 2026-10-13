@@ -7,5 +7,9 @@ export {
   CatFactoryGuidedReviewGateway,
   type CatFactoryGuidedReviewOptions,
 } from './CatFactoryGuidedReviewGateway.js'
+export {
+  CatFactoryDirectoryGateway,
+  type CatFactoryDirectoryOptions,
+} from './CatFactoryDirectoryGateway.js'
 export { CatFactoryProbeGateway, type CatFactoryProbeOptions } from './CatFactoryProbeGateway.js'
 export { catFactoryGateways } from './gateways.js'

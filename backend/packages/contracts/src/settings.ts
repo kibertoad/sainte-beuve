@@ -34,12 +34,17 @@ import type { VcsProvider } from './vcs.js'
  * serves one tenancy, so the org that connected it is the org whose board its
  * commands act on — which is the whole of how a Slack command reaches a tenancy
  * that is not the default one. See `SLACK_ORG_WEBHOOK_PATH`.
+ *
+ * `gitlab-webhook-secret` is the same kind of credential for the same reason: the
+ * token a GitLab webhook sends, which is what places a merge request delivery on
+ * this org's board. See `GITLAB_ORG_WEBHOOK_PATH`.
  */
 export const integrationIdSchema = v.picklist([
   'github-pat',
   'gitlab-pat',
   'slack-bot-token',
   'slack-signing-secret',
+  'gitlab-webhook-secret',
   'cat-factory',
 ])
 export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
@@ -65,7 +70,11 @@ const INTEGRATION_TRAITS: Record<IntegrationId, IntegrationTraits> = {
   'gitlab-pat': { label: 'GitLab token', capabilities: [] },
   'slack-bot-token': { label: 'Slack bot token', capabilities: [] },
   'slack-signing-secret': { label: 'Slack signing secret', capabilities: [] },
-  'cat-factory': { label: 'cat-factory key', capabilities: ['aiReview', 'guidedReview'] },
+  'gitlab-webhook-secret': { label: 'GitLab webhook secret', capabilities: [] },
+  'cat-factory': {
+    label: 'cat-factory key',
+    capabilities: ['aiReview', 'guidedReview', 'repositoryDirectory'],
+  },
 }
 
 /**
@@ -98,6 +107,16 @@ export type VcsOauthCredentialKey = v.InferOutput<typeof vcsOauthCredentialKeySc
  */
 export function vcsOauthCredentialKey(provider: VcsProvider): VcsOauthCredentialKey {
   return provider === 'github' ? 'github-oauth' : 'gitlab-oauth'
+}
+
+/**
+ * The store key of the secret an external repository source signs its pushes
+ * with. This deployment mints it, so it is never pasted and not on the list above.
+ */
+export type RepositorySyncSecretKey = `repository-sync-secret:${string}`
+
+export function repositorySyncSecretKey(source: string): RepositorySyncSecretKey {
+  return `repository-sync-secret:${source}`
 }
 
 /** The store key a pasted token for one host is held under. */

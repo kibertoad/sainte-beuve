@@ -1,8 +1,6 @@
 import type {
-  AiReviewResolution,
-  CreateAttentionRequestInput,
   CreateProjectInput,
-  PullRequestRef,
+  GuidedReviewSession,
   RepositoryLookupQuery,
   ReviewStatus,
   Role,
@@ -13,27 +11,16 @@ import {
   actAsContract,
   addProjectContract,
   assignReviewersContract,
-  cancelAttentionContract,
-  commitToAttentionContract,
-  commitToPullRequestContract,
   createApiKeyContract,
-  dismissAiReviewFindingContract,
   getAuthStateContract,
   getViewerContract,
   getWorkspaceContract,
   issuePath,
-  listAiReviewRunsContract,
   listApiKeysContract,
-  listAttentionContract,
   listProjectsContract,
   lookupRepositoriesContract,
   listReviewsContract,
-  releaseCommitmentContract,
   removeProjectContract,
-  requestAiReviewContract,
-  requestAttentionContract,
-  resolveAiReviewContract,
-  resumeAiReviewContract,
   revokeApiKeyContract,
   signOutContract,
   startSessionSignInContract,
@@ -52,8 +39,10 @@ import {
 import { sendByApiContract, UnexpectedResponseError } from '@toad-contracts/frontend-http-client'
 import wretch from 'wretch'
 import type { RequestParams, SuccessBody } from './contractCall'
+import { attentionCalls } from './attentionApi'
 import { capabilityCalls } from './capabilitiesApi'
-import { guidedReviewCalls } from './guidedReviewApi'
+import { aiReviewCalls } from './aiReviewApi'
+import { guidedReviewCalls, sessionAddress } from './guidedReviewApi'
 import { myPullRequestCalls } from './myPullRequestsApi'
 import { myReviewCalls } from './myReviewsApi'
 import { organizationCalls } from './organizationApi'
@@ -259,9 +248,12 @@ export function createSainteBeuveApi(apiBase: string) {
      * live half survives a laptop closing. The contract still owns the path.
      */
     attentionStreamUrl: `${apiBase}${API_PREFIX}${mapApiContractToPath(streamAttentionContract)}`,
-    /** The same, for one guided review. */
-    guidedReviewStreamUrl: (sessionId: string) =>
-      `${apiBase}${API_PREFIX}${streamGuidedReviewContract.pathResolver({ sessionId })}`,
+    /** The same, for one guided review, naming its pull request the way every session call does. */
+    guidedReviewStreamUrl: (session: GuidedReviewSession) => {
+      const { pathParams, queryParams } = sessionAddress(session)
+      const path = streamGuidedReviewContract.pathResolver(pathParams)
+      return `${apiBase}${API_PREFIX}${path}?${new URLSearchParams(queryParams)}`
+    },
 
     // Who is calling, and whether this deployment cares. Never refused, in
     // either mode: a screen that had to be signed in to discover that it is not
@@ -298,18 +290,6 @@ export function createSainteBeuveApi(apiBase: string) {
     lookupRepositories: (query: RepositoryLookupQuery) =>
       call(lookupRepositoriesContract, { queryParams: query }),
 
-    listAttention: () => call(listAttentionContract, {}),
-    requestAttention: (request: CreateAttentionRequestInput) =>
-      call(requestAttentionContract, { body: request }),
-    commitToAttention: (attentionId: string) =>
-      call(commitToAttentionContract, { pathParams: { attentionId }, body: {} }),
-    cancelAttention: (attentionId: string) =>
-      call(cancelAttentionContract, { pathParams: { attentionId } }),
-    commitToPullRequest: (pullRequest: PullRequestRef, title: string) =>
-      call(commitToPullRequestContract, { body: { pullRequest, title } }),
-    releaseCommitment: (commitmentId: string) =>
-      call(releaseCommitmentContract, { pathParams: { commitmentId } }),
-
     /**
      * The board. Unfiltered it is the ACTIVE reviews, newest first and capped,
      * which is the server's default and what every screen here wants: the
@@ -334,25 +314,8 @@ export function createSainteBeuveApi(apiBase: string) {
     assignReviewers: (reviewId: string, count = 1) =>
       call(assignReviewersContract, { pathParams: { reviewId }, body: { count } }),
 
-    // The AI-review loop. Filing is addressed by review; everything after it by
-    // the delegated RUN, the way cat-factory's own decision surface is.
-    requestAiReview: (reviewId: string, instructions: string | null = null) =>
-      call(requestAiReviewContract, { pathParams: { reviewId }, body: { instructions } }),
-    /** Every delegated run for one review. Each in-flight one is POLLED to answer this. */
-    listAiReviewRuns: (reviewId: string) =>
-      call(listAiReviewRunsContract, { pathParams: { reviewId } }),
-    dismissAiReviewFinding: (runId: string, findingId: string) =>
-      call(dismissAiReviewFindingContract, { pathParams: { runId, findingId }, body: {} }),
-    /**
-     * Act on the curated selection. The answer is the run having ACCEPTED the
-     * instruction: cat-factory posts asynchronously, and what landed shows up on a
-     * later read as the curation's `postReport`.
-     */
-    resolveAiReview: (runId: string, action: AiReviewResolution, findingIds: string[]) =>
-      call(resolveAiReviewContract, { pathParams: { runId }, body: { action, findingIds } }),
-    resumeAiReview: (runId: string) =>
-      call(resumeAiReviewContract, { pathParams: { runId }, body: {} }),
-
+    ...aiReviewCalls(call),
+    ...attentionCalls(call),
     ...guidedReviewCalls(call),
     ...myPullRequestCalls(call),
     ...myReviewCalls(call),

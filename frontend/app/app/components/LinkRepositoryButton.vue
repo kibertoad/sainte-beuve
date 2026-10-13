@@ -12,6 +12,8 @@ const toast = useToast()
 const { busy, run } = useApiAction()
 
 const repository = computed(() => `${props.pullRequest.owner}/${props.pullRequest.repo}`)
+const capabilities = useCapabilities()
+const managed = computed(() => capabilities.confirmed('repositoryDirectory'))
 
 async function link() {
   const { provider, owner, repo } = props.pullRequest
@@ -27,8 +29,11 @@ async function link() {
 </script>
 
 <template>
+  <span v-if="managed" class="text-xs text-muted">
+    Link {{ repository }} in cat-factory to watch it here.
+  </span>
   <UButton
-    v-if="auth.isAdmin.value"
+    v-else-if="auth.isAdmin.value"
     size="sm"
     variant="soft"
     icon="i-lucide-link"

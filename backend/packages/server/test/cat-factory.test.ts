@@ -98,10 +98,18 @@ describe('configuring cat-factory', () => {
       catFactoryWired({ aiReview: stubAiReview(), guidedReview: {} as GuidedReviewGateway }),
     )
     const before = await harness.app.fetch(get('/api/v1/capabilities'))
-    expect(await before.json()).toStrictEqual({ aiReview: false, guidedReview: false })
+    expect(await before.json()).toStrictEqual({
+      aiReview: false,
+      guidedReview: false,
+      repositoryDirectory: false,
+    })
     await connectCatFactory(harness)
     const after = await harness.app.fetch(get('/api/v1/capabilities'))
-    expect(await after.json()).toStrictEqual({ aiReview: true, guidedReview: true })
+    expect(await after.json()).toStrictEqual({
+      aiReview: true,
+      guidedReview: true,
+      repositoryDirectory: true,
+    })
   })
 
   it("does not lend one org's cat-factory to another", async () => {

@@ -96,6 +96,10 @@ provider)` from that host's own credential. Above the adapter there is no
 - **GitLab**, behind the same port as GitHub: listing merge requests, reviewer
   changes (read-merge-write, because GitLab's update replaces the list),
   comments, the account read, and a sign-in.
+- **GitLab intake**: a webhook per org, verified against the token the org
+  stored, that opens, labels, settles and closes board rows the way GitHub's
+  deliveries do, with the same label vocabulary and the same bot commands for
+  people the org's directory knows.
 - The review board API: register a pull request, list it, route it to a reviewer,
   move it through its statuses, delegate it to cat-factory, read the run back.
 - **The AI-review loop, end to end**: a `review` task filed on cat-factory, the
@@ -163,10 +167,8 @@ provider)` from that host's own credential. Above the adapter there is no
 
 | Placeholder                             | Why it exists now                                                                                                                                                                                                                                              |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single cat-factory service id           | cat-factory models one service per repository. A multi-repo deployment needs a mapping.                                                                                                                                                                        |
 | No announcement channel per org         | `SLACK_CHANNEL_ID` names a channel in the deployment's own workspace, so it is the default org's and is not lent across the boundary. A named org posts and nudges over its own bot token and has nowhere to announce until it can store a channel of its own. |
 | A stored credential is never re-checked | A pasted GitHub token is verified once, on the way in. One revoked afterwards is still reported as connected until a call fails. A probe would fix it.                                                                                                         |
-| No GitLab intake                        | Merge requests are READ and written, and no GitLab webhook lands here yet, so nothing on GitLab opens a board row by itself. The label vocabulary is GitHub's for the same reason.                                                                             |
 
 ## Slices, in order
 
@@ -277,10 +279,11 @@ slice decided, in short:
   withdraws it from every inbox, including the people who never answered. The
   alternative, leaving it up until somebody tidies it away, is how a team
   learns to ignore the next one.
-- **Committing is open to anybody, being ASKED is gated.** The skill gate
-  decides who the request reaches; somebody who wants to help anyway has made a
-  judgement about their own competence that a label list is not in a position
-  to overrule. `ReviewService.claim` already made that call for the board.
+- **Committing is open to anybody, being ASKED is gated.** The fit floor
+  decides who a request nobody was named on reaches; somebody who wants to help
+  anyway has made a judgement about their own competence that a label list is
+  not in a position to overrule. `ReviewService.claim` already made that call
+  for the board.
 - **Two delivery paths, one payload.** The stream is not a faster inbox and the
   inbox is not a broken stream: a page opened an hour later has to see the same
   thing, and the REST half is the one that is correct on every runtime.
@@ -320,6 +323,15 @@ The loop runs: file, read the findings, curate, post. What it decided, in short:
   holds when a report carries none, or the post report and the findings would be
   destroyed at the moment somebody wants to read what landed, and nothing could
   recover them.
+- **A challenge is a verdict, bought once.** cat-factory's investigator re-reads
+  the source behind one finding and upholds, amends or retracts it. Each finding
+  may be challenged once (again only after a failure), one at a time, and at most
+  five findings per review. The run records each finding it challenged
+  (`challengedFindingIds`, on the payload, so no migration), because a dismissal
+  removes the finding and its verdict from the curation and would otherwise hand
+  the challenge back. A retracted finding is unticked and a resolution naming it
+  is refused, because cat-factory drops it from the selection silently. A verdict
+  re-parks the review, and that is a new park the ladder nudges about.
 
 What is left:
 
@@ -329,11 +341,6 @@ What is left:
 - A cat-factory-side callback as an OPTIMIZATION over polling, never as a
   replacement: a local deployment has no inbound URL, and a seam that only works in
   production breaks on the day it matters.
-- Per-repository cat-factory service mapping, replacing the one service id an
-  org sets on the Configuration screen.
-- Challenging a finding (cat-factory dispatches an investigator that upholds or
-  retracts it). It is a fourth verb on the same surface; the loop is usable
-  without it and the screen has nowhere to put the verdict yet.
 
 ### Slice 5: durable persistence (done)
 
@@ -713,8 +720,9 @@ The placeholders above are the list. The loudest is now that a stored credential
 is never re-checked, so one revoked after it was entered reads as connected until
 a call fails; a probe would fix it. Beside it, a named org has no announcement
 channel it can store, so a second org that connected its own Slack app nudges by
-DM and announces nowhere; and cat-factory is still one service id for every
-repository.
+DM and announces nowhere. [review-flow-gaps.md](./review-flow-gaps.md) tracks the
+gaps in the review flow itself, in the order they block it, with the pull request
+that closes each.
 
 ## Decisions worth recording
 
@@ -723,9 +731,15 @@ bad sense: people learn their slot, pre-empt it and trade it away, and it stops
 reflecting who is free. Weighted random keeps the long-run share honest while no
 single assignment is anybody's turn to resent.
 
-**Skills are an ALL-of gate, not a ranking.** A review that needs `payments` must not
-fall to somebody who merely knows `typescript`. A partial match reads to the author
-like a real review and is not one.
+**One measure of fit, three uses.** The share of a review's wanted skills and domains
+a person holds ranks the recommendations, weights the board's draw and addresses an
+ask nobody was named on, which reaches whoever holds at least half
+(`ATTENTION_FIT_FLOOR`). A gate on every skill would leave a review unassigned
+whenever the one person holding a rare skill is busy, and would let the list an
+author picks from disagree with the people the same ask reaches. The floor is what
+keeps a `payments` ping off the screens of people who hold none of it. An ask stores
+the mix it was raised with, so its audience, the next best match it moves on to and
+what its DMs say a person holds stay put when the repository's vocabulary is edited.
 
 **cat-factory over its published SDK.** The SDK's operations are generated from
 cat-factory's own OpenAPI spec, so a deployment bumping cat-factory cannot silently

@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { IntegrationTokenStatus, SlackConnection } from '@sainte-beuve/contracts'
+import type {
+  IntegrationTokenStatus,
+  SlackAppManifestResult,
+  SlackConnection,
+} from '@sainte-beuve/contracts'
 
 // Where the nudge arrives. Two halves that are configured separately and fail
 // separately: a bot token to post OUT, and a signing secret to trust what comes
@@ -13,6 +17,9 @@ const props = defineProps<{
   tokenStatus: IntegrationTokenStatus
   signingSecretStatus: IntegrationTokenStatus
   apiBase: string
+  /** Null while the manifest is being read. */
+  manifest: SlackAppManifestResult | null
+  manifestError: unknown
   busy?: boolean
 }>()
 
@@ -40,7 +47,13 @@ defineExpose({
   signingSecret: { clearDraft: () => secretField.value?.clearDraft() },
 })
 
-const requestUrl = computed(() => `${props.apiBase}${props.connection.requestPath}`)
+// The manifest's URL when there is one, so the screen never quotes two: Slack
+// posts to `API_BASE_URL`, which need not be the origin this SPA calls.
+const requestUrl = computed(() =>
+  props.manifest?.status === 'ready'
+    ? props.manifest.requestUrl
+    : `${props.apiBase}${props.connection.requestPath}`,
+)
 
 const badge = computed(() => slackBadge(props.connection))
 </script>
@@ -70,6 +83,10 @@ const badge = computed(() => slackBadge(props.connection))
       title="Reminders go out, announcements do not"
       description="A new review is announced in one channel, and this org has no channel. SLACK_CHANNEL_ID names the default org's, so an org with its own Slack app announces nowhere until it has one of its own — its reminder DMs still go out."
     />
+
+    <SlackManifestSection :result="manifest" :error="manifestError" />
+
+    <USeparator class="my-4" />
 
     <CredentialField
       ref="tokenField"

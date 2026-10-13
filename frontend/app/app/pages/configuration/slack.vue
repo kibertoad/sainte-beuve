@@ -1,7 +1,18 @@
 <script setup lang="ts">
-import type { DraftHolder } from '../../composables/useIntegrationSettings'
+import { callerIsAdmin, type DraftHolder } from '../../composables/useIntegrationSettings'
 
-const { api, data, pending, error, refresh, busy, statusOf, save, clear } = useIntegrationSettings()
+const { api, auth, data, pending, error, refresh, busy, statusOf, save, clear } =
+  useIntegrationSettings()
+
+const manifest = useAsyncData(
+  'slack-app-manifest',
+  async () => ((await callerIsAdmin(auth)) ? api.getSlackAppManifest() : null),
+  { lazy: true },
+)
+
+function refreshAll() {
+  return Promise.all([refresh(), manifest.refresh()])
+}
 
 /** Two holders, one per credential, so storing one cannot clear a draft of the other. */
 const card = ref<{ token: DraftHolder; signingSecret: DraftHolder } | null>(null)
@@ -11,10 +22,10 @@ const card = ref<{ token: DraftHolder; signingSecret: DraftHolder } | null>(null
   <IntegrationScreen
     title="Slack"
     description="Where review requests are announced and reminders are sent."
-    :pending="pending"
+    :pending="pending || manifest.pending.value"
     :error="error"
     :loaded="data != null"
-    @refresh="refresh()"
+    @refresh="refreshAll()"
   >
     <SlackConnectionCard
       v-if="data"
@@ -23,6 +34,8 @@ const card = ref<{ token: DraftHolder; signingSecret: DraftHolder } | null>(null
       :token-status="statusOf('slack-bot-token')"
       :signing-secret-status="statusOf('slack-signing-secret')"
       :api-base="api.apiBase"
+      :manifest="manifest.data.value ?? null"
+      :manifest-error="manifest.error.value"
       :busy="busy !== null"
       @save="save('slack-bot-token', $event, card?.token ?? null)"
       @clear="clear('slack-bot-token')"

@@ -1,4 +1,5 @@
 import type {
+  AttentionRequest,
   CreateReviewerInput,
   CreateReviewRequestInput,
   OpenPullRequest,
@@ -8,6 +9,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import type {
   AttentionBus,
+  AttentionAskNotice,
   ChatGateway,
   GatewayFactory,
   Logger,
@@ -139,6 +141,9 @@ export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFa
     catFactoryProbe: () => {
       throw new Error('this case wired no cat-factory probe')
     },
+    catFactoryDirectory: () => {
+      throw new Error('this case wired no cat-factory directory')
+    },
     signIn: () => null,
     ...overrides,
   }
@@ -170,11 +175,13 @@ export function recordingVcs(): VcsGateway & {
     requestReviewers: async (pr, logins) => {
       requested.push(logins)
       void pr
+      return logins
     },
     removeRequestedReviewers: async (pr, logins) => {
       withdrawn.push(logins)
       void pr
     },
+    pendingReviewers: async () => [],
     comment: async (pr, body) => {
       comments.push({ body, number: pr.number })
     },
@@ -183,10 +190,12 @@ export function recordingVcs(): VcsGateway & {
       username: 'sainte-beuve-bot',
       displayName: null,
       avatarUrl: null,
+      bot: false,
     }),
     listOpenPullRequests: async () => [],
     searchOpenPullRequests: async () => [],
     lookupRepositories: async () => null,
+    pastReviewers: async () => [],
     ...noMerging(),
   }
 }
@@ -201,17 +210,57 @@ export function noMerging(): Pick<VcsGateway, 'pullRequestStatus' | 'merge'> {
   }
 }
 
+/** The attention-ask half of the chat port, for a fake that is never asked to DM one. */
+export function noAttentionDms(): Pick<
+  ChatGateway,
+  'sendAttentionAsk' | 'updateAttentionAsk' | 'sendAttentionShort'
+> {
+  return {
+    sendAttentionAsk: () => Promise.reject(new Error('sendAttentionAsk is not stubbed')),
+    updateAttentionAsk: () => Promise.reject(new Error('updateAttentionAsk is not stubbed')),
+    sendAttentionShort: () => Promise.reject(new Error('sendAttentionShort is not stubbed')),
+  }
+}
+
+/** One attention-ask DM a recording chat gateway was asked to send or update. */
+export interface RecordedAsk {
+  target: string
+  notice: AttentionAskNotice
+}
+
 /** A chat gateway that records what it posted where. */
-export function recordingChat(): ChatGateway & { posted: { target: string; kind: string }[] } {
+export function recordingChat(): ChatGateway & {
+  posted: { target: string; kind: string }[]
+  asks: RecordedAsk[]
+  askUpdates: RecordedAsk[]
+  shortNotices: { target: string; request: AttentionRequest }[]
+} {
   const posted: { target: string; kind: string }[] = []
+  const asks: RecordedAsk[] = []
+  const askUpdates: RecordedAsk[] = []
+  const shortNotices: { target: string; request: AttentionRequest }[] = []
   return {
     posted,
+    asks,
+    askUpdates,
+    shortNotices,
     announceReview: async (_review, channelId) => {
       posted.push({ target: channelId, kind: 'announcement' })
       return { messageId: 'ts-1' }
     },
     sendReminder: async (reminder, _review, target) => {
       posted.push({ target, kind: reminder.kind })
+    },
+    // A DM lands in a conversation of its own, named here after the user.
+    sendAttentionAsk: async (notice, target) => {
+      asks.push({ target, notice })
+      return { conversationId: `D-${target}`, messageId: `ts-${asks.length}` }
+    },
+    updateAttentionAsk: async (notice, message) => {
+      askUpdates.push({ target: message.conversationId, notice })
+    },
+    sendAttentionShort: async (request, target) => {
+      shortNotices.push({ target, request })
     },
   }
 }

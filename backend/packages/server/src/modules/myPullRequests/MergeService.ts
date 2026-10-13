@@ -23,6 +23,7 @@ import { requireCapability } from '../../http/errors.js'
 import { resolveAiReview, VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
+import { catFactoryDirectoryKeys } from '../projects/directoryKeys.js'
 import { NO_CREDENTIAL } from '../workspace/sweep.js'
 import {
   directMergeFor,
@@ -61,8 +62,8 @@ const CONFIRM_OVERRIDE =
 const NO_CONFLICTS = 'This pull request has no conflicts with its base to resolve. Reload My PRs.'
 
 const NO_CAT_FACTORY =
-  'cat-factory is not configured for this org: resolving conflicts needs its base URL, a ' +
-  'service id and an API key, which an admin sets on the Configuration screen'
+  'cat-factory is not configured for this org: resolving conflicts needs its base URL and an ' +
+  'API key, which an admin sets on the Configuration screen'
 
 const MOVED =
   'The pull request has new commits since you loaded it. Reload My PRs and check them first.'
@@ -119,8 +120,10 @@ export class MergeService {
     const target = await this.target(input)
     if (target.status.mergeability !== 'conflicting') throw new ConflictError(NO_CONFLICTS)
     const catFactory = requireCapability(await resolveAiReview(this.container), NO_CAT_FACTORY)
+    const pullRequest = { ...target.address, url: target.status.url }
     const handle = await catFactory.gateway.requestConflictResolution({
-      pullRequest: { ...target.address, url: target.status.url },
+      pullRequest,
+      directoryKeys: await catFactoryDirectoryKeys(this.container, pullRequest),
     })
     this.container.logger.info(
       { projectId: target.project.id, number: input.number, taskId: handle.taskId },

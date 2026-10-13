@@ -3,6 +3,8 @@
 
 export { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stores.js'
 export { InMemoryIntegrationConfigRepository } from './config-stores.js'
+export { InMemoryExternalDirectoryRepository } from './external-directory.js'
+export { InMemoryExternalRepositoryRepository } from './external-repositories.js'
 export { InMemoryOrgRepository } from './orgs.js'
 export { createInMemoryPersistence } from './provider.js'
 export {

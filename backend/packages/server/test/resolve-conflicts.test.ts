@@ -37,11 +37,12 @@ async function setUp(options: { catFactory: boolean }) {
     vcs: environmentVcs(vcs),
     ...(options.catFactory ? catFactoryWired({ aiReview }) : {}),
   })
-  if (options.catFactory) await connectCatFactory(harness)
+  // Registered first: once cat-factory is connected, its directory owns the project list.
   const res = await harness.app.fetch(
     post('/api/v1/projects', { provider: 'github', owner: 'acme', repo: 'api' }),
   )
   const project = (await res.json()) as Project
+  if (options.catFactory) await connectCatFactory(harness)
   return { harness, aiReview, project }
 }
 
@@ -62,13 +63,34 @@ describe('resolving conflicts from My PRs', () => {
     })
     expect(aiReview.conflictsResolved).toStrictEqual([
       {
-        provider: 'github',
-        owner: 'acme',
-        repo: 'api',
-        number: 1,
-        url: 'https://github.com/acme/api/pull/1',
+        pullRequest: {
+          provider: 'github',
+          owner: 'acme',
+          repo: 'api',
+          number: 1,
+          url: 'https://github.com/acme/api/pull/1',
+        },
+        directoryKeys: [],
       },
     ])
+  })
+
+  // The resolver works in the repository's own service, so it is placed as a review is.
+  it('files with the directory keys cat-factory lists the repository under', async () => {
+    const { harness, aiReview, project } = await setUp({ catFactory: true })
+    const listed = (key: string, repo: string) => ({
+      source: 'cat-factory',
+      key,
+      seq: 1,
+      repository: { provider: 'github' as const, owner: 'acme', repo, id: key },
+    })
+    const { externalRepositories } = harness.container.repositories
+    await externalRepositories.apply(listed('ws-b/42', 'api'))
+    await externalRepositories.apply(listed('ws-a/42', 'api'))
+    await externalRepositories.apply(listed('ws-a/43', 'web'))
+
+    expect((await resolve(harness, project, 1)).status).toBe(200)
+    expect(aiReview.conflictsResolved[0]?.directoryKeys).toStrictEqual(['ws-a/42', 'ws-b/42'])
   })
 
   it('refuses a pull request with nothing to resolve', async () => {

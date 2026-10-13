@@ -22,7 +22,7 @@ const emit = defineEmits<{ changed: [] }>()
 const api = useSainteBeuveApi()
 const { data, error, refresh } = useAsyncData(
   `guided-review-thread-${props.threadId}`,
-  () => api.getGuidedReviewThread(props.session.id, props.threadId),
+  () => api.getGuidedReviewThread(props.session, props.threadId),
   { lazy: true, watch: [() => props.threadId] },
 )
 
@@ -65,7 +65,7 @@ async function ask(): Promise<void> {
   if (content.length === 0) return
   const asked = await run(
     () =>
-      api.askGuidedReview(props.session.id, props.threadId, {
+      api.askGuidedReview(props.session, props.threadId, {
         content,
         depth: deep.value ? 'deep' : 'inline',
       }),
@@ -77,7 +77,7 @@ async function ask(): Promise<void> {
 
 async function draft(): Promise<void> {
   const drafted = await run(
-    () => api.requestGuidedReviewDrafts(props.session.id, props.threadId, question.value.trim()),
+    () => api.requestGuidedReviewDrafts(props.session, props.threadId, question.value.trim()),
     'Could not ask for comment drafts',
     'draft',
   )

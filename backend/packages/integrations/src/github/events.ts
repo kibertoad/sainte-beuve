@@ -1,4 +1,12 @@
-import type { CreateReviewRequest, GitHubLabelRules, PullRequestRef } from '@sainte-beuve/contracts'
+import type { PullRequestRef, ReviewLabelRules } from '@sainte-beuve/contracts'
+import {
+  type BotVerb,
+  type IntakeIntent,
+  labelIntent,
+  parseMentionCommand,
+  reviewRequest,
+  skillsFromLabels,
+} from '../intake.js'
 
 /**
  * What a GitHub delivery MEANS, decided as a pure function of the payload.
@@ -86,27 +94,8 @@ export interface GitHubDelivery {
   payload: GitHubEventPayload
 }
 
-/** What the bot can be asked to do in a pull-request comment. */
-export type BotVerb = 'review' | 'reroll' | 'ai' | 'status'
-
-/**
- * The actions a delivery can ask for.
- *
- * `track` carries `route` rather than being two intents, because opening a review
- * request and handing it to somebody are the same event seen from two triggers: a
- * pull request being opened tracks it and leaves it unassigned (which is the state
- * the reminder ladder exists to shorten), while the review LABEL is a team member
- * explicitly asking for a reviewer now.
- */
-export type GitHubIntent =
-  | { kind: 'track'; review: CreateReviewRequest; route: boolean }
-  | { kind: 'close'; pullRequest: PullRequestRef }
-  | { kind: 'resolve'; pullRequest: PullRequestRef; status: 'approved' | 'changes_requested' }
-  | { kind: 'ai_review'; pullRequest: PullRequestRef }
-  | { kind: 'command'; pullRequest: PullRequestRef; requester: string; verb: BotVerb }
-
 export interface GitHubIntentContext {
-  labels: GitHubLabelRules
+  labels: ReviewLabelRules
   /**
    * The login the bot answers to when @-mentioned. Null (or blank) turns comment
    * commands off. Either form of a GitHub App's login is accepted:
@@ -143,15 +132,6 @@ export function isTrustedAssociation(association: AuthorAssociation | undefined)
 /** The actions that mean "this pull request is ready to be looked at". */
 const TRACKING_ACTIONS = new Set(['opened', 'reopened', 'ready_for_review'])
 
-const VERBS: Record<string, BotVerb> = {
-  review: 'review',
-  assign: 'review',
-  reroll: 'reroll',
-  reassign: 'reroll',
-  ai: 'ai',
-  status: 'status',
-}
-
 /**
  * What this delivery asks for, or null when it asks for nothing. Null is the
  * common case and not a fault: GitHub sends every event the App subscribes to,
@@ -160,7 +140,7 @@ const VERBS: Record<string, BotVerb> = {
 export function interpretGitHubDelivery(
   delivery: GitHubDelivery,
   context: GitHubIntentContext,
-): GitHubIntent | null {
+): IntakeIntent | null {
   const { event, payload } = delivery
   if (event === 'pull_request') return fromPullRequest(payload, context)
   if (event === 'pull_request_review') return fromReview(payload)
@@ -172,13 +152,13 @@ export function interpretGitHubDelivery(
 function fromPullRequest(
   payload: GitHubEventPayload,
   context: GitHubIntentContext,
-): GitHubIntent | null {
+): IntakeIntent | null {
   const pr = payload.pull_request
   const ref = pullRequestRef(payload, pr?.number, pr?.html_url)
   if (pr === undefined || ref === null) return null
   if (payload.action === 'closed') return { kind: 'close', pullRequest: ref }
   if (payload.action === 'labeled') {
-    return fromLabel(ref, payload.label?.name, context, {
+    return labelIntent(ref, payload.label?.name, context.labels, {
       title: pr.title,
       author: authorOf(pr),
       skills: skillsOf(pr.labels, context),
@@ -204,36 +184,19 @@ function fromPullRequest(
 function fromIssueLabel(
   payload: GitHubEventPayload,
   context: GitHubIntentContext,
-): GitHubIntent | null {
+): IntakeIntent | null {
   const issue = payload.issue
   if (payload.action !== 'labeled' || issue?.pull_request == null) return null
   const ref = pullRequestRef(payload, issue.number, issue.pull_request.html_url ?? issue.html_url)
   if (ref === null) return null
-  return fromLabel(ref, payload.label?.name, context, {
+  return labelIntent(ref, payload.label?.name, context.labels, {
     title: issue.title,
     author: authorOf(issue),
     skills: skillsOf(issue.labels, context),
   })
 }
 
-/**
- * Which of the configured labels was added, and what it asks for. A label that
- * matches neither rule asks for nothing, which is most of them: teams label
- * pull requests all day for reasons that are none of our business.
- */
-function fromLabel(
-  ref: PullRequestRef,
-  added: string | undefined,
-  context: GitHubIntentContext,
-  pr: { title: string; author: string; skills: string[] },
-): GitHubIntent | null {
-  if (added === undefined) return null
-  if (added === context.labels.aiReview) return { kind: 'ai_review', pullRequest: ref }
-  if (added !== context.labels.review) return null
-  return { kind: 'track', route: true, review: reviewRequest(ref, pr.title, pr.author, pr.skills) }
-}
-
-function fromReview(payload: GitHubEventPayload): GitHubIntent | null {
+function fromReview(payload: GitHubEventPayload): IntakeIntent | null {
   const pr = payload.pull_request
   const ref = pullRequestRef(payload, pr?.number, pr?.html_url)
   if (payload.action !== 'submitted' || ref === null) return null
@@ -258,7 +221,7 @@ function fromReview(payload: GitHubEventPayload): GitHubIntent | null {
 function fromComment(
   payload: GitHubEventPayload,
   context: GitHubIntentContext,
-): GitHubIntent | null {
+): IntakeIntent | null {
   const issue = payload.issue
   const bot = botMentionLogin(context.botLogin)
   if (payload.action !== 'created' || issue?.pull_request == null || bot === null) return null
@@ -266,7 +229,7 @@ function fromComment(
   const verb = parseBotCommand(payload.comment?.body ?? '', bot)
   const ref = pullRequestRef(payload, issue.number, issue.pull_request.html_url ?? issue.html_url)
   if (requester === null || verb === null || ref === null) return null
-  return { kind: 'command', pullRequest: ref, requester, verb }
+  return { kind: 'command', pullRequest: ref, requester, author: authorOf(issue), verb }
 }
 
 /** GitHub's suffix on the login a GitHub App authors its comments under. */
@@ -319,46 +282,18 @@ function commentAuthor(payload: GitHubEventPayload, bot: string): string | null 
  */
 export function parseBotCommand(body: string, botLogin: string): BotVerb | null {
   const bare = botMentionLogin(botLogin)
-  if (bare === null) return null
-  // The boundary is a negative lookahead over the login alphabet rather than
-  // `\b`, because a GitHub login may contain a hyphen: `\b` matches between the
-  // `t` and the `-` of `@bot-staging`, so a bot called `bot` would answer for a
-  // different account with a longer name.
-  //
-  // The `[bot]` suffix is CONSUMED rather than merely tolerated: somebody who
-  // types `@sainte-beuve[bot] status` has named a verb, and a mention that
-  // stopped before the suffix would read the verb as `[bot]` and fall through to
-  // the bare-mention default.
-  const mention = new RegExp(`@${escapeForRegExp(bare)}(?:\\[bot\\])?(?![a-z\\d-])`, 'i')
-  const match = mention.exec(body)
-  if (match === null) return null
-  const rest = body
-    .slice(match.index + match[0].length)
-    .trim()
-    .toLowerCase()
-  const word = /^[a-z]+/.exec(rest)?.[0]
-  // A bare mention means the obvious thing. Somebody who types the bot's name and
-  // nothing else wants a reviewer, not a usage message.
-  if (word === undefined) return 'review'
-  return VERBS[word] ?? null
+  return bare === null ? null : parseMentionCommand(body, bare, BOT_SUFFIX)
 }
 
-function escapeForRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')
-}
-
-function authorOf(subject: { user?: GitHubActor | null }): string {
-  return subject.user?.login ?? 'unknown'
+function authorOf(subject: { user?: GitHubActor | null }): string | null {
+  return subject.user?.login ?? null
 }
 
 function skillsOf(labels: GitHubLabel[] | undefined, context: GitHubIntentContext): string[] {
-  const prefix = context.labels.skillPrefix
-  if (prefix.length === 0) return []
-  return (labels ?? [])
-    .map((label) => label.name)
-    .filter((name) => name.startsWith(prefix))
-    .map((name) => name.slice(prefix.length).trim())
-    .filter((skill) => skill.length > 0)
+  return skillsFromLabels(
+    (labels ?? []).map((label) => label.name),
+    context.labels,
+  )
 }
 
 function pullRequestRef(
@@ -374,21 +309,5 @@ function pullRequestRef(
     repo: repository.name,
     number,
     url,
-  }
-}
-
-function reviewRequest(
-  pullRequest: PullRequestRef,
-  title: string,
-  authorLogin: string,
-  requiredSkills: string[],
-): CreateReviewRequest {
-  return {
-    pullRequest,
-    title,
-    authorLogin,
-    requiredSkills,
-    priority: 'normal',
-    dueAt: null,
   }
 }

@@ -1,10 +1,11 @@
 import type { Reviewer } from '@sainte-beuve/contracts'
+import { outstandingCommitments } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
+  ATTENTION_FIT_FLOOR,
   type AttentionAudienceRule,
   isAttentionSatisfied,
   isInAttentionAudience,
-  outstandingCommitments,
   selectAttentionAudience,
 } from './attention.js'
 
@@ -26,19 +27,32 @@ function reviewer(overrides: Partial<Reviewer> = {}): Reviewer {
   }
 }
 
+function wants(skills: string[], domains: string[] = []) {
+  return { skills, domains }
+}
+
 function rule(overrides: Partial<AttentionAudienceRule> = {}): AttentionAudienceRule {
   return {
-    requiredSkills: [],
+    recipientIds: [],
+    wanted: wants([]),
     sameTeamOnly: false,
     team: null,
     requestedById: 'asker',
+    declinedIds: [],
     ...overrides,
   }
 }
 
 describe('isInAttentionAudience', () => {
-  it('asks everybody available when no skill is named', () => {
+  it('asks everybody available when the ask wants nothing in particular', () => {
     expect(isInAttentionAudience(reviewer(), rule())).toBe(true)
+  })
+
+  it('leaves out somebody who declined, even on an ask that names them', () => {
+    expect(isInAttentionAudience(reviewer(), rule({ declinedIds: ['r-1'] }))).toBe(false)
+    expect(
+      isInAttentionAudience(reviewer(), rule({ recipientIds: ['r-1'], declinedIds: ['r-1'] })),
+    ).toBe(false)
   })
 
   it('never asks the person who raised it', () => {
@@ -55,17 +69,40 @@ describe('isInAttentionAudience', () => {
     expect(isInAttentionAudience(reviewer({ weight: 0 }), rule())).toBe(true)
   })
 
-  it('needs every named skill, not one of them', () => {
+  it('asks whoever holds at least half of what the ask wants', () => {
     const candidate = reviewer({ skills: ['Backend'] })
-    expect(isInAttentionAudience(candidate, rule({ requiredSkills: ['Backend'] }))).toBe(true)
+    expect(isInAttentionAudience(candidate, rule({ wanted: wants(['Backend']) }))).toBe(true)
+    expect(isInAttentionAudience(candidate, rule({ wanted: wants(['Backend', 'Frontend']) }))).toBe(
+      true,
+    )
     expect(
-      isInAttentionAudience(candidate, rule({ requiredSkills: ['Backend', 'Frontend'] })),
+      isInAttentionAudience(candidate, rule({ wanted: wants(['Backend', 'Frontend', 'Mobile']) })),
     ).toBe(false)
+  })
+
+  it('leaves out somebody who holds none of it', () => {
+    const candidate = reviewer({ skills: ['Frontend'] })
+    expect(isInAttentionAudience(candidate, rule({ wanted: wants(['Payments']) }))).toBe(false)
+  })
+
+  it('counts domains alongside skills, as the board does', () => {
+    const candidate = reviewer({ skills: [], domains: ['billing'] })
+    const ask = rule({ wanted: wants(['Backend'], ['billing']) })
+    expect(isInAttentionAudience(candidate, ask)).toBe(true)
+    expect(isInAttentionAudience(reviewer({ skills: ['Frontend'] }), ask)).toBe(false)
+  })
+
+  it('sets the floor at ATTENTION_FIT_FLOOR of the wanted mix', () => {
+    const halfOfFour = reviewer({ skills: ['a', 'b'] })
+    expect(ATTENTION_FIT_FLOOR).toBe(0.5)
+    expect(isInAttentionAudience(halfOfFour, rule({ wanted: wants(['a', 'b'], ['c', 'd']) }))).toBe(
+      true,
+    )
   })
 
   it('matches skills regardless of how they were typed', () => {
     const candidate = reviewer({ skills: ['backend'] })
-    expect(isInAttentionAudience(candidate, rule({ requiredSkills: ['Backend'] }))).toBe(true)
+    expect(isInAttentionAudience(candidate, rule({ wanted: wants(['Backend']) }))).toBe(true)
   })
 
   it('keeps a same-team ask inside the team', () => {
@@ -83,6 +120,36 @@ describe('isInAttentionAudience', () => {
   })
 })
 
+describe('isInAttentionAudience with named recipients', () => {
+  const named = rule({
+    recipientIds: ['r-1'],
+    wanted: wants(['Payments']),
+    sameTeamOnly: true,
+    team: 'Platform',
+  })
+
+  it('asks a named person whatever the fit and team gate would say', () => {
+    expect(isInAttentionAudience(reviewer({ id: 'r-1', team: 'Mobile' }), named)).toBe(true)
+  })
+
+  it('asks nobody who was not named, even somebody the gate would let in', () => {
+    const insider = reviewer({ id: 'r-2', team: 'Platform', skills: ['Payments'] })
+    expect(isInAttentionAudience(insider, named)).toBe(false)
+  })
+
+  it('does not ping a named person who has paused since', () => {
+    expect(isInAttentionAudience(reviewer({ id: 'r-1', availability: 'paused' }), named)).toBe(
+      false,
+    )
+  })
+
+  it('never puts the requester in their own audience, even when named', () => {
+    expect(
+      isInAttentionAudience(reviewer({ id: 'asker' }), rule({ recipientIds: ['asker'] })),
+    ).toBe(false)
+  })
+})
+
 describe('selectAttentionAudience', () => {
   it('keeps directory order and drops everyone the gate excludes', () => {
     const candidates = [
@@ -91,7 +158,7 @@ describe('selectAttentionAudience', () => {
       reviewer({ id: 'c', skills: ['Backend'], availability: 'paused' }),
       reviewer({ id: 'd', skills: ['Backend', 'Frontend'] }),
     ]
-    const audience = selectAttentionAudience(candidates, rule({ requiredSkills: ['Backend'] }))
+    const audience = selectAttentionAudience(candidates, rule({ wanted: wants(['Backend']) }))
     expect(audience.map((r) => r.id)).toStrictEqual(['a', 'd'])
   })
 })

@@ -1,26 +1,27 @@
 import type {
-  AiReviewRun,
+  ProjectRef,
   Reminder,
   ReminderStatus,
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
-import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type {
-  AiReviewRunRepository,
   EpochMs,
+  PullRequestAddress,
   ReminderRepository,
   ReviewListOrder,
   ReviewRequestRepository,
 } from '@sainte-beuve/kernel'
-import { and, asc, desc, eq, inArray, lt, lte, sql } from 'drizzle-orm'
+import { projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
-import { aiReviewRuns, reminders, reviewRequests } from './schema.js'
+import { reminders, reviewRequests } from './schema.js'
 
 /**
  * The board: the reviews a deployment has taken responsibility for, the nudges
- * scheduled against them, and the AI runs delegated from them.
+ * scheduled against them. The AI runs delegated from them are in
+ * `ai-review-runs.ts`.
  *
  * Every ordering here is the one the other two stores answer with, which is
  * what the conformance suite pins. There is a secondary sort on the id wherever
@@ -73,23 +74,38 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
     return firstOr(rows)?.data ?? null
   }
 
-  async getByPullRequest(ref: {
-    owner: string
-    repo: string
-    number: number
-  }): Promise<ReviewRequest | null> {
+  async getByPullRequest(ref: PullRequestAddress): Promise<ReviewRequest | null> {
     const rows = await this.db
       .select()
       .from(reviewRequests)
       .where(
         and(
           eq(reviewRequests.orgId, this.orgId),
-          eq(reviewRequests.prOwner, ref.owner),
-          eq(reviewRequests.prRepo, ref.repo),
-          eq(reviewRequests.prNumber, ref.number),
+          eq(reviewRequests.pullRequestKey, pullRequestKey(ref)),
         ),
       )
     return firstOr(rows)?.data ?? null
+  }
+
+  async listForRepository(
+    repository: ProjectRef,
+    filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
+  ): Promise<ReviewRequest[]> {
+    if (filter.status.length === 0) return []
+    const rows = await this.db
+      .select()
+      .from(reviewRequests)
+      .where(
+        and(
+          eq(reviewRequests.orgId, this.orgId),
+          eq(reviewRequests.repoKey, projectRefKey(repository)),
+          gte(reviewRequests.createdAt, filter.since),
+          inArray(reviewRequests.status, [...filter.status]),
+        ),
+      )
+      .orderBy(desc(reviewRequests.createdAt), desc(reviewRequests.id))
+      .limit(filter.limit)
+    return rows.map((row) => row.data)
   }
 
   async create(review: ReviewRequest): Promise<ReviewRequest> {
@@ -110,9 +126,8 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
       orgId: this.orgId,
       id: review.id,
       status: review.status,
-      prOwner: review.pullRequest.owner,
-      prRepo: review.pullRequest.repo,
-      prNumber: review.pullRequest.number,
+      pullRequestKey: pullRequestKey(review.pullRequest),
+      repoKey: projectRefKey(review.pullRequest),
       createdAt: review.createdAt,
       data: review,
     }
@@ -312,80 +327,5 @@ export class PostgresReminderRepository implements ReminderRepository {
       .insert(reminders)
       .values(reminderRow(this.orgId, reminder))
       .onConflictDoUpdate(REMINDER_CONFLICT)
-  }
-}
-
-export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
-  constructor(
-    private readonly db: PostgresDatabase,
-    private readonly orgId: string,
-  ) {}
-
-  async listByReview(reviewId: string): Promise<AiReviewRun[]> {
-    const rows = await this.db
-      .select()
-      .from(aiReviewRuns)
-      .where(and(eq(aiReviewRuns.orgId, this.orgId), eq(aiReviewRuns.reviewId, reviewId)))
-      .orderBy(desc(aiReviewRuns.requestedAt), desc(aiReviewRuns.id))
-    return rows.map((row) => row.data)
-  }
-
-  async listInFlight(limit: number): Promise<AiReviewRun[]> {
-    const rows = await this.db
-      .select()
-      .from(aiReviewRuns)
-      .where(
-        and(
-          eq(aiReviewRuns.orgId, this.orgId),
-          inArray(aiReviewRuns.status, [...AI_REVIEW_IN_FLIGHT_STATUSES]),
-        ),
-      )
-      // `NULLS FIRST` spelled out: Postgres sorts nulls LAST on an ascending
-      // key, and a run nobody has polled yet is the one that most needs polling.
-      // The other two stores answer the same way; the conformance suite pins it.
-      .orderBy(
-        sql`${aiReviewRuns.lastPolledAt} asc nulls first`,
-        asc(aiReviewRuns.requestedAt),
-        asc(aiReviewRuns.id),
-      )
-      .limit(limit)
-    return rows.map((row) => row.data)
-  }
-
-  async getById(runId: string): Promise<AiReviewRun | null> {
-    const rows = await this.db
-      .select()
-      .from(aiReviewRuns)
-      .where(and(eq(aiReviewRuns.orgId, this.orgId), eq(aiReviewRuns.id, runId)))
-    return firstOr(rows)?.data ?? null
-  }
-
-  async create(run: AiReviewRun): Promise<AiReviewRun> {
-    await this.write(run)
-    return run
-  }
-
-  async update(runId: string, patch: Partial<AiReviewRun>): Promise<AiReviewRun | null> {
-    const current = await this.getById(runId)
-    if (current === null) return null
-    const next = patched(current, patch)
-    await this.write(next)
-    return next
-  }
-
-  private async write(run: AiReviewRun): Promise<void> {
-    const row = {
-      orgId: this.orgId,
-      id: run.id,
-      reviewId: run.reviewId,
-      status: run.status,
-      requestedAt: run.requestedAt,
-      lastPolledAt: run.lastPolledAt,
-      data: run,
-    }
-    await this.db
-      .insert(aiReviewRuns)
-      .values(row)
-      .onConflictDoUpdate({ target: [aiReviewRuns.orgId, aiReviewRuns.id], set: row })
   }
 }

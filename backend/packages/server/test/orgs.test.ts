@@ -50,7 +50,7 @@ function stubSignIn(username: string, subject: string): VcsIdentityGateway {
     authorizeUrl: ({ state }) => `https://github.com/login/oauth/authorize?state=${state}`,
     exchangeCode: async ({ code }) => ({
       token: `gho_${code}_token`,
-      account: { subject, username, displayName: username, avatarUrl: null },
+      account: { subject, username, displayName: username, avatarUrl: null, bot: false },
     }),
   }
 }
@@ -671,7 +671,7 @@ describe('the live attention stream', () => {
   })
 })
 
-/** An ask nobody is named in and no skill gates: what every available reviewer concerns. */
+/** An ask nobody is named in that wants nothing in particular: what every available reviewer concerns. */
 function attentionIn(id: string) {
   return {
     id,
@@ -685,7 +685,13 @@ function attentionIn(id: string) {
     title: `Attention ${id}`,
     requestedById: 'r1',
     requestedByName: 'Somebody',
+    recipients: [],
+    chatDeliveries: [],
+    declines: [],
+    keepAsking: false,
+    people: null,
     requiredSkills: [],
+    domains: [],
     sameTeamOnly: false,
     team: null,
     neededCommitments: 1,

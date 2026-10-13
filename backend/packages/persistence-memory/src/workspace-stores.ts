@@ -12,7 +12,7 @@ import type {
   ProjectRepository,
   ReviewCommitmentRepository,
 } from '@sainte-beuve/kernel'
-import { projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
+import { ConflictError, projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import { clone, patched } from './clone.js'
 import { byText, newestFirst, oldestFirst } from './order.js'
 
@@ -122,12 +122,15 @@ export class InMemoryAttentionRepository implements AttentionRepository {
     return clone(request)
   }
 
-  async update(
+  /** Atomic without a revision: nothing awaits between the read and the write. */
+  async change(
     attentionId: string,
-    patch: Partial<AttentionRequest>,
+    change: (current: AttentionRequest) => Partial<AttentionRequest> | null,
   ): Promise<AttentionRequest | null> {
     const row = this.rows.get(attentionId)
     if (row === undefined) return null
+    const patch = change(clone(row))
+    if (patch === null) return clone(row)
     const next = patched(row, patch)
     this.rows.set(attentionId, next)
     return clone(next)
@@ -153,23 +156,47 @@ export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepos
     reviewerId: string,
     pullRequest: { provider: string; owner: string; repo: string; number: number },
   ): Promise<ReviewCommitment | null> {
-    const wanted = pullRequestKey(pullRequest)
-    // The OLDEST matching promise, ties broken on the id, which is what both
-    // durable stores answer with (`ORDER BY created_at, id`, first row). A scan
-    // that took whichever row it reached first would let a second click find a
-    // different promise than the click before it.
-    const [found] = [...this.rows.values()]
-      .filter((row) => row.reviewerId === reviewerId && pullRequestKey(row.pullRequest) === wanted)
-      .sort(oldestFirst((row) => row.createdAt))
+    const found = this.held(reviewerId, pullRequestKey(pullRequest))
     return found === undefined ? null : clone(found)
   }
 
-  async create(commitment: ReviewCommitment): Promise<ReviewCommitment> {
+  /**
+   * Synchronous from the check to the write, so no other caller runs between
+   * them: the same guarantee the durable stores' unique index gives.
+   */
+  async createOrGet(
+    commitment: ReviewCommitment,
+  ): Promise<{ commitment: ReviewCommitment; created: boolean }> {
+    const existing = this.held(commitment.reviewerId, pullRequestKey(commitment.pullRequest))
+    if (existing !== undefined) return { commitment: clone(existing), created: false }
+    if (this.rows.has(commitment.id)) {
+      throw new ConflictError(`Commitment ${commitment.id} is already taken`, {
+        commitmentId: commitment.id,
+      })
+    }
     this.rows.set(commitment.id, clone(commitment))
-    return clone(commitment)
+    return { commitment: clone(commitment), created: true }
+  }
+
+  async setRequestedHandle(
+    commitmentId: string,
+    requestedHandle: string | null,
+  ): Promise<ReviewCommitment | null> {
+    const row = this.rows.get(commitmentId)
+    if (row === undefined) return null
+    const next = { ...row, requestedHandle }
+    this.rows.set(commitmentId, next)
+    return clone(next)
   }
 
   async delete(commitmentId: string): Promise<void> {
     this.rows.delete(commitmentId)
+  }
+
+  private held(reviewerId: string, key: string): ReviewCommitment | undefined {
+    for (const row of this.rows.values()) {
+      if (row.reviewerId === reviewerId && pullRequestKey(row.pullRequest) === key) return row
+    }
+    return undefined
   }
 }

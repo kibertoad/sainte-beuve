@@ -11,7 +11,9 @@ import {
   disconnectVcsSignInContract,
   getConnectionsContract,
   getIntegrationSettingsContract,
+  getSlackAppManifestContract,
   setCatFactoryConfigContract,
+  syncCatFactoryRepositoriesContract,
   setIntegrationTokenContract,
   startGitHubAppInstallContract,
   startVcsSignInContract,
@@ -42,6 +44,7 @@ export function configurationCalls(call: ContractCaller) {
       call(clearIntegrationTokenContract, { pathParams: { integrationId } }),
 
     getConnections: () => call(getConnectionsContract, {}),
+    getSlackAppManifest: () => call(getSlackAppManifestContract, {}),
     /**
      * Where to send the browser to start a connect round trip. Fetched rather
      * than navigated to, because each call MINTS a signed state with a few
@@ -59,5 +62,6 @@ export function configurationCalls(call: ContractCaller) {
     clearCatFactoryConfig: () => call(clearCatFactoryConfigContract, {}),
     /** Tries a configuration against its instance without storing it. */
     checkCatFactory: (input: CheckCatFactory) => call(checkCatFactoryContract, { body: input }),
+    syncCatFactoryRepositories: () => call(syncCatFactoryRepositoriesContract, { body: {} }),
   }
 }

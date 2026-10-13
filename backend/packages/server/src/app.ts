@@ -1,5 +1,8 @@
 import {
+  CAT_FACTORY_WEBHOOK_PATH,
   GITHUB_WEBHOOK_PATH,
+  GITLAB_ORG_WEBHOOK_PATH,
+  GITLAB_WEBHOOK_PATH,
   SLACK_ORG_WEBHOOK_PATH,
   SLACK_WEBHOOK_PATH,
 } from '@sainte-beuve/contracts'
@@ -232,13 +235,16 @@ const noStore: MiddlewareHandler<AppEnv> = async (c, next) => {
  * signature, so a limit applied below them would be a limit applied to a body
  * already in memory.
  *
- * Every inbound path is named, including the one Slack posts to per org: a
- * pattern left off this list is a route with no limit in front of it.
+ * Every inbound path is named, including the ones Slack and GitLab post to per
+ * org: a pattern left off this list is a route with no limit in front of it.
  */
 function mountBodyLimits(app: Hono<AppEnv>): void {
   app.use(GITHUB_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use(GITLAB_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use(GITLAB_ORG_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
   app.use(SLACK_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
   app.use(SLACK_ORG_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
+  app.use(CAT_FACTORY_WEBHOOK_PATH, refuseBody(WEBHOOK_BODY_LIMIT))
   app.use('/api/v1/*', refuseBody(JSON_BODY_LIMIT))
 }
 

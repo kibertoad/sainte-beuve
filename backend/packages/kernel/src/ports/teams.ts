@@ -1,5 +1,8 @@
 import type { Team } from '@sainte-beuve/contracts'
 
+/** The fields of a team a write may change. */
+export type TeamPatch = Partial<Pick<Team, 'name' | 'ownerId' | 'mergeComments' | 'external'>>
+
 /**
  * An org's teams. A name is unique within the org regardless of case, because
  * a reviewer refers to a team by name and the same-team gate compares names
@@ -17,9 +20,6 @@ export interface TeamRepository {
    */
   create(team: Team): Promise<Team>
   /** Null when the team is gone. The caller checks a new name is free first. */
-  update(
-    teamId: string,
-    patch: Partial<Pick<Team, 'name' | 'ownerId' | 'mergeComments'>>,
-  ): Promise<Team | null>
+  update(teamId: string, patch: TeamPatch): Promise<Team | null>
   delete(teamId: string): Promise<void>
 }

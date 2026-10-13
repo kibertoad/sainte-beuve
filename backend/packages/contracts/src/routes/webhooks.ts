@@ -3,8 +3,8 @@
 //
 // These are the only routes in the tree that are NOT api contracts, and the
 // reason is that we do not own either half of them. The request body is GitHub's
-// event union or Slack's form encoding, so a valibot schema over it would be a
-// copy of somebody else's spec that goes stale silently; the response is a
+// or GitLab's event union or Slack's form encoding, so a valibot schema over it
+// would be a copy of somebody else's spec that goes stale silently; the response is a
 // redirect or a bare ack, which is not a model. What a contract would still have
 // given us is one definition of the PATH, so that is what these constants are:
 // the controller mounts them and the docs quote them, and neither hand-writes a
@@ -51,6 +51,43 @@ export const SLACK_ORG_WEBHOOK_PATH = `${SLACK_WEBHOOK_PATH}/:org`
 /** Where one org's Slack app posts. The default org answers on both this and the bare path. */
 export function slackWebhookPath(orgSlug: string): string {
   return `${SLACK_WEBHOOK_PATH}/${orgSlug}`
+}
+
+/**
+ * GitLab webhook deliveries (`X-Gitlab-Token`) for the DEFAULT org. Built for a
+ * screen to quote with {@link gitlabWebhookPath}.
+ *
+ * A GitLab webhook sends its secret token as a header rather than signing the
+ * body, so the token is compared, not recomputed.
+ */
+export const GITLAB_WEBHOOK_PATH = '/webhooks/gitlab'
+
+/**
+ * The same intake for one NAMED org. The org is in the URL for the reason the
+ * Slack one is, and more: a merge request delivery names a project, but the
+ * token that proves it came from GitLab is one org's credential, so the org has
+ * to be known before there is anything to compare the token with. Naming the
+ * wrong org refuses; it does not admit.
+ */
+export const GITLAB_ORG_WEBHOOK_PATH = `${GITLAB_WEBHOOK_PATH}/:org`
+
+/** Where one org's GitLab webhooks post. The default org answers on both this and the bare path. */
+export function gitlabWebhookPath(orgSlug: string): string {
+  return `${GITLAB_WEBHOOK_PATH}/${orgSlug}`
+}
+
+/**
+ * cat-factory's directory pushes (`x-cat-factory-signature`) for one org.
+ * Mounted as a pattern; built with {@link catFactoryWebhookPath}.
+ *
+ * The org is in the URL for the reason the Slack one is: an account-level push
+ * names no repository this deployment could place it by, and the secret this
+ * org registered with cat-factory is what makes naming the org safe.
+ */
+export const CAT_FACTORY_WEBHOOK_PATH = '/webhooks/cat-factory/:org'
+
+export function catFactoryWebhookPath(orgSlug: string): string {
+  return `/webhooks/cat-factory/${orgSlug}`
 }
 
 /**

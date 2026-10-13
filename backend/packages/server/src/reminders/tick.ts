@@ -9,8 +9,7 @@ import {
   type Resolved,
   resolveChat,
 } from '../integrations/resolve.js'
-import { SessionService } from '../modules/auth/SessionService.js'
-import { AiReviewService } from '../modules/reviews/AiReviewService.js'
+import { type Passengers, ridePassengers } from './passengers.js'
 import { scheduleNextReminder } from './schedule.js'
 import { recoverStalledClaims } from './stalled.js'
 
@@ -111,6 +110,12 @@ export interface TickResult {
    * opens the row it is on — which is to say, until somebody already suspected.
    */
   aiReviewsPolled: number
+  /**
+   * Projects added, renamed or removed to follow the org's cat-factory
+   * directory. On this clock because a push from cat-factory can be lost, and
+   * the change feed this follows is what makes that cost only latency.
+   */
+  repositoriesSynced: number
 }
 
 /** What one org's nudges did. The half of a pass that has a deadline. */
@@ -118,9 +123,6 @@ type Nudges = Pick<TickResult, 'sent' | 'failed' | 'skipped' | 'recovered'>
 
 /** What one delivery did, which is the counter it adds to. */
 type Outcome = keyof Nudges
-
-/** What one org's passengers did. The half that rides whatever budget is left. */
-type Passengers = Pick<TickResult, 'sessionsSwept' | 'aiReviewsPolled'>
 
 /** One tenancy's pass, filled in over the two walks. */
 interface OrgPass {
@@ -136,7 +138,7 @@ export async function runReminderTick(
   const passes: OrgPass[] = (await tenancies(container)).map((orgId) => ({
     container: withOrg(container, orgId),
     nudges: { sent: 0, failed: 0, skipped: 0, recovered: 0 },
-    passengers: { sessionsSwept: 0, aiReviewsPolled: 0 },
+    passengers: { sessionsSwept: 0, aiReviewsPolled: 0, repositoriesSynced: 0 },
   }))
   // FIRST every org's nudges, because they are the half with a deadline.
   await mapWithConcurrency(passes, ORG_FAN_OUT, async (pass) => {
@@ -150,7 +152,15 @@ export async function runReminderTick(
 }
 
 function empty(): TickResult {
-  return { sent: 0, failed: 0, skipped: 0, recovered: 0, sessionsSwept: 0, aiReviewsPolled: 0 }
+  return {
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    recovered: 0,
+    sessionsSwept: 0,
+    aiReviewsPolled: 0,
+    repositoriesSynced: 0,
+  }
 }
 
 /**
@@ -170,6 +180,7 @@ function added(total: TickResult, pass: OrgPass): TickResult {
     recovered: total.recovered + result.recovered,
     sessionsSwept: total.sessionsSwept + result.sessionsSwept,
     aiReviewsPolled: total.aiReviewsPolled + result.aiReviewsPolled,
+    repositoriesSynced: total.repositoriesSynced + result.repositoriesSynced,
   }
 }
 
@@ -239,53 +250,6 @@ function lanesOf(due: readonly Reminder[]): Reminder[][] {
     else lane.push(reminder)
   }
   return [...lanes.values()]
-}
-
-/** One org's passengers, run once every org's nudges have gone out. */
-async function ridePassengers(container: AppContainer, batchSize: number): Promise<Passengers> {
-  return {
-    sessionsSwept: await sweepSessions(container),
-    aiReviewsPolled: await pollAiReviews(container, batchSize),
-  }
-}
-
-/**
- * A sweep that fails does NOT fail the tick. The reminders in this pass have
- * already gone out, and a store that refused a delete is a fault an operator
- * reads in the log rather than a reason to re-send every nudge next minute.
- */
-async function sweepSessions(container: AppContainer): Promise<number> {
-  try {
-    return await new SessionService(container).sweepExpired()
-  } catch (err) {
-    container.logger.warn({ err }, 'could not sweep expired sessions')
-    return 0
-  }
-}
-
-/**
- * Ask cat-factory where this org's delegated reviews got to.
- *
- * The same batch cap as the nudges, for the same reason: every poll is an
- * outbound call, and a tenancy with two hundred runs in flight would otherwise
- * spend one tick's whole budget here. The LEAST RECENTLY POLLED are read first,
- * so what the cap leaves over is picked up next tick rather than starved — see
- * `AiReviewRunRepository.listInFlight`, where that ordering is the difference
- * between a cap and a queue nothing ever leaves.
- *
- * A sweep that fails does NOT fail the tick, exactly as the session sweep does
- * not: the reminders in this pass have already gone out, and a cat-factory that
- * is unreachable for a minute is not a reason to re-send every nudge next
- * minute. A poll that is merely refused never reaches here — the service records
- * that on the run, where the board shows it.
- */
-async function pollAiReviews(container: AppContainer, batchSize: number): Promise<number> {
-  try {
-    return await new AiReviewService(container).sweepInFlight(batchSize)
-  } catch (err) {
-    container.logger.warn({ err }, 'could not poll the AI reviews in flight')
-    return 0
-  }
 }
 
 /**

@@ -22,6 +22,11 @@ const props = defineProps<{
   knownSkills: readonly string[]
   /** The org's domains. A reviewer picks from them; a new one is named on a repository. */
   knownDomains: readonly string[]
+  /**
+   * cat-factory owns this person's name and handles, shown read-only, and `teams`
+   * is then the teams of their cat-factory workspaces.
+   */
+  managed?: boolean
   busy: boolean
   submitLabel: string
 }>()
@@ -103,12 +108,26 @@ function submit() {
 
 <template>
   <div class="flex flex-col gap-5 max-w-xl">
+    <UAlert
+      v-if="managed"
+      color="info"
+      variant="subtle"
+      icon="i-lucide-git-fork"
+      title="This person comes from cat-factory"
+      description="Their name and handles follow their cat-factory profile, and their team is one of their cat-factory workspaces. Everything else is set here."
+    />
     <UFormField label="Name">
-      <UInput v-model="draft.displayName" class="w-full" placeholder="Ada Lovelace" />
+      <UInput
+        v-model="draft.displayName"
+        class="w-full"
+        placeholder="Ada Lovelace"
+        :disabled="managed"
+      />
     </UFormField>
     <UFormField label="Team" description="Optional. What an ask can be kept inside.">
       <USelect v-model="team" :items="teamOptions" value-key="value" class="w-full sm:w-64" />
-      <template #help>
+      <template v-if="managed" #help>The teams of their cat-factory workspaces.</template>
+      <template v-else #help>
         Teams are managed on the
         <ULink to="/configuration/organization" class="underline">Organization screen</ULink>.
       </template>
@@ -123,7 +142,12 @@ function submit() {
       :label="host.label"
       description="Optional. Without it, their pull requests on that host are invisible here."
     >
-      <UInput v-model="draft.handles[host.provider]" class="w-full" placeholder="ada" />
+      <UInput
+        v-model="draft.handles[host.provider]"
+        class="w-full"
+        placeholder="ada"
+        :disabled="managed"
+      />
     </UFormField>
 
     <UFormField

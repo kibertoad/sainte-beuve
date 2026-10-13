@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { webUrlSchema } from './vcs.js'
+import { pullRequestRefSchema, webUrlSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // AI-review wire contracts.
@@ -71,6 +71,32 @@ export const aiReviewCategorySchema = v.picklist([
 export type AiReviewCategory = v.InferOutput<typeof aiReviewCategorySchema>
 
 /**
+ * Where a challenge of one finding stands. cat-factory's own vocabulary:
+ * `investigating` while its read-only investigator re-examines the finding
+ * against the full source, then the verdict. `amended` is a finding kept with a
+ * changed title, detail, severity or fix (already folded into the finding), and
+ * `upheld` one kept as written. `failed` is an investigator that crashed; the
+ * finding stands and may be challenged again.
+ */
+export const aiReviewChallengeStatusSchema = v.picklist([
+  'investigating',
+  'upheld',
+  'amended',
+  'retracted',
+  'failed',
+])
+export type AiReviewChallengeStatus = v.InferOutput<typeof aiReviewChallengeStatusSchema>
+
+export const aiReviewFindingChallengeSchema = v.object({
+  status: aiReviewChallengeStatusSchema,
+  /** The curator's concern, or null for a challenge that asked for a general re-examination. */
+  question: v.nullable(v.string()),
+  /** The investigator's grounding for its verdict, or why it failed. Null while investigating. */
+  justification: v.nullable(v.string()),
+})
+export type AiReviewFindingChallenge = v.InferOutput<typeof aiReviewFindingChallengeSchema>
+
+/**
  * One thing the reviewer found, as the curation screen shows it and as the
  * inline comment would read.
  *
@@ -91,6 +117,13 @@ export const aiReviewFindingSchema = v.object({
   severity: aiReviewSeveritySchema,
   category: aiReviewCategorySchema,
   suggestedFix: v.nullable(v.string()),
+  /**
+   * The finding's challenge, or null for one nobody challenged. A DEFAULT as
+   * well as nullable, because the curation is stored in the run's payload and
+   * parsed through this schema on every read: a run written before challenges
+   * existed has no key for it. See `parkedAt` on the run.
+   */
+  challenge: v.optional(v.nullable(aiReviewFindingChallengeSchema), null),
 })
 export type AiReviewFinding = v.InferOutput<typeof aiReviewFindingSchema>
 
@@ -205,11 +238,25 @@ export const aiReviewRunSchema = v.object({
   catFactoryRunId: v.nullable(v.string()),
   /** Deep link into the cat-factory instance that ran it. */
   catFactoryUrl: v.nullable(webUrlSchema),
+  /**
+   * The cat-factory workspace the task was filed in, which every later call
+   * about it names. Null for a task filed in the key's only workspace. It has a
+   * default for the reason `parkedAt` gives: a run stored before the field
+   * existed has no key for it.
+   */
+  catFactoryWorkspaceId: v.optional(v.nullable(v.string()), null),
   /** Short verdict text once the run completes. The full output lives in cat-factory. */
   summary: v.nullable(v.string()),
   failureReason: v.nullable(v.string()),
   /** What there is to curate right now. See {@link aiReviewCurationSchema}. */
   curation: v.nullable(aiReviewCurationSchema),
+  /**
+   * Every finding this deployment has sent to cat-factory's investigator. The
+   * curation cannot hold that record alone: a dismissal removes the finding,
+   * and its challenge with it. See {@link challengedFindingIdsOf}. A default for
+   * the reason `parkedAt` gives.
+   */
+  challengedFindingIds: v.optional(v.array(v.string()), []),
   requestedAt: v.number(),
   /**
    * When a poll last reached cat-factory about this run. Null until one has.
@@ -264,6 +311,22 @@ export const requestAiReviewSchema = v.object({
 export type RequestAiReview = v.InferOutput<typeof requestAiReviewSchema>
 
 /**
+ * An AI review asked for by pull request rather than by board row: what the
+ * workspace, My PRs and My Reviews send. The board row is found, or opened
+ * when the pull request is not tracked yet, because a run belongs to one.
+ */
+export const requestPullRequestAiReviewSchema = v.object({
+  ...requestAiReviewSchema.entries,
+  pullRequest: pullRequestRefSchema,
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(300)),
+  /** Null when the row that asked does not know it (a commitment): the host is asked instead. */
+  authorLogin: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1))), null),
+})
+export type RequestPullRequestAiReview = v.InferOutput<typeof requestPullRequestAiReviewSchema>
+/** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
+export type RequestPullRequestAiReviewInput = v.InferInput<typeof requestPullRequestAiReviewSchema>
+
+/**
  * What to do with the curated selection.
  *
  * - `post` publishes the selected findings as inline pull-request comments.
@@ -284,3 +347,33 @@ export const resolveAiReviewSchema = v.object({
   findingIds: v.optional(v.array(v.string()), []),
 })
 export type ResolveAiReview = v.InferOutput<typeof resolveAiReviewSchema>
+
+/** Ask cat-factory's investigator to re-examine one finding. */
+export const challengeAiReviewFindingSchema = v.object({
+  /**
+   * What the curator doubts about the finding. Optional: without one the
+   * investigator is asked to justify the finding's grounding and relevance.
+   * cat-factory's own limit.
+   */
+  question: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(4000))), null),
+})
+export type ChallengeAiReviewFinding = v.InferOutput<typeof challengeAiReviewFindingSchema>
+
+/** How many findings of one review may be sent to cat-factory's investigator. */
+export const AI_REVIEW_CHALLENGE_LIMIT = 5
+
+/**
+ * The findings of a run that count against {@link AI_REVIEW_CHALLENGE_LIMIT}:
+ * those recorded as challenged from here, and those the curation shows carrying
+ * a challenge, which covers one filed on cat-factory's own screen. A finding
+ * counts once however many times it is asked about, so a challenge that failed
+ * may be repeated without spending more of the budget.
+ */
+export function challengedFindingIdsOf(
+  run: Pick<AiReviewRun, 'curation' | 'challengedFindingIds'>,
+): Set<string> {
+  const carrying = (run.curation?.findings ?? [])
+    .filter((finding) => finding.challenge !== null)
+    .map((finding) => finding.findingId)
+  return new Set([...run.challengedFindingIds, ...carrying])
+}

@@ -1,4 +1,4 @@
-import type { GuidedReviewSessionView } from '@sainte-beuve/contracts'
+import type { GuidedReviewSession, GuidedReviewSessionView } from '@sainte-beuve/contracts'
 import { guidedReviewStreamEventSchema } from '@sainte-beuve/contracts'
 import * as v from 'valibot'
 
@@ -25,7 +25,7 @@ export interface GuidedReviewStreamHandlers {
  * life backs off, the way the attention inbox does.
  */
 export function useGuidedReviewStream(
-  sessionId: () => string | null,
+  session: () => GuidedReviewSession | null,
   handlers: GuidedReviewStreamHandlers,
 ) {
   const api = useSainteBeuveApi()
@@ -55,11 +55,11 @@ export function useGuidedReviewStream(
   }
 
   function connect(): void {
-    const id = sessionId()
-    if (unmounted || id === null || typeof EventSource === 'undefined') return
+    const current = session()
+    if (unmounted || current === null || typeof EventSource === 'undefined') return
     reconnect = null
     openedAt = Date.now()
-    source = new EventSource(api.guidedReviewStreamUrl(id), { withCredentials: true })
+    source = new EventSource(api.guidedReviewStreamUrl(current), { withCredentials: true })
     opened = false
     source.addEventListener('open', () => {
       opened = true
@@ -92,10 +92,10 @@ export function useGuidedReviewStream(
    * so the session is read once to tell the two apart.
    */
   async function sessionIsGone(): Promise<boolean> {
-    const id = sessionId()
-    if (id === null) return false
+    const current = session()
+    if (current === null) return false
     try {
-      await api.getGuidedReview(id)
+      await api.getGuidedReview(current)
       return false
     } catch (err) {
       return err instanceof ApiError && err.statusCode === 404
@@ -112,7 +112,7 @@ export function useGuidedReviewStream(
 
   // A different session (or the first one) is a different stream.
   watch(
-    sessionId,
+    () => session()?.id ?? null,
     () => {
       close()
       backoffMs = RECONNECT_MS

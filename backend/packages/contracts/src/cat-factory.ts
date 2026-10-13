@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { peopleSyncSchema } from './external-directory.js'
 
 // ---------------------------------------------------------------------------
 // cat-factory connection wire contracts.
@@ -30,15 +31,47 @@ const catFactoryIdSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLen
 export const catFactoryConfigSchema = v.object({
   baseUrl: baseUrlSchema,
   /**
-   * The service (repository frame) AI reviews are filed under. Null leaves the
-   * AI reviewer off while the guided reviewer still works, because cat-factory
-   * finds a guided review's repository from the pull request itself.
+   * The service (repository frame) an AI review goes under when no service
+   * backs its repository in cat-factory, a monorepo for one. A review normally
+   * goes under its own repository's service. Null files only there.
    */
   serviceId: v.nullable(catFactoryIdSchema),
   /** The pipeline AI reviews run on. Null runs the task's own pinned pipeline. */
   pipelineId: v.nullable(catFactoryIdSchema),
 })
 export type CatFactoryConfig = v.InferOutput<typeof catFactoryConfigSchema>
+
+/**
+ * What the key reaches: `account` reads the whole directory, `workspaces` is a
+ * key limited to some workspaces, which cat-factory lists no users to.
+ */
+export const directoryReachSchema = v.picklist(['account', 'workspaces'])
+export type DirectoryReach = v.InferOutput<typeof directoryReachSchema>
+
+/**
+ * How this org's repository list is kept in step with cat-factory's directory.
+ * Times are epoch ms; null until the first time each one happened.
+ */
+export const repositorySyncSchema = v.object({
+  /** The last time the change feed was followed to its head. */
+  syncedAt: v.nullable(v.number()),
+  /** The last full snapshot walk. */
+  reconciledAt: v.nullable(v.number()),
+  /**
+   * Whether cat-factory pushes directory changes here. `pending` until a
+   * registration has been tried; the change feed is followed on the clock either way.
+   */
+  webhook: v.picklist(['registered', 'failed', 'pending']),
+  /** The URL cat-factory was asked to push to. */
+  webhookUrl: v.nullable(v.string()),
+  /** Why the last sync or webhook registration failed, cleared by the next one that worked. */
+  error: v.nullable(v.string()),
+  /** The people and teams the same directory keeps in step. Null until a sync has read them. */
+  people: v.optional(v.nullable(peopleSyncSchema), null),
+  /** What the key reached at the last full snapshot walk. Null until one has run. */
+  reach: v.optional(v.nullable(directoryReachSchema), null),
+})
+export type RepositorySync = v.InferOutput<typeof repositorySyncSchema>
 
 export const catFactoryConnectionSchema = v.object({
   /** What this org stored. Null when it has not configured cat-factory. */
@@ -53,6 +86,8 @@ export const catFactoryConnectionSchema = v.object({
   aiReviewReady: v.boolean(),
   /** A key and a base URL are in place, so a guided review can be opened. */
   guidedReviewReady: v.boolean(),
+  /** Null while cat-factory is not configured, when repositories are registered here instead. */
+  repositorySync: v.nullable(repositorySyncSchema),
 })
 export type CatFactoryConnection = v.InferOutput<typeof catFactoryConnectionSchema>
 

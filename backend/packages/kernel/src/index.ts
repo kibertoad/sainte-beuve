@@ -21,7 +21,14 @@ export {
   ValidationError,
 } from './domain/errors.js'
 export { projectRefKey, pullRequestKey } from './domain/keys.js'
+export {
+  MAX_REVISION_ATTEMPTS,
+  type Revisioned,
+  type RevisionedWrite,
+  writeAtRevision,
+} from './domain/revisions.js'
 export { DEFAULT_REMINDER_POLICY, type EpochMs, formatPullRequest } from './domain/types.js'
+export { type Inserted, insertOrRead, type UniqueInsert } from './domain/uniqueInserts.js'
 export { base64url, base64urlText, base64urlToBytes, timingSafeEqual } from './encoding.js'
 export {
   isSecretDecryptError,
@@ -33,22 +40,31 @@ export {
 export type {
   AiReviewGateway,
   AiReviewHandle,
+  AiReviewWorkspace,
   AiReviewReport,
   CatFactoryAccess,
   CatFactoryProbe,
   CatFactoryProbeReport,
   CatFactoryReviewTarget,
+  AttentionAskNotice,
   ChatGateway,
+  ChatMessageRef,
   GatewayFactory,
-  GuidedReviewGateway,
-  GuidedReviewWatchEvent,
+} from './ports/gateways.js'
+export type {
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewerTally,
   VcsAccount,
   VcsGateway,
   VcsIdentityGateway,
-} from './ports/gateways.js'
+} from './ports/vcs.js'
+export type {
+  GuidedReviewGateway,
+  GuidedReviewSessionRef,
+  GuidedReviewWatchEvent,
+} from './ports/guided-review.js'
 export type {
   IntegrationConfigRepository,
   StoredIntegrationConfig,
@@ -56,26 +72,37 @@ export type {
 export type { AttentionBus, RealtimeKind, ScopedAttentionBus } from './ports/realtime.js'
 export { isStoredRowError, StoredRowError } from './ports/stored-row.js'
 export type {
-  AiReviewRunRepository,
   ApiKeyRepository,
-  AttentionRepository,
+  SessionRepository,
+  StoredApiKey,
+  StoredSession,
+} from './ports/auth.js'
+export type {
+  AiReviewRunRepository,
   IdentityRepository,
   IntegrationTokenRepository,
   PersistenceKind,
   ProjectRepository,
   ReminderRepository,
   Repositories,
-  ReviewCommitmentRepository,
   ReviewerRepository,
   ReviewListOrder,
   ReviewRequestRepository,
-  SessionRepository,
-  StoredApiKey,
   StoredIntegrationToken,
-  StoredSession,
 } from './ports/repositories.js'
+export type { ExternalRepositoryRepository } from './ports/external-repositories.js'
+export type { ExternalDirectoryRepository } from './ports/external-directory.js'
+export type { AttentionRepository, ReviewCommitmentRepository } from './ports/attention.js'
+export type {
+  DirectoryDeliveryOutcome,
+  DirectoryMirrorStore,
+  DirectorySyncReport,
+  ExternalDirectoryEntryInput,
+  ExternalRepositoryEntry,
+  RepositoryDirectoryGateway,
+} from './ports/repository-directory.js'
 export type { OrgRepository, PersistenceProvider, TenancyDirectory } from './ports/tenancy.js'
-export type { TeamRepository } from './ports/teams.js'
+export type { TeamPatch, TeamRepository } from './ports/teams.js'
 export type { RoundTripState, StateSigner } from './ports/state.js'
 export { UPSTREAM_TIMEOUT_MS, withDeadline } from './upstream.js'
 export {

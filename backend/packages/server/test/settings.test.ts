@@ -4,6 +4,7 @@ import { UpstreamFailedError } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.js'
 import { WebCryptoSecretCipher } from '../src/crypto/WebCryptoSecretCipher.js'
+import { stubAiReview } from './ai-review-doubles.js'
 import { type TestHarness, buildHarness, del, noMerging, put, stubGateways } from './helpers.js'
 
 // The Configuration screen's API, through the app: the contract validation, the
@@ -67,6 +68,7 @@ describe('integration configuration API', () => {
       'gitlab-pat',
       'slack-bot-token',
       'slack-signing-secret',
+      'gitlab-webhook-secret',
       'cat-factory',
     ])
     expect(await statusOf(harness)).toStrictEqual(status())
@@ -130,7 +132,10 @@ describe('integration configuration API', () => {
     const wired = buildHarness({
       repositories: harness.container.repositories,
       secrets: cipherFor(KEY),
-      gateways: stubGateways({ guidedReview: () => ({}) as GuidedReviewGateway }),
+      gateways: stubGateways({
+        aiReview: () => stubAiReview(),
+        guidedReview: () => ({}) as GuidedReviewGateway,
+      }),
     })
     expect(await statusOf(wired)).toMatchObject({ state: 'stored', inUse: false })
 
@@ -141,9 +146,10 @@ describe('integration configuration API', () => {
         pipelineId: null,
       }),
     )
+    // Ready with no service id: a review goes under its repository's own service.
     expect(await saved.json()).toMatchObject({
       config: { baseUrl: 'http://localhost:8787' },
-      aiReviewReady: false,
+      aiReviewReady: true,
       guidedReviewReady: true,
     })
     expect(await statusOf(wired)).toMatchObject({ state: 'stored', inUse: true })
@@ -208,6 +214,7 @@ describe('integration configuration API', () => {
       sealed: 'v1.',
       hint: '5b4a',
       subject: null,
+      subjectIsBot: false,
       updatedAt: harness.clock.now(),
     })
     expect(await statusOf(harness)).toMatchObject({
@@ -282,18 +289,21 @@ describe('a pasted GitHub credential', () => {
       secrets: cipherFor(KEY),
       gateways: stubGateways({
         vcsFromToken: () => ({
-          requestReviewers: async () => {},
+          requestReviewers: async () => [],
           removeRequestedReviewers: async () => {},
+          pendingReviewers: async () => [],
           comment: async () => {},
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
           lookupRepositories: async () => null,
+          pastReviewers: async () => [],
           ...noMerging(),
           identify: async () => ({
             subject: '4249249',
             username: 'kibertoad',
             displayName: null,
             avatarUrl: null,
+            bot: false,
           }),
         }),
       }),
@@ -313,12 +323,14 @@ describe('a pasted GitHub credential', () => {
       secrets: cipherFor(KEY),
       gateways: stubGateways({
         vcsFromToken: () => ({
-          requestReviewers: async () => {},
+          requestReviewers: async () => [],
           removeRequestedReviewers: async () => {},
+          pendingReviewers: async () => [],
           comment: async () => {},
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
           lookupRepositories: async () => null,
+          pastReviewers: async () => [],
           ...noMerging(),
           identify: () => Promise.reject(refused),
         }),

@@ -3,7 +3,9 @@ import {
   clearCatFactoryConfigContract,
   disconnectVcsSignInContract,
   getConnectionsContract,
+  getSlackAppManifestContract,
   setCatFactoryConfigContract,
+  syncCatFactoryRepositoriesContract,
   startGitHubAppInstallContract,
   startVcsSignInContract,
 } from '@sainte-beuve/contracts'
@@ -15,6 +17,7 @@ import { writeFlowCookie } from '../auth/cookies.js'
 import { requireAdmin } from '../auth/principal.js'
 import { CatFactoryConnectionService } from './CatFactoryConnectionService.js'
 import { ConnectionsService } from './ConnectionsService.js'
+import { slackManifest } from './slackManifest.js'
 
 /**
  * The connection API behind the Configuration screen's host and Slack cards.
@@ -70,6 +73,11 @@ export function connectionsController(): Hono<AppEnv> {
     return c.json(await service.read(), 200)
   })
 
+  buildHonoRoute(app, getSlackAppManifestContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
+    return c.json(await slackManifest(c.get('container')), 200)
+  })
+
   mountCatFactory(app)
   return app
 }
@@ -84,6 +92,12 @@ function mountCatFactory(app: Hono<AppEnv>): void {
   buildHonoRoute(app, clearCatFactoryConfigContract, async (c) => {
     await requireAdmin(c, NOT_AN_ADMIN)
     return c.json(await new CatFactoryConnectionService(c.get('container')).clear(), 200)
+  })
+
+  buildHonoRoute(app, syncCatFactoryRepositoriesContract, async (c) => {
+    await requireAdmin(c, NOT_AN_ADMIN)
+    const service = new CatFactoryConnectionService(c.get('container'))
+    return c.json(await service.syncRepositories(), 200)
   })
 
   // Admin-only like the rest: it spends the org's stored key on a call out.

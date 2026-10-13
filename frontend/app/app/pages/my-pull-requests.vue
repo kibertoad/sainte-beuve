@@ -318,6 +318,12 @@ function offersComments(pr: MyPullRequest): boolean {
                 :pull-request="pr.pullRequest"
                 @linked="refreshAfterLink"
               />
+              <AiReviewButton
+                v-if="pr.projectId !== null"
+                :pull-request="pr.pullRequest"
+                :title="pr.title"
+                :author-login="pr.authorLogin"
+              />
               <UButton
                 :to="safeHref(pr.pullRequest.url)"
                 target="_blank"

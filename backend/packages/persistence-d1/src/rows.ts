@@ -9,8 +9,8 @@ import type { SqlParam, SqlRow } from './driver.js'
  * THE PAYLOAD IS THE ROW. Every table stores the contract object as JSON in one
  * `data` column, and the scalar columns beside it are indexes derived from that
  * payload at write time: a status a filter reads, a `due_at` the reminder tick
- * scans, the `(owner, repo, number)` a webhook replay looks a review up by. A
- * read decodes the payload and ignores them.
+ * scans, the `pull_request_key` a webhook replay looks a review up by. A read
+ * decodes the payload and ignores them.
  *
  * That is a deliberate trade, and it is the shape the ports asked for. They are
  * coarse by design (`listDue`, not a query builder), so the columns a store has

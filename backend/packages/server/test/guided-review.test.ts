@@ -18,6 +18,14 @@ import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
  */
 const BASE = '/api/v1/guided-reviews'
 
+/** The pull request every session of the registered repository is about, as a session call names it. */
+const PR = '?provider=github&owner=kibertoad&repo=sainte-beuve&number=7'
+
+/** A session route, naming the registered repository's pull request #7. */
+function at(path: string): string {
+  return `${BASE}/${path}${PR}`
+}
+
 function sessionView(sessionId: string, repo: string): GuidedReviewSessionView {
   return {
     session: {
@@ -57,6 +65,8 @@ function threadView(sessionId: string): GuidedReviewThreadView {
 
 interface StubGuidedReview extends GuidedReviewGateway {
   calls: string[]
+  /** The directory keys each call was handed, sorted. */
+  keys: string[][]
   /** What the next `watch` yields, in order. */
   frames: GuidedReviewWatchEvent[]
 }
@@ -77,20 +87,32 @@ function stubGuidedReview(): StubGuidedReview {
     calls.push(call)
     return Promise.resolve(answer)
   }
+  const keys: string[][] = []
+  const seen = (directoryKeys: readonly string[]) => keys.push([...directoryKeys].sort())
   const stub: StubGuidedReview = {
     calls,
+    keys,
     frames: [],
-    async *watch(sessionId) {
+    async *watch({ sessionId }) {
       calls.push(`watch ${sessionId}`)
       yield* stub.frames
     },
-    find: (target: GuidedReviewTarget) => record(`find ${target.repo}`, null),
-    open: (target) => record(`open ${target.repo}#${target.number}`, read('grs-ours')),
-    get: (sessionId) => record(`get ${sessionId}`, read(sessionId)),
-    refresh: (sessionId) => record(`refresh ${sessionId}`, read(sessionId)),
-    openThread: (sessionId) => record(`openThread ${sessionId}`, threadView(sessionId)),
-    getThread: (sessionId) => record(`getThread ${sessionId}`, threadView(sessionId)),
-    ask: (sessionId) => {
+    find: (target: GuidedReviewTarget, directoryKeys) => {
+      seen(directoryKeys)
+      return record(`find ${target.repo}`, null)
+    },
+    open: (target, directoryKeys) => {
+      seen(directoryKeys)
+      return record(`open ${target.repo}#${target.number}`, read('grs-ours'))
+    },
+    get: ({ sessionId, directoryKeys }) => {
+      seen(directoryKeys)
+      return record(`get ${sessionId}`, read(sessionId))
+    },
+    refresh: ({ sessionId }) => record(`refresh ${sessionId}`, read(sessionId)),
+    openThread: ({ sessionId }) => record(`openThread ${sessionId}`, threadView(sessionId)),
+    getThread: ({ sessionId }) => record(`getThread ${sessionId}`, threadView(sessionId)),
+    ask: ({ sessionId }) => {
       calls.push(`ask ${sessionId}`)
       return Promise.reject(
         new ConflictError('cat-factory would not ask', {
@@ -99,11 +121,11 @@ function stubGuidedReview(): StubGuidedReview {
         }),
       )
     },
-    requestDrafts: (sessionId) => {
+    requestDrafts: ({ sessionId }) => {
       calls.push(`requestDrafts ${sessionId}`)
       return Promise.reject(new Error('not exercised'))
     },
-    editDraft: (sessionId, draftId) => {
+    editDraft: ({ sessionId }, draftId) => {
       calls.push(`editDraft ${sessionId} ${draftId}`)
       return Promise.reject(
         new ConflictError('cat-factory would not edit', {
@@ -112,7 +134,7 @@ function stubGuidedReview(): StubGuidedReview {
         }),
       )
     },
-    postDrafts: (sessionId, input) =>
+    postDrafts: ({ sessionId }, input) =>
       record(`postDrafts ${sessionId} ${input.draftIds.join(',')}`, {
         drafts: [],
         posted: input.draftIds.length,
@@ -169,18 +191,16 @@ describe('guided review', () => {
   })
 
   it('answers a lookup that finds nothing with a null session', async () => {
-    const res = await harness.app.fetch(
-      get(`${BASE}?provider=github&owner=kibertoad&repo=sainte-beuve&number=7`),
-    )
+    const res = await harness.app.fetch(get(`${BASE}${PR}`))
 
     expect(res.status).toBe(200)
     expect(await res.json()).toStrictEqual({ session: null })
   })
 
   it("reads another org's session as not found, and acts on nothing in it", async () => {
-    const read = await harness.app.fetch(get(`${BASE}/grs-theirs`))
+    const read = await harness.app.fetch(get(at('grs-theirs')))
     const asked = await harness.app.fetch(
-      post(`${BASE}/grs-theirs/threads`, { question: { content: 'What does it do?' } }),
+      post(at('grs-theirs/threads'), { question: { content: 'What does it do?' } }),
     )
 
     expect(read.status).toBe(404)
@@ -202,19 +222,19 @@ describe('guided review', () => {
       createdAt: -1,
     })
 
-    const read = await harness.app.fetch(get(`${BASE}/grs-ours`))
+    const read = await harness.app.fetch(get(at('grs-ours')))
     const opened = await harness.app.fetch(
       post(BASE, { provider: 'github', owner: 'kibertoad', repo: 'sainte-beuve', number: 7 }),
     )
 
     expect(read.status).toBe(404)
     expect(opened.status).toBe(404)
-    expect(catFactory.calls).toStrictEqual(['get grs-ours'])
+    expect(catFactory.calls).toStrictEqual([])
   })
 
   it('opens a thread on a session of its own', async () => {
     const res = await harness.app.fetch(
-      post(`${BASE}/grs-ours/threads`, { question: { content: 'What does it do?' } }),
+      post(at('grs-ours/threads'), { question: { content: 'What does it do?' } }),
     )
 
     expect(res.status).toBe(200)
@@ -223,7 +243,7 @@ describe('guided review', () => {
 
   it("passes cat-factory's reason for a refusal through to the screen", async () => {
     const res = await harness.app.fetch(
-      post(`${BASE}/grs-ours/threads/thr-1/messages`, { content: 'And then?' }),
+      post(at('grs-ours/threads/thr-1/messages'), { content: 'And then?' }),
     )
 
     expect(res.status).toBe(409)
@@ -232,7 +252,7 @@ describe('guided review', () => {
 
   it('posts the named drafts of a session of its own', async () => {
     const res = await harness.app.fetch(
-      post(`${BASE}/grs-ours/comment-drafts/post`, { draftIds: ['drf-1', 'drf-2'] }),
+      post(at('grs-ours/comment-drafts/post'), { draftIds: ['drf-1', 'drf-2'] }),
     )
 
     expect(res.status).toBe(200)
@@ -242,7 +262,7 @@ describe('guided review', () => {
 
   it("posts nothing on another org's pull request", async () => {
     const res = await harness.app.fetch(
-      post(`${BASE}/grs-theirs/comment-drafts/post`, { draftIds: ['drf-1'] }),
+      post(at('grs-theirs/comment-drafts/post'), { draftIds: ['drf-1'] }),
     )
 
     expect(res.status).toBe(404)
@@ -251,7 +271,7 @@ describe('guided review', () => {
 
   it('reports a stale edit as a conflict a screen can name', async () => {
     const res = await harness.app.fetch(
-      patch(`${BASE}/grs-ours/comment-drafts/drf-1`, { rev: 1, body: 'Tighter wording' }),
+      patch(at('grs-ours/comment-drafts/drf-1'), { rev: 1, body: 'Tighter wording' }),
     )
 
     expect(res.status).toBe(409)
@@ -264,7 +284,7 @@ describe('guided review', () => {
       { kind: 'timeout' },
     ]
 
-    const res = await harness.app.fetch(get(`${BASE}/grs-ours/stream`))
+    const res = await harness.app.fetch(get(at('grs-ours/stream')))
     const body = await res.text()
 
     expect(res.status).toBe(200)
@@ -278,24 +298,87 @@ describe('guided review', () => {
   it('relays a deleted session and tells the browser to back off', async () => {
     catFactory.frames = [{ kind: 'deleted' }]
 
-    const body = await (await harness.app.fetch(get(`${BASE}/grs-ours/stream`))).text()
+    const body = await (await harness.app.fetch(get(at('grs-ours/stream')))).text()
 
     expect(body).toContain('"kind":"deleted"')
     expect(body.trimEnd().endsWith('retry: 30000')).toBe(true)
   })
 
   it("streams nothing of another org's session", async () => {
-    const res = await harness.app.fetch(get(`${BASE}/grs-theirs/stream`))
+    const res = await harness.app.fetch(get(at('grs-theirs/stream')))
 
     expect(res.status).toBe(404)
     expect(catFactory.calls).toStrictEqual(['get grs-theirs'])
+  })
+
+  it('refuses a session named with a pull request it is not about, and acts on nothing', async () => {
+    const read = await harness.app.fetch(
+      get(`${BASE}/grs-ours?provider=github&owner=kibertoad&repo=sainte-beuve&number=8`),
+    )
+    const posted = await harness.app.fetch(
+      post(
+        `${BASE}/grs-ours/comment-drafts/post?provider=github&owner=kibertoad&repo=sainte-beuve&number=8`,
+        {
+          draftIds: ['drf-1'],
+        },
+      ),
+    )
+
+    expect(read.status).toBe(404)
+    expect(posted.status).toBe(404)
+    expect(catFactory.calls).toStrictEqual(['get grs-ours', 'get grs-ours'])
+  })
+
+  it('asks cat-factory nothing for a session named with an unregistered repository', async () => {
+    const res = await harness.app.fetch(
+      get(`${BASE}/grs-theirs?provider=github&owner=kibertoad&repo=elsewhere&number=7`),
+    )
+
+    expect(res.status).toBe(404)
+    expect(catFactory.calls).toStrictEqual([])
+  })
+
+  it('refuses a session call that names no pull request', async () => {
+    const res = await harness.app.fetch(get(`${BASE}/grs-ours`))
+
+    expect(res.status).toBe(400)
+    expect(catFactory.calls).toStrictEqual([])
+  })
+
+  /**
+   * Which workspace a call names is the gateway's to read out of a key; what
+   * the service supplies, on every call, is where the org's mirror lists the
+   * pull request's repository.
+   */
+  it("hands the gateway the repository's directory keys, on a lookup and on a call by session id", async () => {
+    const { externalRepositories } = harness.container.repositories
+    const listed = (key: string, repo: string, id: string) => ({
+      source: 'cat-factory',
+      key,
+      seq: 1,
+      repository: { provider: 'github' as const, owner: 'kibertoad', repo, id },
+    })
+    await externalRepositories.apply(listed('ws-a/42', 'sainte-beuve', '42'))
+    await externalRepositories.apply(listed('ws-b/42', 'sainte-beuve', '42'))
+    await externalRepositories.apply(listed('ws-a/43', 'elsewhere', '43'))
+    const target = { provider: 'github', owner: 'kibertoad', repo: 'sainte-beuve', number: 7 }
+
+    await harness.app.fetch(get(`${BASE}${PR}`))
+    await harness.app.fetch(post(BASE, target))
+    await harness.app.fetch(post(at('grs-ours/threads'), { question: { content: 'Why?' } }))
+
+    expect(catFactory.keys).toStrictEqual([
+      ['ws-a/42', 'ws-b/42'],
+      ['ws-a/42', 'ws-b/42'],
+      ['ws-a/42', 'ws-b/42'],
+    ])
   })
 
   it('names the missing configuration when no cat-factory is wired', async () => {
     const bare = buildHarness()
     await registerProject(bare)
 
-    const res = await bare.app.fetch(get(`${BASE}/grs-ours`))
+    const res = await bare.app.fetch(get(at('grs-ours')))
 
     expect(res.status).toBe(503)
     expect(await res.json()).toMatchObject({ error: { message: /`write` scope/ } })

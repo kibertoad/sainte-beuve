@@ -17,6 +17,8 @@ type Resolver = (
 const RESOLVERS: Record<CapabilityName, Resolver> = {
   aiReview: resolveAiReview,
   guidedReview: resolveGuidedReview,
+  repositoryDirectory: async (container, catFactory) =>
+    container.gateways === null ? null : catFactory,
 }
 
 /** Every capability for this container's org, resolved together over one read of its settings. */

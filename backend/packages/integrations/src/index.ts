@@ -19,11 +19,9 @@ export {
 } from './github/client.js'
 export { appTokenSource, type GitHubTokenSource, staticTokenSource } from './github/credentials.js'
 export {
-  type BotVerb,
   botMentionLogin,
   type GitHubDelivery,
   type GitHubEventPayload,
-  type GitHubIntent,
   type GitHubIntentContext,
   type GitHubIssuePayload,
   type GitHubPullRequestPayload,
@@ -50,6 +48,21 @@ export {
 } from './gitlab/GitLabIdentityGateway.js'
 export { type GitLabGatewayOptions, GitLabVcsGateway } from './gitlab/GitLabVcsGateway.js'
 export {
+  type GitLabEventPayload,
+  type GitLabIntentContext,
+  interpretGitLabDelivery,
+} from './gitlab/events.js'
+export { verifyGitLabToken } from './gitlab/webhooks.js'
+export {
+  type BotVerb,
+  type IntakeIntent,
+  type IntakeReview,
+  intentPullRequest,
+  labelIntent,
+  parseMentionCommand,
+  skillsFromLabels,
+} from './intake.js'
+export {
   DEFAULT_SNOOZE_HOURS,
   parseCommandText,
   parseSlackRequest,
@@ -65,6 +78,8 @@ export {
   slackLink,
   type SlackMessage,
 } from './slack/message.js'
+export { attentionAskMessage } from './slack/attentionMessage.js'
+export { SLACK_BOT_SCOPES, slackAppManifest, type SlackManifestInput } from './slack/manifest.js'
 export { postSlackResponse, type SlackResponseMessage } from './slack/respond.js'
 export { SlackChatGateway, type SlackGatewayOptions } from './slack/SlackChatGateway.js'
 export {

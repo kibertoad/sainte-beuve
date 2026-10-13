@@ -1,7 +1,7 @@
 import type { AttentionRequest, AttentionStatus, ReviewCommitment } from '@sainte-beuve/contracts'
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
-import { pullRequestKey } from '@sainte-beuve/kernel'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { ConflictError, insertOrRead, pullRequestKey, writeAtRevision } from '@sainte-beuve/kernel'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
 import { attentionRequests, reviewCommitments } from './schema.js'
@@ -42,15 +42,36 @@ export class PostgresAttentionRepository implements AttentionRepository {
     return request
   }
 
-  async update(
+  async change(
     attentionId: string,
-    patch: Partial<AttentionRequest>,
+    change: (current: AttentionRequest) => Partial<AttentionRequest> | null,
   ): Promise<AttentionRequest | null> {
-    const current = await this.getById(attentionId)
-    if (current === null) return null
-    const next = patched(current, patch)
-    await this.write(next)
-    return next
+    const row = and(eq(attentionRequests.orgId, this.orgId), eq(attentionRequests.id, attentionId))
+    return writeAtRevision({
+      describe: `Attention request ${attentionId}`,
+      read: async () => {
+        const rows = await this.db.select().from(attentionRequests).where(row)
+        const found = firstOr(rows)
+        return found === null ? null : { value: found.data, revision: found.revision }
+      },
+      change: (current) => {
+        const patch = change(current)
+        return patch === null ? null : patched(current, patch)
+      },
+      writeIf: async (next, expected) => {
+        const written = await this.db
+          .update(attentionRequests)
+          .set({
+            status: next.status,
+            createdAt: next.createdAt,
+            data: next,
+            revision: expected + 1,
+          })
+          .where(and(row, eq(attentionRequests.revision, expected)))
+          .returning({ id: attentionRequests.id })
+        return written.length > 0
+      },
+    })
   }
 
   private async write(request: AttentionRequest): Promise<void> {
@@ -61,10 +82,15 @@ export class PostgresAttentionRepository implements AttentionRepository {
       createdAt: request.createdAt,
       data: request,
     }
+    // A create over an existing id moves the revision on as well, so a change
+    // that read the row before it loses its race instead of writing over it.
     await this.db
       .insert(attentionRequests)
       .values(row)
-      .onConflictDoUpdate({ target: [attentionRequests.orgId, attentionRequests.id], set: row })
+      .onConflictDoUpdate({
+        target: [attentionRequests.orgId, attentionRequests.id],
+        set: { ...row, revision: sql`${attentionRequests.revision} + 1` },
+      })
   }
 }
 
@@ -107,11 +133,13 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
           eq(reviewCommitments.pullRequestKey, pullRequestKey(pullRequest)),
         ),
       )
-      .orderBy(asc(reviewCommitments.createdAt), asc(reviewCommitments.id))
     return firstOr(rows)?.data ?? null
   }
 
-  async create(commitment: ReviewCommitment): Promise<ReviewCommitment> {
+  /** `ON CONFLICT DO NOTHING` names no target, so a taken id loses the same way a taken key does. */
+  async createOrGet(
+    commitment: ReviewCommitment,
+  ): Promise<{ commitment: ReviewCommitment; created: boolean }> {
     const row = {
       orgId: this.orgId,
       id: commitment.id,
@@ -120,16 +148,52 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
       createdAt: commitment.createdAt,
       data: commitment,
     }
-    await this.db
-      .insert(reviewCommitments)
-      .values(row)
-      .onConflictDoUpdate({ target: [reviewCommitments.orgId, reviewCommitments.id], set: row })
-    return commitment
+    const { value, created } = await insertOrRead(commitment, {
+      describe: `The commitment of ${commitment.reviewerId} on ${row.pullRequestKey}`,
+      insert: async () => {
+        const inserted = await this.db
+          .insert(reviewCommitments)
+          .values(row)
+          .onConflictDoNothing()
+          .returning({ id: reviewCommitments.id })
+        return firstOr(inserted) !== null
+      },
+      read: () => this.holderOf(commitment),
+    })
+    return { commitment: value, created }
+  }
+
+  /** An UPDATE rather than an insert, so a row released since the read stays gone. */
+  async setRequestedHandle(
+    commitmentId: string,
+    requestedHandle: string | null,
+  ): Promise<ReviewCommitment | null> {
+    const current = await this.getById(commitmentId)
+    if (current === null) return null
+    const next = { ...current, requestedHandle }
+    const updated = await this.db
+      .update(reviewCommitments)
+      .set({ data: next })
+      .where(and(eq(reviewCommitments.orgId, this.orgId), eq(reviewCommitments.id, commitmentId)))
+      .returning({ id: reviewCommitments.id })
+    return firstOr(updated) === null ? null : next
   }
 
   async delete(commitmentId: string): Promise<void> {
     await this.db
       .delete(reviewCommitments)
       .where(and(eq(reviewCommitments.orgId, this.orgId), eq(reviewCommitments.id, commitmentId)))
+  }
+
+  /**
+   * The commitment that holds this one's key. An insert that lost while no row
+   * holds the key lost on the id, which no retry can win.
+   */
+  private async holderOf(commitment: ReviewCommitment): Promise<ReviewCommitment | null> {
+    const held = await this.find(commitment.reviewerId, commitment.pullRequest)
+    if (held !== null || (await this.getById(commitment.id)) === null) return held
+    throw new ConflictError(`Commitment ${commitment.id} is already taken`, {
+      commitmentId: commitment.id,
+    })
   }
 }

@@ -1,5 +1,14 @@
-import type { PublicDecisionList, PublicPrReviewDecision } from '@cat-factory/sdk'
-import type { AiReviewCuration, AiReviewFinding, AiReviewPostReport } from '@sainte-beuve/contracts'
+import type {
+  PublicDecisionList,
+  PublicPrReviewDecision,
+  PublicPrReviewDecisionFindingChallenge,
+} from '@cat-factory/sdk'
+import type {
+  AiReviewCuration,
+  AiReviewFinding,
+  AiReviewFindingChallenge,
+  AiReviewPostReport,
+} from '@sainte-beuve/contracts'
 
 /**
  * cat-factory's parked `pr-review` decision, projected onto the AI-review port.
@@ -9,8 +18,7 @@ import type { AiReviewCuration, AiReviewFinding, AiReviewPostReport } from '@sai
  * model straight through would put a cat-factory version bump on the wire between
  * two halves of sainte-beuve. What is dropped is dropped on purpose: the slice
  * bodies (their titles and paths say nothing a curator acts on, and the counts are
- * what a stall is judged from) and the challenge state, which needs a verb this
- * loop does not offer.
+ * what a stall is judged from).
  */
 
 /**
@@ -36,7 +44,19 @@ function findingsOf(decision: PublicPrReviewDecision): AiReviewFinding[] {
     severity: finding.severity,
     category: finding.category,
     suggestedFix: finding.suggestedFix,
+    challenge: challengeOf(finding.challenge),
   }))
+}
+
+function challengeOf(
+  challenge: PublicPrReviewDecisionFindingChallenge | null,
+): AiReviewFindingChallenge | null {
+  if (challenge === null) return null
+  return {
+    status: challenge.status,
+    question: challenge.question,
+    justification: challenge.justification,
+  }
 }
 
 /** The receipt for the last posting pass, when there has been one. */

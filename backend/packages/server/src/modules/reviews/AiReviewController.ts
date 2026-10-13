@@ -1,15 +1,19 @@
 import {
+  challengeAiReviewFindingContract,
   dismissAiReviewFindingContract,
   getAiReviewRunContract,
   listAiReviewRunsContract,
   requestAiReviewContract,
+  requestPullRequestAiReviewContract,
   resolveAiReviewContract,
   resumeAiReviewContract,
 } from '@sainte-beuve/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { AiReviewCurationService } from './AiReviewCurationService.js'
 import { AiReviewService } from './AiReviewService.js'
+import { requestPullRequestAiReview } from './pullRequestAiReview.js'
 
 /**
  * The AI-review loop: hand a pull request to cat-factory, read what it found,
@@ -31,6 +35,12 @@ export function aiReviewController(): Hono<AppEnv> {
     return c.json(await service.request(reviewId, c.req.valid('json').instructions), 202)
   })
 
+  // The same filing from a row that is not on the board yet: the workspace, My
+  // PRs and My Reviews. The run names the board row it was filed on.
+  buildHonoRoute(app, requestPullRequestAiReviewContract, async (c) => {
+    return c.json(await requestPullRequestAiReview(c.get('container'), c.req.valid('json')), 202)
+  })
+
   buildHonoRoute(app, listAiReviewRunsContract, async (c) => {
     const service = new AiReviewService(c.get('container'))
     const { reviewId } = c.req.valid('param')
@@ -43,22 +53,28 @@ export function aiReviewController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, dismissAiReviewFindingContract, async (c) => {
-    const service = new AiReviewService(c.get('container'))
+    const service = new AiReviewCurationService(c.get('container'))
     const { runId, findingId } = c.req.valid('param')
     return c.json(await service.dismissFinding(runId, findingId), 200)
   })
 
-  // 202 for both of these: cat-factory resolves and resumes ASYNCHRONOUSLY, so
-  // what comes back is the instruction having been accepted rather than the
-  // comments being up. The receipt arrives on a later read, as `postReport`.
+  // 202 for the three below: cat-factory challenges, resolves and resumes
+  // ASYNCHRONOUSLY, so what comes back is the instruction having been accepted
+  // rather than the verdict or the comments. Those arrive on a later read.
+  buildHonoRoute(app, challengeAiReviewFindingContract, async (c) => {
+    const service = new AiReviewCurationService(c.get('container'))
+    const { runId, findingId } = c.req.valid('param')
+    return c.json(await service.challenge(runId, findingId, c.req.valid('json').question), 202)
+  })
+
   buildHonoRoute(app, resolveAiReviewContract, async (c) => {
-    const service = new AiReviewService(c.get('container'))
+    const service = new AiReviewCurationService(c.get('container'))
     const { action, findingIds } = c.req.valid('json')
     return c.json(await service.resolve(c.req.valid('param').runId, { action, findingIds }), 202)
   })
 
   buildHonoRoute(app, resumeAiReviewContract, async (c) => {
-    const service = new AiReviewService(c.get('container'))
+    const service = new AiReviewCurationService(c.get('container'))
     return c.json(await service.resume(c.req.valid('param').runId), 202)
   })
 

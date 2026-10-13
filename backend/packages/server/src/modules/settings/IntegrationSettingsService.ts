@@ -6,7 +6,7 @@ import type {
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import { integrationIdSchema, vcsPatCredentialKey } from '@sainte-beuve/contracts'
-import type { StoredIntegrationToken } from '@sainte-beuve/kernel'
+import type { StoredIntegrationToken, VcsAccount } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { hintOf } from '../../integrations/credentials.js'
@@ -17,6 +17,7 @@ import {
   resolveSlackSigningSecret,
   resolveVcs,
 } from '../../integrations/resolve.js'
+import { RepositorySyncService } from '../projects/RepositorySyncService.js'
 
 /**
  * The credentials a deployment attaches to its integrations, entered in the SPA
@@ -64,6 +65,8 @@ export class IntegrationSettingsService {
 
   async setToken(integrationId: IntegrationId, token: string): Promise<IntegrationTokenStatus> {
     const cipher = requireCapability(this.container.secrets, this.noCipherMessage())
+    await this.releaseDirectory(integrationId)
+    const account = await this.accountOf(integrationId, token)
     const stored = await this.container.repositories.integrationTokens.put({
       integrationId,
       // Sealed AGAINST the integration id: the envelope opens for this row and
@@ -71,7 +74,8 @@ export class IntegrationSettingsService {
       // the wrong gateway authenticates with.
       sealed: await cipher.encrypt(token, integrationId),
       hint: hintOf(token),
-      subject: await this.subjectOf(integrationId, token),
+      subject: account?.username ?? null,
+      subjectIsBot: account?.bot ?? false,
       updatedAt: this.container.clock.now(),
     })
     // Readable by construction: it was sealed by the cipher that just ran. The
@@ -93,8 +97,18 @@ export class IntegrationSettingsService {
    * store surgery.
    */
   async clearToken(integrationId: IntegrationId): Promise<IntegrationTokenStatus> {
+    await this.releaseDirectory(integrationId)
     await this.container.repositories.integrationTokens.delete(integrationId)
     return this.absent(integrationId)
+  }
+
+  /**
+   * A replaced cat-factory key may reach another account, whose directory the
+   * mirrored repositories, the feed cursor and the enrolled webhook are not from.
+   * They go while the old key still opens, so the webhook can be removed with it.
+   */
+  private async releaseDirectory(integrationId: IntegrationId): Promise<void> {
+    if (integrationId === 'cat-factory') await new RepositorySyncService(this.container).forget()
   }
 
   /**
@@ -105,17 +119,20 @@ export class IntegrationSettingsService {
    * write instead of being stored and reported as configured until the next
    * assignment quietly fails.
    *
+   * Whether the account is a bot is kept too: GitLab's intake answers comment
+   * commands only as one (see `resolveGitLabBotUsername`).
+   *
    * Every other credential returns null, because nothing on their ports answers
    * the question. A deployment with no gateway factory (a suite, or a facade that
    * wired no adapters) also returns null rather than refusing the write: the
    * store is the capability being exercised, not the host.
    */
-  private async subjectOf(integrationId: IntegrationId, token: string): Promise<string | null> {
+  private async accountOf(integrationId: IntegrationId, token: string): Promise<VcsAccount | null> {
     const provider = providerOfPat(integrationId)
     const gateway =
       provider === null ? null : (this.container.gateways?.vcsFromToken(provider, token) ?? null)
     if (gateway === null) return null
-    return (await gateway.identify())?.username ?? null
+    return gateway.identify()
   }
 
   private async activeCredentials(): Promise<ActiveCredentials> {
@@ -208,6 +225,9 @@ function inUse(integrationId: IntegrationId, active: ActiveCredentials): boolean
     // whole answer — but only in the default org does the other source exist at
     // all, which is why this is a resolution rather than a row read.
     'slack-signing-secret': active.slackSigning === 'stored',
+    // The only source there is: a stored GitLab webhook secret is the one
+    // every delivery to this org is verified against.
+    'gitlab-webhook-secret': true,
     // There is no other source, so the stored key is in use once its instance
     // is configured too.
     'cat-factory': active.catFactory,

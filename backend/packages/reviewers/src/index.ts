@@ -3,17 +3,19 @@
 // Seven decisions, all pure. Three are over the same candidate list: which
 // reviewer the router picks (`selection`), who an attention request is addressed
 // to (`attention`), and which of a host's open pull requests belong to the person
-// in front of the workspace (`workspace`). They share the skill gate and the
+// in front of the workspace (`workspace`). They share the measure of fit and the
 // handle comparison on purpose, so a ping cannot reach somebody the router would
 // have refused. The fourth is upstream of all of them: whether a host account
 // may become a person in this org at all (`enrolment`). The fifth is downstream:
 // what the BOARD is, once the router has done its work — who is on each review,
 // and which of them somebody should open next (`board`). The last two are about
 // the budget and the board's writes from outside the SPA: whether one more AI
-// review may be filed (`aiAdmission`), and who may change a review from a chat
+// review may be filed (`aiAdmission`) and whether one of its findings may be
+// challenged (`aiChallenge`), and who may change a review from a chat
 // command (`commands`). What merging one of your own pull requests from here
 // may look like (`merging`), and which pull requests are yours to review
-// (`reviewing`).
+// (`reviewing`). Which reviewers and teams an external directory's people and
+// groups are (`directoryPeople`, `directoryTeams`).
 
 export {
   AI_REVIEW_FILING_TIMEOUT_MS,
@@ -22,6 +24,12 @@ export {
   type AiReviewAdmission,
   decideAiReviewAdmission,
 } from './aiAdmission.js'
+export {
+  type AiChallengeAdmission,
+  type ChallengeRun,
+  decideChallengeAdmission,
+  retractedFindingIds,
+} from './aiChallenge.js'
 export { buildBoard, isOverdue, isSettledReview } from './board.js'
 export {
   type ChatActor,
@@ -30,6 +38,15 @@ export {
   type ChatCommandVerb,
   decideChatCommand,
 } from './commands.js'
+export {
+  accountKey,
+  type DirectoryOwnedFields,
+  type DirectoryPeopleInput,
+  type DirectoryPeoplePlan,
+  handleMatchCandidates,
+  planDirectoryPeople,
+} from './directoryPeople.js'
+export { type DirectoryTeamPlan, planDirectoryTeams } from './directoryTeams.js'
 export { decideEnrolment, type EnrolmentDecision, type EnrolmentInput } from './enrolment.js'
 export {
   decideDirectMerge,
@@ -42,7 +59,12 @@ export {
   searchesBeyondProjects,
   unlinkedPullRequests,
 } from './merging.js'
-export { assembleReviewLists, type ReviewLists, type ReviewListsInput } from './reviewing.js'
+export {
+  assembleReviewLists,
+  placeCommitments,
+  type ReviewLists,
+  type ReviewListsInput,
+} from './reviewing.js'
 export {
   decideTeamAction,
   ownerOfNewTeam,
@@ -51,29 +73,77 @@ export {
   type TeamDecision,
 } from './teams.js'
 export {
+  ATTENTION_FIT_FLOOR,
   type AttentionAudienceRule,
+  askedOrAnsweredIds,
   audienceRuleOf,
+  declineRefusal,
+  fitsWanted,
+  hasDeclined,
   isAttentionSatisfied,
   isInAttentionAudience,
-  outstandingCommitments,
   selectAttentionAudience,
+  unaskableReason,
+  wantedOf,
 } from './attention.js'
 export {
+  type RecipientRefusal,
+  type RecipientsInput,
+  type RecipientsResolution,
+  askableRecipients,
+  resolveAttentionRecipients,
+} from './recipients.js'
+export {
+  type AttentionChange,
+  type AttentionPatch,
+  askMoreChange,
+  cancelChange,
+  commitmentChange,
+  declineChange,
+  deliveriesChange,
+  nextToAsk,
+} from './attentionChanges.js'
+export {
+  countPastReviews,
+  familiarityBonus,
+  NO_PAST_REVIEWS,
+  PAST_REVIEW_HALF_POINT,
+  PAST_REVIEW_PREFERENCE,
+  PAST_REVIEW_READ_LIMIT,
+  PAST_REVIEW_STATUSES,
+  PAST_REVIEW_WINDOW_MS,
+  type PastReviewCounts,
+} from './familiarity.js'
+export { type HostReviewTally, pastReviewCounts, type ReviewHistory } from './history.js'
+export {
   diagnoseShortfall,
+  distinctAsSpelled,
   drawWeight,
-  hasAllSkills,
+  excludedFromReview,
+  affinityOf,
   isEligible,
   isSameHandle,
   MATCH_PREFERENCE,
+  matchPreference,
   type MatchTarget,
   matchTargetFor,
   normalizeSkill,
+  reviewersWithHandles,
   type ScoredCandidate,
+  matchesOf,
   scoreCandidate,
   scoreCandidates,
+  type ScoringTarget,
   type SelectionInput,
   type SelectionResult,
   selectReviewers,
+  wantsNothing,
 } from './selection.js'
+export {
+  compareCandidates,
+  rankCandidates,
+  type RankingInput,
+  type RankingResult,
+} from './recommendation.js'
 export { mergeVocabulary, type MergedVocabulary } from './vocabulary.js'
 export { type PartitionedPullRequests, partitionForViewer } from './workspace.js'

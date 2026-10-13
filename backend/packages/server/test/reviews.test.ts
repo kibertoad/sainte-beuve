@@ -65,9 +65,11 @@ describe('review board API', () => {
         vcs: { github: false, gitlab: false },
         aiReview: false,
         guidedReview: false,
+        repositoryDirectory: false,
         secrets: false,
         githubWebhooks: false,
         slackInteractivity: false,
+        gitlabWebhooks: false,
       },
     })
   })
@@ -124,6 +126,21 @@ describe('review board API', () => {
     )
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ error: { code: 'conflict' } })
+  })
+
+  it('tracks a GitLab merge request that shares a tracked GitHub pull request name', async () => {
+    const tracked = await openReview(harness)
+    const onGitLab = {
+      ...PR,
+      provider: 'gitlab',
+      url: `https://gitlab.com/${PR.owner}/${PR.repo}/-/merge_requests/${PR.number}`,
+    }
+    const res = await harness.app.fetch(
+      post('/api/v1/reviews', { pullRequest: onGitLab, title: 'On GitLab', authorLogin: 'author' }),
+    )
+    expect(res.status).toBe(201)
+    const created = (await res.json()) as { id: string }
+    expect(created.id).not.toBe(tracked.id)
   })
 
   it('rejects a payload the contract does not accept', async () => {

@@ -1,4 +1,6 @@
-import type { Reviewer, ShortfallReason } from '@sainte-beuve/contracts'
+import type { Reviewer, ReviewRequest, ShortfallReason, VcsProvider } from '@sainte-beuve/contracts'
+import { handleOf } from '@sainte-beuve/contracts'
+import { type PastReviewCounts, familiarityBonus } from './familiarity.js'
 
 /**
  * Reviewer selection: a load-aware weighted random pick that favours the
@@ -25,6 +27,12 @@ export interface MatchTarget {
   domains: readonly string[]
 }
 
+/** What a candidate is scored against: what the review wants, and who knows its repository. */
+export interface ScoringTarget extends MatchTarget {
+  /** What each candidate already finished on the repository. Required, so no caller skips it. */
+  pastReviews: PastReviewCounts
+}
+
 /**
  * What a review wants: the skills it asked for, or else the ones its repository
  * names, and the repository's domains. A review on a repository nobody
@@ -43,15 +51,21 @@ export function matchTargetFor(
 /** A candidate scored for one review, kept beside the reviewer so a caller can explain a pick. */
 export interface ScoredCandidate {
   reviewer: Reviewer
-  /** How many of the wanted skills this reviewer holds. */
-  matchedSkills: number
-  /** How many of the wanted domains this reviewer knows. */
-  matchedDomains: number
-  /** The reviewer's share of the draw. Higher is likelier; never zero for a candidate. */
+  /** The wanted skills this reviewer holds, as the review spelled them, each once. */
+  matchedSkills: string[]
+  /** The wanted domains this reviewer knows, as the review spelled them, each once. */
+  matchedDomains: string[]
+  /** The share of the wanted skills and domains this reviewer holds, from 0 to 1. */
+  affinity: number
+  /** Reviews this reviewer finished on the pull request's repository. */
+  pastReviews: number
+  /** How much the review prefers this reviewer, before their load and configured weight. */
+  preference: number
+  /** The reviewer's share of the draw: `preference` times `drawWeight`. Never zero for a candidate. */
   weight: number
 }
 
-export interface SelectionInput extends MatchTarget {
+export interface SelectionInput extends ScoringTarget {
   candidates: Reviewer[]
   /** Reviewer ids that must not be picked: the author, anyone already on, the caller's vetoes. */
   excludeReviewerIds: readonly string[]
@@ -89,14 +103,29 @@ export function isSameHandle(left: string | null, right: string | null): boolean
 }
 
 /**
- * Whether a reviewer holds every named skill. The gate an attention request
- * addresses its audience by; review selection scores skills instead. An empty
- * requirement matches everybody.
+ * The reviewers a review rules out of its own pool: whoever is already on it,
+ * and its author. The author is matched on the handle for the pull request's
+ * OWN host, because the same person is spelled differently on each.
  */
-export function hasAllSkills(reviewer: Reviewer, requiredSkills: readonly string[]): boolean {
-  if (requiredSkills.length === 0) return true
-  const owned = new Set(reviewer.skills.map(normalizeSkill))
-  return requiredSkills.every((skill) => owned.has(normalizeSkill(skill)))
+export function excludedFromReview(
+  review: Pick<ReviewRequest, 'pullRequest' | 'authorLogin' | 'assignedReviewerIds'>,
+  candidates: readonly Reviewer[],
+): string[] {
+  return [
+    ...review.assignedReviewerIds,
+    ...reviewersWithHandles(candidates, review.pullRequest.provider, [review.authorLogin]),
+  ]
+}
+
+/** The ids of the reviewers whose handle on `provider` is one of `logins`. */
+export function reviewersWithHandles(
+  candidates: readonly Reviewer[],
+  provider: VcsProvider,
+  logins: readonly string[],
+): string[] {
+  return candidates
+    .filter((r) => logins.some((login) => isSameHandle(handleOf(r.handles, provider), login)))
+    .map((r) => r.id)
 }
 
 /** Whether the router may hand a review to this reviewer at all. */
@@ -122,32 +151,90 @@ function distinct(list: readonly string[]): string[] {
   return [...new Set(list.map(normalizeSkill))]
 }
 
-/** How many of `wanted` appear in `held`, compared case-insensitively. */
-function countHeld(held: readonly string[], wanted: readonly string[]): number {
+/** The entries of a list as first spelled, each once, compared case-insensitively. */
+export function distinctAsSpelled(list: readonly string[]): string[] {
+  const seen = new Set<string>()
+  return list.filter((entry) => {
+    const key = normalizeSkill(entry)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/** The entries of `wanted` that appear in `held`, compared case-insensitively, each once. */
+function heldOf(held: readonly string[], wanted: readonly string[]): string[] {
   const owned = new Set(held.map(normalizeSkill))
-  return distinct(wanted).filter((entry) => owned.has(entry)).length
+  return distinctAsSpelled(wanted).filter((entry) => owned.has(normalizeSkill(entry)))
+}
+
+/**
+ * How much a review prefers a reviewer, whatever their load: one for anybody,
+ * plus the share of the wanted mix they hold, plus their familiarity with the
+ * repository. The draw multiplies it by `drawWeight` and the recommendations
+ * rank on it, so both favour the same person. `familiarityBonus` stays below
+ * half of `MATCH_PREFERENCE`, so the whole mix outweighs any history.
+ */
+export function matchPreference(affinity: number, pastReviews: number): number {
+  return 1 + MATCH_PREFERENCE * affinity + familiarityBonus(pastReviews)
+}
+
+/** What of a review's wanted skills and domains one reviewer holds: the reason they fit. */
+export function matchesOf(
+  reviewer: Reviewer,
+  target: MatchTarget,
+): Pick<ScoredCandidate, 'matchedSkills' | 'matchedDomains'> {
+  return {
+    matchedSkills: heldOf(reviewer.skills, target.skills),
+    matchedDomains: heldOf(reviewer.domains, target.domains),
+  }
 }
 
 /**
  * Skills and domains count alike: the mix is one list of what the review
  * wants, and the affinity is the share of it the reviewer holds.
  */
-export function scoreCandidate(reviewer: Reviewer, target: MatchTarget): ScoredCandidate {
-  const matchedSkills = countHeld(reviewer.skills, target.skills)
-  const matchedDomains = countHeld(reviewer.domains, target.domains)
-  const wanted = distinct(target.skills).length + distinct(target.domains).length
-  const affinity = wanted === 0 ? 0 : (matchedSkills + matchedDomains) / wanted
+export function scoreCandidate(reviewer: Reviewer, target: ScoringTarget): ScoredCandidate {
+  const matches = matchesOf(reviewer, target)
+  const affinity = shareHeld(matches, target)
+  const pastReviews = target.pastReviews.get(reviewer.id) ?? 0
+  const preference = matchPreference(affinity, pastReviews)
   return {
     reviewer,
-    matchedSkills,
-    matchedDomains,
-    weight: drawWeight(reviewer) * (1 + MATCH_PREFERENCE * affinity),
+    ...matches,
+    affinity,
+    pastReviews,
+    preference,
+    weight: drawWeight(reviewer) * preference,
   }
+}
+
+/**
+ * The share of what a review wants that this reviewer holds, from 0 to 1: the
+ * affinity the draw and the ranking prefer by and an ask is gated on. A review
+ * that wants nothing in particular is held by nobody, so the share is 0.
+ */
+export function affinityOf(reviewer: Reviewer, target: MatchTarget): number {
+  return shareHeld(matchesOf(reviewer, target), target)
+}
+
+/** Whether a review wants anything in particular at all. */
+export function wantsNothing(target: MatchTarget): boolean {
+  return target.skills.length === 0 && target.domains.length === 0
+}
+
+function shareHeld(
+  matches: Pick<ScoredCandidate, 'matchedSkills' | 'matchedDomains'>,
+  target: MatchTarget,
+): number {
+  const wanted = distinct(target.skills).length + distinct(target.domains).length
+  if (wanted === 0) return 0
+  return (matches.matchedSkills.length + matches.matchedDomains.length) / wanted
 }
 
 export function scoreCandidates(
   candidates: readonly Reviewer[],
-  target: MatchTarget,
+  target: ScoringTarget,
   excludeReviewerIds: readonly string[],
 ): ScoredCandidate[] {
   const excluded = new Set(excludeReviewerIds)

@@ -24,6 +24,40 @@ import { projectRefSchema, repoOwnerSchema, vcsProviderSchema, webUrlSchema } fr
  */
 export const DEFAULT_PROJECT_SKILLS: readonly string[] = ['Backend', 'Frontend'] as const
 
+/**
+ * Which external source a project came from, and the repository's id there.
+ * The id is the host's own, so it survives a rename where owner and repo do not.
+ */
+export const externalRepositoryRefSchema = v.object({
+  /** The system the list is synchronised from, `cat-factory` for one. */
+  source: v.pipe(v.string(), v.minLength(1), v.maxLength(64)),
+  id: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+})
+export type ExternalRepositoryRef = v.InferOutput<typeof externalRepositoryRefSchema>
+
+/**
+ * One repository as an external source lists it, held so a synchronisation can
+ * tell what changed. `key` is the source's own stable key for the entry (one
+ * repository can be listed more than once, under different keys), and `seq` is
+ * its ordering position: a state with a lower `seq` than the held one is older.
+ * `repository` is null once the source dropped the entry; the row stays, so a
+ * late, older state cannot bring it back.
+ */
+export const externalRepositorySchema = v.object({
+  source: externalRepositoryRefSchema.entries.source,
+  key: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+  seq: v.number(),
+  repository: v.nullable(
+    v.object({
+      provider: vcsProviderSchema,
+      owner: projectRefSchema.entries.owner,
+      repo: projectRefSchema.entries.repo,
+      id: externalRepositoryRefSchema.entries.id,
+    }),
+  ),
+})
+export type ExternalRepository = v.InferOutput<typeof externalRepositorySchema>
+
 export const projectSchema = v.object({
   id: v.string(),
   provider: vcsProviderSchema,
@@ -45,6 +79,11 @@ export const projectSchema = v.object({
    * here, so a merge goes through the bot. An admin may still override it.
    */
   restrictDirectMerge: v.optional(v.boolean(), false),
+  /**
+   * Set on a project that an external system's repository list put here, which
+   * then decides whether it stays. Absent on one an admin registered.
+   */
+  external: v.optional(v.nullable(externalRepositoryRefSchema)),
   createdAt: v.number(),
 })
 export type Project = v.InferOutput<typeof projectSchema>

@@ -3,6 +3,7 @@ import type {
   MyReviewCommitment,
   MyReviewsQuery,
   OpenPullRequest,
+  PlacedCommitment,
   Project,
   ReviewCommitment,
 } from '@sainte-beuve/contracts'
@@ -31,7 +32,9 @@ export interface ReviewLists {
  * A pull request the host asks the viewer to look at again is still in the
  * reviewed search, and it belongs under `requested`, where the next move is
  * theirs. The project read and the search overlap for every registered
- * repository the search can see, so a row is kept once, by its URL.
+ * repository the search can see, so a row is kept once, by its URL. A
+ * commitment requests its reviewer on the host, so a pull request they
+ * committed to is listed under `committed` and not again under `requested`.
  */
 export function assembleReviewLists(input: ReviewListsInput, query: MyReviewsQuery): ReviewLists {
   const projectIdOf = projectIndex(input.projects)
@@ -44,18 +47,34 @@ export function assembleReviewLists(input: ReviewListsInput, query: MyReviewsQue
     projectId: projectIdOf(pr.pullRequest),
   })
 
-  const requested = uniqueByUrl([...input.requestedInProjects, ...input.requestedFound])
+  const committedUrls = new Set(input.commitments.map((c) => c.pullRequest.url))
+  const requested = uniqueByUrl([...input.requestedInProjects, ...input.requestedFound]).filter(
+    (pr) => !committedUrls.has(pr.pullRequest.url),
+  )
   const requestedUrls = new Set(requested.map((pr) => pr.pullRequest.url))
   const reviewed = uniqueByUrl(input.reviewedFound).filter(
     (pr) => !requestedUrls.has(pr.pullRequest.url),
   )
   return {
     requested: byRecency(requested.filter((pr) => inScope(pr.pullRequest))).map(toRow),
-    committed: input.commitments
-      .filter((commitment) => inScope(commitment.pullRequest))
-      .map((commitment) => ({ ...commitment, projectId: projectIdOf(commitment.pullRequest) })),
+    committed: placeCommitments(
+      input.commitments.filter((commitment) => inScope(commitment.pullRequest)),
+      input.projects,
+    ),
     reviewed: byRecency(reviewed.filter((pr) => inScope(pr.pullRequest))).map(toRow),
   }
+}
+
+/** Each commitment with the registered project its repository is in, or null for none. */
+export function placeCommitments(
+  commitments: readonly ReviewCommitment[],
+  projects: readonly Project[],
+): PlacedCommitment[] {
+  const projectIdOf = projectIndex(projects)
+  return commitments.map((commitment) => ({
+    ...commitment,
+    projectId: projectIdOf(commitment.pullRequest),
+  }))
 }
 
 function projectIndex(projects: readonly Project[]) {

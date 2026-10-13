@@ -1,6 +1,12 @@
 import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
-import { aiReviewRunSchema, requestAiReviewSchema, resolveAiReviewSchema } from '../ai-review.js'
+import {
+  aiReviewRunSchema,
+  challengeAiReviewFindingSchema,
+  requestAiReviewSchema,
+  requestPullRequestAiReviewSchema,
+  resolveAiReviewSchema,
+} from '../ai-review.js'
 import { errorResponses, singleStringParam, stringParams } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -24,6 +30,19 @@ export const requestAiReviewContract = defineApiContract({
   requestPathParamsSchema: reviewIdParams,
   pathResolver: ({ reviewId }) => `/reviews/${reviewId}/ai-review`,
   requestBodySchema: requestAiReviewSchema,
+  responsesByStatusCode: { 202: aiReviewRunSchema, ...errorResponses },
+})
+
+/**
+ * File an AI review on a pull request, tracking it on the board first when it
+ * is not there yet. The run that comes back names its board row (`reviewId`),
+ * which is where it is curated. Idempotent on the row, never on the run: each
+ * call is another billed job, under the same limit as every other way to ask.
+ */
+export const requestPullRequestAiReviewContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/ai-review',
+  requestBodySchema: requestPullRequestAiReviewSchema,
   responsesByStatusCode: { 202: aiReviewRunSchema, ...errorResponses },
 })
 
@@ -66,6 +85,23 @@ export const dismissAiReviewFindingContract = defineApiContract({
   pathResolver: ({ runId, findingId }) => `/ai-review/runs/${runId}/findings/${findingId}/dismiss`,
   requestBodySchema: v.object({}),
   responsesByStatusCode: { 200: aiReviewRunSchema, ...errorResponses },
+})
+
+/**
+ * Ask cat-factory's investigator to re-examine one finding.
+ *
+ * 202 for the reason `resolve` is: the investigator runs asynchronously, so
+ * what comes back is the review with the finding `investigating` (and the run
+ * back in flight), and the verdict arrives on a later read. A retracted finding
+ * is unticked by the verdict and never posted.
+ */
+export const challengeAiReviewFindingContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: stringParams('runId', 'findingId'),
+  pathResolver: ({ runId, findingId }) =>
+    `/ai-review/runs/${runId}/findings/${findingId}/challenge`,
+  requestBodySchema: challengeAiReviewFindingSchema,
+  responsesByStatusCode: { 202: aiReviewRunSchema, ...errorResponses },
 })
 
 /**

@@ -17,17 +17,25 @@ and GitLab are where reviews live; Slack is where the nudge arrives; the AI
 review runs on a [cat-factory](https://github.com/kibertoad/cat-factory)
 instance, local or centralized.
 
-Label a pull request `needs-review` and it lands on the board with a reviewer on it.
-Mention the bot in a comment and it answers there. Take the review from a Slack
+Label a pull request or a merge request `needs-review` and it lands on the board
+with a reviewer on it. Mention the bot in a comment and it answers there. Take the review from a Slack
 button, or snooze it with `/review snooze`. How all of that is wired, and what has
 to be registered where, is [docs/integrations.md](./docs/integrations.md).
 
 ## The AI review is a loop, not a button
 
-Press **AI review** on a board row and the pull request goes to cat-factory,
-which fans the diff out across parallel reviewers. It posts nothing. It comes
-back and waits, and the row opens on what it found: each finding with its
-severity, the file and line it is about, and the fix it suggests.
+Press **AI review** on a pull request and it goes to cat-factory, which fans
+the diff out across parallel reviewers. The button is on every board row, and on
+the workspace, My PRs and My Reviews for any repository that is linked. A pull
+request that is not on the board yet is put there, because its board row is
+where the review is curated, and the button takes you to it. It posts nothing.
+It comes back and waits, and the row opens on what it found: each finding with
+its severity, the file and line it is about, and the fix it suggests.
+
+The review is filed under the cat-factory service that backs the pull request's
+repository, in the workspace that links it. A repository no service backs (a
+monorepo, say) goes under the default service the org sets on the Configuration
+screen, and with none set the button says which of the two to fix.
 
 You are the gate. Tick the ones worth saying out loud (the blockers and the highs
 start ticked), **Dismiss** the noise, and then choose:
@@ -39,6 +47,12 @@ start ticked), **Dismiss** the noise, and then choose:
   reviewed branch.
 - **Finish without posting** closes the review having said nothing, which is the
   right answer more often than it sounds.
+
+Not sure a finding is right? **Challenge** it, with your doubt or without one.
+cat-factory sends an investigator back to the source behind that finding, and the
+verdict lands on it: upheld, amended (with the new wording or severity), or
+retracted, which unticks it and keeps it off the pull request. Each finding can
+be challenged once, one at a time, and a review gets five, dismissed ones included.
 
 Posting reports back. If seven comments went out and two bounced, the row says
 which two and why, against the attempt number, and posting again skips what
@@ -88,8 +102,11 @@ There is one guided review per pull request on a deployment, and everybody who
 opens it sees the same threads. Opening the page reads; only **Start a guided
 review** spends model budget. It needs the same cat-factory key as the AI
 review (the `write` scope is enough) and a base URL, both set per org on the
-Configuration screen, but no service id: the repository has to be linked in the
-cat-factory workspace, and registered as a project here.
+Configuration screen, but no service id: the repository has to be linked in a
+cat-factory workspace, which with cat-factory configured is also what registers
+it here (see [docs/integrations.md](./docs/integrations.md)). A key that reaches
+several workspaces works too: the review opens in the workspace that links the
+repository.
 
 ## Asking for attention
 
@@ -99,10 +116,56 @@ which skills (from the project's own vocabulary, `Backend` and `Frontend` until
 a team names its own), how many people you want, and whether the ask should stay
 inside your team.
 
-Everyone available who holds all of those skills is asked, two ways at once. A
-page already open is pushed the request over server-sent events; a page opened
-an hour later fetches the same thing over REST. Neither is a fallback for the
-other, and both carry the same payload.
+The dialog lists the five best matches as you pick, with what each one matched,
+how many reviews they finished in the same repository over the last six months,
+and how many they already have open beside their name. Past reviews are read
+from GitHub or GitLab when a credential for the host is configured (a verdict on
+one of the repository's 100 most recently updated pull requests), and from the
+board's own finished reviews otherwise; each person gets the larger of the two
+counts, since both describe the same history. They are ranked on how much of
+those skills and the repository's domains a person holds, raised for those past
+reviews, and open reviews only order people who rank equally on those: you can
+see the load and weigh it yourself, and a busy expert still outranks an idle
+stranger. Past reviews count with diminishing returns and never outweigh the
+whole wanted mix, so the regular of a repository is preferred without being
+handed every review in it. An automatic assignment draws with the same
+preference, so the list and the router favour the same people. The list is the
+people an ask could reach, so it never names you, the author, anybody already on
+the pull request or paused, and it keeps to your team when the ask does.
+
+Tick people in that list and the ask goes to them by name: exactly those
+people, whatever skills they hold, and each of them sees who else was asked. It
+can wait for no more people than it names. Tick nobody and the ask goes to
+everyone available who holds at least half of what is wanted: the picked skills,
+or the pull request's own when none are picked, and the repository's domains. It
+stays inside your team if you said so, and an ask on a repository that wants
+nothing in particular reaches everybody available. An ask that would reach
+nobody because nobody available holds half of what it wants is refused, so you
+can pick fewer skills or name people instead.
+Either way anybody can still volunteer, because a skill list is not in a
+position to overrule somebody's own judgement of what they can review.
+
+The ask is delivered two ways at once. A page already open is pushed the
+request over server-sent events; a page opened an hour later fetches the same
+thing over REST. Neither is a fallback for the other, and both carry the same
+payload.
+
+A named ask also reaches each recipient who has a Slack id as a DM from the
+org's Slack app: who asks, for which pull request, what of the ask they match,
+and an **I will review it** button that commits exactly as the inbox does. The
+DM follows the ask, so it says when you committed and closes when the ask is
+answered or withdrawn, rather than leave a button on an ask that is over. An ask
+nobody was named on is not sent as DMs, since it can reach the whole pool.
+
+Anybody an ask reached can say **Not me**, in the inbox (with an optional
+reason) or on the DM. The ask leaves their inbox and the requester sees who
+passed and why, so a no is never mistaken for an unread ask. When declines leave
+a named ask with fewer people to answer than it still waits for, it moves on to
+the next best match from the same ranking the dialog showed, skipping everyone
+already asked and the pull request's author. It does that by itself when you
+left **If somebody declines, ask the next best match** ticked. Otherwise you get
+a DM saying the ask is short, and **Ask the next best match** in your inbox asks
+them. Somebody who declined and then volunteers after all is simply committed.
 
 The ask ANSWERS ITSELF. Once enough people have said they will review, it is
 resolved and disappears from everybody's inbox, including the people who never
@@ -147,11 +210,15 @@ A GitHub App needs `Contents: Read & write` to merge.
 opened that you have a part in. It lists three things:
 
 - **Asked to review**: the host is waiting on your review. "I will review it"
-  records a commitment.
-- **Committed to reviewing**: the promises you made here, whether or not the host
-  knows about them.
+  records a commitment, which moves the pull request to the next list.
+- **Committed to reviewing**: the promises you made here.
 - **Reviewed**: still open, and you have reviewed them. One the host asks you to
   look at again moves back up to the first list.
+
+A commitment, made here or by answering an ask, requests your review on the
+host, so the pull request shows who took it. Releasing it takes that request
+back only if the commitment made it and you have not reviewed yet: a request the
+author or a board assignment made stays where it was.
 
 Like My PRs, it covers every repository the host search can see, and **Linked
 repositories only** narrows it to the registered projects. On GitLab, which keeps
@@ -164,15 +231,23 @@ can be asked, what they know, and how much they should take.
 
 A person carries a handle PER HOST, and the screen shows both, because a reviewer
 with no handle on the host a project lives on is invisible in that project's
-workspace and this is the only place that says so. Skills are an ALL-of gate: a
-review that needs `payments` is never handed to somebody who merely knows
-`typescript`, so a partial match is not a near miss, it is not a candidate.
+workspace and this is the only place that says so. Skills and domains are
+matched one way everywhere: the share of what a review wants that a person
+holds. The ranking sorts on it, the board's draw favours it without excluding
+anybody, and an ask nobody was named on reaches whoever holds at least half.
 Weight is the share of the load, for somebody part-time or ramping up.
 
 Going heads-down is one click: **Pause** takes somebody out of every selection and
 keeps their row, so they come back as themselves rather than being retyped. There
 is no delete, for the same reason and one more: the row is what a review's
 assignment and a signed-in host account point at.
+
+With cat-factory configured, the pool follows its directory: every member of the
+account is a reviewer, matched on their GitHub or GitLab account, and every
+workspace is a team. Somebody it adds joins paused, until an admin gives them
+skills and resumes them. Their name, handles and team are then set in cat-factory;
+skills, domains, weight and availability stay here. See
+[docs/integrations.md](./docs/integrations.md).
 
 ## Try it in one command
 
@@ -244,7 +319,8 @@ the strongest one present is what calls are made with.
 GitLab has the same order minus the App, which it has no equivalent of: a
 sign-in, then a pasted token, then `GITLAB_TOKEN`. One `GITLAB_BASE_URL`
 configures a self-managed install, because GitLab serves its API and its OAuth
-endpoints under the same root.
+endpoints under the same root. GitLab's webhook belongs to an org, like Slack's
+app: it posts to `/webhooks/gitlab/<org>` with the secret token that org stored.
 
 Slack needs a bot token to post, and separately a signing secret to trust the
 `/review` command and the message buttons coming back. Both belong to an ORG

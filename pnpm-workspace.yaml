@@ -52,7 +52,9 @@ minimumReleaseAge: 1440
 
 # The exceptions, and they are not a convenience. `@cat-factory/sdk` is generated
 # from cat-factory's own OpenAPI spec, and `@cat-factory/contracts` holds the
-# schemas that spec is generated from. `@toad-contracts/*` is the contract layer
+# schemas that spec is generated from, and `@cat-factory/webhooks` verifies the
+# deliveries that spec describes, and `@cat-factory/directory-sync` is the client
+# loop over the directory part of it. `@toad-contracts/*` is the contract layer
 # both sides of this repo are built on, and a fix to it is usually made for this
 # repo. All of them are published out of repositories this one's maintainers own,
 # so there is no third party between the source and the package for the window
@@ -61,5 +63,7 @@ minimumReleaseAge: 1440
 # a facade comes to hand-write a path the spec already describes.
 minimumReleaseAgeExclude:
   - '@cat-factory/contracts'
+  - '@cat-factory/directory-sync'
   - '@cat-factory/sdk'
+  - '@cat-factory/webhooks'
   - '@toad-contracts/*'

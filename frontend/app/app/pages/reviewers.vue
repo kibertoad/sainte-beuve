@@ -38,6 +38,13 @@ const { skills: knownSkills, domains: knownDomains } = useKnownVocabulary({
   domains: () => reviewers.value.flatMap((reviewer) => reviewer.domains),
 })
 const { busy, run } = useApiAction({ refresh })
+const capabilities = useCapabilities()
+const toast = useToast()
+
+/** Whether cat-factory owns this reviewer's name, handles and team right now. */
+function managed(reviewer: Reviewer): boolean {
+  return capabilities.confirmed('repositoryDirectory') && reviewer.external != null
+}
 
 /** Whether the add form is open, and which row is being edited. Never both. */
 const adding = ref(false)
@@ -45,6 +52,9 @@ const adding = ref(false)
 // snapshot is what a save is diffed against, so a field this form never touched is
 // never sent, whatever has happened to the row in the meantime.
 const editing = ref<Reviewer | null>(null)
+// The teams a followed reviewer may be put in, which are their cat-factory
+// workspaces' rather than every team. Null while the form offers every team.
+const editingTeams = ref<string[] | null>(null)
 
 // Let go of an edit target the list no longer holds. A refresh that fails leaves
 // `reviewers` empty, which unmounts the open form along with the Cancel button that
@@ -62,8 +72,21 @@ function startAdding() {
   adding.value = true
 }
 
-function startEditing(reviewer: Reviewer) {
+async function startEditing(reviewer: Reviewer) {
   adding.value = false
+  editingTeams.value = null
+  if (managed(reviewer)) {
+    try {
+      editingTeams.value = (await api.reviewerTeamChoices(reviewer.id)).teams
+    } catch (err) {
+      toast.add({
+        color: 'error',
+        title: 'Could not read their teams',
+        description: apiErrorMessage(err),
+      })
+      return
+    }
+  }
   editing.value = reviewer
 }
 
@@ -165,10 +188,11 @@ function togglePause(reviewer: Reviewer) {
           <p class="font-medium mb-4">Editing {{ reviewer.displayName }}</p>
           <!-- Seeded from the snapshot, which is also what the save is diffed against. -->
           <ReviewerForm
-            :teams="teams"
+            :teams="editingTeams ?? teams"
             :known-skills="knownSkills"
             :known-domains="knownDomains"
             :reviewer="editing"
+            :managed="managed(reviewer)"
             :busy="busy === reviewer.id"
             submit-label="Save"
             @submit="save"
@@ -181,7 +205,12 @@ function togglePause(reviewer: Reviewer) {
           class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
         >
           <div class="min-w-0">
-            <p class="font-medium">{{ reviewer.displayName }}</p>
+            <p class="flex flex-wrap items-center gap-2 font-medium">
+              {{ reviewer.displayName }}
+              <UBadge v-if="managed(reviewer)" variant="outline" color="neutral" size="sm">
+                cat-factory
+              </UBadge>
+            </p>
             <p class="text-sm text-muted">
               {{ handles(reviewer) }}
               <template v-if="reviewer.team"> &middot; {{ reviewer.team }}</template>
