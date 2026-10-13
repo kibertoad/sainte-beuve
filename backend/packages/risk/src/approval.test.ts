@@ -148,4 +148,13 @@ describe('aiReviewOutcome', () => {
   it('blocks on a review that failed', () => {
     expect(aiReviewOutcome({ status: 'failed', curation: null }, 'medium')).toBe('blocked')
   })
+
+  it('blocks on a review a person completed by posting its findings', () => {
+    const { curation } = parked([finding('high')])
+    expect(aiReviewOutcome({ status: 'completed', curation }, 'medium')).toBe('blocked')
+  })
+
+  it('is clean when a review completed without findings', () => {
+    expect(aiReviewOutcome({ status: 'completed', curation: null }, 'medium')).toBe('clean')
+  })
 })

@@ -2,7 +2,8 @@ import type { ChangeClass } from '@sainte-beuve/contracts'
 
 // The same rules as cat-factory's `classifyChangedFiles` (its kernel,
 // `domain/change-class.ts`), so a pull request is one class whichever of the two
-// assessed it. A rule changed there is changed here.
+// assessed it. A rule changed there is changed here. It is stricter in one place:
+// a source file named like a doc (`notice.ts`) and `CODEOWNERS` are never docs.
 
 /** Higher is riskier; a mixed diff takes the highest rank present. */
 export const CHANGE_CLASS_RANK: Record<ChangeClass, number> = {
@@ -65,7 +66,6 @@ const DOC_BASENAMES: readonly string[] = [
   'contributing',
   'authors',
   'notice',
-  'codeowners',
 ]
 
 const CONFIG_BASENAMES: readonly string[] = [
@@ -92,6 +92,8 @@ const CONFIG_BASENAMES: readonly string[] = [
   'wrangler.jsonc',
   'pnpm-workspace.yaml',
   'lefthook.yml',
+  // Who must review is access control, not prose.
+  'codeowners',
 ]
 
 const CONFIG_SEGMENTS: readonly string[] = [
@@ -180,13 +182,12 @@ function isTest(lower: string): boolean {
 
 function isDocs(lower: string, base: string, isSource: boolean): boolean {
   if (DOC_EXTENSIONS.some((ext) => base.endsWith(ext))) return true
-  if (DOC_BASENAMES.includes(base.replace(/\.[^.]+$/, ''))) return true
+  if (!isSource && DOC_BASENAMES.includes(base.replace(/\.[^.]+$/, ''))) return true
   if (!isSource && hasSegment(lower, DOC_SEGMENTS)) return true
   return /(^|\/)(i18n|locales|lang|translations)\/.*\.(json|ya?ml)$/.test(lower)
 }
 
-function isConfig(lower: string, base: string, isSource: boolean): boolean {
-  if (CONFIG_BASENAMES.includes(base)) return true
+function isConfig(lower: string, isSource: boolean): boolean {
   if (!isSource && hasSegment(lower, CONFIG_SEGMENTS)) return true
   if (/(^|\/)(tsconfig|jsconfig)[^/]*\.json$/.test(lower)) return true
   if (/(^|\/)\.?(oxlintrc|eslintrc|prettierrc|babelrc|swcrc)[^/]*$/.test(lower)) return true
@@ -200,9 +201,10 @@ export function classifyChangedPath(path: string): Exclude<ChangeClass, 'unknown
   if (isSchema(lower)) return 'schema'
   if (isTest(lower)) return 'test'
   if (DEPENDENCY_BASENAMES.includes(base)) return 'dependency'
+  if (CONFIG_BASENAMES.includes(base)) return 'config'
   const isSource = SOURCE_EXTENSIONS.some((ext) => lower.endsWith(ext))
   if (isDocs(lower, base, isSource)) return 'docs'
-  if (isConfig(lower, base, isSource)) return 'config'
+  if (isConfig(lower, isSource)) return 'config'
   return 'source'
 }
 

@@ -91,15 +91,17 @@ export function blockingFindings(
  * What an AI review run means for approval: null while it is still working,
  * `clean` when it settled with nothing at the threshold, `blocked` otherwise.
  * A run that failed or was cancelled blocks, since nobody vouched for the code.
+ * A completed run is judged by its findings too: a person may have curated and
+ * posted them before this looked.
  */
 export function aiReviewOutcome(
   run: Pick<AiReviewRun, 'status' | 'curation'>,
   threshold: AiReviewSeverity,
 ): 'clean' | 'blocked' | null {
   if (run.status === 'failed' || run.status === 'cancelled') return 'blocked'
-  if (run.status === 'completed') return 'clean'
-  if (run.status !== 'awaiting_selection' || run.curation?.status !== 'awaiting_selection') {
-    return null
-  }
+  const settled =
+    run.status === 'completed' ||
+    (run.status === 'awaiting_selection' && run.curation?.status === 'awaiting_selection')
+  if (!settled) return null
   return blockingFindings(run.curation, threshold).length === 0 ? 'clean' : 'blocked'
 }

@@ -21,6 +21,12 @@ describe('classifyChangedPath', () => {
     expect(classifyChangedPath('docs/scripts/build.ts')).toBe('source')
     expect(classifyChangedPath('deploy/node/src/main.ts')).toBe('source')
   })
+
+  it('never reads code named like a doc, or CODEOWNERS, as docs', () => {
+    expect(classifyChangedPath('src/notice.ts')).toBe('source')
+    expect(classifyChangedPath('.github/CODEOWNERS')).toBe('config')
+    expect(classifyChangedPath('docs/CODEOWNERS')).toBe('config')
+  })
 })
 
 describe('classifyChangedFiles', () => {

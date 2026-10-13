@@ -53,7 +53,8 @@ describe('assessChangedFiles', () => {
   })
 
   it('scores a truncated listing as maximal', () => {
-    const { scores, rationale } = assessChangedFiles([file('README.md')], true)
+    const { changeClass, scores, rationale } = assessChangedFiles([file('README.md')], true)
+    expect(changeClass).toBe('unknown')
     expect(scores).toEqual({ complexity: 1, risk: 1, impact: 1 })
     expect(rationale).toContain('only part')
   })

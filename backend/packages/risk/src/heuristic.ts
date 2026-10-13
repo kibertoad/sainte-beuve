@@ -120,6 +120,7 @@ export interface HeuristicAssessment {
 /**
  * Score a pull request from the files it changed. A list the host cut short
  * scores as maximal on every axis, since what was not read cannot be vouched for.
+ * Its class is `unknown` too, so no class rule can approve the part nobody read.
  */
 export function assessChangedFiles(
   files: readonly ChangedFile[],
@@ -129,7 +130,7 @@ export function assessChangedFiles(
   if (truncated || fileCount === 0) {
     const why = truncated ? 'the host listed only part of the diff' : 'no changed files were listed'
     return {
-      changeClass: truncated ? changeClass : 'unknown',
+      changeClass: 'unknown',
       changedFileCount: fileCount,
       scores: { complexity: 1, risk: 1, impact: 1 },
       rationale: `Scored as maximal because ${why}.`,
