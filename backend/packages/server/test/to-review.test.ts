@@ -69,10 +69,10 @@ describe('PRs to review', () => {
           openPullRequestReviews: async (project) =>
             project.repo === 'api'
               ? [
-                  { number: 1, reviewerLogins: [] },
-                  { number: 2, reviewerLogins: [] },
-                  { number: 3, reviewerLogins: ['carol'] },
-                  { number: 4, reviewerLogins: [] },
+                  { number: 1, reviewerLogins: [], awaitingLogins: [] },
+                  { number: 2, reviewerLogins: [], awaitingLogins: [] },
+                  { number: 3, reviewerLogins: ['carol'], awaitingLogins: [] },
+                  { number: 4, reviewerLogins: [], awaitingLogins: [] },
                 ]
               : [],
           pastActivity: async () => ({

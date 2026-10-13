@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   FIT_WEIGHT,
   NEGLECT_WEIGHT,
+  type OpenReviews,
   type RepositoryToReview,
   rankPullRequestsToReview,
   scoreOf,
@@ -67,11 +68,15 @@ function repository(overrides: Partial<RepositoryToReview> = {}): RepositoryToRe
   return {
     project: project(),
     pullRequests,
-    reviewers: new Map(pullRequests.map((row) => [row.pullRequest.number, []])),
+    reviews: new Map(pullRequests.map((row) => [row.pullRequest.number, reviewed()])),
     pastReviews: 0,
     authored: 0,
     ...overrides,
   }
+}
+
+function reviewed(reviewerLogins: string[] = [], awaitingLogins: string[] = []): OpenReviews {
+  return { reviewerLogins, awaitingLogins }
 }
 
 function commitment(number: number, reviewerId: string, createdAt = NOW): ReviewCommitment {
@@ -131,9 +136,9 @@ describe('rankPullRequestsToReview', () => {
     const rows = rank([
       repository({
         pullRequests: [old, pr(2)],
-        reviewers: new Map([
-          [1, ['alice']],
-          [2, []],
+        reviews: new Map([
+          [1, reviewed(['alice'])],
+          [2, reviewed()],
         ]),
       }),
     ])
@@ -142,7 +147,7 @@ describe('rankPullRequestsToReview', () => {
   })
 
   it('does not call a pull request unreviewed when its reviews were not read', () => {
-    const rows = rank([repository({ reviewers: new Map() })])
+    const rows = rank([repository({ reviews: new Map() })])
     expect(rows[0]?.reasons).toMatchObject({ unreviewedForMs: null, reviewerLogins: [] })
   })
 
@@ -173,15 +178,43 @@ describe('rankPullRequestsToReview', () => {
           pr(4, { requestedReviewerLogins: ['kibertoad'] }),
           pr(5),
         ],
-        reviewers: new Map([
-          [3, ['kibertoad']],
-          [4, ['kibertoad']],
-          [5, []],
+        reviews: new Map([
+          [3, reviewed(['kibertoad'])],
+          [4, reviewed(['kibertoad'], ['kibertoad'])],
+          [5, reviewed()],
         ]),
       }),
     ])
     expect(numbers(rows).sort()).toStrictEqual([4, 5])
     expect(rows.find((row) => row.pullRequest.number === 4)?.reasons.requested).toBe(true)
+  })
+
+  it('takes who the host is waiting on from the reviews, not the listing', () => {
+    // GitLab keeps a reviewer listed after they approve.
+    const listed = { requestedReviewerLogins: ['kibertoad'] }
+    const rows = rank([
+      repository({
+        pullRequests: [pr(1, listed), pr(2, listed), pr(3)],
+        reviews: new Map([
+          [1, reviewed(['kibertoad'])],
+          [2, reviewed([], [])],
+          [3, reviewed([], ['kibertoad'])],
+        ]),
+      }),
+    ])
+    expect(numbers(rows).sort()).toStrictEqual([2, 3])
+    expect(rows.find((row) => row.pullRequest.number === 2)?.reasons.requested).toBe(false)
+    expect(rows.find((row) => row.pullRequest.number === 3)?.reasons.requested).toBe(true)
+  })
+
+  it('falls back to the listing for who is asked when the reviews were not read', () => {
+    const rows = rank([
+      repository({
+        pullRequests: [pr(1, { requestedReviewerLogins: ['kibertoad'] })],
+        reviews: new Map(),
+      }),
+    ])
+    expect(rows[0]?.reasons.requested).toBe(true)
   })
 
   it('matches commitments on the host and the path in any case', () => {

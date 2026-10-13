@@ -9,8 +9,22 @@ function reviewBy(login: string, kind = 'User') {
   return { author: { __typename: kind, login } }
 }
 
-function openPull(number: number, author: string | null, reviews: unknown[]) {
-  return { number, author: author === null ? null : { login: author }, reviews: { nodes: reviews } }
+function requestFor(login: string, kind = 'User') {
+  return { requestedReviewer: kind === 'User' ? { __typename: kind, login } : { __typename: kind } }
+}
+
+function openPull(
+  number: number,
+  author: string | null,
+  reviews: unknown[],
+  requests: unknown[] = [],
+) {
+  return {
+    number,
+    author: author === null ? null : { login: author },
+    reviews: { nodes: reviews },
+    reviewRequests: { nodes: requests },
+  }
 }
 
 function pulls(...nodes: ReturnType<typeof openPull>[]) {
@@ -57,8 +71,8 @@ describe('GitHubVcsGateway.openPullRequestReviews', () => {
     )
 
     expect(await gateway(fetchImpl).openPullRequestReviews(PROJECT)).toStrictEqual([
-      { number: 7, reviewerLogins: ['Bea', 'cid'] },
-      { number: 8, reviewerLogins: [] },
+      { number: 7, reviewerLogins: ['Bea', 'cid'], awaitingLogins: [] },
+      { number: 8, reviewerLogins: [], awaitingLogins: [] },
     ])
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe('https://api.github.com/graphql')
@@ -72,8 +86,8 @@ describe('GitHubVcsGateway.openPullRequestReviews', () => {
       page(null, [openPull(3, 'ann', [])]),
     )
     expect(await gateway(fetchImpl).openPullRequestReviews(PROJECT)).toStrictEqual([
-      { number: 7, reviewerLogins: ['bea'] },
-      { number: 3, reviewerLogins: [] },
+      { number: 7, reviewerLogins: ['bea'], awaitingLogins: [] },
+      { number: 3, reviewerLogins: [], awaitingLogins: [] },
     ])
     expect(calls.map((call) => call.body.variables)).toStrictEqual([
       { owner: 'platform', name: 'api', after: null },
@@ -101,7 +115,23 @@ describe('GitHubVcsGateway.openPullRequestReviews', () => {
       ),
     )
     expect(await gateway(fetchImpl).openPullRequestReviews(PROJECT)).toStrictEqual([
-      { number: 7, reviewerLogins: ['bea'] },
+      { number: 7, reviewerLogins: ['bea'], awaitingLogins: [] },
+    ])
+  })
+
+  it('lists the people still asked for a review, without teams', async () => {
+    const { fetchImpl } = answering(
+      pulls(
+        openPull(
+          7,
+          'ann',
+          [reviewBy('bea')],
+          [requestFor('cid'), requestFor('core', 'Team'), { requestedReviewer: null }],
+        ),
+      ),
+    )
+    expect(await gateway(fetchImpl).openPullRequestReviews(PROJECT)).toStrictEqual([
+      { number: 7, reviewerLogins: ['bea'], awaitingLogins: ['cid'] },
     ])
   })
 

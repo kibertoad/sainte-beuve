@@ -72,6 +72,12 @@ export interface OpenPullRequestReviews {
    * approval, so there it is the approvers.
    */
   reviewerLogins: string[]
+  /**
+   * The handles the host is still waiting on for a review: asked, and not
+   * answered since. GitLab keeps a reviewer listed after they approve, so this
+   * is narrower there than the pull request's requested reviewers.
+   */
+  awaitingLogins: string[]
 }
 
 /** One file a pull request changed, with its line counts. */

@@ -20,6 +20,9 @@ const OPEN_REVIEWS_QUERY = `query OpenReviews($owner: String!, $name: String!, $
         reviews(first: ${REVIEWS_PER_PULL_REQUEST}, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
           nodes { author { __typename login } }
         }
+        reviewRequests(first: ${REVIEWS_PER_PULL_REQUEST}) {
+          nodes { requestedReviewer { __typename ... on User { login } } }
+        }
       }
     }
   }
@@ -29,6 +32,9 @@ interface OpenPullRequestNode {
   number: number
   author: { login: string } | null
   reviews: { nodes: { author: { __typename: string; login: string } | null }[] }
+  reviewRequests: {
+    nodes: { requestedReviewer: { __typename: string; login?: string } | null }[]
+  } | null
 }
 
 interface OpenReviewsAnswer {
@@ -76,6 +82,11 @@ function reviewsOf(pull: OpenPullRequestNode): OpenPullRequestReviews {
         review.author?.__typename === 'User' ? [review.author.login] : [],
       ),
       pull.author?.login ?? null,
+    ),
+    awaitingLogins: distinctLogins(
+      (pull.reviewRequests?.nodes ?? []).flatMap(({ requestedReviewer: reviewer }) =>
+        reviewer?.__typename === 'User' && reviewer.login !== undefined ? [reviewer.login] : [],
+      ),
     ),
   }
 }

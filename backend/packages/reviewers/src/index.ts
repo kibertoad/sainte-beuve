@@ -155,6 +155,7 @@ export {
   FIT_WEIGHT,
   isReviewableBy,
   NEGLECT_WEIGHT,
+  type OpenReviews,
   rankPullRequestsToReview,
   type RepositoryToReview,
   REQUESTED_WEIGHT,

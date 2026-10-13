@@ -41,15 +41,27 @@ export const FAMILIARITY_HALF_POINT = 3
 /** The weight of the host waiting on the viewer's review. */
 export const REQUESTED_WEIGHT = 1
 
+/** What the host says about the reviews on one open pull request. */
+export interface OpenReviews {
+  /** The handles that submitted a review. */
+  reviewerLogins: readonly string[]
+  /**
+   * The handles the host is still waiting on: asked, and not answered since.
+   * Narrower than the listing's requested reviewers on GitLab, which keeps a
+   * reviewer listed after they approve.
+   */
+  awaitingLogins: readonly string[]
+}
+
 /** One linked repository's open pull requests, and the viewer's history in it. */
 export interface RepositoryToReview {
   project: Project
   pullRequests: readonly OpenPullRequest[]
   /**
-   * Who has reviewed each open pull request, by number. A number missing was
-   * not read, which is not the same as nobody having reviewed it.
+   * The reviews on each open pull request, by number. A number missing was not
+   * read, which is not the same as nobody having reviewed it.
    */
-  reviewers: ReadonlyMap<number, readonly string[]>
+  reviews: ReadonlyMap<number, OpenReviews>
   /** Reviews the viewer finished in the repository recently. */
   pastReviews: number
   /** Pull requests the viewer opened in the repository recently. */
@@ -105,21 +117,38 @@ function toReviewRow(
   const { pr, commitments } = subject
   if (!isReviewableBy(pr, viewer)) return null
   const handle = handleOf(viewer.handles, pr.pullRequest.provider)
-  const requested = pr.requestedReviewerLogins.some((login) => isSameHandle(handle, login))
-  const reviewerLogins = repository.reviewers.get(pr.pullRequest.number) ?? null
-  // Reviewed already, and the host is not asking for another look: nothing left to do here.
-  if (!requested && reviewerLogins?.some((login) => isSameHandle(handle, login))) return null
+  const review = reviewReasons(pr, repository.reviews.get(pr.pullRequest.number), { handle, now })
+  if (review === null) return null
 
   const reasons = {
     ...commitmentReasons(commitments, viewer.id),
-    requested,
-    reviewerLogins: [...(reviewerLogins ?? [])],
-    unreviewedForMs: reviewerLogins?.length === 0 ? Math.max(0, now - pr.createdAt) : null,
+    ...review,
     ...subject.fit,
     pastReviews: repository.pastReviews,
     authored: repository.authored,
   }
   return { ...pr, projectId: repository.project.id, score: scoreOf(reasons), reasons }
+}
+
+/**
+ * Whether the host is waiting on the viewer, who reviewed already and for how
+ * long nobody has. Null when the viewer has nothing left to do on it.
+ */
+function reviewReasons(
+  pr: OpenPullRequest,
+  reviews: OpenReviews | undefined,
+  context: { handle: string | null; now: number },
+): Pick<PullRequestToReview['reasons'], 'requested' | 'reviewerLogins' | 'unreviewedForMs'> | null {
+  const { handle, now } = context
+  // The listing's requested reviewers stand in only when the reviews were not read.
+  const awaiting = reviews?.awaitingLogins ?? pr.requestedReviewerLogins
+  const requested = awaiting.some((login) => isSameHandle(handle, login))
+  const reviewerLogins = reviews?.reviewerLogins ?? []
+  // Reviewed already, and the host is not asking for another look.
+  if (!requested && reviewerLogins.some((login) => isSameHandle(handle, login))) return null
+  const unreviewedForMs =
+    reviews !== undefined && reviewerLogins.length === 0 ? Math.max(0, now - pr.createdAt) : null
+  return { requested, reviewerLogins: [...reviewerLogins], unreviewedForMs }
 }
 
 function commitmentReasons(

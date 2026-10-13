@@ -8,13 +8,21 @@ function openMerge(
   iid: string,
   author: string | null,
   approvers: string[] | null,
-  bots: string[] = [],
+  options: { bots?: string[]; reviewers?: Record<string, string | null> } = {},
 ) {
-  const approver = (username: string) => ({ username, bot: bots.includes(username) })
+  const approver = (username: string) => ({
+    username,
+    bot: (options.bots ?? []).includes(username),
+  })
+  const reviewer = ([username, reviewState]: [string, string | null]) => ({
+    username,
+    mergeRequestInteraction: reviewState === null ? null : { reviewState },
+  })
   return {
     iid,
     author: author === null ? null : { username: author },
     approvedBy: approvers === null ? null : { nodes: approvers.map(approver) },
+    reviewers: { nodes: Object.entries(options.reviewers ?? {}).map(reviewer) },
   }
 }
 
@@ -60,8 +68,8 @@ describe('GitLabVcsGateway.openPullRequestReviews', () => {
     })
 
     expect(await gateway.openPullRequestReviews(PROJECT)).toStrictEqual([
-      { number: 7, reviewerLogins: ['Bea', 'cid'] },
-      { number: 8, reviewerLogins: [] },
+      { number: 7, reviewerLogins: ['Bea', 'cid'], awaitingLogins: [] },
+      { number: 8, reviewerLogins: [], awaitingLogins: [] },
     ])
     expect(calls.map((call) => call.url)).toStrictEqual(['https://gitlab.example.com/api/graphql'])
     expect(calls[0]?.body.variables).toStrictEqual({
@@ -78,8 +86,8 @@ describe('GitLabVcsGateway.openPullRequestReviews', () => {
     )
     const gateway = new GitLabVcsGateway({ token: 'glpat-x', fetchImpl })
     expect(await gateway.openPullRequestReviews(PROJECT)).toStrictEqual([
-      { number: 7, reviewerLogins: ['bea'] },
-      { number: 3, reviewerLogins: [] },
+      { number: 7, reviewerLogins: ['bea'], awaitingLogins: [] },
+      { number: 3, reviewerLogins: [], awaitingLogins: [] },
     ])
     expect(calls.map((call) => call.body.variables)).toStrictEqual([
       { fullPath: 'platform/backend/api', after: null },
@@ -89,11 +97,27 @@ describe('GitLabVcsGateway.openPullRequestReviews', () => {
 
   it('leaves out the author and bots', async () => {
     const { fetchImpl } = answering(
-      merges(openMerge('7', 'Ann', ['ann', 'project_9_bot', 'bea'], ['project_9_bot'])),
+      merges(openMerge('7', 'Ann', ['ann', 'project_9_bot', 'bea'], { bots: ['project_9_bot'] })),
     )
     const gateway = new GitLabVcsGateway({ token: 'glpat-x', fetchImpl })
     expect(await gateway.openPullRequestReviews(PROJECT)).toStrictEqual([
-      { number: 7, reviewerLogins: ['bea'] },
+      { number: 7, reviewerLogins: ['bea'], awaitingLogins: [] },
+    ])
+  })
+
+  it('waits on the listed reviewers who have not answered, not on the ones who approved', async () => {
+    const reviewers = {
+      ann: 'APPROVED',
+      bea: 'UNREVIEWED',
+      cid: 'REVIEW_STARTED',
+      dan: 'REQUESTED_CHANGES',
+      eve: 'UNAPPROVED',
+      fay: null,
+    }
+    const { fetchImpl } = answering(merges(openMerge('7', 'zed', ['ann'], { reviewers })))
+    const gateway = new GitLabVcsGateway({ token: 'glpat-x', fetchImpl })
+    expect(await gateway.openPullRequestReviews(PROJECT)).toStrictEqual([
+      { number: 7, reviewerLogins: ['ann'], awaitingLogins: ['bea', 'cid', 'eve', 'fay'] },
     ])
   })
 

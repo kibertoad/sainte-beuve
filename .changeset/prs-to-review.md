@@ -27,6 +27,6 @@ Breaking changes to the published packages:
   `pastActivity(project, since)`, answering `{ reviewers, authors }` from the
   same host read.
 - `VcsGateway` gains `openPullRequestReviews(project)`: who has reviewed each
-  open pull request.
+  open pull request, and who the host is still waiting on for a review.
 - `ReviewCommitmentRepository` gains `listByPullRequests(pullRequests)`, backed
   by a new `review_commitments_key_idx` index in both durable stores.

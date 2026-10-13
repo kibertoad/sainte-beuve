@@ -12,6 +12,7 @@ const OPEN_REVIEWS_QUERY = `query OpenReviews($fullPath: ID!, $after: String) {
         iid
         author { username }
         approvedBy { nodes { username bot } }
+        reviewers { nodes { username mergeRequestInteraction { reviewState } } }
       }
     }
   }
@@ -21,7 +22,16 @@ interface OpenMergeRequestNode {
   iid: string
   author: { username: string } | null
   approvedBy: { nodes: { username: string; bot: boolean }[] } | null
+  reviewers: {
+    nodes: { username: string; mergeRequestInteraction: { reviewState: string } | null }[]
+  } | null
 }
+
+/**
+ * The review states in which a listed reviewer has answered. Anything else
+ * (not started, started and not submitted, approval taken back) is still owed.
+ */
+const ANSWERED_REVIEW_STATES = new Set(['APPROVED', 'REQUESTED_CHANGES', 'REVIEWED'])
 
 interface OpenReviewsAnswer {
   data?: {
@@ -70,6 +80,14 @@ function approvalsOf(merge: OpenMergeRequestNode): OpenPullRequestReviews {
     reviewerLogins: distinctLogins(
       (merge.approvedBy?.nodes ?? []).filter((user) => !user.bot).map((user) => user.username),
       merge.author?.username ?? null,
+    ),
+    awaitingLogins: distinctLogins(
+      (merge.reviewers?.nodes ?? [])
+        .filter(
+          (reviewer) =>
+            !ANSWERED_REVIEW_STATES.has(reviewer.mergeRequestInteraction?.reviewState ?? ''),
+        )
+        .map((reviewer) => reviewer.username),
     ),
   }
 }

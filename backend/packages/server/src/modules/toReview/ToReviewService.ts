@@ -4,6 +4,7 @@ import type { AuthorTally, VcsGateway } from '@sainte-beuve/kernel'
 import {
   isReviewableBy,
   isSameHandle,
+  type OpenReviews,
   pastReviewCounts,
   rankPullRequestsToReview,
   type RepositoryToReview,
@@ -75,29 +76,29 @@ export class ToReviewService {
   ): Promise<RepositoryToReview> {
     const { viewer, gateway } = context
     const { project } = read
-    const [reviewers, activity] = await Promise.all([
+    const [reviews, activity] = await Promise.all([
       this.openReviews(read, gateway),
       readRepositoryActivity(this.container, project, gateway),
     ])
     return {
       project,
       pullRequests: read.pullRequests,
-      reviewers,
+      reviews,
       pastReviews:
         pastReviewCounts(activity.history, [viewer], project.provider).get(viewer.id) ?? 0,
       authored: authoredBy(activity.authors, handleOf(viewer.handles, project.provider)),
     }
   }
 
-  /** Who reviewed each open pull request, or nothing known when the host would not say. */
+  /** The reviews on each open pull request, or nothing known when the host would not say. */
   private async openReviews(
     read: ProjectRead,
     gateway: VcsGateway | null,
-  ): Promise<Map<number, string[]>> {
+  ): Promise<Map<number, OpenReviews>> {
     if (gateway === null) return new Map()
     try {
       const reviews = await gateway.openPullRequestReviews(read.project)
-      return new Map(reviews.map((entry) => [entry.number, entry.reviewerLogins]))
+      return new Map(reviews.map((entry) => [entry.number, entry]))
     } catch (err) {
       this.container.logger.warn(
         { err, projectId: read.project.id },
