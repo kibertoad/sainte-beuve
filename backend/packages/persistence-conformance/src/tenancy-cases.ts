@@ -164,7 +164,7 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
 
   tenancyCase('attention and commitments stay inside their org', async (stores) => {
     await stores.forOrg(ORG_A).attention.create(attentionRequest('a1'))
-    await stores.forOrg(ORG_A).commitments.create(commitment('c1'))
+    await stores.forOrg(ORG_A).commitments.createOrGet(commitment('c1'))
     assert.deepStrictEqual(await stores.forOrg(ORG_B).attention.list({ status: ['open'] }), [])
     assert.strictEqual(await stores.forOrg(ORG_B).attention.getById('a1'), null)
     assert.deepStrictEqual(await stores.forOrg(ORG_B).commitments.listByReviewer('reviewer-1'), [])
@@ -181,6 +181,20 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
     assert.strictEqual(
       (await stores.forOrg(ORG_A).commitments.getById('c1'))?.requestedHandle,
       null,
+    )
+  }),
+
+  tenancyCase('one pull request takes a promise in each org', async (stores) => {
+    const answers = await Promise.all([
+      stores.forOrg(ORG_A).commitments.createOrGet(commitment('c1')),
+      stores.forOrg(ORG_B).commitments.createOrGet(commitment('c2')),
+    ])
+    assert.deepStrictEqual(
+      answers.map((answer) => [answer.commitment.id, answer.created]),
+      [
+        ['c1', true],
+        ['c2', true],
+      ],
     )
   }),
 

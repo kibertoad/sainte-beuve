@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { type ConformanceCase, conformanceCase } from './case.js'
-import { attentionRequest, commitment, identity, project, pullRequest } from './fixtures.js'
+import { attentionRequest, identity, project } from './fixtures.js'
 
 /** The projects a deployment watches, and who its people are on each host. */
 export const projectCases: readonly ConformanceCase[] = [
@@ -169,77 +169,5 @@ export const attentionCases: readonly ConformanceCase[] = [
     const ids = (await repos.attention.list({ status: ['open'] })).map((row) => row.id)
     assert.deepStrictEqual(ids, ['a1'])
     assert.deepStrictEqual(await repos.attention.list({ status: [] }), [])
-  }),
-]
-
-export const commitmentCases: readonly ConformanceCase[] = [
-  conformanceCase('a promise comes back with what it was made about', async (repos) => {
-    const written = commitment('c1', { attentionRequestId: 'a1', requestedHandle: 'kibertoad' })
-    assert.deepStrictEqual(await repos.commitments.create(written), written)
-    assert.deepStrictEqual(await repos.commitments.getById('c1'), written)
-  }),
-
-  conformanceCase('a promise records the host request it holds, and drops it', async (repos) => {
-    await repos.commitments.create(commitment('c1'))
-    const claimed = await repos.commitments.setRequestedHandle('c1', 'kibertoad')
-    assert.deepStrictEqual(claimed, commitment('c1', { requestedHandle: 'kibertoad' }))
-    assert.deepStrictEqual(await repos.commitments.getById('c1'), claimed)
-    await repos.commitments.setRequestedHandle('c1', null)
-    assert.strictEqual((await repos.commitments.getById('c1'))?.requestedHandle, null)
-  }),
-
-  conformanceCase('a released promise takes no host request, and stays released', async (repos) => {
-    await repos.commitments.create(commitment('c1'))
-    await repos.commitments.delete('c1')
-    assert.strictEqual(await repos.commitments.setRequestedHandle('c1', 'kibertoad'), null)
-    assert.strictEqual(await repos.commitments.getById('c1'), null)
-  }),
-
-  conformanceCase("lists one person's promises newest first, ties on the id", async (repos) => {
-    await repos.commitments.create(commitment('c1', { createdAt: 1_000 }))
-    await repos.commitments.create(
-      commitment('c2', { createdAt: 2_000, pullRequest: pullRequest({ number: 13 }) }),
-    )
-    await repos.commitments.create(commitment('c3', { reviewerId: 'r2' }))
-    await repos.commitments.create(
-      commitment('c4', { createdAt: 2_000, pullRequest: pullRequest({ number: 14 }) }),
-    )
-    const ids = (await repos.commitments.listByReviewer('reviewer-1')).map((row) => row.id)
-    assert.deepStrictEqual(ids, ['c4', 'c2', 'c1'])
-  }),
-
-  conformanceCase('a second click on the same pull request finds the first', async (repos) => {
-    await repos.commitments.create(commitment('c1'))
-    const found = await repos.commitments.find('reviewer-1', pullRequest())
-    assert.strictEqual(found?.id, 'c1')
-    assert.strictEqual(await repos.commitments.find('r2', pullRequest()), null)
-  }),
-
-  conformanceCase('two promises about one pull request resolve to the same row', async (repos) => {
-    // Two clicks that raced both wrote a row, in the same millisecond. Whichever
-    // one this answers with, it has to be the same one every time it is asked,
-    // or the button reports a promise that is withdrawn somewhere else.
-    await repos.commitments.create(commitment('c2', { createdAt: 1_000 }))
-    await repos.commitments.create(commitment('c1', { createdAt: 1_000 }))
-    assert.strictEqual((await repos.commitments.find('reviewer-1', pullRequest()))?.id, 'c1')
-  }),
-
-  conformanceCase('the same number on the other host is another promise', async (repos) => {
-    // `platform/api#12` exists on GitHub and on GitLab, and they are two
-    // different changes. A lookup that matched on the path alone would answer
-    // the second with the first and leave no row for it.
-    await repos.commitments.create(
-      commitment('c1', { pullRequest: pullRequest({ provider: 'github' }) }),
-    )
-    const found = await repos.commitments.find('reviewer-1', pullRequest({ provider: 'gitlab' }))
-    assert.strictEqual(found, null)
-  }),
-
-  conformanceCase('withdrawing a promise removes it', async (repos) => {
-    await repos.commitments.create(commitment('c1'))
-    await repos.commitments.delete('c1')
-    assert.strictEqual(await repos.commitments.getById('c1'), null)
-    assert.deepStrictEqual(await repos.commitments.listByReviewer('reviewer-1'), [])
-    assert.strictEqual(await repos.commitments.find('reviewer-1', pullRequest()), null)
   }),
 ]

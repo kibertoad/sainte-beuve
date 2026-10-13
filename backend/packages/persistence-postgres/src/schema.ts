@@ -328,6 +328,12 @@ export const reviewCommitments = pgTable(
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
     index('review_commitments_reviewer_idx').on(table.orgId, table.reviewerId, table.createdAt),
+    /** One commitment per person per pull request: what `createOrGet` conflicts on. */
+    uniqueIndex('review_commitments_pr_idx').on(
+      table.orgId,
+      table.reviewerId,
+      table.pullRequestKey,
+    ),
   ],
 )
 

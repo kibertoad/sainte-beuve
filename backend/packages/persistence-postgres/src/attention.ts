@@ -1,7 +1,7 @@
 import type { AttentionRequest, AttentionStatus, ReviewCommitment } from '@sainte-beuve/contracts'
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
-import { pullRequestKey, writeAtRevision } from '@sainte-beuve/kernel'
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { ConflictError, insertOrRead, pullRequestKey, writeAtRevision } from '@sainte-beuve/kernel'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
 import { attentionRequests, reviewCommitments } from './schema.js'
@@ -133,11 +133,13 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
           eq(reviewCommitments.pullRequestKey, pullRequestKey(pullRequest)),
         ),
       )
-      .orderBy(asc(reviewCommitments.createdAt), asc(reviewCommitments.id))
     return firstOr(rows)?.data ?? null
   }
 
-  async create(commitment: ReviewCommitment): Promise<ReviewCommitment> {
+  /** `ON CONFLICT DO NOTHING` names no target, so a taken id loses the same way a taken key does. */
+  async createOrGet(
+    commitment: ReviewCommitment,
+  ): Promise<{ commitment: ReviewCommitment; created: boolean }> {
     const row = {
       orgId: this.orgId,
       id: commitment.id,
@@ -146,14 +148,22 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
       createdAt: commitment.createdAt,
       data: commitment,
     }
-    await this.db
-      .insert(reviewCommitments)
-      .values(row)
-      .onConflictDoUpdate({ target: [reviewCommitments.orgId, reviewCommitments.id], set: row })
-    return commitment
+    const { value, created } = await insertOrRead(commitment, {
+      describe: `The commitment of ${commitment.reviewerId} on ${row.pullRequestKey}`,
+      insert: async () => {
+        const inserted = await this.db
+          .insert(reviewCommitments)
+          .values(row)
+          .onConflictDoNothing()
+          .returning({ id: reviewCommitments.id })
+        return firstOr(inserted) !== null
+      },
+      read: () => this.holderOf(commitment),
+    })
+    return { commitment: value, created }
   }
 
-  /** An UPDATE rather than the upsert, so a row released since the read stays gone. */
+  /** An UPDATE rather than an insert, so a row released since the read stays gone. */
   async setRequestedHandle(
     commitmentId: string,
     requestedHandle: string | null,
@@ -173,5 +183,17 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
     await this.db
       .delete(reviewCommitments)
       .where(and(eq(reviewCommitments.orgId, this.orgId), eq(reviewCommitments.id, commitmentId)))
+  }
+
+  /**
+   * The commitment that holds this one's key. An insert that lost while no row
+   * holds the key lost on the id, which no retry can win.
+   */
+  private async holderOf(commitment: ReviewCommitment): Promise<ReviewCommitment | null> {
+    const held = await this.find(commitment.reviewerId, commitment.pullRequest)
+    if (held !== null || (await this.getById(commitment.id)) === null) return held
+    throw new ConflictError(`Commitment ${commitment.id} is already taken`, {
+      commitmentId: commitment.id,
+    })
   }
 }

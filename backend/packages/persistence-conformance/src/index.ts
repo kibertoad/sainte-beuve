@@ -41,7 +41,8 @@ import {
 import { reviewerCases } from './reviewer-cases.js'
 import { teamCases, teamTenancyCases } from './teams-cases.js'
 import { type TenancyCase, tenancyConformanceCases as boundaryCases } from './tenancy-cases.js'
-import { attentionCases, commitmentCases, identityCases, projectCases } from './workspace-cases.js'
+import { commitmentCases } from './commitment-cases.js'
+import { attentionCases, identityCases, projectCases } from './workspace-cases.js'
 
 /** Every case, in the order the ports are declared on `Repositories`. */
 export const repositoryConformanceCases: readonly ConformanceCase[] = [
@@ -97,4 +98,5 @@ export {
 export { reviewHistoryCases } from './history-cases.js'
 export { reminderCases } from './reminder-cases.js'
 export { reviewerCases } from './reviewer-cases.js'
-export { attentionCases, commitmentCases, identityCases, projectCases } from './workspace-cases.js'
+export { commitmentCases } from './commitment-cases.js'
+export { attentionCases, identityCases, projectCases } from './workspace-cases.js'

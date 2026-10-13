@@ -28,6 +28,7 @@ export {
   writeAtRevision,
 } from './domain/revisions.js'
 export { DEFAULT_REMINDER_POLICY, type EpochMs, formatPullRequest } from './domain/types.js'
+export { type Inserted, insertOrRead, type UniqueInsert } from './domain/uniqueInserts.js'
 export { base64url, base64urlText, base64urlToBytes, timingSafeEqual } from './encoding.js'
 export {
   isSecretDecryptError,
