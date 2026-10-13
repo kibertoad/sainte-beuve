@@ -211,7 +211,7 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
     })
     expect(calls[0]?.body).toMatchObject({
       taskType: 'resolve-conflicts',
-      fields: { prNumber: 7 },
+      fields: { prNumber: 7, prUrl: 'https://github.com/kibertoad/sainte-beuve/pull/7' },
       title: 'Resolve conflicts in kibertoad/sainte-beuve#7',
     })
     expect(calls[1]).toMatchObject({ path: '/api/v1/tasks/task-1/start', body: {} })
@@ -235,6 +235,35 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
       { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-a' },
       { path: '/api/v1/tasks/task-1/start', workspace: 'ws-a' },
     ])
+  })
+
+  /**
+   * A default service linked to another repository would attach whichever pull
+   * request there shares the number. The URL is what lets cat-factory refuse it.
+   */
+  it('passes on the refusal of a service linked to another repository, and starts nothing', async () => {
+    const message =
+      'That pull request belongs to kibertoad/sainte-beuve, but this service is linked to acme/api.'
+    const { gateway, calls } = gatewayOver({
+      '/tasks': {
+        status: 422,
+        body: {
+          error: {
+            code: 'validation_failed',
+            message,
+            details: { reason: 'attached_pr_repo_mismatch', expected: 'acme/api' },
+          },
+        },
+      },
+    })
+
+    await expect(
+      gateway.requestConflictResolution({ pullRequest: PULL_REQUEST, directoryKeys: [] }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining(message),
+      details: { upstream: 'cat-factory', reason: 'attached_pr_repo_mismatch' },
+    })
+    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/services/svc-1/tasks'])
   })
 })
 

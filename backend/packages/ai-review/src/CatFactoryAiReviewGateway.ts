@@ -169,9 +169,10 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
           `Merge the base branch into ${ref} (${input.pullRequest.url}), resolve the ` +
           'conflicts, and push the result to its own branch.',
         taskType: 'resolve-conflicts',
-        // The number is what cat-factory attaches the pull request by, and so what
-        // points the resolver at its branch rather than at a new one.
-        fields: { prNumber: input.pullRequest.number },
+        // cat-factory attaches the pull request by its number, which points the
+        // resolver at its branch. The URL makes it refuse a service linked to
+        // another repository, where the number would name somebody else's branch.
+        fields: { prNumber: input.pullRequest.number, prUrl: input.pullRequest.url },
       },
       // No pipeline pinned: the one a deployment pins is a review pipeline, and
       // this task type brings its own.
