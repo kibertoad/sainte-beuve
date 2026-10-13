@@ -26,11 +26,15 @@ function pr(number: number, authorLogin = 'ada'): OpenPullRequest {
   })
 }
 
-/** Ada's pull request 1 conflicts with its base; 2 is clean; 3 is Bob's and conflicts. */
+/**
+ * Ada's pull request 1 conflicts with its base; 2 is clean; 3 is Bob's and conflicts;
+ * 4 is one the host has not checked yet.
+ */
 async function setUp(options: { catFactory: boolean }) {
-  const vcs = viewerVcs('ada', [pr(1), pr(2), pr(3, 'bob')], {
+  const vcs = viewerVcs('ada', [pr(1), pr(2), pr(3, 'bob'), pr(4)], {
     1: { mergeability: 'conflicting' },
     3: { mergeability: 'conflicting', authorLogin: 'bob' },
+    4: { mergeability: 'checking' },
   })
   const aiReview = stubAiReview()
   const harness = buildHarness({
@@ -97,6 +101,16 @@ describe('resolving conflicts from My PRs', () => {
     const { harness, aiReview, project } = await setUp({ catFactory: true })
 
     expect((await resolve(harness, project, 2)).status).toBe(409)
+    expect(aiReview.conflictsResolved).toStrictEqual([])
+  })
+
+  it('asks to retry while the host is still checking for conflicts', async () => {
+    const { harness, aiReview, project } = await setUp({ catFactory: true })
+
+    const res = await resolve(harness, project, 4)
+
+    expect(res.status).toBe(409)
+    expect(JSON.stringify(await res.json())).toContain('still checking')
     expect(aiReview.conflictsResolved).toStrictEqual([])
   })
 
