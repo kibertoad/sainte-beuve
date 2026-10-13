@@ -172,9 +172,9 @@ with a copy button, built by `slackAppManifest` in
 the org's `/webhooks/slack/<slug>` on `API_BASE_URL`, the Messages tab is on, and
 the bot scopes are the three the code calls on (`chat:write`,
 `chat:write.public`, `commands`). An admin creates the app from it and pastes
-the bot token and signing secret back. A deployment with no https
-`API_BASE_URL` is told what to set instead of being handed a URL Slack cannot
-reach.
+the bot token and signing secret back. A deployment whose `API_BASE_URL` is
+missing, plain http or a loopback host is told what to set instead of being
+handed a URL Slack cannot reach.
 
 ### 18. One copy of the cat-factory SDK
 
