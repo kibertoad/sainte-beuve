@@ -1,12 +1,12 @@
-import { UnavailableError } from '@sainte-beuve/kernel'
+import type { PublicPrAssessment, PublicPrAssessmentVerdictReason } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import {
   CatFactoryRiskAssessmentGateway,
-  type PublicPrAssessment,
+  type PrAssessmentAnswer,
   toExternalAssessment,
 } from './CatFactoryRiskAssessmentGateway.js'
 
-const ANSWER: PublicPrAssessment = {
+const ANSWER: PrAssessmentAnswer = {
   headSha: 'abc',
   changeClass: 'docs',
   changedFileCount: 2,
@@ -47,13 +47,21 @@ describe('toExternalAssessment', () => {
   it('holds a pull request whose verdict reason this build does not know', () => {
     const verdict = toExternalAssessment({
       ...ANSWER,
-      verdict: { ...ANSWER.verdict, reason: 'something_new' },
+      verdict: {
+        ...ANSWER.verdict,
+        reason: 'something_new' as PublicPrAssessmentVerdictReason,
+      },
     }).verdict
-    expect(verdict.outcome).toBe('requires_review')
+    expect(verdict).toMatchObject({ outcome: 'requires_review', reason: 'unrecognised' })
   })
 
   it('reads a change class it does not know as unknown', () => {
-    expect(toExternalAssessment({ ...ANSWER, changeClass: 'binary' }).changeClass).toBe('unknown')
+    expect(
+      toExternalAssessment({
+        ...ANSWER,
+        changeClass: 'binary' as PublicPrAssessment['changeClass'],
+      }).changeClass,
+    ).toBe('unknown')
   })
 })
 
@@ -89,8 +97,28 @@ describe('CatFactoryRiskAssessmentGateway', () => {
     await expect(gateway.listPolicies()).rejects.toThrow(/`admin` scope/)
   })
 
-  it('refuses to assess on an SDK with no assessment surface', async () => {
-    const gateway = gatewayAnswering({})
+  it('assesses in the workspace that links the repository, under the named policy', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    const answer: PublicPrAssessment = {
+      ...ANSWER,
+      assessedAt: 1,
+      model: 'm',
+      owner: 'acme',
+      repo: 'api',
+      prNumber: 7,
+      provider: 'github',
+    }
+    const gateway = new CatFactoryRiskAssessmentGateway({
+      baseUrl: 'http://cat-factory.example',
+      apiKey: 'cf_live_key.secret',
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), body: JSON.parse(String(init?.body)) })
+        return new Response(JSON.stringify(answer), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      },
+    })
     const pullRequest = {
       provider: 'github',
       owner: 'acme',
@@ -98,8 +126,20 @@ describe('CatFactoryRiskAssessmentGateway', () => {
       number: 7,
       url: 'https://github.com/acme/api/pull/7',
     } as const
-    await expect(
-      gateway.assess({ pullRequest, policyId: null, directoryKeys: [] }),
-    ).rejects.toBeInstanceOf(UnavailableError)
+    const assessed = await gateway.assess({
+      pullRequest,
+      policyId: 'mp_balanced',
+      directoryKeys: [],
+    })
+    expect(assessed.verdict).toMatchObject({ outcome: 'within_policy', policyName: 'Balanced' })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toContain('/api/v1/pr-assessments')
+    expect(calls[0]?.body).toEqual({
+      owner: 'acme',
+      repo: 'api',
+      prNumber: 7,
+      provider: 'github',
+      riskPolicyId: 'mp_balanced',
+    })
   })
 })

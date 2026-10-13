@@ -124,8 +124,11 @@ export function defaultRiskPolicy(): RiskPolicy {
 /**
  * Why a pull request is, or is not, within policy. The cat-factory reasons are
  * the ones its own verdict can carry: `policy_disabled` is a cat-factory policy
- * that never lands anything unattended, and `no_rationale` an assessment that
- * gave scores without saying why.
+ * that never lands anything unattended, `no_rationale` an assessment that gave
+ * scores without saying why, and `role_requires_review`, `submission_not_allowed`
+ * and `dry_run` are the policy's rules for the role of the person a key is bound
+ * to. `unrecognised` is a reason newer than this build, which always holds the
+ * pull request for a person.
  */
 export const riskVerdictReasonSchema = v.picklist([
   'within_thresholds',
@@ -134,6 +137,10 @@ export const riskVerdictReasonSchema = v.picklist([
   'class_requires_review',
   'policy_disabled',
   'no_rationale',
+  'role_requires_review',
+  'submission_not_allowed',
+  'dry_run',
+  'unrecognised',
 ])
 export type RiskVerdictReason = v.InferOutput<typeof riskVerdictReasonSchema>
 

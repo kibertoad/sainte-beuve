@@ -1,4 +1,8 @@
-import { CatFactoryClient } from '@cat-factory/sdk'
+import {
+  CatFactoryClient,
+  type PublicPrAssessment,
+  type PublicPrAssessmentVerdictReason,
+} from '@cat-factory/sdk'
 import type {
   ChangeClass,
   ExternalRiskPolicy,
@@ -10,7 +14,6 @@ import { CHANGE_CLASSES } from '@sainte-beuve/contracts'
 import {
   type ExternalRiskAssessment,
   type RiskAssessmentGateway,
-  UnavailableError,
   withDeadline,
 } from '@sainte-beuve/kernel'
 import { locationOf } from './directoryKeys.js'
@@ -27,47 +30,22 @@ export interface CatFactoryRiskAssessmentOptions {
   fetch?: typeof globalThis.fetch
 }
 
-/** cat-factory's assessment of one pull request, as its public API answers it. */
-export interface PublicPrAssessment {
-  headSha: string
-  changeClass: string
-  changedFileCount: number
-  assessment: { complexity: number; risk: number; impact: number; rationale: string }
-  policy: { policyId: string; name: string }
-  verdict: {
-    outcome: 'within_policy' | 'requires_review'
-    reason: string
-    exceededAxes: ('complexity' | 'risk' | 'impact')[]
-  }
-}
+/** cat-factory's assessment of one pull request, as much of it as is read here. */
+export type PrAssessmentAnswer = Pick<
+  PublicPrAssessment,
+  'headSha' | 'changeClass' | 'changedFileCount' | 'assessment' | 'policy' | 'verdict'
+>
 
-interface PrAssessmentsResource {
-  assess(body: {
-    owner: string
-    repo: string
-    prNumber: number
-    provider: 'github' | 'gitlab'
-    riskPolicyId?: string
-  }): Promise<PublicPrAssessment>
-}
-
-/**
- * The SDK's `prAssessments` group, when the installed SDK has one.
- * TODO(kibertoad/cat-factory#2364): call it typed once `@cat-factory/sdk` 0.58.0 is the floor.
- */
-function prAssessmentsOf(client: CatFactoryClient): PrAssessmentsResource | null {
-  const resource = (client as unknown as { prAssessments?: Partial<PrAssessmentsResource> })
-    .prAssessments
-  return typeof resource?.assess === 'function' ? (resource as PrAssessmentsResource) : null
-}
-
-const REASONS: Record<string, RiskVerdictReason> = {
+const REASONS: Record<PublicPrAssessmentVerdictReason, RiskVerdictReason> = {
   within_thresholds: 'within_thresholds',
   exceeded_thresholds: 'exceeded_thresholds',
   class_auto_merge: 'class_auto_approve',
   class_requires_review: 'class_requires_review',
   auto_merge_disabled: 'policy_disabled',
   no_rationale: 'no_rationale',
+  role_requires_review: 'role_requires_review',
+  submission_not_allowed: 'submission_not_allowed',
+  dry_run: 'dry_run',
 }
 
 function changeClassOf(value: string): ChangeClass {
@@ -75,21 +53,20 @@ function changeClassOf(value: string): ChangeClass {
 }
 
 /**
- * A reason this build does not know cannot be read as a pass, so it holds the
- * pull request for a person whatever the outcome said.
+ * A reason newer than this build cannot be read as a pass, so it holds the pull
+ * request for a person whatever the outcome said.
  */
-function verdictOf(answer: PublicPrAssessment): RiskVerdict {
-  const reason = REASONS[answer.verdict.reason]
-  const known = reason !== undefined
+function verdictOf(answer: PrAssessmentAnswer): RiskVerdict {
+  const reason = (REASONS as Partial<Record<string, RiskVerdictReason>>)[answer.verdict.reason]
   return {
-    outcome: known ? answer.verdict.outcome : 'requires_review',
-    reason: reason ?? 'exceeded_thresholds',
+    outcome: reason === undefined ? 'requires_review' : answer.verdict.outcome,
+    reason: reason ?? 'unrecognised',
     exceededAxes: answer.verdict.exceededAxes,
     policyName: answer.policy.name,
   }
 }
 
-export function toExternalAssessment(answer: PublicPrAssessment): ExternalRiskAssessment {
+export function toExternalAssessment(answer: PrAssessmentAnswer): ExternalRiskAssessment {
   const { rationale, ...scores } = answer.assessment
   return {
     headSha: answer.headSha,
@@ -125,16 +102,10 @@ export class CatFactoryRiskAssessmentGateway implements RiskAssessmentGateway {
     directoryKeys: readonly string[]
   }): Promise<ExternalRiskAssessment> {
     const workspace = input.directoryKeys.map(locationOf).find((location) => location !== null)
-    const resource = prAssessmentsOf(this.clients.in(workspace?.workspaceId ?? null))
-    if (resource === null) {
-      throw new UnavailableError(
-        'this build of the cat-factory SDK cannot assess a pull request; the heuristic assessor still can',
-      )
-    }
     const { provider, owner, repo, number } = input.pullRequest
     let answer: PublicPrAssessment
     try {
-      answer = await resource.assess({
+      answer = await this.clients.in(workspace?.workspaceId ?? null).prAssessments.assess({
         owner,
         repo,
         prNumber: number,

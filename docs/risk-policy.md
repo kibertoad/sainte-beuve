@@ -54,8 +54,9 @@ class whichever of the two assessed it.
   assessor too, since it only judges what it scored. Picking a policy from the
   list needs a key with the `admin` scope; without one the screen says so.
 
-Role-scoped rules on a cat-factory policy do not apply: the call is made with an
-API key, which carries no role.
+Role-scoped rules on a cat-factory policy apply only when the org's key is bound
+to a person in cat-factory, who is then the role it is judged under. A key bound
+to nobody has no role, and those rules do not apply to it.
 
 ## What happens to a pull request within the policy
 
@@ -73,11 +74,14 @@ reaches a person the way it always does.
 A pull request is never approved when:
 
 - it is a draft, or no longer open;
+- its repository is not registered to this org (any member can track any pull
+  request, and the deployment's GitHub App reaches every org's repositories);
 - its head moved since it was assessed (it is assessed again instead);
 - the approver opened it, which both hosts refuse anyway;
 - nobody is configured to approve on its host.
 
-Each of these leaves the row `within_policy` with the reason on it.
+Each of these, apart from a moved head, leaves the row `within_policy` with the
+reason on it.
 
 ## The approver
 
@@ -112,6 +116,12 @@ asks for a review. The first step starts as the pull request is tracked, after t
 webhook has been answered (the request's `waitUntil` on the Worker). Anything left
 in flight is driven by the reminder clock once its own step has had three minutes,
 and a step that fails is tried three times before the row says why it gave up.
+
+Every write to the row is a check and set on its `revision`. A step claims the
+row before it runs, so a deferred step and a clock tick that reach it together do
+not both score or approve it. New commits restart the row, and a step that was
+approving the old head when they arrived finds its write refused and withdraws
+the approval it had just posted.
 
 Any member can ask for a pull request to be assessed again from the API
 (`POST /api/v1/reviews/<id>/risk-assessment`), whether or not the org assesses

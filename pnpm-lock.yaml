@@ -39,10 +39,10 @@ importers:
     dependencies:
       '@cat-factory/directory-sync':
         specifier: ^0.2.1
-        version: 0.2.1(@cat-factory/sdk@0.57.0)
+        version: 0.2.1(@cat-factory/sdk@0.58.0)
       '@cat-factory/sdk':
-        specifier: ^0.57.0
-        version: 0.57.0
+        specifier: ^0.58.0
+        version: 0.58.0
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -677,8 +677,8 @@ packages:
     peerDependencies:
       '@cat-factory/sdk': '>=0.57.0 <1.0.0'
 
-  '@cat-factory/sdk@0.57.0':
-    resolution: {integrity: sha512-tDXdub/Y9qAidxXyOJFRRJNvW7VqlZ9yxm7SbAyTUacsg9PnSRdPnHeJQwrwT6FUYZJd4Ni0dhxQZga9rM3k1A==}
+  '@cat-factory/sdk@0.58.0':
+    resolution: {integrity: sha512-DjWIQ62AscNk9sSrxj9sFOI1e9QEBHnxED+rLLvk4Hmwrwj7wkeV8URVY/HTlYC6isOJ052zbBqSNNwwpDlZMQ==}
     engines: {node: '>=20'}
 
   '@cat-factory/webhooks@0.2.0':
@@ -6782,12 +6782,12 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@cat-factory/directory-sync@0.2.1(@cat-factory/sdk@0.57.0)':
+  '@cat-factory/directory-sync@0.2.1(@cat-factory/sdk@0.58.0)':
     dependencies:
-      '@cat-factory/sdk': 0.57.0
+      '@cat-factory/sdk': 0.58.0
       '@cat-factory/webhooks': 0.2.0
 
-  '@cat-factory/sdk@0.57.0': {}
+  '@cat-factory/sdk@0.58.0': {}
 
   '@cat-factory/webhooks@0.2.0': {}
 
