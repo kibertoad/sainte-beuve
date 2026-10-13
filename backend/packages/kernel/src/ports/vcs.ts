@@ -50,6 +50,16 @@ export interface ReviewerTally {
   reviews: number
 }
 
+/** One file a pull request changed, with its line counts. */
+export interface ChangedFile {
+  path: string
+  /** The path before a rename, or null. */
+  previousPath: string | null
+  status: 'added' | 'modified' | 'removed' | 'renamed'
+  additions: number
+  deletions: number
+}
+
 /** A pull request by the coordinates every host addresses it by. */
 export type PullRequestAddress = ProjectRef & { number: number }
 
@@ -132,6 +142,35 @@ export interface VcsGateway {
    * GitLab records only approvals.
    */
   pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]>
+  /**
+   * The files the pull request changes, up to the host's own cap on one listing
+   * (3000 on GitHub). `truncated` says the list stopped short of the whole diff.
+   */
+  changedFiles(pr: PullRequestAddress): Promise<{ files: ChangedFile[]; truncated: boolean }>
+  /**
+   * Approve the pull request as this gateway's account, at `headSha`. Refused
+   * with a `ConflictError` when the head has moved; a host that will not take
+   * the approval (from the author, from an account without access) fails the
+   * call with its own refusal. Answers the host's id for the approval where it
+   * has one, which is what withdrawing it later names.
+   *
+   * `body` travels with the approval only on a host whose approval carries text
+   * (`bodyPosted`). Where it does not (GitLab), the caller posts it as a comment,
+   * so a failed comment never reads as a refused approval.
+   */
+  approve(
+    pr: PullRequestAddress,
+    input: { headSha: string; body: string },
+  ): Promise<{ approvalId: string | null; bodyPosted: boolean }>
+  /**
+   * Take back an approval this gateway's account gave. `message` travels with
+   * the withdrawal where the host's dismissal carries text (`messagePosted`);
+   * elsewhere the caller posts it as a comment.
+   */
+  withdrawApproval(
+    pr: PullRequestAddress,
+    input: { approvalId: string | null; message: string },
+  ): Promise<{ messagePosted: boolean }>
 }
 
 /**

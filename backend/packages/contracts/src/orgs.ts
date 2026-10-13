@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { mergeCommentListSchema } from './merging.js'
+import { defaultRiskPolicy, riskPolicySchema } from './risk.js'
 import { repoOwnerSchema, vcsProviderSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
@@ -92,6 +93,8 @@ export const orgSchema = v.object({
    * with a domain not on it adds it here.
    */
   domains: v.optional(v.array(domainSchema), () => []),
+  /** Which pull requests are assessed, and which of them are approved unattended. See `risk.ts`. */
+  riskPolicy: v.optional(riskPolicySchema, defaultRiskPolicy),
   createdAt: v.number(),
 })
 export type Org = v.InferOutput<typeof orgSchema>
@@ -131,6 +134,7 @@ export function defaultOrg(): Org {
     defaultRepositoryOwner: null,
     mergeComments: [],
     domains: [],
+    riskPolicy: defaultRiskPolicy(),
     createdAt: 0,
   }
 }
@@ -205,6 +209,7 @@ export const updateOrgInputSchema = v.partial(
     defaultRepositoryOwner: v.nullable(repoOwnerSchema),
     mergeComments: mergeCommentListSchema,
     domains: v.array(domainSchema),
+    riskPolicy: riskPolicySchema,
   }),
 )
 export type UpdateOrgInput = v.InferOutput<typeof updateOrgInputSchema>

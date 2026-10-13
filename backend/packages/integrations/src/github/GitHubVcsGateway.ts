@@ -6,6 +6,7 @@ import type {
   RepositoryLookup,
 } from '@sainte-beuve/contracts'
 import type {
+  ChangedFile,
   EpochMs,
   PullRequestAddress,
   PullRequestSearch,
@@ -15,6 +16,12 @@ import type {
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
+import {
+  githubApprove,
+  githubChangedFiles,
+  type GitHubCallContext,
+  githubWithdrawApproval,
+} from './approval.js'
 import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
 import { pastGitHubReviewers } from './history.js'
@@ -274,6 +281,34 @@ export class GitHubVcsGateway implements VcsGateway {
       baseUrl: this.options.baseUrl,
       fetchImpl: this.options.fetchImpl,
     })
+  }
+
+  async changedFiles(
+    pr: PullRequestAddress,
+  ): Promise<{ files: ChangedFile[]; truncated: boolean }> {
+    return githubChangedFiles(pr, await this.contextFor(pr))
+  }
+
+  async approve(
+    pr: PullRequestAddress,
+    input: { headSha: string; body: string },
+  ): Promise<{ approvalId: string | null; bodyPosted: boolean }> {
+    return githubApprove(pr, input, await this.contextFor(pr))
+  }
+
+  async withdrawApproval(
+    pr: PullRequestAddress,
+    input: { approvalId: string | null; message: string },
+  ): Promise<{ messagePosted: boolean }> {
+    return githubWithdrawApproval(pr, input, await this.contextFor(pr))
+  }
+
+  private async contextFor(pr: PullRequestAddress): Promise<GitHubCallContext> {
+    return {
+      token: await this.options.tokens.tokenFor(pr.owner, pr.repo),
+      baseUrl: this.options.baseUrl,
+      fetchImpl: this.options.fetchImpl,
+    }
   }
 
   private async readViewer(): Promise<VcsAccount | null> {

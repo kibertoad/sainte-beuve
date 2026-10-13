@@ -272,6 +272,8 @@ export function containerFor(
     gateways: gatewaysFor(env),
     bus: fanout.bus,
     realtime: fanout.kind,
+    // A risk assessment calls a model after the response; this keeps the isolate for it.
+    defer: waitUntil,
     secrets: secretsFor(env),
     // `||` throughout, not `??`, exactly as the Node facade's `loadConfig` does
     // it: a binding left blank is one somebody has not set, `.dev.vars.example`

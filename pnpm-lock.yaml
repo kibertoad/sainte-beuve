@@ -39,10 +39,10 @@ importers:
     dependencies:
       '@cat-factory/directory-sync':
         specifier: ^0.2.1
-        version: 0.2.1(@cat-factory/sdk@0.57.0)
+        version: 0.2.1(@cat-factory/sdk@0.58.0)
       '@cat-factory/sdk':
-        specifier: ^0.57.0
-        version: 0.57.0
+        specifier: ^0.58.0
+        version: 0.58.0
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -258,6 +258,22 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@26.5.0)(happy-dom@20.14.0)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
 
+  backend/packages/risk:
+    dependencies:
+      '@sainte-beuve/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@sainte-beuve/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.5.0)(happy-dom@20.14.0)(vite@8.2.2(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
+
   backend/packages/server:
     dependencies:
       '@sainte-beuve/contracts':
@@ -275,6 +291,9 @@ importers:
       '@sainte-beuve/reviewers':
         specifier: workspace:*
         version: link:../reviewers
+      '@sainte-beuve/risk':
+        specifier: workspace:*
+        version: link:../risk
       '@toad-contracts/core':
         specifier: 1.0.0
         version: 1.0.0
@@ -658,8 +677,8 @@ packages:
     peerDependencies:
       '@cat-factory/sdk': '>=0.57.0 <1.0.0'
 
-  '@cat-factory/sdk@0.57.0':
-    resolution: {integrity: sha512-tDXdub/Y9qAidxXyOJFRRJNvW7VqlZ9yxm7SbAyTUacsg9PnSRdPnHeJQwrwT6FUYZJd4Ni0dhxQZga9rM3k1A==}
+  '@cat-factory/sdk@0.58.0':
+    resolution: {integrity: sha512-DjWIQ62AscNk9sSrxj9sFOI1e9QEBHnxED+rLLvk4Hmwrwj7wkeV8URVY/HTlYC6isOJ052zbBqSNNwwpDlZMQ==}
     engines: {node: '>=20'}
 
   '@cat-factory/webhooks@0.2.0':
@@ -6763,12 +6782,12 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@cat-factory/directory-sync@0.2.1(@cat-factory/sdk@0.57.0)':
+  '@cat-factory/directory-sync@0.2.1(@cat-factory/sdk@0.58.0)':
     dependencies:
-      '@cat-factory/sdk': 0.57.0
+      '@cat-factory/sdk': 0.58.0
       '@cat-factory/webhooks': 0.2.0
 
-  '@cat-factory/sdk@0.57.0': {}
+  '@cat-factory/sdk@0.58.0': {}
 
   '@cat-factory/webhooks@0.2.0': {}
 

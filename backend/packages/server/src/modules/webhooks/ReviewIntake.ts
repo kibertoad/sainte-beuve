@@ -8,6 +8,7 @@ import { resolveVcs } from '../../integrations/resolve.js'
 import { AiReviewService } from '../reviews/AiReviewService.js'
 import { readPullRequestAuthor } from '../reviews/pullRequestAuthor.js'
 import { ReviewService } from '../reviews/ReviewService.js'
+import { RiskAssessmentService } from '../risk/RiskAssessmentService.js'
 import { botReply } from './botReplies.js'
 
 /**
@@ -72,6 +73,7 @@ export class ReviewIntake {
     if (intent.kind === 'track') return this.track(intent)
     if (intent.kind === 'ai_review') return this.delegate(intent)
     if (intent.kind === 'command') return this.command(intent)
+    if (intent.kind === 'assess') return this.reassess(intent.pullRequest)
     // An event about a pull request nobody tracked is not a fault: a repository
     // has open pull requests that predate the intake, and closing one of those
     // is simply not our business.
@@ -94,12 +96,37 @@ export class ReviewIntake {
     const { review, created, result } = intent.route
       ? await service.trackAndAssign(draft, 1)
       : { ...(await service.track(draft)), result: null }
+    if (created) await this.assess(review)
     if (result === null) {
       return { action: created ? 'tracked' : 'already_tracked', reviewId: review.id }
     }
     return {
       action: result.assigned.length > 0 ? 'assigned' : 'no_reviewer_available',
       reviewId: review.id,
+    }
+  }
+
+  /** New commits on a pull request the board tracks. One it does not track is not ours. */
+  private async reassess(pullRequest: PullRequestRef): Promise<IntakeOutcome> {
+    const review = await this.tracked(pullRequest)
+    if (review === null) return IGNORED
+    const assessment = await new RiskAssessmentService(this.container).onNewCommits(review)
+    return { action: assessment === null ? 'ignored:not_assessed' : 'assess', reviewId: review.id }
+  }
+
+  /**
+   * Queue the risk assessment of a review the board just started tracking. A
+   * failure to queue it is logged rather than failing the delivery, which
+   * would make the host redeliver an event whose tracking already landed.
+   */
+  private async assess(review: ReviewRequest): Promise<void> {
+    try {
+      await new RiskAssessmentService(this.container).queue(review)
+    } catch (err) {
+      this.container.logger.warn(
+        { err, reviewId: review.id },
+        'a risk assessment could not be queued',
+      )
     }
   }
 

@@ -46,6 +46,8 @@ export const integrationIdSchema = v.picklist([
   'slack-signing-secret',
   'gitlab-webhook-secret',
   'cat-factory',
+  'github-approver-token',
+  'gitlab-approver-token',
 ])
 export type IntegrationId = v.InferOutput<typeof integrationIdSchema>
 
@@ -75,6 +77,8 @@ const INTEGRATION_TRAITS: Record<IntegrationId, IntegrationTraits> = {
     label: 'cat-factory key',
     capabilities: ['aiReview', 'guidedReview', 'repositoryDirectory'],
   },
+  'github-approver-token': { label: 'GitHub approver token', capabilities: [] },
+  'gitlab-approver-token': { label: 'GitLab approver token', capabilities: [] },
 }
 
 /**
@@ -117,6 +121,11 @@ export type RepositorySyncSecretKey = `repository-sync-secret:${string}`
 
 export function repositorySyncSecretKey(source: string): RepositorySyncSecretKey {
   return `repository-sync-secret:${source}`
+}
+
+/** The store key of the token automatic approvals are posted with on one host. */
+export function vcsApproverCredentialKey(provider: VcsProvider): IntegrationId {
+  return provider === 'github' ? 'github-approver-token' : 'gitlab-approver-token'
 }
 
 /** The store key a pasted token for one host is held under. */

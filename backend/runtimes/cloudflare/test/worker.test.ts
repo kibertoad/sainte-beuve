@@ -78,6 +78,8 @@ describe('sainte-beuve worker', () => {
         aiReview: false,
         guidedReview: false,
         repositoryDirectory: false,
+        externalRiskAssessment: false,
+        autoApproval: { github: false, gitlab: false },
         secrets: true,
         githubWebhooks: false,
         slackInteractivity: false,

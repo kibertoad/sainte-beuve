@@ -6,6 +6,7 @@ import type {
   RepositoryLookup,
 } from '@sainte-beuve/contracts'
 import type {
+  ChangedFile,
   EpochMs,
   PullRequestAddress,
   PullRequestSearch,
@@ -15,6 +16,7 @@ import type {
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
+import { gitlabApprove, gitlabChangedFiles, gitlabWithdrawApproval } from './approval.js'
 import { gitlabApiStatusOf, gitlabRequest, projectPath } from './client.js'
 import { pastGitLabReviewers } from './history.js'
 import { lookupGitLabRepositories } from './lookup.js'
@@ -303,6 +305,26 @@ export class GitLabVcsGateway implements VcsGateway {
       createdAt: Date.parse(merge.created_at),
       updatedAt: Date.parse(merge.updated_at),
     }
+  }
+
+  async changedFiles(
+    pr: PullRequestAddress,
+  ): Promise<{ files: ChangedFile[]; truncated: boolean }> {
+    return gitlabChangedFiles(pr, this.options)
+  }
+
+  async approve(
+    pr: PullRequestAddress,
+    input: { headSha: string; body: string },
+  ): Promise<{ approvalId: string | null; bodyPosted: boolean }> {
+    return gitlabApprove(pr, input, this.options)
+  }
+
+  async withdrawApproval(
+    pr: PullRequestAddress,
+    _input: { approvalId: string | null; message: string },
+  ): Promise<{ messagePosted: boolean }> {
+    return gitlabWithdrawApproval(pr, this.options)
   }
 
   private async call<T>(request: {

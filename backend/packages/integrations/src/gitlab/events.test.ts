@@ -153,6 +153,12 @@ describe('interpretGitLabDelivery: merge requests', () => {
     expect(interpretGitLabDelivery(relabelled, CONTEXT)).toEqual([])
   })
 
+  it('asks for a fresh assessment on an update that pushed commits, and only then', () => {
+    const pushed = mergeRequest('update', {}, { oldrev: 'abc123' })
+    expect(interpretGitLabDelivery(pushed, CONTEXT)).toEqual([{ kind: 'assess', pullRequest: REF }])
+    expect(interpretGitLabDelivery(mergeRequest('update'), CONTEXT)).toEqual([])
+  })
+
   it('closes on merge and on close', () => {
     for (const action of ['merge', 'close']) {
       expect(interpretGitLabDelivery(mergeRequest(action), CONTEXT)).toStrictEqual([

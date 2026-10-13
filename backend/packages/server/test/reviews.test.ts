@@ -66,6 +66,8 @@ describe('review board API', () => {
         aiReview: false,
         guidedReview: false,
         repositoryDirectory: false,
+        externalRiskAssessment: false,
+        autoApproval: { github: false, gitlab: false },
         secrets: false,
         githubWebhooks: false,
         slackInteractivity: false,

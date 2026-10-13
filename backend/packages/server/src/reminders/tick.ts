@@ -116,6 +116,8 @@ export interface TickResult {
    * the change feed this follows is what makes that cost only latency.
    */
   repositoriesSynced: number
+  /** Risk assessments moved on: scored, approved, or settled after their AI review. */
+  riskAssessmentsDriven: number
 }
 
 /** What one org's nudges did. The half of a pass that has a deadline. */
@@ -138,7 +140,12 @@ export async function runReminderTick(
   const passes: OrgPass[] = (await tenancies(container)).map((orgId) => ({
     container: withOrg(container, orgId),
     nudges: { sent: 0, failed: 0, skipped: 0, recovered: 0 },
-    passengers: { sessionsSwept: 0, aiReviewsPolled: 0, repositoriesSynced: 0 },
+    passengers: {
+      sessionsSwept: 0,
+      aiReviewsPolled: 0,
+      repositoriesSynced: 0,
+      riskAssessmentsDriven: 0,
+    },
   }))
   // FIRST every org's nudges, because they are the half with a deadline.
   await mapWithConcurrency(passes, ORG_FAN_OUT, async (pass) => {
@@ -160,6 +167,7 @@ function empty(): TickResult {
     sessionsSwept: 0,
     aiReviewsPolled: 0,
     repositoriesSynced: 0,
+    riskAssessmentsDriven: 0,
   }
 }
 
@@ -181,6 +189,7 @@ function added(total: TickResult, pass: OrgPass): TickResult {
     sessionsSwept: total.sessionsSwept + result.sessionsSwept,
     aiReviewsPolled: total.aiReviewsPolled + result.aiReviewsPolled,
     repositoriesSynced: total.repositoriesSynced + result.repositoriesSynced,
+    riskAssessmentsDriven: total.riskAssessmentsDriven + result.riskAssessmentsDriven,
   }
 }
 

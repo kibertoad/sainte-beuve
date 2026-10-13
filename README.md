@@ -108,6 +108,22 @@ it here (see [docs/integrations.md](./docs/integrations.md)). A key that reaches
 several workspaces works too: the review opens in the workspace that links the
 repository.
 
+## Pull requests nobody needs to look at
+
+A typo fix waits for a reviewer as long as a schema change does. Turn on a
+**risk policy** (Configuration, Risk policy) and every pull request the board
+tracks is scored from 0 to 1 on complexity, risk and impact, by cat-factory when
+the org connected it and from the changed files when not. Then it is held to the
+org's ceilings and to a rule per kind of change (documentation, tests, dependency
+bumps, CI, code, migrations), or handed to one of the org's cat-factory risk
+policies for its verdict.
+
+A pull request within the policy can be approved with nobody looking, as the bot
+account the org stored a token for (or the GitHub App), and only after a clean
+AI review if the policy asks for one. New commits withdraw that approval and the
+new head is assessed again. The board row says where each one stands and why.
+See [docs/risk-policy.md](./docs/risk-policy.md).
+
 ## Asking for attention
 
 A pull request that nobody has picked up is the thing the workspace exists to

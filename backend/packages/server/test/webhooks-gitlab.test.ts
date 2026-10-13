@@ -1,4 +1,5 @@
 import type { PullRequestStatus, ReviewRequest } from '@sainte-beuve/contracts'
+import { defaultRiskPolicy } from '@sainte-beuve/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { withOrg } from '../src/container.js'
 import {
@@ -262,6 +263,7 @@ describe('GitLab intake, per org', () => {
       defaultRepositoryOwner: null,
       mergeComments: [],
       domains: [],
+      riskPolicy: defaultRiskPolicy(),
       createdAt: harness.clock.now(),
     })
     return org.id

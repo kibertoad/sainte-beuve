@@ -39,6 +39,7 @@ import {
   externalRepositoryTenancyCases,
 } from './external-repository-cases.js'
 import { reviewerCases } from './reviewer-cases.js'
+import { riskAssessmentCases, riskAssessmentTenancyCases } from './risk-assessment-cases.js'
 import { teamCases, teamTenancyCases } from './teams-cases.js'
 import { type TenancyCase, tenancyConformanceCases as boundaryCases } from './tenancy-cases.js'
 import { commitmentCases } from './commitment-cases.js'
@@ -61,6 +62,7 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
   ...teamCases,
   ...externalRepositoryCases,
   ...externalDirectoryCases,
+  ...riskAssessmentCases,
 ]
 
 /**
@@ -74,6 +76,7 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
   ...teamTenancyCases,
   ...externalRepositoryTenancyCases,
   ...externalDirectoryTenancyCases,
+  ...riskAssessmentTenancyCases,
   ...sessionCases,
   ...apiKeyCases,
 ]
@@ -98,5 +101,6 @@ export {
 export { reviewHistoryCases } from './history-cases.js'
 export { reminderCases } from './reminder-cases.js'
 export { reviewerCases } from './reviewer-cases.js'
+export { riskAssessmentCases, riskAssessmentTenancyCases } from './risk-assessment-cases.js'
 export { commitmentCases } from './commitment-cases.js'
 export { attentionCases, identityCases, projectCases } from './workspace-cases.js'

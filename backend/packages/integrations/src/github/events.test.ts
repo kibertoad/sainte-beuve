@@ -76,6 +76,14 @@ describe('interpretGitHubDelivery: pull requests', () => {
     expect(intent).toMatchObject({ review: { pullRequest: REF, authorLogin: 'kibertoad' } })
   })
 
+  it('asks for a fresh assessment when commits are pushed', () => {
+    const pushed = pullRequest({ action: 'synchronize' })
+    expect(interpretGitHubDelivery({ event: 'pull_request', payload: pushed }, CONTEXT)).toEqual({
+      kind: 'assess',
+      pullRequest: REF,
+    })
+  })
+
   it('waits for a draft to be marked ready', () => {
     const draft = pullRequest({
       pull_request: { ...pullRequest().pull_request!, draft: true },

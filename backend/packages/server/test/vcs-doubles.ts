@@ -61,6 +61,7 @@ export function viewerVcs(
       pullRequests.filter((pr) => matchesSearch(pr, search, reviewed)),
     lookupRepositories: async (owner, query) => lookupIn(pullRequests, owner, query),
     pastReviewers: async () => [],
+    ...noApproving(),
     identify: async () => ({
       subject: `subject-${username}`,
       username,
@@ -68,6 +69,15 @@ export function viewerVcs(
       avatarUrl: null,
       bot: false,
     }),
+  }
+}
+
+/** The approval half of the port, for a fake that is never asked to assess or approve. */
+export function noApproving(): Pick<VcsGateway, 'changedFiles' | 'approve' | 'withdrawApproval'> {
+  return {
+    changedFiles: () => Promise.reject(new Error('changedFiles is not stubbed')),
+    approve: () => Promise.reject(new Error('approve is not stubbed')),
+    withdrawApproval: () => Promise.reject(new Error('withdrawApproval is not stubbed')),
   }
 }
 

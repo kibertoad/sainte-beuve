@@ -16,6 +16,7 @@ import { PostgresExternalRepositoryRepository } from './external-repositories.js
 import { PostgresOrgRepository } from './orgs.js'
 import { PostgresReviewerRepository } from './reviewers.js'
 import { PostgresReminderRepository, PostgresReviewRequestRepository } from './reviews.js'
+import { PostgresRiskAssessmentRepository } from './risk-assessments.js'
 import { firstOr } from './rows.js'
 import { apiKeys, projects, sessions } from './schema.js'
 import { PostgresTeamRepository } from './teams.js'
@@ -69,6 +70,7 @@ class PostgresPersistence implements PersistenceProvider {
       teams: new PostgresTeamRepository(db, orgId),
       externalRepositories: new PostgresExternalRepositoryRepository(db, orgId),
       externalDirectory: new PostgresExternalDirectoryRepository(db, orgId),
+      riskAssessments: new PostgresRiskAssessmentRepository(db, orgId),
     }
   }
 

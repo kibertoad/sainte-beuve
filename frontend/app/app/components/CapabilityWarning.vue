@@ -19,6 +19,11 @@ const DESCRIPTORS: Record<CapabilityName, { title: string; missing: string }> = 
     title: 'Following cat-factory workspaces needs cat-factory',
     missing: 'This org has not connected cat-factory, so its repositories are registered here.',
   },
+  externalRiskAssessment: {
+    title: 'Assessing with cat-factory needs cat-factory',
+    missing:
+      'This org has not connected cat-factory, so pull requests are scored from their changed files.',
+  },
 }
 
 const capabilities = useCapabilities()

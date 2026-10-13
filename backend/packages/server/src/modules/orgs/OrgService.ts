@@ -3,6 +3,7 @@ import {
   DEFAULT_ORG_ID,
   DEFAULT_ORG_SLUG,
   defaultOrg,
+  defaultRiskPolicy,
   NO_VCS_HANDLES,
   withHandle,
 } from '@sainte-beuve/contracts'
@@ -132,6 +133,7 @@ export class OrgService {
       defaultRepositoryOwner: null,
       mergeComments: [],
       domains: [],
+      riskPolicy: defaultRiskPolicy(),
       createdAt: clock.now(),
     }
     // The default org has no row until somebody makes one, so a deployment

@@ -15,6 +15,7 @@ import type { ApiKeyRepository, SessionRepository } from './auth.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
 import type { ExternalDirectoryRepository } from './external-directory.js'
 import type { ExternalRepositoryRepository } from './external-repositories.js'
+import type { RiskAssessmentRepository } from './risk.js'
 import type { TeamRepository } from './teams.js'
 import type { PullRequestAddress } from './vcs.js'
 import type { AttentionRepository, ReviewCommitmentRepository } from './attention.js'
@@ -293,4 +294,5 @@ export interface Repositories {
   teams: TeamRepository
   externalRepositories: ExternalRepositoryRepository
   externalDirectory: ExternalDirectoryRepository
+  riskAssessments: RiskAssessmentRepository
 }

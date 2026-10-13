@@ -1,7 +1,7 @@
 // `@sainte-beuve/persistence-d1`: the durable store the Cloudflare Worker boots
 // with.
 //
-// Eleven stores over one `D1Database` and one org, plus the tenancy surface above
+// Every store, over one `D1Database` and one org, plus the tenancy surface above
 // them (`createD1Store`) and the migrations directory a deployment
 // points wrangler at (`migrations_dir`). The Postgres adapter
 // (@sainte-beuve/persistence-postgres) implements the same ports over Drizzle,
@@ -41,6 +41,7 @@
 //  | `teams`              | `(org_id, id)`                 | `name_key` (UNIQUE per org), `created_at`                  |
 //  | `external_repositories` | `(org_id, source, key)`     | `seq`                                                      |
 //  | `external_directory` | `(org_id, source, kind, key)`  | `seq`                                                      |
+//  | `risk_assessments`   | `(org_id, review_id)`          | `status`, `updated_at`                                     |
 
 import type { PersistenceProvider } from '@sainte-beuve/kernel'
 import { D1SqlDriver } from './D1SqlDriver.js'

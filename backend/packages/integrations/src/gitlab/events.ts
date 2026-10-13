@@ -39,6 +39,8 @@ interface GitLabObjectAttributes {
   title?: string
   url?: string
   action?: string
+  /** The previous head, present on an `update` that pushed commits. */
+  oldrev?: string
   draft?: boolean
   work_in_progress?: boolean
   /** A Note Hook's comment text. */
@@ -131,6 +133,9 @@ function fromActivity(
   // The review label already tracks it, routed; an unrouted track first would only be undone.
   if (becameReady(payload, action) && !intents.some((i) => i.kind === 'track')) {
     intents.unshift(tracked(ref, subject, false))
+  }
+  if (action === 'update' && payload.object_attributes?.oldrev) {
+    intents.push({ kind: 'assess', pullRequest: ref })
   }
   return intents
 }

@@ -25,6 +25,7 @@ import {
   createContainer,
 } from '../src/container.js'
 import { secretsFrom } from '../src/crypto/WebCryptoSecretCipher.js'
+import { noApproving } from './vcs-doubles.js'
 import type { AppEnv } from '../src/http/env.js'
 
 /** A logger that keeps quiet unless a test wants to read what was logged. */
@@ -144,6 +145,12 @@ export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFa
     catFactoryDirectory: () => {
       throw new Error('this case wired no cat-factory directory')
     },
+    // Built whenever cat-factory is configured, to report the capability, so it
+    // refuses on use rather than on construction.
+    riskAssessment: () => ({
+      assess: () => Promise.reject(new Error('this case wired no cat-factory assessor')),
+      listPolicies: () => Promise.reject(new Error('this case wired no cat-factory assessor')),
+    }),
     signIn: () => null,
     ...overrides,
   }
@@ -197,6 +204,7 @@ export function recordingVcs(): VcsGateway & {
     lookupRepositories: async () => null,
     pastReviewers: async () => [],
     ...noMerging(),
+    ...noApproving(),
   }
 }
 

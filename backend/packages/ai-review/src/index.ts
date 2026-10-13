@@ -12,4 +12,8 @@ export {
   type CatFactoryDirectoryOptions,
 } from './CatFactoryDirectoryGateway.js'
 export { CatFactoryProbeGateway, type CatFactoryProbeOptions } from './CatFactoryProbeGateway.js'
+export {
+  CatFactoryRiskAssessmentGateway,
+  type CatFactoryRiskAssessmentOptions,
+} from './CatFactoryRiskAssessmentGateway.js'
 export { catFactoryGateways } from './gateways.js'

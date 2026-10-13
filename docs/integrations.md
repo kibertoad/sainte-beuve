@@ -81,6 +81,7 @@ anybody close a review.
 | ---------------------------------------- | ------------------------------------------------------------------------------ |
 | `pull_request` opened / reopened / ready | Tracked on the board, unassigned                                               |
 | `pull_request` closed                    | The review is closed and the reminder clock stops                              |
+| `pull_request` synchronize               | A tracked one is assessed again, and an automatic approval withdrawn           |
 | `pull_request_review` submitted          | Resolved to `approved` or `changes_requested`; a bare comment resolves nothing |
 | the review label is added                | Tracked if it was not, and handed to a reviewer                                |
 | the AI-review label is added             | Handed to cat-factory, or acked and logged when it is not configured           |
@@ -198,6 +199,7 @@ wrong token are one 403, so the status code cannot be used to list tenancies.
 | merge request opened / reopened               | Tracked on the board, unassigned (a draft waits until it leaves draft) |
 | merge request leaves draft                    | Tracked, unassigned                                                    |
 | merge request merged or closed                | Closed, the clock stops; a review with a verdict keeps it              |
+| commits pushed to a tracked merge request     | Assessed again, and an automatic approval withdrawn                    |
 | merge request becomes approved                | Resolved to `approved`                                                 |
 | its approval is taken back                    | An `approved` review goes back on the clock                            |
 | the review label is added                     | Tracked if it was not, and handed to a reviewer                        |
@@ -518,7 +520,9 @@ version bump.
 5. **Repository permissions**: `Pull requests: Read & write` (to request
    reviewers, comment, and read who reviewed the repository recently), `Issues: Read & write` (a pull request's comments are
    the issues API), `Contents: Read & write` (to merge from My PRs),
-   `Metadata: Read-only`.
+   `Metadata: Read-only`. `Pull requests: Read & write` is also what lets the App
+   approve a pull request within the org's risk policy when no approver token is
+   stored (see [risk-policy.md](./risk-policy.md)).
 6. **Subscribe to events**: `Pull request`, `Pull request review`, `Issues`,
    `Issue comment`.
 7. Generate a private key, convert it once, and set the three variables:

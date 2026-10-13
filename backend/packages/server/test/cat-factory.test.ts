@@ -102,6 +102,7 @@ describe('configuring cat-factory', () => {
       aiReview: false,
       guidedReview: false,
       repositoryDirectory: false,
+      externalRiskAssessment: false,
     })
     await connectCatFactory(harness)
     const after = await harness.app.fetch(get('/api/v1/capabilities'))
@@ -109,6 +110,7 @@ describe('configuring cat-factory', () => {
       aiReview: true,
       guidedReview: true,
       repositoryDirectory: true,
+      externalRiskAssessment: true,
     })
   })
 

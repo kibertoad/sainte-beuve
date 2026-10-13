@@ -10,6 +10,7 @@
     { "path": "packages/kernel/tsconfig.build.json" },
     { "path": "packages/reviewers/tsconfig.build.json" },
     { "path": "packages/reminders/tsconfig.build.json" },
+    { "path": "packages/risk/tsconfig.build.json" },
     { "path": "packages/integrations/tsconfig.build.json" },
     { "path": "packages/ai-review/tsconfig.build.json" },
     { "path": "packages/persistence-memory/tsconfig.build.json" },

@@ -52,6 +52,7 @@ export type {
   GatewayFactory,
 } from './ports/gateways.js'
 export type {
+  ChangedFile,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
@@ -91,6 +92,11 @@ export type {
   StoredIntegrationToken,
 } from './ports/repositories.js'
 export type { ExternalRepositoryRepository } from './ports/external-repositories.js'
+export type {
+  ExternalRiskAssessment,
+  RiskAssessmentGateway,
+  RiskAssessmentRepository,
+} from './ports/risk.js'
 export type { ExternalDirectoryRepository } from './ports/external-directory.js'
 export type { AttentionRepository, ReviewCommitmentRepository } from './ports/attention.js'
 export type {

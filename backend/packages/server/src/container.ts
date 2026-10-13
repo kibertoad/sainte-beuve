@@ -9,6 +9,7 @@ import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type {
   AttentionBus,
   ChatGateway,
+  Deferral,
   Clock,
   GatewayFactory,
   IdGenerator,
@@ -223,6 +224,12 @@ export interface AppContainer {
    * the isolate it was published on and no other.
    */
   realtime: RealtimeKind
+  /**
+   * Work a request starts and does not wait for: a risk assessment that calls a
+   * model. The Worker hands over its `waitUntil`, which keeps the isolate alive
+   * past the response; a Node process keeps running anyway.
+   */
+  defer: Deferral
   github: GitHubWiring
   /**
    * The labels that drive the board from a pull request or a merge request.
@@ -263,6 +270,7 @@ export interface ContainerOptions {
   bus?: AttentionBus
   /** Defaults to `memory`, which is what the bus a facade left unwired is. */
   realtime?: RealtimeKind
+  defer?: Deferral
   gateways?: GatewayFactory | null
   /** The cipher, the state signer, and the reason there is neither, as `secretsFrom` reports them. */
   secrets?: SecretsWiring | null
@@ -299,6 +307,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     // Worker holds its own at module level and passes it in here.
     ...attentionBuses(options.bus ?? new InMemoryAttentionBus()),
     realtime: options.realtime ?? 'memory',
+    defer: logging(options.logger, options.defer),
     gateways: options.gateways ?? null,
     secrets: secrets.cipher,
     states: secrets.states,
@@ -336,6 +345,18 @@ export function withOrg(container: AppContainer, orgId: string): AppContainer {
     // into the new container, and the audience rule a subscriber filters on
     // knows nothing about orgs.
     bus: scopedBus(container.attentionFanout, orgId),
+  }
+}
+
+/**
+ * Hands the work to the runtime's deferral (or runs it unawaited), logging a
+ * failure on every runtime rather than leaving it unhandled.
+ */
+function logging(logger: Logger, runtime: Deferral | undefined): Deferral {
+  return (work) => {
+    const logged = work.catch((err: unknown) => logger.error({ err }, 'deferred work failed'))
+    if (runtime === undefined) void logged
+    else runtime(logged)
   }
 }
 

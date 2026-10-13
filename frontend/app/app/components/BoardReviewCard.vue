@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { BoardReview } from '@sainte-beuve/contracts'
+import type { BoardReview, RiskAssessment } from '@sainte-beuve/contracts'
 import { formatPullRequestRef, reviewStatusLabel } from '@sainte-beuve/contracts'
 
 // One row of the board: what the review is, who is on the hook for it, and how
@@ -22,6 +22,8 @@ const props = defineProps<{
    * at a different mount. The page owns the tick; this renders what it says.
    */
   now: number
+  /** The row's risk assessment, or null when it has none. */
+  assessment: RiskAssessment | null
 }>()
 
 const emit = defineEmits<{ assign: []; aiReview: []; toggle: [] }>()
@@ -77,6 +79,7 @@ const assignedTo = computed(() => {
           >
             {{ dueLabel(due, review, now) }}
           </UBadge>
+          <RiskAssessmentBadge v-if="assessment" :assessment="assessment" />
         </div>
         <p class="text-sm text-muted line-clamp-2">{{ review.title }}</p>
         <!--

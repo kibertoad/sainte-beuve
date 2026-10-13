@@ -25,6 +25,9 @@ export type BotVerb = 'review' | 'reroll' | 'ai' | 'status'
  * `unapprove` is an approval taken back. Only GitLab says so as an event of its
  * own, and it puts a review the approval had settled back on the clock.
  *
+ * `assess` is new commits on an open pull request: whatever it was assessed
+ * as no longer describes it, so its assessment is redone if it has one.
+ *
  * An author is null where the payload does not name one (a GitLab hook names
  * whoever acted, not the author), and the intake asks the host before it opens
  * a row with it.
@@ -34,6 +37,7 @@ export type IntakeIntent =
   | { kind: 'close'; pullRequest: PullRequestRef }
   | { kind: 'resolve'; pullRequest: PullRequestRef; status: 'approved' | 'changes_requested' }
   | { kind: 'unapprove'; pullRequest: PullRequestRef }
+  | { kind: 'assess'; pullRequest: PullRequestRef }
   | { kind: 'ai_review'; pullRequest: PullRequestRef; author: string | null }
   | {
       kind: 'command'
