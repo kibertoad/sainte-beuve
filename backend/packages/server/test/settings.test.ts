@@ -6,6 +6,7 @@ import { createApp } from '../src/app.js'
 import { WebCryptoSecretCipher } from '../src/crypto/WebCryptoSecretCipher.js'
 import { stubAiReview } from './ai-review-doubles.js'
 import { type TestHarness, buildHarness, del, noMerging, put, stubGateways } from './helpers.js'
+import { noApproving } from './vcs-doubles.js'
 
 // The Configuration screen's API, through the app: the contract validation, the
 // service and the error envelope together.
@@ -70,6 +71,8 @@ describe('integration configuration API', () => {
       'slack-signing-secret',
       'gitlab-webhook-secret',
       'cat-factory',
+      'github-approver-token',
+      'gitlab-approver-token',
     ])
     expect(await statusOf(harness)).toStrictEqual(status())
   })
@@ -298,6 +301,7 @@ describe('a pasted GitHub credential', () => {
           lookupRepositories: async () => null,
           pastReviewers: async () => [],
           ...noMerging(),
+          ...noApproving(),
           identify: async () => ({
             subject: '4249249',
             username: 'kibertoad',
@@ -332,6 +336,7 @@ describe('a pasted GitHub credential', () => {
           lookupRepositories: async () => null,
           pastReviewers: async () => [],
           ...noMerging(),
+          ...noApproving(),
           identify: () => Promise.reject(refused),
         }),
       }),

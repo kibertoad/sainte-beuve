@@ -131,6 +131,21 @@ function signIn(provider: string) {
       </UCard>
     </NuxtLink>
 
+    <NuxtLink to="/configuration/risk-policy" class="group block mb-8">
+      <UCard class="transition-colors group-hover:bg-elevated/50">
+        <div class="flex items-center gap-3">
+          <UIcon name="i-lucide-shield-check" class="size-6 shrink-0 text-muted" />
+          <div class="min-w-0 flex-1">
+            <p class="font-medium">Risk policy</p>
+            <p class="text-sm text-muted">
+              Which pull requests are assessed, and which are approved with nobody looking.
+            </p>
+          </div>
+          <UIcon name="i-lucide-chevron-right" class="size-5 shrink-0 text-muted" />
+        </div>
+      </UCard>
+    </NuxtLink>
+
     <div class="flex items-center justify-between gap-3 mb-4">
       <h2 class="text-lg font-semibold">Integrations</h2>
       <UButton

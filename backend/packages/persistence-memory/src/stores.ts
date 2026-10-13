@@ -26,6 +26,7 @@ import { clone, patched } from './clone.js'
 import { InMemoryIntegrationConfigRepository } from './config-stores.js'
 import { InMemoryExternalDirectoryRepository } from './external-directory.js'
 import { InMemoryExternalRepositoryRepository } from './external-repositories.js'
+import { InMemoryRiskAssessmentRepository } from './risk-assessments.js'
 import { InMemoryTeamRepository } from './teams.js'
 import { byText, leastRecentlyPolledFirst, newestFirst, oldestFirst } from './order.js'
 import {
@@ -355,5 +356,6 @@ export function createInMemoryRepositories(): Repositories {
     teams: new InMemoryTeamRepository(),
     externalRepositories: new InMemoryExternalRepositoryRepository(),
     externalDirectory: new InMemoryExternalDirectoryRepository(),
+    riskAssessments: new InMemoryRiskAssessmentRepository(),
   }
 }

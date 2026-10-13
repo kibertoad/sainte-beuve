@@ -157,6 +157,7 @@ function fromPullRequest(
   const ref = pullRequestRef(payload, pr?.number, pr?.html_url)
   if (pr === undefined || ref === null) return null
   if (payload.action === 'closed') return { kind: 'close', pullRequest: ref }
+  if (payload.action === 'synchronize') return { kind: 'assess', pullRequest: ref }
   if (payload.action === 'labeled') {
     return labelIntent(ref, payload.label?.name, context.labels, {
       title: pr.title,

@@ -1,6 +1,7 @@
 import {
   type AttentionRequest,
   DEFAULT_ORG_ID,
+  defaultRiskPolicy,
   type Reviewer,
   type ReviewRequest,
 } from '@sainte-beuve/contracts'
@@ -403,6 +404,7 @@ describe('Slack intake, per org', () => {
       defaultRepositoryOwner: null,
       mergeComments: [],
       domains: [],
+      riskPolicy: defaultRiskPolicy(),
       createdAt: harness.clock.now(),
     })
     return org.id
@@ -542,6 +544,7 @@ describe('Slack intake, per org', () => {
       defaultRepositoryOwner: null,
       mergeComments: [],
       domains: [],
+      riskPolicy: defaultRiskPolicy(),
       createdAt: announcing.clock.now(),
     })
 

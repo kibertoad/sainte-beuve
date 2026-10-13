@@ -5,7 +5,7 @@ import type {
   VcsHandlesInput,
   VcsProvider,
 } from '@sainte-beuve/contracts'
-import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID, defaultRiskPolicy } from '@sainte-beuve/contracts'
 import type { VcsIdentityGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { withOrg } from '../src/container.js'
@@ -212,6 +212,7 @@ describe('the org boundary', () => {
         defaultRepositoryOwner: null,
         mergeComments: [],
         domains: [],
+        riskPolicy: defaultRiskPolicy(),
         createdAt: 0,
       })
       // Synthesised, not stored: the route every page polls must not be a write.

@@ -9,6 +9,7 @@ import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
 import type {
   AttentionBus,
   ChatGateway,
+  Deferral,
   Clock,
   GatewayFactory,
   IdGenerator,
@@ -223,6 +224,12 @@ export interface AppContainer {
    * the isolate it was published on and no other.
    */
   realtime: RealtimeKind
+  /**
+   * Work a request starts and does not wait for: a risk assessment that calls a
+   * model. The Worker hands over its `waitUntil`, which keeps the isolate alive
+   * past the response; a Node process keeps running anyway.
+   */
+  defer: Deferral
   github: GitHubWiring
   /**
    * The labels that drive the board from a pull request or a merge request.
@@ -263,6 +270,7 @@ export interface ContainerOptions {
   bus?: AttentionBus
   /** Defaults to `memory`, which is what the bus a facade left unwired is. */
   realtime?: RealtimeKind
+  defer?: Deferral
   gateways?: GatewayFactory | null
   /** The cipher, the state signer, and the reason there is neither, as `secretsFrom` reports them. */
   secrets?: SecretsWiring | null
@@ -299,6 +307,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     // Worker holds its own at module level and passes it in here.
     ...attentionBuses(options.bus ?? new InMemoryAttentionBus()),
     realtime: options.realtime ?? 'memory',
+    defer: options.defer ?? swallowing(options.logger),
     gateways: options.gateways ?? null,
     secrets: secrets.cipher,
     states: secrets.states,
@@ -336,6 +345,13 @@ export function withOrg(container: AppContainer, orgId: string): AppContainer {
     // into the new container, and the audience rule a subscriber filters on
     // knows nothing about orgs.
     bus: scopedBus(container.attentionFanout, orgId),
+  }
+}
+
+/** Runs the work unawaited, logging a failure rather than leaving it unhandled. */
+function swallowing(logger: Logger): Deferral {
+  return (work) => {
+    void work.catch((err: unknown) => logger.error({ err }, 'deferred work failed'))
   }
 }
 

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import { resolveCapabilities } from '../../integrations/capabilities.js'
+import { resolveApprover } from '../../integrations/riskResolve.js'
 import {
   resolveChat,
   resolveGitLabWebhookSecret,
@@ -43,6 +44,10 @@ export function healthController(): Hono<AppEnv> {
         resolveGitLabWebhookSecret(container),
         storeAnswers(container),
       ])
+    const [githubApprover, gitlabApprover] = await Promise.all([
+      resolveApprover(container, 'github'),
+      resolveApprover(container, 'gitlab'),
+    ])
     const body = {
       status: persistenceReady ? 'ok' : 'degraded',
       ...shape(container),
@@ -56,6 +61,9 @@ export function healthController(): Hono<AppEnv> {
         aiReview: catFactory.aiReview,
         guidedReview: catFactory.guidedReview,
         repositoryDirectory: catFactory.repositoryDirectory,
+        externalRiskAssessment: catFactory.externalRiskAssessment,
+        // Whether an approval within the risk policy has an account to go out as.
+        autoApproval: { github: githubApprover !== null, gitlab: gitlabApprover !== null },
         secrets: container.secrets !== null,
         githubWebhooks: container.github.webhookSecret !== null,
         // For the org this probe is in, which on an unauthenticated `/health` is

@@ -1,5 +1,5 @@
 import type { Reminder, Reviewer, ReviewRequest } from '@sainte-beuve/contracts'
-import { DEFAULT_ORG_ID, NO_VCS_HANDLES } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID, defaultRiskPolicy, NO_VCS_HANDLES } from '@sainte-beuve/contracts'
 import type { ChatGateway } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { AiReviewService } from '../src/modules/reviews/AiReviewService.js'
@@ -83,6 +83,7 @@ describe('reminder tick', () => {
       sessionsSwept: 0,
       aiReviewsPolled: 0,
       repositoriesSynced: 0,
+      riskAssessmentsDriven: 0,
     })
 
     harness.clock.advance(4 * HOUR)
@@ -290,6 +291,7 @@ describe('reminder tick', () => {
       sessionsSwept: 0,
       aiReviewsPolled: 0,
       repositoriesSynced: 0,
+      riskAssessmentsDriven: 0,
     })
     expect(chat.delivered).toStrictEqual([])
     const statuses = (await remindersFor(harness, review.id)).map((r) => r.status)
@@ -645,6 +647,7 @@ describe('a tick across tenancies', () => {
       defaultRepositoryOwner: null,
       mergeComments: [],
       domains: [],
+      riskPolicy: defaultRiskPolicy(),
       createdAt: harness.clock.now(),
     })
     // The second org posts over its OWN bot token: the deployment's belongs to

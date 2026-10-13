@@ -19,6 +19,9 @@
     },
     {
       "path": "../reminders/tsconfig.build.json"
+    },
+    {
+      "path": "../risk/tsconfig.build.json"
     }
   ]
 }

@@ -11,7 +11,7 @@ import type {
   ReviewRequest,
 } from '@sainte-beuve/contracts'
 import type { Org } from '@sainte-beuve/contracts'
-import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID, defaultRiskPolicy } from '@sainte-beuve/contracts'
 import type { StoredApiKey, StoredIntegrationToken, StoredSession } from '@sainte-beuve/kernel'
 
 /**
@@ -32,6 +32,12 @@ export function org(id: string, overrides: Partial<Org> = {}): Org {
     defaultRepositoryOwner: null,
     mergeComments: [],
     domains: ['billing'],
+    riskPolicy: {
+      ...defaultRiskPolicy(),
+      assess: true,
+      maxRisk: 0.35,
+      classRules: { docs: 'always' },
+    },
     createdAt: 1_000,
     ...overrides,
   }

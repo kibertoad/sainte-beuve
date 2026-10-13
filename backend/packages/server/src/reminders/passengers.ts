@@ -2,12 +2,13 @@ import type { AppContainer } from '../container.js'
 import { SessionService } from '../modules/auth/SessionService.js'
 import { RepositorySyncService } from '../modules/projects/RepositorySyncService.js'
 import { AiReviewService } from '../modules/reviews/AiReviewService.js'
+import { RiskAssessmentService } from '../modules/risk/RiskAssessmentService.js'
 import type { TickResult } from './tick.js'
 
 /** What one org's passengers did. The half that rides whatever budget is left. */
 export type Passengers = Pick<
   TickResult,
-  'sessionsSwept' | 'aiReviewsPolled' | 'repositoriesSynced'
+  'sessionsSwept' | 'aiReviewsPolled' | 'repositoriesSynced' | 'riskAssessmentsDriven'
 >
 
 /** One org's passengers, run once every org's nudges have gone out. */
@@ -19,6 +20,18 @@ export async function ridePassengers(
     sessionsSwept: await sweepSessions(container),
     aiReviewsPolled: await pollAiReviews(container, batchSize),
     repositoriesSynced: await syncRepositories(container),
+    // After the AI reviews, so one an assessment waits on has just been polled.
+    riskAssessmentsDriven: await driveRiskAssessments(container, batchSize),
+  }
+}
+
+/** Assessments their own request let go of: a Worker that ended, a step that failed. */
+async function driveRiskAssessments(container: AppContainer, batchSize: number): Promise<number> {
+  try {
+    return await new RiskAssessmentService(container).sweepInFlight(batchSize)
+  } catch (err) {
+    container.logger.warn({ err }, 'could not drive the risk assessments in flight')
+    return 0
   }
 }
 

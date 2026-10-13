@@ -163,6 +163,14 @@ provider)` from that host's own credential. Above the adapter there is no
   deployment that never makes a second org is entirely inside the default one and
   behaves exactly as it did. See [orgs.md](./orgs.md).
 
+- **Risk assessment and unattended approval**: every pull request the board
+  tracks can be scored on complexity, risk and impact, by cat-factory or from its
+  changed files, and judged by the org's own ceilings or by one of its cat-factory
+  risk policies. One within the policy is approved on the host as a bot account
+  the org configured, optionally only after a clean AI review, and the approval is
+  withdrawn when new commits arrive. Off until an admin turns it on. See
+  [risk-policy.md](./risk-policy.md).
+
 ## What is a placeholder, and why it is still here
 
 | Placeholder                             | Why it exists now                                                                                                                                                                                                                                              |
@@ -744,6 +752,16 @@ what its DMs say a person holds stay put when the repository's vocabulary is edi
 **cat-factory over its published SDK.** The SDK's operations are generated from
 cat-factory's own OpenAPI spec, so a deployment bumping cat-factory cannot silently
 drift from what we send. Reimplementing the wire format would give up exactly that.
+
+**Approval with nobody looking is opt-in, and never in a person's name.** The AI
+review posts nothing until a person curates it, and that stays true for every
+review a person asked for. A risk policy is the one place sainte-beuve approves on
+its own, because an org decided in advance which pull requests need nobody: it is
+off by default, it approves only as a dedicated approver token or the
+deployment's GitHub App, and it withdraws an approval the moment the code it was
+about changes. The ceilings stay with whoever owns them: an org that uses a
+cat-factory risk policy gets cat-factory's verdict rather than a copy of its
+thresholds that could drift.
 
 **Every integration is optional.** A deployment with no Slack token still serves the
 board, and the route that needs one answers 503 naming what is missing. This is what

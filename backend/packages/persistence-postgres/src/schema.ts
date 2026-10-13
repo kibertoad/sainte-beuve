@@ -355,3 +355,4 @@ export const teams = pgTable(
 
 export { apiKeys, sessions } from './auth-schema.js'
 export { externalDirectory, externalRepositories } from './external-schema.js'
+export { riskAssessments } from './risk-schema.js'

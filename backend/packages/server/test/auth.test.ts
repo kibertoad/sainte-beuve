@@ -1,5 +1,5 @@
 import type { ApiKeyList, AuthState, IssuedApiKey, Viewer } from '@sainte-beuve/contracts'
-import { vcsOauthCredentialKey } from '@sainte-beuve/contracts'
+import { defaultRiskPolicy, vcsOauthCredentialKey } from '@sainte-beuve/contracts'
 import type { VcsIdentityGateway } from '@sainte-beuve/kernel'
 import { DEFAULT_SESSION_LIFETIME_MS } from '../src/container.js'
 import { runReminderTick } from '../src/reminders/tick.js'
@@ -117,6 +117,7 @@ describe('who is calling', () => {
           defaultRepositoryOwner: null,
           mergeComments: [],
           domains: [],
+          riskPolicy: defaultRiskPolicy(),
           createdAt: 0,
         },
         // `open` refuses nobody, so whoever can reach this deployment can

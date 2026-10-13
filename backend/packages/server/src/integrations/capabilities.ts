@@ -7,6 +7,7 @@ import {
   resolveAiReview,
   resolveGuidedReview,
 } from './resolve.js'
+import { resolveRiskAssessment } from './riskResolve.js'
 
 type Resolver = (
   container: AppContainer,
@@ -19,6 +20,7 @@ const RESOLVERS: Record<CapabilityName, Resolver> = {
   guidedReview: resolveGuidedReview,
   repositoryDirectory: async (container, catFactory) =>
     container.gateways === null ? null : catFactory,
+  externalRiskAssessment: resolveRiskAssessment,
 }
 
 /** Every capability for this container's org, resolved together over one read of its settings. */

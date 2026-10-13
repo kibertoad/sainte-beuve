@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { AssignedReviewer, BoardReview, ShortfallReason } from '@sainte-beuve/contracts'
+import type {
+  AssignedReviewer,
+  BoardReview,
+  RiskAssessment,
+  ShortfallReason,
+} from '@sainte-beuve/contracts'
 import {
   ACTIVE_REVIEW_STATUSES,
   ALL_REVIEW_STATUSES,
@@ -79,6 +84,19 @@ const { data, pending, error, refresh } = useAsyncData(
 )
 
 const reviews = computed<BoardReview[]>(() => data.value?.reviews ?? [])
+
+// The rows' risk assessments, read once the rows are known. A board with
+// assessment switched off simply gets none back.
+const { data: assessments } = useAsyncData(
+  'risk-assessments',
+  async () => {
+    const ids = reviews.value.map((review) => review.id)
+    if (ids.length === 0) return new Map<string, RiskAssessment>()
+    const listed = await api.listRiskAssessments(ids.slice(0, 200))
+    return new Map(listed.assessments.map((row) => [row.reviewId, row]))
+  },
+  { lazy: true, watch: [reviews] },
+)
 
 /**
  * The moment the rows date themselves against.
@@ -294,6 +312,7 @@ function clearLink() {
         :review="review"
         :expanded="expanded.has(review.id)"
         :now="now"
+        :assessment="assessments?.get(review.id) ?? null"
         @assign="assign(review)"
         @ai-review="requestAiReview(review)"
         @toggle="toggle(review.id)"

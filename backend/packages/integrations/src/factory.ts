@@ -69,7 +69,7 @@ export interface GatewayFactoryConfig {
    */
   catFactory: Pick<
     GatewayFactory,
-    'aiReview' | 'guidedReview' | 'catFactoryProbe' | 'catFactoryDirectory'
+    'aiReview' | 'guidedReview' | 'catFactoryProbe' | 'catFactoryDirectory' | 'riskAssessment'
   >
   clock?: Clock
   /** Swap the HTTP implementation. Only a test has a reason to. */

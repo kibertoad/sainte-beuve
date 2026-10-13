@@ -15,6 +15,8 @@ export const capabilitiesSchema = v.object({
    * ones linked in its cat-factory workspaces rather than registered here.
    */
   repositoryDirectory: v.boolean(),
+  /** cat-factory has a key and an instance, so it can score a pull request and judge it by its risk policies. */
+  externalRiskAssessment: v.boolean(),
 })
 export type Capabilities = v.InferOutput<typeof capabilitiesSchema>
 

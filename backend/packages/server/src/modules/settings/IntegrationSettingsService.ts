@@ -5,7 +5,11 @@ import type {
   VcsAuthMethod,
   VcsProvider,
 } from '@sainte-beuve/contracts'
-import { integrationIdSchema, vcsPatCredentialKey } from '@sainte-beuve/contracts'
+import {
+  integrationIdSchema,
+  vcsApproverCredentialKey,
+  vcsPatCredentialKey,
+} from '@sainte-beuve/contracts'
 import type { StoredIntegrationToken, VcsAccount } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
@@ -128,7 +132,7 @@ export class IntegrationSettingsService {
    * store is the capability being exercised, not the host.
    */
   private async accountOf(integrationId: IntegrationId, token: string): Promise<VcsAccount | null> {
-    const provider = providerOfPat(integrationId)
+    const provider = providerOfVcsToken(integrationId)
     const gateway =
       provider === null ? null : (this.container.gateways?.vcsFromToken(provider, token) ?? null)
     if (gateway === null) return null
@@ -231,13 +235,18 @@ function inUse(integrationId: IntegrationId, active: ActiveCredentials): boolean
     // There is no other source, so the stored key is in use once its instance
     // is configured too.
     'cat-factory': active.catFactory,
+    // Nothing else approves on the org's behalf in its place, so a stored one is in force.
+    'github-approver-token': true,
+    'gitlab-approver-token': true,
   }
   return ANSWERS[integrationId]
 }
 
-/** The host a pasteable id names, or null for a credential that is not one's. */
-function providerOfPat(integrationId: IntegrationId): VcsProvider | null {
-  if (integrationId === vcsPatCredentialKey('github')) return 'github'
-  if (integrationId === vcsPatCredentialKey('gitlab')) return 'gitlab'
+/** The host a pasteable source-control token is for, or null for a credential that is not one. */
+function providerOfVcsToken(integrationId: IntegrationId): VcsProvider | null {
+  for (const provider of ['github', 'gitlab'] as const) {
+    if (integrationId === vcsPatCredentialKey(provider)) return provider
+    if (integrationId === vcsApproverCredentialKey(provider)) return provider
+  }
   return null
 }
