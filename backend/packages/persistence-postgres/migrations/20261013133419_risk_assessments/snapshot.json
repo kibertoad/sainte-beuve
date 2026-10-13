@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "c495f3b7-f78a-427f-a3b8-f2b09bfecdba",
+  "id": "df5221d0-f715-4405-ba92-c586cec4185d",
   "prevIds": ["c71054cc-2051-48c4-968c-6ca9ebad889c"],
   "ddl": [
     {
@@ -1233,6 +1233,19 @@
       "generated": null,
       "identity": null,
       "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "risk_assessments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "revision",
       "entityType": "columns",
       "schema": "public",
       "table": "risk_assessments"

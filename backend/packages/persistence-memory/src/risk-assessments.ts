@@ -34,4 +34,10 @@ export class InMemoryRiskAssessmentRepository implements RiskAssessmentRepositor
     this.rows.set(assessment.reviewId, clone(assessment))
     return clone(assessment)
   }
+
+  async replace(assessment: RiskAssessment, expectedRevision: string): Promise<boolean> {
+    if (this.rows.get(assessment.reviewId)?.revision !== expectedRevision) return false
+    this.rows.set(assessment.reviewId, clone(assessment))
+    return true
+  }
 }

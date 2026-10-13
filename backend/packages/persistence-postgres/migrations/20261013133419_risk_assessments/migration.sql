@@ -3,6 +3,7 @@ CREATE TABLE "risk_assessments" (
 	"review_id" text,
 	"status" text NOT NULL,
 	"updated_at" bigint NOT NULL,
+	"revision" text NOT NULL,
 	"data" jsonb NOT NULL,
 	CONSTRAINT "risk_assessments_pkey" PRIMARY KEY("org_id","review_id")
 );

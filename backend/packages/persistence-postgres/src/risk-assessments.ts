@@ -55,6 +55,7 @@ export class PostgresRiskAssessmentRepository implements RiskAssessmentRepositor
       reviewId: assessment.reviewId,
       status: assessment.status,
       updatedAt: assessment.updatedAt,
+      revision: assessment.revision,
       data: assessment,
     }
     await this.db
@@ -62,5 +63,25 @@ export class PostgresRiskAssessmentRepository implements RiskAssessmentRepositor
       .values(row)
       .onConflictDoUpdate({ target: [riskAssessments.orgId, riskAssessments.reviewId], set: row })
     return assessment
+  }
+
+  async replace(assessment: RiskAssessment, expectedRevision: string): Promise<boolean> {
+    const rows = await this.db
+      .update(riskAssessments)
+      .set({
+        status: assessment.status,
+        updatedAt: assessment.updatedAt,
+        revision: assessment.revision,
+        data: assessment,
+      })
+      .where(
+        and(
+          eq(riskAssessments.orgId, this.orgId),
+          eq(riskAssessments.reviewId, assessment.reviewId),
+          eq(riskAssessments.revision, expectedRevision),
+        ),
+      )
+      .returning({ reviewId: riskAssessments.reviewId })
+    return rows.length > 0
   }
 }

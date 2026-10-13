@@ -9,12 +9,17 @@ const TABLE = 'risk_assessments'
 /** D1 binds at most 100 parameters per statement; one is the org. */
 const IDS_PER_READ = 90
 
-const UPSERT = `INSERT INTO ${TABLE} (org_id, review_id, status, updated_at, data)
-VALUES (?, ?, ?, ?, ?)
+const UPSERT = `INSERT INTO ${TABLE} (org_id, review_id, status, updated_at, revision, data)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT (org_id, review_id) DO UPDATE SET
   status = excluded.status,
   updated_at = excluded.updated_at,
+  revision = excluded.revision,
   data = excluded.data`
+
+const REPLACE = `UPDATE ${TABLE} SET status = ?, updated_at = ?, revision = ?, data = ?
+WHERE org_id = ? AND review_id = ? AND revision = ?
+RETURNING review_id`
 
 const IN_FLIGHT = `SELECT data FROM ${TABLE}
 WHERE org_id = ? AND status IN (${placeholders(RISK_ASSESSMENT_IN_FLIGHT_STATUSES.length)})
@@ -64,8 +69,22 @@ export class SqlRiskAssessmentRepository implements RiskAssessmentRepository {
       assessment.reviewId,
       assessment.status,
       assessment.updatedAt,
+      assessment.revision,
       encodeData(assessment),
     ])
     return assessment
+  }
+
+  async replace(assessment: RiskAssessment, expectedRevision: string): Promise<boolean> {
+    const row = await this.db.first(REPLACE, [
+      assessment.status,
+      assessment.updatedAt,
+      assessment.revision,
+      encodeData(assessment),
+      this.orgId,
+      assessment.reviewId,
+      expectedRevision,
+    ])
+    return row !== null
   }
 }

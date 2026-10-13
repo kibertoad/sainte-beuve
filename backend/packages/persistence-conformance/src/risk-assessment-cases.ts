@@ -26,6 +26,7 @@ function assessment(reviewId: string, overrides: Partial<RiskAssessment> = {}): 
     approvedAs: 'approver-bot',
     approvalId: '9001',
     attempts: 1,
+    revision: 'rev-1',
     requestedAt: 1_000,
     updatedAt: 2_000,
     ...overrides,
@@ -72,6 +73,22 @@ export const riskAssessmentCases: readonly ConformanceCase[] = [
     assert.deepStrictEqual(await repos.riskAssessments.listByReviews(['r1']), [replaced])
   }),
 
+  conformanceCase('a replace writes only over the revision it names', async (repos) => {
+    const stored = pending('r1', 1_000)
+    await repos.riskAssessments.put(stored)
+    const claimed = { ...stored, revision: 'rev-2', updatedAt: 2_000 }
+    assert.strictEqual(await repos.riskAssessments.replace(claimed, 'rev-1'), true)
+    const late = { ...stored, status: 'approved' as const, revision: 'rev-3' }
+    assert.strictEqual(await repos.riskAssessments.replace(late, 'rev-1'), false)
+    assert.deepStrictEqual(await repos.riskAssessments.get('r1'), claimed)
+    assert.deepStrictEqual(await repos.riskAssessments.listInFlight(10), [claimed])
+  }),
+
+  conformanceCase('a replace of a review with no assessment writes nothing', async (repos) => {
+    assert.strictEqual(await repos.riskAssessments.replace(pending('r1', 1_000), 'rev-1'), false)
+    assert.strictEqual(await repos.riskAssessments.get('r1'), null)
+  }),
+
   conformanceCase('assessments are read for the named reviews only', async (repos) => {
     const rows = ['r1', 'r2', 'r3'].map((id) => assessment(id))
     for (const row of rows) await repos.riskAssessments.put(row)
@@ -114,6 +131,12 @@ export const riskAssessmentTenancyCases: readonly TenancyCase[] = [
     assert.deepStrictEqual(
       (await stores.forOrg('org-b').riskAssessments.listInFlight(10)).map((row) => row.reviewId),
       [],
+    )
+    const fromB = assessment('r1', { status: 'failed', revision: 'rev-2' })
+    assert.strictEqual(await stores.forOrg('org-b').riskAssessments.replace(fromB, 'rev-1'), true)
+    assert.deepStrictEqual(
+      await stores.forOrg('org-a').riskAssessments.get('r1'),
+      pending('r1', 1_000),
     )
   }),
 ]

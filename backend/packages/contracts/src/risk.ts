@@ -195,6 +195,8 @@ export const riskAssessmentSchema = v.object({
   /** The host's id for that approval, so it can be withdrawn when new commits arrive. */
   approvalId: v.nullable(v.string()),
   attempts: v.number(),
+  /** Changes on every write. A step writes only over the revision it read. */
+  revision: v.string(),
   requestedAt: v.number(),
   updatedAt: v.number(),
 })

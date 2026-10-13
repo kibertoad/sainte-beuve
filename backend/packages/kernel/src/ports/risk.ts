@@ -17,8 +17,15 @@ export interface RiskAssessmentRepository {
    * least recently updated first, ties broken on the review id.
    */
   listInFlight(limit: number): Promise<RiskAssessment[]>
-  /** Store or replace the assessment of one review. */
+  /** Store the assessment of one review, replacing whatever it had, whatever its revision. */
   put(assessment: RiskAssessment): Promise<RiskAssessment>
+  /**
+   * Check and set: write `assessment` only while the stored row is still at
+   * `expectedRevision`. False when another write got there first, which is how
+   * a step learns that a second driver claimed the row or that new commits
+   * restarted it.
+   */
+  replace(assessment: RiskAssessment, expectedRevision: string): Promise<boolean>
 }
 
 /** What an external assessor read and concluded about one pull request. */
