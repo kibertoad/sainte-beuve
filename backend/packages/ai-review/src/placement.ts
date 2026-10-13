@@ -4,7 +4,7 @@ import { type DirectoryLocation, locationOf } from './directoryKeys.js'
 import { refusalFor } from './refusals.js'
 import type { WorkspaceClients } from './workspaceClients.js'
 
-/** Where a review task goes: a service, and the workspace it belongs to. */
+/** Where a task goes: a service, and the workspace it belongs to. */
 export interface Placement {
   serviceId: string
   /** Null for the key's only workspace. */
@@ -15,7 +15,7 @@ export interface PlacementRequest {
   pullRequest: PullRequestRef
   /** The mirror keys the repository is listed under, in the order to prefer them. */
   directoryKeys: readonly string[]
-  /** The service a review goes under when none backs its repository. */
+  /** The service a task goes under when none backs its repository. */
   defaultServiceId: string | null
 }
 
@@ -27,10 +27,10 @@ export interface PlacementRequest {
  * in one workspace does not stop filing when another backs it. A repository no
  * workspace backs (a monorepo never is, since it can back several) falls back to
  * the default, but only once every linking workspace has answered: filing under
- * the default because the key could not read a workspace would put the review
+ * the default because the key could not read a workspace would put the task
  * under another repository's service without saying so.
  */
-export async function placeReview(
+export async function placeTask(
   clients: WorkspaceClients,
   request: PlacementRequest,
 ): Promise<Placement> {
@@ -50,7 +50,7 @@ export async function placeReview(
   if (refused !== undefined) throw refused.reason
   if (defaultServiceId === null) {
     throw new UnavailableError(
-      `Cannot file a review task for ${formatPullRequest(pullRequest)}: no cat-factory service backs its repository and no default service is set. ` +
+      `Cannot file a cat-factory task for ${formatPullRequest(pullRequest)}: no cat-factory service backs its repository and no default service is set. ` +
         'Create a service for the repository in cat-factory, or set a default service id on the Configuration screen',
     )
   }
@@ -86,7 +86,7 @@ async function backing(
 /**
  * The first linking workspace that holds the default service, else null for
  * the key's only workspace. Naming it is what lets a key reaching several
- * workspaces file a monorepo's review at all.
+ * workspaces file a monorepo's task at all.
  */
 async function workspaceHolding(
   clients: WorkspaceClients,

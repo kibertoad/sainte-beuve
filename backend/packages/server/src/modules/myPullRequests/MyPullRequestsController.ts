@@ -2,6 +2,7 @@ import {
   listMyPullRequestsContract,
   mergeMyPullRequestContract,
   postMergeCommentContract,
+  resolveConflictsContract,
 } from '@sainte-beuve/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -10,7 +11,7 @@ import { principalOf } from '../auth/principal.js'
 import { MergeService } from './MergeService.js'
 import { MyPullRequestsService } from './MyPullRequestsService.js'
 
-/** My PRs: the viewer's own open pull requests, and merging them. */
+/** My PRs: the viewer's own open pull requests, merging them, and resolving their conflicts. */
 export function myPullRequestsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -27,6 +28,11 @@ export function myPullRequestsController(): Hono<AppEnv> {
   buildHonoRoute(app, postMergeCommentContract, async (c) => {
     const service = new MergeService(c.get('container'), principalOf(c))
     return c.json(await service.postComment(c.req.valid('json')), 200)
+  })
+
+  buildHonoRoute(app, resolveConflictsContract, async (c) => {
+    const service = new MergeService(c.get('container'), principalOf(c))
+    return c.json(await service.resolveConflicts(c.req.valid('json')), 200)
   })
 
   return app

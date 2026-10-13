@@ -1,4 +1,9 @@
-import { CatFactoryClient, CatFactoryNotFoundError, type PublicRun } from '@cat-factory/sdk'
+import {
+  CatFactoryClient,
+  CatFactoryNotFoundError,
+  type CreatePublicTask,
+  type PublicRun,
+} from '@cat-factory/sdk'
 import type { AiReviewCuration, AiReviewResolution, PullRequestRef } from '@sainte-beuve/contracts'
 import {
   type AiReviewGateway,
@@ -8,7 +13,7 @@ import {
   withDeadline,
 } from '@sainte-beuve/kernel'
 import { curationOf } from './curation.js'
-import { placeReview } from './placement.js'
+import { placeTask } from './placement.js'
 import { refusalFor } from './refusals.js'
 import { WorkspaceClients } from './workspaceClients.js'
 
@@ -136,50 +141,79 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     instructions: string | null
     directoryKeys: readonly string[]
   }): Promise<AiReviewHandle> {
-    const placement = await placeReview(this.clients, {
-      pullRequest: input.pullRequest,
-      directoryKeys: input.directoryKeys,
+    const ref = formatPullRequest(input.pullRequest)
+    const brief = [`Review ${ref}: ${input.pullRequest.url}`, input.instructions]
+      .filter((line): line is string => line !== null && line.length > 0)
+      .join('\n\n')
+    return this.fileAndStart(input, {
+      kind: 'review',
+      task: {
+        title: `Review ${ref}: ${input.title}`.slice(0, 200),
+        description: brief.slice(0, 2000),
+        taskType: 'review',
+      },
+      pipelineId: this.options.pipelineId,
+    })
+  }
+
+  async requestConflictResolution(input: {
+    pullRequest: PullRequestRef
+    directoryKeys: readonly string[]
+  }): Promise<AiReviewHandle> {
+    const ref = formatPullRequest(input.pullRequest)
+    return this.fileAndStart(input, {
+      kind: 'conflict resolution',
+      task: {
+        title: `Resolve conflicts in ${ref}`.slice(0, 200),
+        description:
+          `Merge the base branch into ${ref} (${input.pullRequest.url}), resolve the ` +
+          'conflicts, and push the result to its own branch.',
+        taskType: 'resolve-conflicts',
+        // cat-factory attaches the pull request by its number, which points the
+        // resolver at its branch. The URL makes it refuse a service linked to
+        // another repository, where the number would name somebody else's branch.
+        fields: { prNumber: input.pullRequest.number, prUrl: input.pullRequest.url },
+      },
+      // No pipeline pinned: the one a deployment pins is a review pipeline, and
+      // this task type brings its own.
+      pipelineId: undefined,
+    })
+  }
+
+  /**
+   * File a task under the service backing the pull request's repository, in
+   * the workspace that holds it, then start it. Create and start are two calls
+   * in cat-factory's API on purpose (a task is editable before it runs), but
+   * nothing filed from here has anything to edit.
+   */
+  private async fileAndStart(
+    target: { pullRequest: PullRequestRef; directoryKeys: readonly string[] },
+    filing: { kind: string; task: CreatePublicTask; pipelineId: string | undefined },
+  ): Promise<AiReviewHandle> {
+    const { kind, task: body, pipelineId } = filing
+    const placement = await placeTask(this.clients, {
+      ...target,
       defaultServiceId: this.options.serviceId,
     })
     const client = this.clients.in(placement.workspaceId)
-    const task = await this.createTask(client, placement.serviceId, input)
-    // Create and start are two calls in cat-factory's API on purpose (a task is
-    // editable before it runs), but a review has nothing to edit, so file it and go.
+    let task: { taskId: string }
     try {
-      await client.tasks.start(
-        task.taskId,
-        this.options.pipelineId === undefined ? {} : { pipelineId: this.options.pipelineId },
-      )
+      task = await client.tasks.create(placement.serviceId, body)
+    } catch (err) {
+      throw refusalFor(err, `file a ${kind} task for ${formatPullRequest(target.pullRequest)}`)
+    }
+    try {
+      await client.tasks.start(task.taskId, pipelineId === undefined ? {} : { pipelineId })
     } catch (err) {
       // Through the same translation as every other call, because this is where a
       // `write`-scope key is turned away: the run would park, so cat-factory will
       // not start one the caller could not answer. See `refusalFor`.
-      throw refusalFor(err, `start the review task ${task.taskId} it had accepted`)
+      throw refusalFor(err, `start the ${kind} task ${task.taskId} it had accepted`)
     }
     return {
       taskId: task.taskId,
       url: `${this.options.baseUrl}/tasks/${task.taskId}`,
       workspaceId: placement.workspaceId,
-    }
-  }
-
-  private async createTask(
-    client: CatFactoryClient,
-    serviceId: string,
-    input: { pullRequest: PullRequestRef; title: string; instructions: string | null },
-  ) {
-    const ref = formatPullRequest(input.pullRequest)
-    const brief = [`Review ${ref}: ${input.pullRequest.url}`, input.instructions]
-      .filter((line): line is string => line !== null && line.length > 0)
-      .join('\n\n')
-    try {
-      return await client.tasks.create(serviceId, {
-        title: `Review ${ref}: ${input.title}`.slice(0, 200),
-        description: brief.slice(0, 2000),
-        taskType: 'review',
-      })
-    } catch (err) {
-      throw refusalFor(err, `file a review task for ${ref}`)
     }
   }
 

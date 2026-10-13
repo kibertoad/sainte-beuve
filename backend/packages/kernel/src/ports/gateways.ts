@@ -119,6 +119,16 @@ export interface AiReviewGateway {
     instructions: string | null
     directoryKeys: readonly string[]
   }): Promise<AiReviewHandle>
+  /**
+   * Hand a pull request whose branch conflicts with its base to cat-factory's
+   * conflict resolver, which merges the base in, resolves the conflicts and
+   * pushes to the pull request's own branch. Resolves once the task is accepted.
+   * Placed as `requestReview` places a review, through the same `directoryKeys`.
+   */
+  requestConflictResolution(input: {
+    pullRequest: PullRequestRef
+    directoryKeys: readonly string[]
+  }): Promise<AiReviewHandle>
   /** Poll one delegated run. The Worker cron and the Node scheduler both drive this. */
   getStatus(input: { taskId: string } & AiReviewWorkspace): Promise<AiReviewReport>
   /**
