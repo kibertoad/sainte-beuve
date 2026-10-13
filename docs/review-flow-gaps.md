@@ -36,8 +36,9 @@ pull request is merged with its review findings fixed.
 | 13  | A guided review names its cat-factory workspace               | 5    | 5          | Merged    | [#37](https://github.com/kibertoad/sainte-beuve/pull/37) |
 | 14  | Board lookups tell GitHub and GitLab apart                    | 5    |            | Merged    | [#41](https://github.com/kibertoad/sainte-beuve/pull/41) |
 | 15  | Attention answers are written atomically                      | 3    |            | Merged    | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
-| 16  | One commitment per reviewer and pull request                  | 3    |            | In review | [#48](https://github.com/kibertoad/sainte-beuve/pull/48) |
-| 17  | Slack app setup from a generated manifest                     | 3    |            | In review | [#47](https://github.com/kibertoad/sainte-beuve/pull/47) |
+| 16  | One commitment per reviewer and pull request                  | 3    |            | Merged    | [#48](https://github.com/kibertoad/sainte-beuve/pull/48) |
+| 17  | Slack app setup from a generated manifest                     | 3    |            | Merged    | [#47](https://github.com/kibertoad/sainte-beuve/pull/47) |
+| 18  | One copy of the cat-factory SDK, with no override             | 1    |            | In review |                                                          |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -174,3 +175,11 @@ the bot scopes are the three the code calls on (`chat:write`,
 the bot token and signing secret back. A deployment with no https
 `API_BASE_URL` is told what to set instead of being handed a URL Slack cannot
 reach.
+
+### 18. One copy of the cat-factory SDK
+
+`@sainte-beuve/ai-review` depends on `@cat-factory/directory-sync` 0.2.1, which
+takes `@cat-factory/sdk` as a peer over `>=0.57.0 <1.0.0`, and on
+`@cat-factory/webhooks` 0.2.0, the version `directory-sync` itself uses. The
+workspace resolves one SDK and one `webhooks` with no override in
+`pnpm-workspace.yaml`.

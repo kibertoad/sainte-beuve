@@ -28,10 +28,6 @@ overrides:
   # `@cloudflare/vitest-pool-workers` pins (wrangler 4.124.0 + miniflare
   # 5.20260815.0-alpha). Move it with wrangler, never on its own.
   '@cloudflare/workers-types': 5.20260815.1
-  # `@cat-factory/directory-sync@0.1.0` was published pinning the SDK to 0.56.3,
-  # which predates the directory API it drives. Remove once a release ranges it
-  # over 0.57.
-  '@cat-factory/directory-sync>@cat-factory/sdk': ^0.57.0
 
 # NO `wrangler` override, deliberately. The invariant is ONE wrangler (and
 # through it one workerd + one miniflare): the Worker suite runs inside the
