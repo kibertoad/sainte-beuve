@@ -1,9 +1,12 @@
 import type {
+  ConflictResolution,
   MergeMyPullRequest,
   MergeOutcome,
   PostMergeComment,
   Project,
   PullRequestStatus,
+  ResolveConflicts,
+  Viewer,
 } from '@sainte-beuve/contracts'
 import { handleOf } from '@sainte-beuve/contracts'
 import {
@@ -17,9 +20,11 @@ import {
 } from '@sainte-beuve/kernel'
 import { isSameHandle } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
-import { VcsResolutions } from '../../integrations/resolve.js'
+import { requireCapability } from '../../http/errors.js'
+import { resolveAiReview, VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
+import { catFactoryDirectoryKeys } from '../projects/directoryKeys.js'
 import { NO_CREDENTIAL } from '../workspace/sweep.js'
 import {
   directMergeFor,
@@ -37,11 +42,16 @@ import {
  * viewer did not author. The host still applies its own branch protection.
  */
 
-interface Target {
+/** An open pull request the viewer authored, as its host reports it now. */
+interface Authored {
+  viewer: Viewer
   project: Project
   address: PullRequestAddress
   gateway: VcsGateway
   status: PullRequestStatus
+}
+
+interface Target extends Authored {
   context: MergeContext
 }
 
@@ -54,6 +64,18 @@ const RESTRICTED =
 
 const CONFIRM_OVERRIDE =
   'This repository merges through its merge comments. Confirm the override to merge directly.'
+
+const NOT_YOURS_TO_RESOLVE =
+  'My PRs only resolves conflicts on pull requests you opened. Ask the author to resolve them.'
+
+const NO_CONFLICTS = 'This pull request has no conflicts with its base to resolve. Reload My PRs.'
+
+const STILL_CHECKING =
+  'The host is still checking whether this pull request conflicts with its base. Try again shortly.'
+
+const NO_CAT_FACTORY =
+  'cat-factory is not configured for this org: resolving conflicts needs its base URL and an ' +
+  'API key, which an admin sets on the Configuration screen'
 
 const MOVED =
   'The pull request has new commits since you loaded it. Reload My PRs and check them first.'
@@ -101,7 +123,38 @@ export class MergeService {
     return { outcome: 'commented' }
   }
 
+  /**
+   * Hand a conflicting pull request to cat-factory, whose resolver merges the
+   * base in and pushes the result to the pull request's own branch. The author's
+   * call, as a merge is: it changes their branch.
+   */
+  async resolveConflicts(input: ResolveConflicts): Promise<ConflictResolution> {
+    const catFactory = requireCapability(await resolveAiReview(this.container), NO_CAT_FACTORY)
+    const { project, address, status } = await this.authored(input, NOT_YOURS_TO_RESOLVE)
+    if (status.mergeability === 'checking') throw new ConflictError(STILL_CHECKING)
+    if (status.mergeability !== 'conflicting') throw new ConflictError(NO_CONFLICTS)
+    const pullRequest = { ...address, url: status.url }
+    const handle = await catFactory.gateway.requestConflictResolution({
+      pullRequest,
+      directoryKeys: await catFactoryDirectoryKeys(this.container, pullRequest),
+    })
+    this.container.logger.info(
+      { projectId: project.id, number: input.number, taskId: handle.taskId },
+      'handed a conflicting pull request to cat-factory',
+    )
+    return { taskId: handle.taskId, url: handle.url }
+  }
+
   private async target(input: { projectId: string; number: number }): Promise<Target> {
+    const authored = await this.authored(input, NOT_YOURS)
+    const context = await mergeContextOf(this.container, this.principal, authored.viewer)
+    return { ...authored, context }
+  }
+
+  private async authored(
+    input: { projectId: string; number: number },
+    notYours: string,
+  ): Promise<Authored> {
     const viewer = await new ViewerService(this.container, this.principal).current()
     const project = assertFound(
       await this.container.repositories.projects.getById(input.projectId),
@@ -116,11 +169,10 @@ export class MergeService {
     }
     const status = await gateway.pullRequestStatus(address)
     if (!isSameHandle(handleOf(viewer.reviewer.handles, project.provider), status.authorLogin)) {
-      throw new ForbiddenError(NOT_YOURS)
+      throw new ForbiddenError(notYours)
     }
     if (status.state !== 'open') throw new ConflictError(`This pull request is ${status.state}.`)
-    const context = await mergeContextOf(this.container, this.principal, viewer)
-    return { project, address, gateway, status, context }
+    return { viewer, project, address, gateway, status }
   }
 
   private async gatewayFor(project: Project): Promise<VcsGateway> {

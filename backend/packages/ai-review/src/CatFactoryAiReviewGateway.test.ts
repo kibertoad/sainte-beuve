@@ -192,6 +192,81 @@ function service(serviceId: string) {
   return { serviceId, title: serviceId, description: '', status: 'planned', type: 'service' }
 }
 
+describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
+  it('files a resolve-conflicts task naming the pull request, and starts its own pipeline', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/tasks': { body: task() },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    const handle = await gateway.requestConflictResolution({
+      pullRequest: PULL_REQUEST,
+      directoryKeys: [],
+    })
+
+    expect(handle).toStrictEqual({
+      taskId: 'task-1',
+      url: 'https://cat-factory.example.com/tasks/task-1',
+      workspaceId: null,
+    })
+    expect(calls[0]?.body).toMatchObject({
+      taskType: 'resolve-conflicts',
+      fields: { prNumber: 7, prUrl: 'https://github.com/kibertoad/sainte-beuve/pull/7' },
+      title: 'Resolve conflicts in kibertoad/sainte-beuve#7',
+    })
+    expect(calls[1]).toMatchObject({ path: '/api/v1/tasks/task-1/start', body: {} })
+  })
+
+  it('files under the service backing the repository, in the workspace that links it', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/repos': { body: repos({ repoId: 42, serviceId: 'svc-42' }) },
+      '/tasks': { body: task({ serviceId: 'svc-42' }) },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    const handle = await gateway.requestConflictResolution({
+      pullRequest: PULL_REQUEST,
+      directoryKeys: ['ws-a/42'],
+    })
+
+    expect(handle.workspaceId).toBe('ws-a')
+    expect(calls.map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
+      { path: '/api/v1/repos', workspace: 'ws-a' },
+      { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-a' },
+      { path: '/api/v1/tasks/task-1/start', workspace: 'ws-a' },
+    ])
+  })
+
+  /**
+   * A default service linked to another repository would attach whichever pull
+   * request there shares the number. The URL is what lets cat-factory refuse it.
+   */
+  it('passes on the refusal of a service linked to another repository, and starts nothing', async () => {
+    const message =
+      'That pull request belongs to kibertoad/sainte-beuve, but this service is linked to acme/api.'
+    const { gateway, calls } = gatewayOver({
+      '/tasks': {
+        status: 422,
+        body: {
+          error: {
+            code: 'validation_failed',
+            message,
+            details: { reason: 'attached_pr_repo_mismatch', expected: 'acme/api' },
+          },
+        },
+      },
+    })
+
+    await expect(
+      gateway.requestConflictResolution({ pullRequest: PULL_REQUEST, directoryKeys: [] }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining(message),
+      details: { upstream: 'cat-factory', reason: 'attached_pr_repo_mismatch' },
+    })
+    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/services/svc-1/tasks'])
+  })
+})
+
 describe('CatFactoryAiReviewGateway.requestReview', () => {
   it('files the task and starts it, and reports the handle the loop is tracked by', async () => {
     const { gateway, calls } = gatewayOver({
