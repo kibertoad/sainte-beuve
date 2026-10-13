@@ -43,9 +43,6 @@ importers:
       '@cat-factory/sdk':
         specifier: ^0.57.0
         version: 0.57.0
-      '@cat-factory/webhooks':
-        specifier: ^0.2.0
-        version: 0.2.0
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../contracts

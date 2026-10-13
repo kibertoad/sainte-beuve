@@ -33,7 +33,6 @@
   "dependencies": {
     "@cat-factory/directory-sync": "^0.2.1",
     "@cat-factory/sdk": "^0.57.0",
-    "@cat-factory/webhooks": "^0.2.0",
     "@sainte-beuve/contracts": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*"
   },

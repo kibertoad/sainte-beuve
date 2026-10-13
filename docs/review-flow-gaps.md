@@ -38,7 +38,7 @@ pull request is merged with its review findings fixed.
 | 15  | Attention answers are written atomically                      | 3    |            | Merged    | [#44](https://github.com/kibertoad/sainte-beuve/pull/44) |
 | 16  | One commitment per reviewer and pull request                  | 3    |            | Merged    | [#48](https://github.com/kibertoad/sainte-beuve/pull/48) |
 | 17  | Slack app setup from a generated manifest                     | 3    |            | Merged    | [#47](https://github.com/kibertoad/sainte-beuve/pull/47) |
-| 18  | One copy of the cat-factory SDK, with no override             | 1    |            | In review |                                                          |
+| 18  | One copy of the cat-factory SDK, with no override             | 1    |            | In review | [#50](https://github.com/kibertoad/sainte-beuve/pull/50) |
 
 Status is one of: Not started, In progress, In review, Merged.
 
@@ -179,7 +179,6 @@ reach.
 ### 18. One copy of the cat-factory SDK
 
 `@sainte-beuve/ai-review` depends on `@cat-factory/directory-sync` 0.2.1, which
-takes `@cat-factory/sdk` as a peer over `>=0.57.0 <1.0.0`, and on
-`@cat-factory/webhooks` 0.2.0, the version `directory-sync` itself uses. The
-workspace resolves one SDK and one `webhooks` with no override in
-`pnpm-workspace.yaml`.
+takes `@cat-factory/sdk` as a peer over `>=0.57.0 <1.0.0` and brings
+`@cat-factory/webhooks` 0.2.0 to verify its pushes. The workspace resolves one
+SDK and one `webhooks` with no override in `pnpm-workspace.yaml`.
