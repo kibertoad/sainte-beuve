@@ -1,5 +1,5 @@
 import type { PullRequestRef } from '@sainte-beuve/contracts'
-import type { ReviewerTally } from '@sainte-beuve/kernel'
+import type { AuthorTally, ProjectActivity, VcsGateway } from '@sainte-beuve/kernel'
 import {
   PAST_REVIEW_READ_LIMIT,
   PAST_REVIEW_STATUSES,
@@ -10,6 +10,14 @@ import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 
 type Repository = Pick<PullRequestRef, 'provider' | 'owner' | 'repo'>
+
+/** A repository's recent review history, and who opened pull requests in it. */
+export interface RepositoryActivity {
+  history: ReviewHistory
+  authors: AuthorTally[]
+}
+
+const NO_ACTIVITY: ProjectActivity = { reviewers: [], authors: [] }
 
 /**
  * A pull request's repository's recent review history, from the board's rows
@@ -23,21 +31,30 @@ export async function readReviewHistory(
   container: AppContainer,
   pullRequest: Repository,
 ): Promise<ReviewHistory> {
-  const repository = {
-    provider: pullRequest.provider,
-    owner: pullRequest.owner,
-    repo: pullRequest.repo,
-  }
+  return (await readRepositoryActivity(container, pullRequest)).history
+}
+
+/**
+ * The same history, with the host's tally of who opened pull requests in the
+ * window. `gateway` is the credential to ask the host with when the caller
+ * already resolved one; null asks the board alone.
+ */
+export async function readRepositoryActivity(
+  container: AppContainer,
+  repository: Repository,
+  gateway?: VcsGateway | null,
+): Promise<RepositoryActivity> {
+  const ref = { provider: repository.provider, owner: repository.owner, repo: repository.repo }
   const since = container.clock.now() - PAST_REVIEW_WINDOW_MS
   const [board, host] = await Promise.all([
-    container.repositories.reviews.listForRepository(repository, {
+    container.repositories.reviews.listForRepository(ref, {
       status: PAST_REVIEW_STATUSES,
       since,
       limit: PAST_REVIEW_READ_LIMIT,
     }),
-    hostReviewers(container, repository, since),
+    hostActivity(container, { ref, since, gateway }),
   ])
-  return { board, host }
+  return { history: { board, host: host.reviewers }, authors: host.authors }
 }
 
 /**
@@ -45,20 +62,23 @@ export async function readReviewHistory(
  * path: a host that is not configured, or is down, leaves the board's count to
  * stand rather than failing an assignment or a recommendation.
  */
-async function hostReviewers(
+async function hostActivity(
   container: AppContainer,
-  repository: Repository,
-  since: number,
-): Promise<ReviewerTally[]> {
+  read: { ref: Repository; since: number; gateway: VcsGateway | null | undefined },
+): Promise<ProjectActivity> {
+  const { ref, since } = read
   try {
-    const vcs = await resolveVcs(container, repository.provider)
-    if (vcs === null) return []
-    return await vcs.gateway.pastReviewers(repository, since)
+    const gateway =
+      read.gateway === undefined
+        ? ((await resolveVcs(container, ref.provider))?.gateway ?? null)
+        : read.gateway
+    if (gateway === null) return NO_ACTIVITY
+    return await gateway.pastActivity(ref, since)
   } catch (err) {
     container.logger.warn(
-      { err, provider: repository.provider, owner: repository.owner, repo: repository.repo },
+      { err, provider: ref.provider, owner: ref.owner, repo: ref.repo },
       'could not read the review history from the host',
     )
-    return []
+    return NO_ACTIVITY
   }
 }

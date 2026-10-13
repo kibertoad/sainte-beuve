@@ -50,6 +50,36 @@ export interface ReviewerTally {
   reviews: number
 }
 
+/** How many of a project's pull requests one handle opened. */
+export interface AuthorTally {
+  login: string
+  pullRequests: number
+}
+
+/** Who was active in a project recently: who gave verdicts, and who opened pull requests. */
+export interface ProjectActivity {
+  reviewers: ReviewerTally[]
+  authors: AuthorTally[]
+}
+
+/** Who has reviewed one open pull request. */
+export interface OpenPullRequestReviews {
+  /** The number the host shows on the page. */
+  number: number
+  /**
+   * The handles that submitted a review, each once, as first spelled. The
+   * author and bot accounts are left out. GitLab records nothing short of an
+   * approval, so there it is the approvers.
+   */
+  reviewerLogins: string[]
+  /**
+   * The handles the host is still waiting on for a review: asked, and not
+   * answered since. GitLab keeps a reviewer listed after they approve, so this
+   * is narrower there than the pull request's requested reviewers.
+   */
+  awaitingLogins: string[]
+}
+
 /** One file a pull request changed, with its line counts. */
 export interface ChangedFile {
   path: string
@@ -136,12 +166,19 @@ export interface VcsGateway {
    */
   identify(): Promise<VcsAccount | null>
   /**
-   * Who gave a verdict on the project's pull requests updated since `since`,
-   * each pull request counted once per reviewer, over at most one page of the
-   * most recently updated. A verdict is an approval or a request for changes;
-   * GitLab records only approvals.
+   * Who was active in the project since `since`, over at most one page of its
+   * most recently updated pull requests: who gave a verdict on them, each pull
+   * request counted once per reviewer, and who opened the ones created in the
+   * window. A verdict is an approval or a request for changes; GitLab records
+   * only approvals.
    */
-  pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]>
+  pastActivity(project: ProjectRef, since: EpochMs): Promise<ProjectActivity>
+  /**
+   * Who has reviewed each of the project's open pull requests, over at most one
+   * page of the most recently updated. A pull request with no entry was not
+   * read, which is not the same as nobody having reviewed it.
+   */
+  openPullRequestReviews(project: ProjectRef): Promise<OpenPullRequestReviews[]>
   /**
    * The files the pull request changes, up to the host's own cap on one listing
    * (3000 on GitHub). `truncated` says the list stopped short of the whole diff.

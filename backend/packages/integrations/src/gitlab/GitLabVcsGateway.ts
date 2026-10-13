@@ -8,18 +8,20 @@ import type {
 import type {
   ChangedFile,
   EpochMs,
+  OpenPullRequestReviews,
+  ProjectActivity,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
-  ReviewerTally,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { gitlabApprove, gitlabChangedFiles, gitlabWithdrawApproval } from './approval.js'
-import { gitlabApiStatusOf, gitlabRequest, projectPath } from './client.js'
-import { pastGitLabReviewers } from './history.js'
+import { gitlabApiStatusOf, gitlabRequest, MAX_PAGES, PAGE_SIZE, projectPath } from './client.js'
+import { pastGitLabActivity } from './history.js'
 import { lookupGitLabRepositories } from './lookup.js'
+import { gitlabOpenPullRequestReviews } from './openReviews.js'
 import {
   type GitLabApprovals,
   type GitLabMergeRequestDetail,
@@ -39,16 +41,6 @@ import {
  * group access token is a pasted token like any other and there is nothing to
  * mint per project.
  */
-
-/** How many merge requests one page of a workspace read pulls. GitLab's own cap. */
-const PAGE_SIZE = 100
-
-/**
- * How many pages one read will follow. A project with more than a thousand open
- * merge requests is past what any screen is read down, and the cap is what
- * keeps one badly registered project from spending a rate-limit budget.
- */
-const MAX_PAGES = 10
 
 /**
  * What GitLab answers a merge it will not make with: 405 or 406 for one it
@@ -235,16 +227,20 @@ export class GitLabVcsGateway implements VcsGateway {
     return this.identity
   }
 
+  async pastActivity(project: ProjectRef, since: EpochMs): Promise<ProjectActivity> {
+    return pastGitLabActivity(project, since, this.options)
+  }
+
+  async openPullRequestReviews(project: ProjectRef): Promise<OpenPullRequestReviews[]> {
+    return gitlabOpenPullRequestReviews(project, this.options)
+  }
+
   /**
    * Rewrite the reviewer list. GitLab has no add/remove endpoint: the update
    * REPLACES `reviewer_ids` wholesale, so the current list has to be read and
    * merged, or a reroll would silently drop everybody the update did not name.
    * Answers what the list held before, and the users the logins resolved to.
    */
-  async pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]> {
-    return pastGitLabReviewers(project, since, this.options)
-  }
-
   private async changeReviewers(
     pr: PullRequestRef,
     combine: (current: number[], named: number[]) => number[],

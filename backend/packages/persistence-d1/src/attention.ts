@@ -96,6 +96,9 @@ export class SqlAttentionRepository implements AttentionRepository {
   }
 }
 
+/** D1 binds at most 100 parameters per statement; one is the org. */
+const KEYS_PER_READ = 90
+
 // No conflict target: a taken id loses the same way a taken
 // `(org_id, reviewer_id, pull_request_key)` does, and writes nothing.
 const COMMITMENT_INSERT = `INSERT INTO review_commitments (org_id, id, reviewer_id, pull_request_key, created_at, data)
@@ -123,6 +126,22 @@ export class SqlReviewCommitmentRepository implements ReviewCommitmentRepository
       [this.orgId, commitmentId],
     )
     return row === null ? null : decodeData(reviewCommitmentSchema, 'review_commitments', row.data)
+  }
+
+  async listByPullRequests(
+    pullRequests: readonly { provider: string; owner: string; repo: string; number: number }[],
+  ): Promise<ReviewCommitment[]> {
+    const keys = [...new Set(pullRequests.map(pullRequestKey))]
+    const found: ReviewCommitment[] = []
+    for (let start = 0; start < keys.length; start += KEYS_PER_READ) {
+      const chunk = keys.slice(start, start + KEYS_PER_READ)
+      const rows = await this.db.all(
+        `SELECT data FROM review_commitments WHERE org_id = ? AND pull_request_key IN (${placeholders(chunk.length)})`,
+        [this.orgId, ...chunk],
+      )
+      found.push(...decodeRows(reviewCommitmentSchema, 'review_commitments', rows))
+    }
+    return found
   }
 
   async find(

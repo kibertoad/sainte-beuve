@@ -45,9 +45,9 @@ export async function sweepProjects(
  * project. Resolution opens a sealed credential, and doing that per project
  * would be one HKDF derivation per repository on a screen somebody refreshes.
  */
-async function gatewaysByProvider(
+export async function gatewaysByProvider(
   resolutions: VcsResolutions,
-  projects: readonly Project[],
+  projects: readonly Pick<Project, 'provider'>[],
 ): Promise<Map<VcsProvider, VcsGateway>> {
   const providers = [...new Set(projects.map((project) => project.provider))]
   const resolved = await Promise.all(

@@ -101,8 +101,10 @@ describe('reviewer recommendations', () => {
     const h = buildHarness({
       vcs: environmentVcs({
         ...vcs,
-        pastReviewers: async (project) =>
-          project.repo === PR.repo ? [{ login: 'RAE', reviews: 3 }] : [],
+        pastActivity: async (project) => ({
+          reviewers: project.repo === PR.repo ? [{ login: 'RAE', reviews: 3 }] : [],
+          authors: [],
+        }),
       }),
     })
     await addReviewer(h, { displayName: 'Alex', handles: { github: 'alex' } })
@@ -119,7 +121,7 @@ describe('reviewer recommendations', () => {
     const h = buildHarness({
       vcs: environmentVcs({
         ...vcs,
-        pastReviewers: () => Promise.reject(new Error('rate limited')),
+        pastActivity: () => Promise.reject(new Error('rate limited')),
       }),
     })
     await addReviewer(h, { displayName: 'Alex', handles: { github: 'alex' } })

@@ -26,6 +26,16 @@ const API_VERSION = '2022-11-28'
 export const GITHUB_API_BASE_URL = 'https://api.github.com'
 export const GITHUB_WEB_BASE_URL = 'https://github.com'
 
+/** How many pull requests one page of a workspace read pulls. GitHub's own cap. */
+export const PAGE_SIZE = 100
+
+/**
+ * How many pages one read will follow. A repository with more than a thousand
+ * open pull requests is past what any screen is read down, and the cap is what
+ * keeps one badly registered project from spending a rate-limit budget.
+ */
+export const MAX_PAGES = 10
+
 /** A GitHub answer that was not a success, with the status kept as a field. */
 export class GitHubApiError extends UpstreamFailedError {
   readonly status: number

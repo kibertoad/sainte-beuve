@@ -28,6 +28,7 @@ import { connectionsController } from './modules/connections/ConnectionsControll
 import { healthController } from './modules/health/HealthController.js'
 import { myPullRequestsController } from './modules/myPullRequests/MyPullRequestsController.js'
 import { myReviewsController } from './modules/myReviews/MyReviewsController.js'
+import { toReviewController } from './modules/toReview/ToReviewController.js'
 import { orgController } from './modules/orgs/OrgController.js'
 import { teamController } from './modules/teams/TeamController.js'
 import { projectController } from './modules/projects/ProjectController.js'
@@ -337,6 +338,7 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/api/v1', workspaceController())
   app.route('/api/v1', myPullRequestsController())
   app.route('/api/v1', myReviewsController())
+  app.route('/api/v1', toReviewController())
   app.route('/api/v1', projectController())
   app.route('/api/v1', attentionController())
   app.route('/api/v1', authController())

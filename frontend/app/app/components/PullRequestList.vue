@@ -63,6 +63,7 @@ function isLinked(pr: OpenPullRequest): boolean {
           <p class="text-xs text-muted">
             {{ formatPullRequestRef(pr.pullRequest) }} &middot; {{ pr.authorLogin }}
           </p>
+          <slot name="details" :pull-request="pr" />
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <slot name="actions" :pull-request="pr" />

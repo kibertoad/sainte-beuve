@@ -25,6 +25,14 @@ export interface AttentionRepository {
 
 export interface ReviewCommitmentRepository {
   listByReviewer(reviewerId: string): Promise<ReviewCommitment[]>
+  /**
+   * Everybody's commitments on any of these pull requests, in no particular
+   * order. A pull request is matched on its host as well as its path and
+   * number, as `find` matches it.
+   */
+  listByPullRequests(
+    pullRequests: readonly { provider: string; owner: string; repo: string; number: number }[],
+  ): Promise<ReviewCommitment[]>
   getById(commitmentId: string): Promise<ReviewCommitment | null>
   /**
    * What one person already promised about one pull request, so a second click

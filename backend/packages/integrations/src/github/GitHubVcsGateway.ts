@@ -8,10 +8,11 @@ import type {
 import type {
   ChangedFile,
   EpochMs,
+  OpenPullRequestReviews,
+  ProjectActivity,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
-  ReviewerTally,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
@@ -22,10 +23,11 @@ import {
   type GitHubCallContext,
   githubWithdrawApproval,
 } from './approval.js'
-import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
+import { githubApiStatusOf, githubRequest, MAX_PAGES, PAGE_SIZE, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
-import { pastGitHubReviewers } from './history.js'
+import { pastGitHubActivity } from './history.js'
 import { lookupGitHubRepositories } from './lookup.js'
+import { githubOpenPullRequestReviews } from './openReviews.js'
 import {
   type GitHubPullRequestDetail,
   type GitHubRepositorySettings,
@@ -49,16 +51,6 @@ import {
  * repository. Which one a deployment uses is resolved above this line; nothing
  * here knows or cares.
  */
-
-/** How many pull requests one page of a workspace read pulls. GitHub's own cap. */
-const PAGE_SIZE = 100
-
-/**
- * How many pages one read will follow. A repository with more than a thousand
- * open pull requests is past what any screen is read down, and the cap is what
- * keeps one badly registered project from spending a rate-limit budget.
- */
-const MAX_PAGES = 10
 
 /**
  * What GitHub answers a merge it will not make with: 405 for a pull request it
@@ -275,12 +267,12 @@ export class GitHubVcsGateway implements VcsGateway {
     return this.identity
   }
 
-  async pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]> {
-    return pastGitHubReviewers(project, since, {
-      token: await this.options.tokens.tokenFor(project.owner, project.repo),
-      baseUrl: this.options.baseUrl,
-      fetchImpl: this.options.fetchImpl,
-    })
+  async pastActivity(project: ProjectRef, since: EpochMs): Promise<ProjectActivity> {
+    return pastGitHubActivity(project, since, await this.contextFor(project))
+  }
+
+  async openPullRequestReviews(project: ProjectRef): Promise<OpenPullRequestReviews[]> {
+    return githubOpenPullRequestReviews(project, await this.contextFor(project))
   }
 
   async changedFiles(
@@ -303,9 +295,9 @@ export class GitHubVcsGateway implements VcsGateway {
     return githubWithdrawApproval(pr, input, await this.contextFor(pr))
   }
 
-  private async contextFor(pr: PullRequestAddress): Promise<GitHubCallContext> {
+  private async contextFor(project: ProjectRef): Promise<GitHubCallContext> {
     return {
-      token: await this.options.tokens.tokenFor(pr.owner, pr.repo),
+      token: await this.options.tokens.tokenFor(project.owner, project.repo),
       baseUrl: this.options.baseUrl,
       fetchImpl: this.options.fetchImpl,
     }
