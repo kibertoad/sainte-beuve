@@ -1,12 +1,8 @@
-import type {
-  OpenPullRequest,
-  PullRequestsToReview,
-  Reviewer,
-  VcsProvider,
-} from '@sainte-beuve/contracts'
+import type { PullRequestsToReview, Reviewer } from '@sainte-beuve/contracts'
 import { handleOf, MAX_PULL_REQUESTS_TO_REVIEW } from '@sainte-beuve/contracts'
 import type { AuthorTally, VcsGateway } from '@sainte-beuve/kernel'
 import {
+  isReviewableBy,
   isSameHandle,
   pastReviewCounts,
   rankPullRequestsToReview,
@@ -17,7 +13,7 @@ import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
 import { readRepositoryActivity } from '../reviewers/pastReviews.js'
-import { type ProjectRead, sweepProjects } from '../workspace/sweep.js'
+import { gatewaysByProvider, type ProjectRead, sweepProjects } from '../workspace/sweep.js'
 
 /**
  * PRs to review: the open pull requests in the linked repositories the viewer
@@ -41,8 +37,13 @@ export class ToReviewService {
     const { repositories } = this.container
     const projects = await repositories.projects.list()
     const reads = await sweepProjects(this.container, resolutions, projects)
-    const candidates = reads.filter((read) => hasCandidates(read, viewer.reviewer))
-    const gateways = await gatewaysFor(resolutions, candidates)
+    const candidates = reads.filter((read) =>
+      read.pullRequests.some((pr) => isReviewableBy(pr, viewer.reviewer)),
+    )
+    const gateways = await gatewaysByProvider(
+      resolutions,
+      candidates.map((read) => read.project),
+    )
     const [repositoriesToReview, commitments] = await Promise.all([
       Promise.all(
         candidates.map((read) =>
@@ -105,27 +106,6 @@ export class ToReviewService {
       return new Map()
     }
   }
-}
-
-/** Whether a project lists anything the viewer could be asked to review. */
-function hasCandidates(read: ProjectRead, viewer: Reviewer): boolean {
-  const handle = handleOf(viewer.handles, read.project.provider)
-  return read.pullRequests.some(
-    (pr: OpenPullRequest) => !pr.draft && !isSameHandle(handle, pr.authorLogin),
-  )
-}
-
-async function gatewaysFor(
-  resolutions: VcsResolutions,
-  reads: readonly ProjectRead[],
-): Promise<Map<VcsProvider, VcsGateway>> {
-  const providers = [...new Set(reads.map((read) => read.project.provider))]
-  const gateways = new Map<VcsProvider, VcsGateway>()
-  for (const provider of providers) {
-    const resolved = await resolutions.acting(provider)
-    if (resolved !== null) gateways.set(provider, resolved.gateway)
-  }
-  return gateways
 }
 
 function authoredBy(authors: readonly AuthorTally[], handle: string | null): number {

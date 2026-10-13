@@ -153,6 +153,7 @@ export {
   FAMILIARITY_HALF_POINT,
   FAMILIARITY_WEIGHT,
   FIT_WEIGHT,
+  isReviewableBy,
   NEGLECT_WEIGHT,
   rankPullRequestsToReview,
   type RepositoryToReview,

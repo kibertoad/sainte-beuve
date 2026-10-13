@@ -23,7 +23,7 @@ import {
   type GitHubCallContext,
   githubWithdrawApproval,
 } from './approval.js'
-import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
+import { githubApiStatusOf, githubRequest, MAX_PAGES, PAGE_SIZE, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
 import { pastGitHubActivity } from './history.js'
 import { lookupGitHubRepositories } from './lookup.js'
@@ -51,16 +51,6 @@ import {
  * repository. Which one a deployment uses is resolved above this line; nothing
  * here knows or cares.
  */
-
-/** How many pull requests one page of a workspace read pulls. GitHub's own cap. */
-const PAGE_SIZE = 100
-
-/**
- * How many pages one read will follow. A repository with more than a thousand
- * open pull requests is past what any screen is read down, and the cap is what
- * keeps one badly registered project from spending a rate-limit budget.
- */
-const MAX_PAGES = 10
 
 /**
  * What GitHub answers a merge it will not make with: 405 for a pull request it

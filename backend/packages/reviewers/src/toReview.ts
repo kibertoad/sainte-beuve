@@ -65,43 +65,57 @@ export interface ToReviewInput {
   limit: number
 }
 
+type FitReasons = Pick<PullRequestToReview['reasons'], 'matchedSkills' | 'matchedDomains' | 'fit'>
+
 /** Best first: the viewer's own promises, oldest first, then by score. */
 export function rankPullRequestsToReview(input: ToReviewInput): PullRequestToReview[] {
   const commitments = commitmentsByPullRequest(input.commitments)
-  const rows = input.repositories.flatMap((repository) =>
-    repository.pullRequests.flatMap((pr) => {
+  const rows = input.repositories.flatMap((repository) => {
+    const fit = fitOf(input.viewer, repository.project)
+    return repository.pullRequests.flatMap((pr) => {
       const row = toReviewRow(input, repository, {
         pr,
-        commitments: commitments.get(pullRequestKeyOf(pr)) ?? [],
+        fit,
+        commitments: commitments.get(pullRequestKeyOf(pr.pullRequest)) ?? [],
       })
       return row === null ? [] : [row]
-    }),
-  )
+    })
+  })
   return rows.sort(compareRows).slice(0, input.limit)
+}
+
+/** Whether a pull request is one the viewer could be asked to review: not a draft, not their own. */
+export function isReviewableBy(pr: OpenPullRequest, viewer: Reviewer): boolean {
+  return (
+    !pr.draft && !isSameHandle(handleOf(viewer.handles, pr.pullRequest.provider), pr.authorLogin)
+  )
+}
+
+function fitOf(viewer: Reviewer, project: Project): FitReasons {
+  const target = matchTargetFor({ requiredSkills: [] }, project)
+  return { ...matchesOf(viewer, target), fit: affinityOf(viewer, target) }
 }
 
 function toReviewRow(
   input: ToReviewInput,
   repository: RepositoryToReview,
-  subject: { pr: OpenPullRequest; commitments: readonly ReviewCommitment[] },
+  subject: { pr: OpenPullRequest; fit: FitReasons; commitments: readonly ReviewCommitment[] },
 ): PullRequestToReview | null {
   const { viewer, now } = input
   const { pr, commitments } = subject
+  if (!isReviewableBy(pr, viewer)) return null
   const handle = handleOf(viewer.handles, pr.pullRequest.provider)
-  if (pr.draft || isSameHandle(handle, pr.authorLogin)) return null
   const requested = pr.requestedReviewerLogins.some((login) => isSameHandle(handle, login))
   const reviewerLogins = repository.reviewers.get(pr.pullRequest.number) ?? null
   // Reviewed already, and the host is not asking for another look: nothing left to do here.
   if (!requested && reviewerLogins?.some((login) => isSameHandle(handle, login))) return null
 
-  const target = matchTargetFor({ requiredSkills: [] }, repository.project)
   const reasons = {
     ...commitmentReasons(commitments, viewer.id),
     requested,
     reviewerLogins: [...(reviewerLogins ?? [])],
     unreviewedForMs: reviewerLogins?.length === 0 ? Math.max(0, now - pr.createdAt) : null,
-    ...matchesOf(viewer, target),
-    fit: affinityOf(viewer, target),
+    ...subject.fit,
     pastReviews: repository.pastReviews,
     authored: repository.authored,
   }
@@ -150,12 +164,14 @@ function commitmentsByPullRequest(
 ): Map<string, ReviewCommitment[]> {
   const grouped = new Map<string, ReviewCommitment[]>()
   for (const commitment of commitments) {
-    const key = pullRequestKeyOf({ pullRequest: commitment.pullRequest })
-    grouped.set(key, [...(grouped.get(key) ?? []), commitment])
+    const key = pullRequestKeyOf(commitment.pullRequest)
+    const group = grouped.get(key)
+    if (group === undefined) grouped.set(key, [commitment])
+    else group.push(commitment)
   }
   return grouped
 }
 
-function pullRequestKeyOf(row: Pick<OpenPullRequest, 'pullRequest'>): string {
-  return `${repositoryKey(row.pullRequest)}#${row.pullRequest.number}`
+function pullRequestKeyOf(ref: OpenPullRequest['pullRequest']): string {
+  return `${repositoryKey(ref)}#${ref.number}`
 }

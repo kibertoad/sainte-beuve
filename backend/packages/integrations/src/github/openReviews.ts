@@ -1,23 +1,25 @@
 import type { ProjectRef } from '@sainte-beuve/contracts'
 import type { OpenPullRequestReviews } from '@sainte-beuve/kernel'
 import { distinctLogins } from '../tally.js'
-import { type GitHubHistoryRequest, githubGraphql, HISTORY_PULL_REQUESTS } from './history.js'
-
-/**
- * Who has reviewed each of a repository's open pull requests, in one GraphQL
- * call. Any submitted review counts. GitHub shows a pending review only to the
- * account writing it, so no state filter is needed.
- */
+import { MAX_PAGES, PAGE_SIZE } from './client.js'
+import { type GitHubHistoryRequest, githubGraphql } from './history.js'
 
 const REVIEWS_PER_PULL_REQUEST = 50
 
-const OPEN_REVIEWS_QUERY = `query OpenReviews($owner: String!, $name: String!) {
+/**
+ * Any submitted review counts. PENDING is left out by name: GitHub shows a
+ * draft review to the account writing it, and that account is often the viewer.
+ */
+const OPEN_REVIEWS_QUERY = `query OpenReviews($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: ${HISTORY_PULL_REQUESTS}, orderBy: { field: UPDATED_AT, direction: DESC }) {
+    pullRequests(states: OPEN, first: ${PAGE_SIZE}, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      pageInfo { hasNextPage endCursor }
       nodes {
         number
         author { login }
-        reviews(first: ${REVIEWS_PER_PULL_REQUEST}) { nodes { author { __typename login } } }
+        reviews(first: ${REVIEWS_PER_PULL_REQUEST}, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
+          nodes { author { __typename login } }
+        }
       }
     }
   }
@@ -30,20 +32,44 @@ interface OpenPullRequestNode {
 }
 
 interface OpenReviewsAnswer {
-  data?: { repository: { pullRequests: { nodes: OpenPullRequestNode[] } } | null } | null
+  data?: {
+    repository: {
+      pullRequests: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        nodes: OpenPullRequestNode[]
+      }
+    } | null
+  } | null
   errors?: { message: string }[]
 }
 
+/**
+ * Who has reviewed each of a repository's open pull requests, a page of a
+ * hundred per GraphQL call, down to the same depth `listOpenPullRequests` reads.
+ */
 export async function githubOpenPullRequestReviews(
   project: ProjectRef,
   request: GitHubHistoryRequest,
 ): Promise<OpenPullRequestReviews[]> {
-  const answer = await githubGraphql<OpenReviewsAnswer>(
-    { query: OPEN_REVIEWS_QUERY, variables: { owner: project.owner, name: project.repo } },
-    request,
-    'open review',
-  )
-  return (answer.data?.repository?.pullRequests.nodes ?? []).map((pull) => ({
+  const pulls: OpenPullRequestNode[] = []
+  let after: string | null = null
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const answer: OpenReviewsAnswer = await githubGraphql<OpenReviewsAnswer>(
+      { query: OPEN_REVIEWS_QUERY, variables: { owner: project.owner, name: project.repo, after } },
+      request,
+      'open review',
+    )
+    const connection = answer.data?.repository?.pullRequests
+    if (connection === undefined) break
+    pulls.push(...connection.nodes)
+    if (!connection.pageInfo.hasNextPage || connection.pageInfo.endCursor === null) break
+    after = connection.pageInfo.endCursor
+  }
+  return pulls.map(reviewsOf)
+}
+
+function reviewsOf(pull: OpenPullRequestNode): OpenPullRequestReviews {
+  return {
     number: pull.number,
     reviewerLogins: distinctLogins(
       pull.reviews.nodes.flatMap((review) =>
@@ -51,5 +77,5 @@ export async function githubOpenPullRequestReviews(
       ),
       pull.author?.login ?? null,
     ),
-  }))
+  }
 }

@@ -6,6 +6,9 @@ import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
 import { attentionRequests, reviewCommitments } from './schema.js'
 
+/** Keys bound in one statement, well under Postgres's 65 535 parameters. */
+const KEYS_PER_READ = 1000
+
 /** The asks in flight, and the promises people made against pull requests. */
 export class PostgresAttentionRepository implements AttentionRepository {
   constructor(
@@ -122,18 +125,21 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
   async listByPullRequests(
     pullRequests: readonly { provider: string; owner: string; repo: string; number: number }[],
   ): Promise<ReviewCommitment[]> {
-    if (pullRequests.length === 0) return []
     const keys = [...new Set(pullRequests.map(pullRequestKey))]
-    const rows = await this.db
-      .select()
-      .from(reviewCommitments)
-      .where(
-        and(
-          eq(reviewCommitments.orgId, this.orgId),
-          inArray(reviewCommitments.pullRequestKey, keys),
-        ),
-      )
-    return rows.map((row) => row.data)
+    const found: ReviewCommitment[] = []
+    for (let start = 0; start < keys.length; start += KEYS_PER_READ) {
+      const rows = await this.db
+        .select()
+        .from(reviewCommitments)
+        .where(
+          and(
+            eq(reviewCommitments.orgId, this.orgId),
+            inArray(reviewCommitments.pullRequestKey, keys.slice(start, start + KEYS_PER_READ)),
+          ),
+        )
+      found.push(...rows.map((row) => row.data))
+    }
+    return found
   }
 
   async find(

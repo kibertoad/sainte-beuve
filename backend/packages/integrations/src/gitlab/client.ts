@@ -26,6 +26,16 @@ const API_PREFIX = '/api/v4'
 /** And its GraphQL endpoint here. */
 export const GITLAB_GRAPHQL_ROOT = '/api'
 
+/** How many merge requests one page of a workspace read pulls. GitLab's own cap. */
+export const PAGE_SIZE = 100
+
+/**
+ * How many pages one read will follow. A project with more than a thousand open
+ * merge requests is past what any screen is read down, and the cap is what
+ * keeps one badly registered project from spending a rate-limit budget.
+ */
+export const MAX_PAGES = 10
+
 /** A GitLab answer that was not a success, with the status kept as a field. */
 export class GitLabApiError extends UpstreamFailedError {
   readonly status: number
