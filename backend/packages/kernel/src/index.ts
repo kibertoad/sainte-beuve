@@ -52,7 +52,10 @@ export type {
   GatewayFactory,
 } from './ports/gateways.js'
 export type {
+  AuthorTally,
   ChangedFile,
+  OpenPullRequestReviews,
+  ProjectActivity,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,

@@ -152,6 +152,15 @@ export class InMemoryReviewCommitmentRepository implements ReviewCommitmentRepos
     return row === undefined ? null : clone(row)
   }
 
+  async listByPullRequests(
+    pullRequests: readonly { provider: string; owner: string; repo: string; number: number }[],
+  ): Promise<ReviewCommitment[]> {
+    const keys = new Set(pullRequests.map(pullRequestKey))
+    return [...this.rows.values()]
+      .filter((row) => keys.has(pullRequestKey(row.pullRequest)))
+      .map(clone)
+  }
+
   async find(
     reviewerId: string,
     pullRequest: { provider: string; owner: string; repo: string; number: number },

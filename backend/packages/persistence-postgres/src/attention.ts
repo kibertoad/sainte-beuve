@@ -119,6 +119,23 @@ export class PostgresReviewCommitmentRepository implements ReviewCommitmentRepos
     return firstOr(rows)?.data ?? null
   }
 
+  async listByPullRequests(
+    pullRequests: readonly { provider: string; owner: string; repo: string; number: number }[],
+  ): Promise<ReviewCommitment[]> {
+    if (pullRequests.length === 0) return []
+    const keys = [...new Set(pullRequests.map(pullRequestKey))]
+    const rows = await this.db
+      .select()
+      .from(reviewCommitments)
+      .where(
+        and(
+          eq(reviewCommitments.orgId, this.orgId),
+          inArray(reviewCommitments.pullRequestKey, keys),
+        ),
+      )
+    return rows.map((row) => row.data)
+  }
+
   async find(
     reviewerId: string,
     pullRequest: { provider: string; owner: string; repo: string; number: number },

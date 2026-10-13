@@ -8,10 +8,11 @@ import type {
 import type {
   ChangedFile,
   EpochMs,
+  OpenPullRequestReviews,
+  ProjectActivity,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
-  ReviewerTally,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
@@ -24,8 +25,9 @@ import {
 } from './approval.js'
 import { githubApiStatusOf, githubRequest, repoPath } from './client.js'
 import type { GitHubTokenSource } from './credentials.js'
-import { pastGitHubReviewers } from './history.js'
+import { pastGitHubActivity } from './history.js'
 import { lookupGitHubRepositories } from './lookup.js'
+import { githubOpenPullRequestReviews } from './openReviews.js'
 import {
   type GitHubPullRequestDetail,
   type GitHubRepositorySettings,
@@ -275,12 +277,12 @@ export class GitHubVcsGateway implements VcsGateway {
     return this.identity
   }
 
-  async pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]> {
-    return pastGitHubReviewers(project, since, {
-      token: await this.options.tokens.tokenFor(project.owner, project.repo),
-      baseUrl: this.options.baseUrl,
-      fetchImpl: this.options.fetchImpl,
-    })
+  async pastActivity(project: ProjectRef, since: EpochMs): Promise<ProjectActivity> {
+    return pastGitHubActivity(project, since, await this.contextFor(project))
+  }
+
+  async openPullRequestReviews(project: ProjectRef): Promise<OpenPullRequestReviews[]> {
+    return githubOpenPullRequestReviews(project, await this.contextFor(project))
   }
 
   async changedFiles(
@@ -303,9 +305,9 @@ export class GitHubVcsGateway implements VcsGateway {
     return githubWithdrawApproval(pr, input, await this.contextFor(pr))
   }
 
-  private async contextFor(pr: PullRequestAddress): Promise<GitHubCallContext> {
+  private async contextFor(project: ProjectRef): Promise<GitHubCallContext> {
     return {
-      token: await this.options.tokens.tokenFor(pr.owner, pr.repo),
+      token: await this.options.tokens.tokenFor(project.owner, project.repo),
       baseUrl: this.options.baseUrl,
       fetchImpl: this.options.fetchImpl,
     }

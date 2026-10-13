@@ -11,8 +11,24 @@ function review(login: string | null, submittedAt: string | null = '2026-09-01T0
   return { submittedAt, author: login === null ? null : { login } }
 }
 
-function pull(updatedAt: string, reviews: ReturnType<typeof review>[]) {
-  return { updatedAt, reviews: { nodes: reviews } }
+interface Opened {
+  by?: string | null
+  at?: string
+  kind?: string
+}
+
+function pull(updatedAt: string, reviews: ReturnType<typeof review>[], opened: Opened = {}) {
+  const by = opened.by ?? null
+  return {
+    createdAt: opened.at ?? '2026-01-01T00:00:00Z',
+    updatedAt,
+    author: by === null ? null : { __typename: opened.kind ?? 'User', login: by },
+    reviews: { nodes: reviews },
+  }
+}
+
+function pulls(...nodes: ReturnType<typeof pull>[]) {
+  return { data: { repository: { pullRequests: { nodes } } } }
 }
 
 interface Recorded {
@@ -41,24 +57,18 @@ function gateway(fetchImpl: typeof globalThis.fetch): GitHubVcsGateway {
   return new GitHubVcsGateway({ tokens: staticTokenSource('ghp_x'), fetchImpl })
 }
 
-describe('GitHubVcsGateway.pastReviewers', () => {
+describe('GitHubVcsGateway.pastActivity', () => {
   it('tallies each pull request once per reviewer, in one GraphQL call', async () => {
-    const { fetchImpl, calls } = answering({
-      data: {
-        repository: {
-          pullRequests: {
-            nodes: [
-              pull('2026-09-02T00:00:00Z', [review('ann'), review('Ann'), review('bea')]),
-              pull('2026-08-02T00:00:00Z', [review('ann'), review(null)]),
-            ],
-          },
-        },
-      },
-    })
+    const { fetchImpl, calls } = answering(
+      pulls(
+        pull('2026-09-02T00:00:00Z', [review('ann'), review('Ann'), review('bea')]),
+        pull('2026-08-02T00:00:00Z', [review('ann'), review(null)]),
+      ),
+    )
 
-    const tallies = await gateway(fetchImpl).pastReviewers(PROJECT, SINCE)
+    const activity = await gateway(fetchImpl).pastActivity(PROJECT, SINCE)
 
-    expect(tallies).toStrictEqual([
+    expect(activity.reviewers).toStrictEqual([
       { login: 'ann', reviews: 2 },
       { login: 'bea', reviews: 1 },
     ])
@@ -70,31 +80,46 @@ describe('GitHubVcsGateway.pastReviewers', () => {
   })
 
   it('leaves out pull requests and verdicts older than the window', async () => {
-    const { fetchImpl } = answering({
-      data: {
-        repository: {
-          pullRequests: {
-            nodes: [
-              pull('2026-09-02T00:00:00Z', [review('ann', '2026-01-01T00:00:00Z'), review('bea')]),
-              pull('2026-01-02T00:00:00Z', [review('cid', '2026-01-01T00:00:00Z')]),
-            ],
-          },
-        },
-      },
-    })
-    expect(await gateway(fetchImpl).pastReviewers(PROJECT, SINCE)).toStrictEqual([
+    const { fetchImpl } = answering(
+      pulls(
+        pull('2026-09-02T00:00:00Z', [review('ann', '2026-01-01T00:00:00Z'), review('bea')]),
+        pull('2026-01-02T00:00:00Z', [review('cid', '2026-01-01T00:00:00Z')]),
+      ),
+    )
+    expect((await gateway(fetchImpl).pastActivity(PROJECT, SINCE)).reviewers).toStrictEqual([
       { login: 'bea', reviews: 1 },
+    ])
+  })
+
+  it('tallies who opened the pull requests created in the window, folding case', async () => {
+    const recent = '2026-07-01T00:00:00Z'
+    const { fetchImpl } = answering(
+      pulls(
+        pull('2026-09-02T00:00:00Z', [], { by: 'Dan', at: recent }),
+        pull('2026-09-01T00:00:00Z', [], { by: 'dan', at: '2026-06-01T00:00:00Z' }),
+        pull('2026-08-02T00:00:00Z', [], { by: 'eve', at: recent }),
+        pull('2026-08-01T00:00:00Z', [], { by: 'old', at: '2026-05-31T23:59:59Z' }),
+        pull('2026-07-02T00:00:00Z', [], { by: 'dependabot', at: recent, kind: 'Bot' }),
+        pull('2026-07-01T00:00:00Z', [], { by: null, at: recent }),
+      ),
+    )
+    expect((await gateway(fetchImpl).pastActivity(PROJECT, SINCE)).authors).toStrictEqual([
+      { login: 'Dan', pullRequests: 2 },
+      { login: 'eve', pullRequests: 1 },
     ])
   })
 
   it('answers nobody for a repository GitHub does not show this credential', async () => {
     const { fetchImpl } = answering({ data: { repository: null } })
-    expect(await gateway(fetchImpl).pastReviewers(PROJECT, SINCE)).toStrictEqual([])
+    expect(await gateway(fetchImpl).pastActivity(PROJECT, SINCE)).toStrictEqual({
+      reviewers: [],
+      authors: [],
+    })
   })
 
   it('fails on a GraphQL refusal, which arrives with a 200', async () => {
     const { fetchImpl } = answering({ data: null, errors: [{ message: 'rate limited' }] })
-    await expect(gateway(fetchImpl).pastReviewers(PROJECT, SINCE)).rejects.toThrow(
+    await expect(gateway(fetchImpl).pastActivity(PROJECT, SINCE)).rejects.toThrow(
       UpstreamFailedError,
     )
   })

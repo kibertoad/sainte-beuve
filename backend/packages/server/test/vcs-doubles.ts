@@ -60,7 +60,7 @@ export function viewerVcs(
     searchOpenPullRequests: async (search) =>
       pullRequests.filter((pr) => matchesSearch(pr, search, reviewed)),
     lookupRepositories: async (owner, query) => lookupIn(pullRequests, owner, query),
-    pastReviewers: async () => [],
+    ...noActivity(),
     ...noApproving(),
     identify: async () => ({
       subject: `subject-${username}`,
@@ -69,6 +69,14 @@ export function viewerVcs(
       avatarUrl: null,
       bot: false,
     }),
+  }
+}
+
+/** The history half of the port, for a fake whose host has seen nobody review. */
+export function noActivity(): Pick<VcsGateway, 'pastActivity' | 'openPullRequestReviews'> {
+  return {
+    pastActivity: async () => ({ reviewers: [], authors: [] }),
+    openPullRequestReviews: async () => [],
   }
 }
 

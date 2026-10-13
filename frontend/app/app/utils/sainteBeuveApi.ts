@@ -48,6 +48,7 @@ import { myReviewCalls } from './myReviewsApi'
 import { organizationCalls } from './organizationApi'
 import { riskCalls } from './riskApi'
 import { configurationCalls } from './sainteBeuveSettingsApi'
+import { toReviewCalls } from './toReviewApi'
 
 // ---------------------------------------------------------------------------
 // The SPA's single door to the backend, driven by the same contract objects the
@@ -324,6 +325,7 @@ export function createSainteBeuveApi(apiBase: string) {
     ...configurationCalls(call),
     ...organizationCalls(call),
     ...riskCalls(call),
+    ...toReviewCalls(call),
   }
 }
 

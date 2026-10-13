@@ -240,6 +240,29 @@ Like My PRs, it covers every repository the host search can see, and **Linked
 repositories only** narrows it to the registered projects. On GitLab, which keeps
 no record of a review short of an approval, reviewed means approved.
 
+## PRs to review
+
+**PRs to review** answers "what should I pick up next" across the linked
+repositories, whether or not anybody asked you. A pull request you committed to
+and have not reviewed yet is listed first, oldest promise first. The rest are
+ranked:
+
+- longest without any review ranks highest, and one nobody committed to ranks
+  higher than one somebody did;
+- then the share of the repository's skills and domains you hold;
+- then how active you were in the repository over the last six months, in
+  reviews given and pull requests opened;
+- and a request for your review on the host raises it.
+
+The wait counts more than the fit, so a stranger's change that nobody has
+looked at for days still outranks a fresh one in your own corner. Drafts, your
+own pull requests and the ones you already reviewed are left out, unless the
+host asks you to look again. Each row says why it is there.
+
+Who reviewed what is read from the host (on GitLab, which records nothing short
+of an approval, that is the approvers). When the host will not say, the pull
+request is still listed and simply does not rank for its wait.
+
 ## Who is in the pool
 
 Both of those depend on the same list, and **Reviewers** is where it is kept: who

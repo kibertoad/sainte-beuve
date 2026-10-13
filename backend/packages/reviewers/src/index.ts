@@ -14,7 +14,8 @@
 // challenged (`aiChallenge`), and who may change a review from a chat
 // command (`commands`). What merging one of your own pull requests from here
 // may look like (`merging`), and which pull requests are yours to review
-// (`reviewing`). Which reviewers and teams an external directory's people and
+// (`reviewing`), and which other open ones the viewer is best placed to review
+// next (`toReview`). Which reviewers and teams an external directory's people and
 // groups are (`directoryPeople`, `directoryTeams`).
 
 export {
@@ -147,3 +148,16 @@ export {
 } from './recommendation.js'
 export { mergeVocabulary, type MergedVocabulary } from './vocabulary.js'
 export { type PartitionedPullRequests, partitionForViewer } from './workspace.js'
+export {
+  CLAIMED_NEGLECT_SHARE,
+  FAMILIARITY_HALF_POINT,
+  FAMILIARITY_WEIGHT,
+  FIT_WEIGHT,
+  NEGLECT_WEIGHT,
+  rankPullRequestsToReview,
+  type RepositoryToReview,
+  REQUESTED_WEIGHT,
+  scoreOf,
+  type ToReviewInput,
+  UNREVIEWED_HALF_POINT_MS,
+} from './toReview.js'

@@ -8,18 +8,20 @@ import type {
 import type {
   ChangedFile,
   EpochMs,
+  OpenPullRequestReviews,
+  ProjectActivity,
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
-  ReviewerTally,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { gitlabApprove, gitlabChangedFiles, gitlabWithdrawApproval } from './approval.js'
 import { gitlabApiStatusOf, gitlabRequest, projectPath } from './client.js'
-import { pastGitLabReviewers } from './history.js'
+import { pastGitLabActivity } from './history.js'
 import { lookupGitLabRepositories } from './lookup.js'
+import { gitlabOpenPullRequestReviews } from './openReviews.js'
 import {
   type GitLabApprovals,
   type GitLabMergeRequestDetail,
@@ -235,16 +237,20 @@ export class GitLabVcsGateway implements VcsGateway {
     return this.identity
   }
 
+  async pastActivity(project: ProjectRef, since: EpochMs): Promise<ProjectActivity> {
+    return pastGitLabActivity(project, since, this.options)
+  }
+
+  async openPullRequestReviews(project: ProjectRef): Promise<OpenPullRequestReviews[]> {
+    return gitlabOpenPullRequestReviews(project, this.options)
+  }
+
   /**
    * Rewrite the reviewer list. GitLab has no add/remove endpoint: the update
    * REPLACES `reviewer_ids` wholesale, so the current list has to be read and
    * merged, or a reroll would silently drop everybody the update did not name.
    * Answers what the list held before, and the users the logins resolved to.
    */
-  async pastReviewers(project: ProjectRef, since: EpochMs): Promise<ReviewerTally[]> {
-    return pastGitLabReviewers(project, since, this.options)
-  }
-
   private async changeReviewers(
     pr: PullRequestRef,
     combine: (current: number[], named: number[]) => number[],

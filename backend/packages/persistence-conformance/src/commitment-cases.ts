@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
+import type { Repositories, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
 import { ConflictError } from '@sainte-beuve/kernel'
 import { type ConformanceCase, conformanceCase } from './case.js'
 import { commitment, pullRequest } from './fixtures.js'
+
+type NamedPullRequests = Parameters<ReviewCommitmentRepository['listByPullRequests']>[0]
+
+async function idsOn(repos: Repositories, pullRequests: NamedPullRequests): Promise<string[]> {
+  const found = await repos.commitments.listByPullRequests(pullRequests)
+  return found.map((row) => row.id).sort()
+}
 
 /** The promises people made against pull requests: one per person per pull request. */
 export const commitmentCases: readonly ConformanceCase[] = [
@@ -145,5 +153,48 @@ export const commitmentCases: readonly ConformanceCase[] = [
     assert.strictEqual(await repos.commitments.find('reviewer-1', pullRequest()), null)
     const again = await repos.commitments.createOrGet(commitment('c2'))
     assert.deepStrictEqual(again, { commitment: commitment('c2'), created: true })
+  }),
+
+  conformanceCase("lists everybody's promises on the named pull requests", async (repos) => {
+    await repos.commitments.createOrGet(commitment('c1', { reviewerId: 'r1' }))
+    await repos.commitments.createOrGet(commitment('c2', { reviewerId: 'r2' }))
+    await repos.commitments.createOrGet(
+      commitment('c3', { reviewerId: 'r3', pullRequest: pullRequest({ number: 13 }) }),
+    )
+    await repos.commitments.createOrGet(
+      commitment('c4', { reviewerId: 'r1', pullRequest: pullRequest({ number: 14 }) }),
+    )
+    const named = [pullRequest(), pullRequest({ number: 13 })]
+    assert.deepStrictEqual(await idsOn(repos, named), ['c1', 'c2', 'c3'])
+  }),
+
+  conformanceCase('lists the promises on a path spelled in another case', async (repos) => {
+    await repos.commitments.createOrGet(commitment('c1'))
+    const shouted = pullRequest({ owner: 'Platform', repo: 'API' })
+    assert.deepStrictEqual(await idsOn(repos, [shouted]), ['c1'])
+  }),
+
+  conformanceCase('lists nothing for the same number on the other host', async (repos) => {
+    await repos.commitments.createOrGet(
+      commitment('c1', { pullRequest: pullRequest({ provider: 'github' }) }),
+    )
+    assert.deepStrictEqual(await idsOn(repos, [pullRequest({ provider: 'gitlab' })]), [])
+  }),
+
+  conformanceCase('lists nothing when no pull request is named', async (repos) => {
+    await repos.commitments.createOrGet(commitment('c1'))
+    assert.deepStrictEqual(await repos.commitments.listByPullRequests([]), [])
+  }),
+
+  conformanceCase('lists the promises on more pull requests than one read takes', async (repos) => {
+    const numbers = Array.from({ length: 120 }, (_, index) => index + 1)
+    const idOf = (number: number) => `c${String(number).padStart(3, '0')}`
+    for (const number of numbers) {
+      await repos.commitments.createOrGet(
+        commitment(idOf(number), { pullRequest: pullRequest({ number }) }),
+      )
+    }
+    const named = numbers.map((number) => pullRequest({ number }))
+    assert.deepStrictEqual(await idsOn(repos, named), numbers.map(idOf))
   }),
 ]
