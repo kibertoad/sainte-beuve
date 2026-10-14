@@ -4,7 +4,7 @@ import type { Logger } from '@sainte-beuve/kernel'
 import { RETIRED_VARIABLES_MESSAGE, createApp } from '@sainte-beuve/server'
 import { pino } from 'pino'
 import { clientAddressOf } from './clientAddress.js'
-import { startReminderClock } from './clock.js'
+import { startReminderClock, startReviewMetricsClock } from './clock.js'
 import { type NodeConfig, loadConfig } from './config.js'
 import { buildContainer } from './container.js'
 import { type NodeStore, openStore } from './persistence.js'
@@ -61,6 +61,7 @@ async function listen(
   // rejection the caller can report and the guard above can clean up after.
   await once(server, 'listening')
   const timer = startReminderClock(container, config.reminderIntervalMs)
+  const metricsTimer = startReviewMetricsClock(container, config.reviewMetricsIntervalMs)
 
   // One line naming every optional capability, because "which integrations did
   // this process actually wire?" is the first question a deploy raises and the
@@ -75,6 +76,7 @@ async function listen(
       github: githubSummary(config),
       gitlab: gitlabSummary(config),
       secrets: config.encryptionKey === null ? 'not configured' : 'configured',
+      reviewMetrics: config.reviewMetrics === null ? 'not configured' : config.reviewMetrics.url,
     },
     'sainte-beuve server listening',
   )
@@ -85,6 +87,7 @@ async function listen(
     port: config.port,
     close: async () => {
       clearInterval(timer)
+      if (metricsTimer !== null) clearInterval(metricsTimer)
       await new Promise<void>((resolve) => server.close(() => resolve()))
       // After the server, so a request in flight still has its connections.
       await store.close()

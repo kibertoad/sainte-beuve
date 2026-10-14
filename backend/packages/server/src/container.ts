@@ -18,6 +18,7 @@ import type {
   PersistenceProvider,
   RealtimeKind,
   Repositories,
+  ReviewMetricsExporter,
   ScopedAttentionBus,
   SecretCipher,
   StateSigner,
@@ -230,6 +231,11 @@ export interface AppContainer {
    * past the response; a Node process keeps running anyway.
    */
   defer: Deferral
+  /**
+   * Where the review metrics are pushed (an OpenTelemetry collector). Null
+   * when the deployment configured none, and then the export pass does nothing.
+   */
+  reviewMetrics: ReviewMetricsExporter | null
   github: GitHubWiring
   /**
    * The labels that drive the board from a pull request or a merge request.
@@ -272,6 +278,7 @@ export interface ContainerOptions {
   realtime?: RealtimeKind
   defer?: Deferral
   gateways?: GatewayFactory | null
+  reviewMetrics?: ReviewMetricsExporter | null
   /** The cipher, the state signer, and the reason there is neither, as `secretsFrom` reports them. */
   secrets?: SecretsWiring | null
   github?: Partial<GitHubWiring>
@@ -309,6 +316,7 @@ export function createContainer(options: ContainerOptions): AppContainer {
     realtime: options.realtime ?? 'memory',
     defer: logging(options.logger, options.defer),
     gateways: options.gateways ?? null,
+    reviewMetrics: options.reviewMetrics ?? null,
     secrets: secrets.cipher,
     states: secrets.states,
     secretsRejectedReason: secrets.rejectedReason,

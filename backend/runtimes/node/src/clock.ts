@@ -1,4 +1,4 @@
-import { type AppContainer, runReminderTick } from '@sainte-beuve/server'
+import { type AppContainer, runReminderTick, runReviewMetricsExport } from '@sainte-beuve/server'
 
 /**
  * The reminder clock on the Node facade: an interval, with the guarantee an
@@ -60,6 +60,36 @@ export function startReminderClock(container: AppContainer, intervalMs: number):
   )
   // Do not hold the process open for the clock alone: a shutdown should be decided
   // by the HTTP server closing, not by a timer nobody is waiting on.
+  timer.unref()
+  return timer
+}
+
+/**
+ * The review metrics export, on its own interval. Null when no collector is
+ * configured, so a deployment without one runs no timer at all. Skipped rather
+ * than overlapped for the reason the reminder clock is: two passes would read
+ * every repository twice and push two sets of the same gauges.
+ */
+export function startReviewMetricsClock(
+  container: AppContainer,
+  intervalMs: number,
+): NodeJS.Timeout | null {
+  if (container.reviewMetrics === null) return null
+  const timer = setInterval(
+    oneAtATime(
+      async () => {
+        try {
+          await runReviewMetricsExport(container)
+        } catch (err: unknown) {
+          container.logger.error({ err }, 'review metrics export failed')
+        }
+      },
+      () => {
+        container.logger.warn({ intervalMs }, 'review metrics export still running; skipping')
+      },
+    ),
+    intervalMs,
+  )
   timer.unref()
   return timer
 }

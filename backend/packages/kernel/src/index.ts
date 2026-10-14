@@ -59,6 +59,9 @@ export type {
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  PullRequestTimeline,
+  ReviewEvent,
+  ReviewTimelines,
   ReviewerTally,
   VcsAccount,
   VcsGateway,
@@ -112,6 +115,7 @@ export type {
 } from './ports/repository-directory.js'
 export type { OrgRepository, PersistenceProvider, TenancyDirectory } from './ports/tenancy.js'
 export type { TeamPatch, TeamRepository } from './ports/teams.js'
+export type { OrgReviewReport, ReviewMetricsExporter } from './ports/telemetry.js'
 export type { RoundTripState, StateSigner } from './ports/state.js'
 export { UPSTREAM_TIMEOUT_MS, withDeadline } from './upstream.js'
 export {

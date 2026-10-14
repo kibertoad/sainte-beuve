@@ -25,7 +25,7 @@ import {
   createContainer,
 } from '../src/container.js'
 import { secretsFrom } from '../src/crypto/WebCryptoSecretCipher.js'
-import { noApproving } from './vcs-doubles.js'
+import { noActivity, noApproving } from './vcs-doubles.js'
 import type { AppEnv } from '../src/http/env.js'
 
 /** A logger that keeps quiet unless a test wants to read what was logged. */
@@ -202,8 +202,7 @@ export function recordingVcs(): VcsGateway & {
     listOpenPullRequests: async () => [],
     searchOpenPullRequests: async () => [],
     lookupRepositories: async () => null,
-    pastActivity: async () => ({ reviewers: [], authors: [] }),
-    openPullRequestReviews: async () => [],
+    ...noActivity(),
     ...noMerging(),
     ...noApproving(),
   }

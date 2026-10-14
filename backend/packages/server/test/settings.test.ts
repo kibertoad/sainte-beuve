@@ -6,7 +6,7 @@ import { createApp } from '../src/app.js'
 import { WebCryptoSecretCipher } from '../src/crypto/WebCryptoSecretCipher.js'
 import { stubAiReview } from './ai-review-doubles.js'
 import { type TestHarness, buildHarness, del, noMerging, put, stubGateways } from './helpers.js'
-import { noApproving } from './vcs-doubles.js'
+import { noActivity, noApproving } from './vcs-doubles.js'
 
 // The Configuration screen's API, through the app: the contract validation, the
 // service and the error envelope together.
@@ -299,8 +299,7 @@ describe('a pasted GitHub credential', () => {
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
           lookupRepositories: async () => null,
-          pastActivity: async () => ({ reviewers: [], authors: [] }),
-          openPullRequestReviews: async () => [],
+          ...noActivity(),
           ...noMerging(),
           ...noApproving(),
           identify: async () => ({
@@ -335,8 +334,7 @@ describe('a pasted GitHub credential', () => {
           listOpenPullRequests: async () => [],
           searchOpenPullRequests: async () => [],
           lookupRepositories: async () => null,
-          pastActivity: async () => ({ reviewers: [], authors: [] }),
-          openPullRequestReviews: async () => [],
+          ...noActivity(),
           ...noMerging(),
           ...noApproving(),
           identify: () => Promise.reject(refused),

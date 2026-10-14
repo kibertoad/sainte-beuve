@@ -65,6 +65,9 @@ export function healthController(): Hono<AppEnv> {
         // Whether an approval within the risk policy has an account to go out as.
         autoApproval: { github: githubApprover !== null, gitlab: gitlabApprover !== null },
         secrets: container.secrets !== null,
+        // An OTLP endpoint the review metrics are pushed to. Deployment wiring
+        // rather than an org's, so it reads the same from every org.
+        reviewMetricsExport: container.reviewMetrics !== null,
         githubWebhooks: container.github.webhookSecret !== null,
         // For the org this probe is in, which on an unauthenticated `/health` is
         // the default one. An org that connected its own Slack app turned this

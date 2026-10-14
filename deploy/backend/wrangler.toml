@@ -29,8 +29,14 @@ head_sampling_rate = 1
 # Five minutes rather than one: the reminder ladder is measured in hours, so this
 # is about the ceiling, not the cadence, and a pass over an idle deployment is a
 # handful of indexed reads that find nothing due.
+#
+# The second trigger is the review metrics export, which pushes the review
+# timings to an OpenTelemetry collector when OTEL_EXPORTER_OTLP_ENDPOINT is set
+# and does nothing otherwise. Hourly, because every pass reads each linked
+# repository's history from its host. REVIEW_METRICS_CRON names it, and has to
+# match the expression here if either changes.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "0 * * * *"]
 
 # The board's own database. Create it once with
 # `wrangler d1 create sainte-beuve` and paste the id it prints; the migrations
@@ -142,6 +148,11 @@ GITHUB_LABEL_SKILL_PREFIX = "skill:"
 #   SETTINGS_ENCRYPTION_KEY    seals the credentials entered on the Configuration
 #                              screen and signs the connect round trips
 #                              (`openssl rand -base64 32`)
+#   OTEL_EXPORTER_OTLP_ENDPOINT
+#                              the OpenTelemetry collector the review metrics are
+#                              pushed to over OTLP/HTTP (`/v1/metrics` is
+#                              appended); OTEL_EXPORTER_OTLP_HEADERS carries its
+#                              credential as `key=value` pairs
 #
 # Every one of them is OPTIONAL. A Worker with none of them set still serves the
 # board and reports the gaps on /health, which is what makes the first deploy

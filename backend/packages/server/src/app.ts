@@ -32,6 +32,7 @@ import { toReviewController } from './modules/toReview/ToReviewController.js'
 import { orgController } from './modules/orgs/OrgController.js'
 import { teamController } from './modules/teams/TeamController.js'
 import { projectController } from './modules/projects/ProjectController.js'
+import { reportingController } from './modules/reporting/ReportingController.js'
 import { reviewerController } from './modules/reviewers/ReviewerController.js'
 import { guidedReviewController } from './modules/guidedReview/GuidedReviewController.js'
 import { aiReviewController } from './modules/reviews/AiReviewController.js'
@@ -328,17 +329,13 @@ function mountCallerChecks(
   app.use('/api/v1/*', authentication({ throttle, clientOf }))
 }
 
-export function createApp(options: AppOptions): Hono<AppEnv> {
-  const app = new Hono<AppEnv>()
-  mountMiddleware(app, options)
-
-  app.route('/', healthController())
-  app.route('/', webhookController())
-  app.route('/', connectController())
+/** Everything under `/api/v1`, which the middleware above authenticates. */
+function mountApiRoutes(app: Hono<AppEnv>): void {
   app.route('/api/v1', workspaceController())
   app.route('/api/v1', myPullRequestsController())
   app.route('/api/v1', myReviewsController())
   app.route('/api/v1', toReviewController())
+  app.route('/api/v1', reportingController())
   app.route('/api/v1', projectController())
   app.route('/api/v1', attentionController())
   app.route('/api/v1', authController())
@@ -352,6 +349,16 @@ export function createApp(options: AppOptions): Hono<AppEnv> {
   app.route('/api/v1', teamController())
   app.route('/api/v1', settingsController())
   app.route('/api/v1', connectionsController())
+}
+
+export function createApp(options: AppOptions): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+  mountMiddleware(app, options)
+
+  app.route('/', healthController())
+  app.route('/', webhookController())
+  app.route('/', connectController())
+  mountApiRoutes(app)
 
   app.notFound((c) => c.json(errorBody('not_found', `No route for ${c.req.path}`), 404))
   app.onError(handleError)

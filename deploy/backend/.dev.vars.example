@@ -78,3 +78,17 @@ AUTH_SESSION_LIFETIME_MS=
 # rotating it makes every stored token unreadable, which the screen reports as
 # such.
 SETTINGS_ENCRYPTION_KEY=
+
+# ---------------------------------------------------------------------------
+# Review metrics over OpenTelemetry. Set an OTLP/HTTP endpoint and the hourly
+# cron trigger pushes each org's review timings (time to first review, first
+# human review, approval and merge) as gauges; leave it out and the export does
+# nothing. The variables are the OpenTelemetry SDK's own: the metrics endpoint
+# is taken as written, the general one gets `/v1/metrics` appended, and the
+# headers are `key=value` pairs separated by commas.
+# ---------------------------------------------------------------------------
+OTEL_EXPORTER_OTLP_ENDPOINT=
+OTEL_EXPORTER_OTLP_HEADERS=
+OTEL_SERVICE_NAME=sainte-beuve
+# The cron trigger (from wrangler.toml) that runs the export. `0 * * * *` by default.
+REVIEW_METRICS_CRON=

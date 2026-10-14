@@ -8,6 +8,7 @@ import {
   retiredVariablesIn,
   withAppOrigin,
 } from '@sainte-beuve/server'
+import { type OtlpMetricsConfig, otlpMetricsConfigFrom } from '@sainte-beuve/telemetry'
 import { clientAddressHeaderFrom } from './clientAddress.js'
 
 /**
@@ -113,6 +114,13 @@ export interface NodeConfig {
   /** How often the reminder clock runs, in ms. */
   reminderIntervalMs: number
   /**
+   * The OTLP collector the review metrics are pushed to, from the
+   * OpenTelemetry SDK's own variables. Null leaves the export off.
+   */
+  reviewMetrics: OtlpMetricsConfig | null
+  /** How often the review metrics export runs, in ms. An hour by default. */
+  reviewMetricsIntervalMs: number
+  /**
    * What the Configuration screen proposes for an org with no cat-factory
    * settings. Never read from the environment: cat-factory is configured per
    * org, on that screen. Local mode fills it with a local instance's defaults.
@@ -140,6 +148,9 @@ export interface NodeConfig {
 }
 
 type Env = Record<string, string | undefined>
+
+/** The review metrics export's interval when none is set: hourly, like the Worker's cron. */
+export const DEFAULT_REVIEW_METRICS_INTERVAL_MS = 60 * 60 * 1000
 
 function intFrom(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? '', 10)
@@ -206,6 +217,11 @@ export function loadConfig(env: Env = process.env): NodeConfig {
     clientAddressHeader: clientAddressHeaderFrom(env.CLIENT_ADDRESS_HEADER),
     logLevel: env.LOG_LEVEL ?? 'info',
     reminderIntervalMs: intFrom(env.REMINDER_INTERVAL_MS, 60_000),
+    reviewMetrics: otlpMetricsConfigFrom(env),
+    // `optionalCountFrom`, because zero or less would be a timer firing
+    // continuously, each pass reading every linked repository's history.
+    reviewMetricsIntervalMs:
+      optionalCountFrom(env.REVIEW_METRICS_INTERVAL_MS) ?? DEFAULT_REVIEW_METRICS_INTERVAL_MS,
     catFactorySuggestion: null,
     github: githubFrom(env),
     gitlab: gitlabFrom(env),
