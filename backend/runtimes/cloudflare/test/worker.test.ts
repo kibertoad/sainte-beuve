@@ -81,6 +81,8 @@ describe('sainte-beuve worker', () => {
         externalRiskAssessment: false,
         autoApproval: { github: false, gitlab: false },
         secrets: true,
+        // wrangler.toml names no OTLP endpoint, so the export is off.
+        reviewMetricsExport: false,
         githubWebhooks: false,
         slackInteractivity: false,
         gitlabWebhooks: false,

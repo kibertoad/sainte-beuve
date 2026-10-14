@@ -35,6 +35,7 @@
     "@sainte-beuve/integrations": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*",
     "@sainte-beuve/reminders": "workspace:*",
+    "@sainte-beuve/reporting": "workspace:*",
     "@sainte-beuve/reviewers": "workspace:*",
     "@sainte-beuve/risk": "workspace:*",
     "@toad-contracts/core": "1.0.0",

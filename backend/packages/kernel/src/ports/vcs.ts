@@ -90,6 +90,43 @@ export interface ChangedFile {
   deletions: number
 }
 
+/**
+ * One review event on a pull request. GitLab has no review object, so there a
+ * comment by somebody else is a review and approvals come from its system notes.
+ */
+export interface ReviewEvent {
+  login: string
+  /** The host marks the account as a machine (a GitHub App, a GitLab bot user). */
+  bot: boolean
+  kind: 'approved' | 'changes_requested' | 'commented'
+  at: EpochMs
+}
+
+/** What a report needs of one pull request: when it was ready, reviewed, approved and merged. */
+export interface PullRequestTimeline {
+  number: number
+  title: string
+  url: string
+  authorLogin: string | null
+  /** Still a draft now. */
+  draft: boolean
+  createdAt: EpochMs
+  /** When it was last marked ready for review, or `createdAt` when it never was a draft. */
+  readyAt: EpochMs
+  mergedAt: EpochMs | null
+  /** When it was closed, merged or not. Null while open. */
+  closedAt: EpochMs | null
+  /** Every review event the read reached, in no promised order, the author's own included. */
+  reviews: ReviewEvent[]
+}
+
+/** The pull requests opened in a project since a moment, and whether the read reached that far. */
+export interface ReviewTimelines {
+  pullRequests: PullRequestTimeline[]
+  /** The read stopped at its page cap before reaching `since`. */
+  truncated: boolean
+}
+
 /** A pull request by the coordinates every host addresses it by. */
 export type PullRequestAddress = ProjectRef & { number: number }
 
@@ -179,6 +216,12 @@ export interface VcsGateway {
    * read, which is not the same as nobody having reviewed it.
    */
   openPullRequestReviews(project: ProjectRef): Promise<OpenPullRequestReviews[]>
+  /**
+   * The project's pull requests opened since `since`, open or not, each with
+   * its review events, newest first, down to the same page cap the open reads
+   * follow.
+   */
+  reviewTimelines(project: ProjectRef, since: EpochMs): Promise<ReviewTimelines>
   /**
    * The files the pull request changes, up to the host's own cap on one listing
    * (3000 on GitHub). `truncated` says the list stopped short of the whole diff.

@@ -28,6 +28,7 @@ const links = computed(() => [
   { label: 'My PRs', to: '/my-pull-requests', icon: 'i-lucide-git-merge' },
   { label: 'My Reviews', to: '/my-reviews', icon: 'i-lucide-eye' },
   { label: 'PRs to review', to: '/to-review', icon: 'i-lucide-list-checks' },
+  { label: 'Reports', to: '/reports', icon: 'i-lucide-chart-column' },
   { label: 'Repositories', to: '/repositories', icon: 'i-lucide-folder-git-2' },
   { label: 'Board', to: '/board', icon: 'i-lucide-git-pull-request' },
   { label: 'Reviewers', to: '/reviewers', icon: 'i-lucide-users' },

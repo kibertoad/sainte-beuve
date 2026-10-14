@@ -21,6 +21,9 @@
       "path": "../reminders/tsconfig.build.json"
     },
     {
+      "path": "../reporting/tsconfig.build.json"
+    },
+    {
       "path": "../risk/tsconfig.build.json"
     }
   ]

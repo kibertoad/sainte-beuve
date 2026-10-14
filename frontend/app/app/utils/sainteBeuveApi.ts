@@ -46,6 +46,7 @@ import { guidedReviewCalls, sessionAddress } from './guidedReviewApi'
 import { myPullRequestCalls } from './myPullRequestsApi'
 import { myReviewCalls } from './myReviewsApi'
 import { organizationCalls } from './organizationApi'
+import { reportingCalls } from './reportingApi'
 import { riskCalls } from './riskApi'
 import { configurationCalls } from './sainteBeuveSettingsApi'
 import { toReviewCalls } from './toReviewApi'
@@ -324,6 +325,7 @@ export function createSainteBeuveApi(apiBase: string) {
     ...capabilityCalls(call),
     ...configurationCalls(call),
     ...organizationCalls(call),
+    ...reportingCalls(call),
     ...riskCalls(call),
     ...toReviewCalls(call),
   }

@@ -1,4 +1,4 @@
-import { createApp, runReminderTick } from '@sainte-beuve/server'
+import { createApp, runReminderTick, runReviewMetricsExport } from '@sainte-beuve/server'
 import { containerFor, corsOriginsFor } from './container.js'
 import type { WorkerEnv } from './env.js'
 
@@ -12,6 +12,9 @@ import type { WorkerEnv } from './env.js'
  * A deployment re-exports `default` from here and supplies its own wrangler.toml;
  * see deploy/backend.
  */
+
+/** The cron expression the review metrics export runs on when `REVIEW_METRICS_CRON` names none. */
+export const DEFAULT_REVIEW_METRICS_CRON = '0 * * * *'
 
 /**
  * Built once per isolate, not once per request. The app is the route table, four
@@ -38,13 +41,24 @@ export default {
   },
 
   async scheduled(
-    _event: ScheduledController,
+    event: ScheduledController,
     env: WorkerEnv,
     ctx: ExecutionContext,
   ): Promise<void> {
     const container = containerFor(env, (work) => {
       ctx.waitUntil(work)
     })
+    // Its own trigger rather than a ride on the reminder clock's: a report
+    // reads every linked repository's history from the hosts, which is an
+    // hourly job, not a five-minute one. The Node facade has its own interval.
+    if (event.cron === (env.REVIEW_METRICS_CRON || DEFAULT_REVIEW_METRICS_CRON)) {
+      ctx.waitUntil(
+        runReviewMetricsExport(container).catch((err: unknown) => {
+          container.logger.error({ err }, 'review metrics export failed')
+        }),
+      )
+      return
+    }
     // `waitUntil` so a slow Slack call cannot make the cron invocation time out
     // and be retried with half its batch already delivered. The rejection handler
     // matches the Node facade's: a tick that throws inside `waitUntil` is

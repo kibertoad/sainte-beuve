@@ -149,4 +149,24 @@ export interface WorkerEnv {
    * such.
    */
   SETTINGS_ENCRYPTION_KEY?: string
+
+  /**
+   * Where the review metrics are pushed, as the OpenTelemetry SDK spells it:
+   * the metrics endpoint taken as written, or the general one with
+   * `/v1/metrics` appended. Neither set leaves the export off, and `/health`
+   * says so.
+   */
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT?: string
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string
+  /** `key=value` pairs, comma-separated: the collector's credential, usually. */
+  OTEL_EXPORTER_OTLP_METRICS_HEADERS?: string
+  OTEL_EXPORTER_OTLP_HEADERS?: string
+  /** `service.name` on every exported metric. `sainte-beuve` by default. */
+  OTEL_SERVICE_NAME?: string
+  /**
+   * Which of the Worker's cron triggers runs the review metrics export rather
+   * than the reminder clock. `0 * * * *` by default, which wrangler.toml has to
+   * list beside the reminder clock's own expression.
+   */
+  REVIEW_METRICS_CRON?: string
 }

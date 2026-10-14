@@ -36,6 +36,8 @@ Mirrors cat-factory's layout, for the same reasons it works there.
 | `backend/packages/kernel`                  | Domain errors and PORT interfaces. Nothing here reaches a network or a database.                              |
 | `backend/packages/reviewers`               | Who should look: selection, attention audiences, and the cut of a host's list that is yours. Pure.            |
 | `backend/packages/reminders`               | Reminder cadence and escalation. Pure.                                                                        |
+| `backend/packages/reporting`               | Review timings per milestone, their statistics and the hotspots. Pure.                                        |
+| `backend/packages/telemetry`               | The review metrics as OpenTelemetry gauges, over the official SDK and its OTLP/HTTP exporter.                 |
 | `backend/packages/integrations`            | GitHub, GitLab and Slack adapters behind the kernel ports, plus the vendor protocols (signatures, events).    |
 | `backend/packages/ai-review`               | The cat-factory gateway. The only package that knows cat-factory exists.                                      |
 | `backend/packages/persistence-memory`      | In-memory repositories: what a facade boots with when no database is configured.                              |
@@ -170,6 +172,11 @@ provider)` from that host's own credential. Above the adapter there is no
   the org configured, optionally only after a clean AI review, and the approval is
   withdrawn when new commits arrive. Off until an admin turns it on. See
   [risk-policy.md](./risk-policy.md).
+
+- **Reports and review metrics**: time to first review, first human review,
+  approval and merge, read from the hosts per linked repository, with the
+  hotspots across an org, on a screen and as OpenTelemetry gauges pushed on a
+  clock of their own. See [reporting.md](./reporting.md).
 
 ## What is a placeholder, and why it is still here
 

@@ -60,3 +60,9 @@ export { GitHubWebhookService } from './modules/webhooks/GitHubWebhookService.js
 export { SlackWebhookService } from './modules/webhooks/SlackWebhookService.js'
 export { snoozeReview } from './reminders/snooze.js'
 export { runReminderTick, type TickResult } from './reminders/tick.js'
+export {
+  EXPORTED_REPORT_WINDOW,
+  type MetricsExportResult,
+  runReviewMetricsExport,
+} from './modules/reporting/metricsExport.js'
+export { ReportingService } from './modules/reporting/ReportingService.js'

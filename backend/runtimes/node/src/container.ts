@@ -7,6 +7,7 @@ import {
   staticTokenSource,
 } from '@sainte-beuve/integrations'
 import type { GatewayFactory, Logger } from '@sainte-beuve/kernel'
+import { OtlpReviewMetricsExporter } from '@sainte-beuve/telemetry'
 import {
   type AppContainer,
   createContainer,
@@ -46,6 +47,8 @@ export function buildContainer(config: NodeConfig, store: NodeStore, logger: Log
     vcs: environmentVcs(config),
     catFactorySuggestion: config.catFactorySuggestion,
     gateways: gatewaysFor(config),
+    reviewMetrics:
+      config.reviewMetrics === null ? null : new OtlpReviewMetricsExporter(config.reviewMetrics),
     // Built once, with the container, because this facade is one process: every
     // stream a page opens against it is on the same bus.
     //

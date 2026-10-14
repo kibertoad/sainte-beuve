@@ -39,6 +39,7 @@
     "@sainte-beuve/persistence-d1": "workspace:*",
     "@sainte-beuve/persistence-memory": "workspace:*",
     "@sainte-beuve/server": "workspace:*",
+    "@sainte-beuve/telemetry": "workspace:*",
     "valibot": "^1.5.0"
   },
   "devDependencies": {

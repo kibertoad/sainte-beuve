@@ -22,8 +22,14 @@ head_sampling_rate = 1
 # Five minutes rather than one: the reminder ladder is measured in hours, so this
 # is about the ceiling, not the cadence, and a pass over an idle deployment is a
 # handful of indexed reads that find nothing due.
+#
+# The second trigger is the review metrics export, which pushes the review
+# timings to an OpenTelemetry collector when OTEL_EXPORTER_OTLP_ENDPOINT is set
+# and does nothing otherwise. Hourly, because every pass reads each linked
+# repository's history from its host. REVIEW_METRICS_CRON names it, and has to
+# match the expression here if either changes.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "0 * * * *"]
 
 # A deployment serving its SPA from another origin lists it here, or sets
 # APP_BASE_URL, whose origin is folded in: the SPA's client sends

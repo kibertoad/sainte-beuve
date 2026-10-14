@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SESSION_LIFETIME_MS } from '@sainte-beuve/server'
-import { loadConfig } from './config.js'
+import { DEFAULT_REVIEW_METRICS_INTERVAL_MS, loadConfig } from './config.js'
 
 describe('loadConfig', () => {
   it('runs with nothing configured', () => {
@@ -229,5 +229,21 @@ describe('loadConfig', () => {
       DEFAULT_SESSION_LIFETIME_MS,
     )
     expect(loadConfig({ AUTH_SESSION_LIFETIME_MS: '60000' }).auth.sessionLifetimeMs).toBe(60_000)
+  })
+  it('exports the review metrics only to a collector it was given, hourly unless told', () => {
+    const quiet = loadConfig({})
+    expect(quiet.reviewMetrics).toBeNull()
+    expect(quiet.reviewMetricsIntervalMs).toBe(DEFAULT_REVIEW_METRICS_INTERVAL_MS)
+    const exporting = loadConfig({
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otel.example.com',
+      OTEL_EXPORTER_OTLP_HEADERS: 'x-token=abc',
+      REVIEW_METRICS_INTERVAL_MS: '0',
+    })
+    expect(exporting.reviewMetrics).toStrictEqual({
+      url: 'https://otel.example.com/v1/metrics',
+      headers: { 'x-token': 'abc' },
+      serviceName: 'sainte-beuve',
+    })
+    expect(exporting.reviewMetricsIntervalMs).toBe(DEFAULT_REVIEW_METRICS_INTERVAL_MS)
   })
 })

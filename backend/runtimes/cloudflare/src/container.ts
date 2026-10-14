@@ -15,8 +15,10 @@ import type {
   PersistenceKind,
   PersistenceProvider,
   RealtimeKind,
+  ReviewMetricsExporter,
 } from '@sainte-beuve/kernel'
 import { createD1Store } from '@sainte-beuve/persistence-d1'
+import { OtlpReviewMetricsExporter, otlpMetricsConfigFrom } from '@sainte-beuve/telemetry'
 import { createInMemoryPersistence } from '@sainte-beuve/persistence-memory'
 import {
   type AppContainer,
@@ -222,6 +224,27 @@ function buildGateways(env: WorkerEnv): GatewayFactory {
   })
 }
 
+let cachedMetrics: { key: string; exporter: ReviewMetricsExporter | null } | null = null
+
+/** Per isolate and keyed by its variables, for the reason the gateway factory is. */
+function reviewMetricsFor(env: WorkerEnv): ReviewMetricsExporter | null {
+  const key = JSON.stringify([
+    env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+    env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    env.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+    env.OTEL_EXPORTER_OTLP_HEADERS,
+    env.OTEL_SERVICE_NAME,
+  ])
+  if (cachedMetrics === null || cachedMetrics.key !== key) {
+    const config = otlpMetricsConfigFrom(env)
+    cachedMetrics = {
+      key,
+      exporter: config === null ? null : new OtlpReviewMetricsExporter(config),
+    }
+  }
+  return cachedMetrics.exporter
+}
+
 function buildChat(env: WorkerEnv): ChatGateway | null {
   if (!env.SLACK_BOT_TOKEN) return null
   return new SlackChatGateway({
@@ -270,6 +293,7 @@ export function containerFor(
     chat: buildChat(env),
     vcs: buildVcs(env),
     gateways: gatewaysFor(env),
+    reviewMetrics: reviewMetricsFor(env),
     bus: fanout.bus,
     realtime: fanout.kind,
     // A risk assessment calls a model after the response; this keeps the isolate for it.

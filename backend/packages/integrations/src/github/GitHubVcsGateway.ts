@@ -13,6 +13,7 @@ import type {
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewTimelines,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
@@ -28,6 +29,7 @@ import type { GitHubTokenSource } from './credentials.js'
 import { pastGitHubActivity } from './history.js'
 import { lookupGitHubRepositories } from './lookup.js'
 import { githubOpenPullRequestReviews } from './openReviews.js'
+import { githubReviewTimelines } from './reviewTimelines.js'
 import {
   type GitHubPullRequestDetail,
   type GitHubRepositorySettings,
@@ -273,6 +275,10 @@ export class GitHubVcsGateway implements VcsGateway {
 
   async openPullRequestReviews(project: ProjectRef): Promise<OpenPullRequestReviews[]> {
     return githubOpenPullRequestReviews(project, await this.contextFor(project))
+  }
+
+  async reviewTimelines(project: ProjectRef, since: EpochMs): Promise<ReviewTimelines> {
+    return githubReviewTimelines(project, since, await this.contextFor(project))
   }
 
   async changedFiles(

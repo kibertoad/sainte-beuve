@@ -263,6 +263,25 @@ Who reviewed what is read from the host (on GitLab, which records nothing short
 of an approval, that is the approvers). When the host will not say, the pull
 request is still listed and simply does not rank for its wait.
 
+## Reports
+
+**Reports** shows how long pull requests wait at each step of review: the first
+review, the first human review (CodeRabbit, Copilot and the other bots left
+out), the approval and the merge. Pick a window of 7 to 90 days, and either
+every linked repository or one of them.
+
+Each step gets its median, p90 and mean, and a count of the open pull requests
+still waiting on it, so the slowest ones are not hidden by not having finished.
+Across the whole org it names the **hotspots**: repositories whose median is
+well behind the rest, and ones with several pull requests left waiting longer
+than nearly anything else took. Below that are the longest waits for a human
+review, still open or not.
+
+The history is read from GitHub and GitLab when you open the screen, so a
+report covers time before this deployment existed. The same numbers can be
+pushed to an OpenTelemetry collector as gauges, hourly, by setting
+`OTEL_EXPORTER_OTLP_ENDPOINT`. See [docs/reporting.md](./docs/reporting.md).
+
 ## Who is in the pool
 
 Both of those depend on the same list, and **Reviewers** is where it is kept: who
@@ -312,6 +331,8 @@ a reduced build.
 | `backend/packages/kernel`                  | `@sainte-beuve/kernel`                  | Domain errors and port interfaces                               |
 | `backend/packages/reviewers`               | `@sainte-beuve/reviewers`               | Reviewer selection, attention audiences, workspace cuts (pure)  |
 | `backend/packages/reminders`               | `@sainte-beuve/reminders`               | Reminder cadence and escalation (pure)                          |
+| `backend/packages/reporting`               | `@sainte-beuve/reporting`               | Review timings, statistics and hotspots (pure)                  |
+| `backend/packages/telemetry`               | `@sainte-beuve/telemetry`               | The review metrics over OpenTelemetry (OTLP/HTTP)               |
 | `backend/packages/integrations`            | `@sainte-beuve/integrations`            | GitHub, GitLab and Slack adapters, and the protocols they speak |
 | `backend/packages/ai-review`               | `@sainte-beuve/ai-review`               | The cat-factory gateway                                         |
 | `backend/packages/persistence-memory`      | `@sainte-beuve/persistence-memory`      | In-memory repositories, for a facade with no database           |
@@ -335,7 +356,8 @@ what is a placeholder, and what lands next,
 [docs/auth.md](./docs/auth.md) for who is allowed to call it,
 [docs/orgs.md](./docs/orgs.md) for what they may reach once they are in,
 [docs/realtime.md](./docs/realtime.md) for how the attention stream is fanned
-out, and [docs/performance-review.md](./docs/performance-review.md) for where it
+out, [docs/reporting.md](./docs/reporting.md) for what Reports measures and
+exports, and [docs/performance-review.md](./docs/performance-review.md) for where it
 will scale badly first.
 
 ## Connecting GitHub, GitLab and Slack

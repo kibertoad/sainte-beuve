@@ -42,6 +42,7 @@
     "@sainte-beuve/persistence-memory": "workspace:*",
     "@sainte-beuve/persistence-postgres": "workspace:*",
     "@sainte-beuve/server": "workspace:*",
+    "@sainte-beuve/telemetry": "workspace:*",
     "hono": "^4.13.7",
     "pino": "^10.3.1"
   },

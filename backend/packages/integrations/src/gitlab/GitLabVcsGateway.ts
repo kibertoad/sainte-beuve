@@ -13,6 +13,7 @@ import type {
   PullRequestAddress,
   PullRequestSearch,
   PullRequestSearchRole,
+  ReviewTimelines,
   VcsAccount,
   VcsGateway,
 } from '@sainte-beuve/kernel'
@@ -22,6 +23,7 @@ import { gitlabApiStatusOf, gitlabRequest, MAX_PAGES, PAGE_SIZE, projectPath } f
 import { pastGitLabActivity } from './history.js'
 import { lookupGitLabRepositories } from './lookup.js'
 import { gitlabOpenPullRequestReviews } from './openReviews.js'
+import { gitlabReviewTimelines } from './reviewTimelines.js'
 import {
   type GitLabApprovals,
   type GitLabMergeRequestDetail,
@@ -233,6 +235,10 @@ export class GitLabVcsGateway implements VcsGateway {
 
   async openPullRequestReviews(project: ProjectRef): Promise<OpenPullRequestReviews[]> {
     return gitlabOpenPullRequestReviews(project, this.options)
+  }
+
+  async reviewTimelines(project: ProjectRef, since: EpochMs): Promise<ReviewTimelines> {
+    return gitlabReviewTimelines(project, since, this.options)
   }
 
   /**

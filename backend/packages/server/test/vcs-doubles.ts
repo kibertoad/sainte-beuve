@@ -73,10 +73,14 @@ export function viewerVcs(
 }
 
 /** The history half of the port, for a fake whose host has seen nobody review. */
-export function noActivity(): Pick<VcsGateway, 'pastActivity' | 'openPullRequestReviews'> {
+export function noActivity(): Pick<
+  VcsGateway,
+  'pastActivity' | 'openPullRequestReviews' | 'reviewTimelines'
+> {
   return {
     pastActivity: async () => ({ reviewers: [], authors: [] }),
     openPullRequestReviews: async () => [],
+    reviewTimelines: async () => ({ pullRequests: [], truncated: false }),
   }
 }
 
