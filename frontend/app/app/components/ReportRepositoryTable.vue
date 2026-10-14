@@ -14,14 +14,14 @@ const emit = defineEmits<{ select: [projectId: string] }>()
       <h2 class="font-semibold">Repositories</h2>
       <p class="text-sm text-muted">Median per milestone. Highlighted cells are hotspots.</p>
     </template>
-    <p v-if="repositories.length === 0" class="text-sm text-muted">No linked repositories.</p>
+    <p v-if="repositories.length === 0" class="text-sm text-muted">No repository could be read.</p>
     <ul v-else class="divide-y divide-default">
       <li
         v-for="repository in repositories"
         :key="repository.projectId"
         class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-4"
       >
-        <div class="min-w-0 sm:w-64">
+        <div class="w-full min-w-0 sm:w-64 sm:shrink-0">
           <UButton
             variant="link"
             class="p-0 max-w-full truncate"

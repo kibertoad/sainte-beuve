@@ -21,7 +21,8 @@ const REPOSITORY_FAN_OUT = 4
 
 interface RepositoryRead {
   project: Project
-  pullRequests: PullRequestTimeline[]
+  /** Null when the host would not answer: no numbers, which is not the same as none. */
+  pullRequests: PullRequestTimeline[] | null
   source: ReviewReport['sources'][number]
 }
 
@@ -30,7 +31,8 @@ interface RepositoryRead {
  * human review, an approval and a merge, read from the hosts at the time of
  * asking. Nothing is stored, so a report covers history from before this
  * deployment tracked anything, and a repository the host will not read is
- * reported per source rather than failing the rest.
+ * reported per source rather than failing the rest. It is left out of the
+ * numbers, so nothing downstream reads its silence as zero pull requests.
  */
 export class ReportingService {
   constructor(private readonly container: AppContainer) {}
@@ -41,7 +43,9 @@ export class ReportingService {
     const now = this.container.clock.now()
     const reads = await this.readTimelines(projects, windowStart(now, days))
     const computed = buildReviewReport({
-      repositories: reads.map(({ project, pullRequests }) => ({ project, pullRequests })),
+      repositories: reads.flatMap(({ project, pullRequests }) =>
+        pullRequests === null ? [] : [{ project, pullRequests }],
+      ),
       days,
       now,
       projectId: query.projectId ?? null,
@@ -71,7 +75,7 @@ export class ReportingService {
   ): Promise<RepositoryRead> {
     const gateway = gateways.get(project.provider)
     if (gateway === undefined) {
-      return { project, pullRequests: [], source: readOf(project, false, NO_CREDENTIAL) }
+      return { project, pullRequests: null, source: readOf(project, false, NO_CREDENTIAL) }
     }
     try {
       const { pullRequests, truncated } = await gateway.reviewTimelines(project, since)
@@ -83,7 +87,7 @@ export class ReportingService {
       )
       return {
         project,
-        pullRequests: [],
+        pullRequests: null,
         source: readOf(project, false, getErrorMessage(err)),
       }
     }

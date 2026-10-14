@@ -93,6 +93,7 @@ describe('review reports', () => {
     expect(sources.api).toMatchObject({ ok: true, truncated: false })
     expect(sources.web).toMatchObject({ ok: true, truncated: true })
     expect(sources.broken).toMatchObject({ ok: false, reason: 'GitHub answered 502' })
+    expect(body.repositories.map((repository) => repository.repo).sort()).toEqual(['api', 'web'])
   })
 
   it('narrows to one project, and refuses one that is not linked', async () => {
@@ -126,6 +127,7 @@ describe('review reports', () => {
     await addProject(harness, 'api')
     const body = await report(harness)
     expect(body.pullRequests).toBe(0)
+    expect(body.repositories).toEqual([])
     expect(body.sources[0]).toMatchObject({ ok: false, truncated: false })
   })
 })

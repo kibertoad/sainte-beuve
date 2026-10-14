@@ -36,6 +36,7 @@ function githubPull(number: number, createdAt: string, extra: Record<string, unk
     author: { login: 'bob' },
     reviews: { nodes: [] },
     timelineItems: { nodes: [] },
+    dismissals: { nodes: [] },
     ...extra,
   }
 }
@@ -94,6 +95,47 @@ describe('GitHubVcsGateway.reviewTimelines', () => {
       ],
     })
     expect(pullRequests[1]?.readyAt).toBe(at('2026-10-02T00:00:00Z'))
+  })
+
+  it('counts a dismissed review as what it was before the dismissal', async () => {
+    const { fetchImpl } = answering(
+      githubPage(null, [
+        githubPull(3, '2026-10-05T00:00:00Z', {
+          reviews: {
+            nodes: [
+              {
+                id: 'r1',
+                state: 'DISMISSED',
+                submittedAt: '2026-10-05T02:00:00Z',
+                author: { __typename: 'User', login: 'ada' },
+              },
+              {
+                id: 'r2',
+                state: 'DISMISSED',
+                submittedAt: '2026-10-05T03:00:00Z',
+                author: { __typename: 'User', login: 'carol' },
+              },
+            ],
+          },
+          dismissals: {
+            nodes: [
+              { previousReviewState: 'APPROVED', review: { id: 'r1' } },
+              { previousReviewState: 'CHANGES_REQUESTED', review: { id: 'r2' } },
+            ],
+          },
+        }),
+      ]),
+    )
+    const { pullRequests } = await gateway(fetchImpl).reviewTimelines(PROJECT, SINCE)
+    expect(pullRequests[0]?.reviews.map((review) => [review.login, review.kind])).toEqual([
+      ['ada', 'approved'],
+      ['carol', 'changes_requested'],
+    ])
+  })
+
+  it('fails a repository the credential cannot see instead of reading it as empty', async () => {
+    const { fetchImpl } = answering({ data: { repository: null } })
+    await expect(gateway(fetchImpl).reviewTimelines(PROJECT, SINCE)).rejects.toThrow(/acme\/api/)
   })
 
   it('reports a read that ran out of pages inside the window as truncated', async () => {

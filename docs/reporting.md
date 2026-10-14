@@ -38,7 +38,9 @@ stored, so a report covers history from before the deployment tracked anything.
 
 - **GitHub**: one GraphQL page of fifty pull requests at a time, newest first,
   with their submitted reviews and their last ready-for-review event, until the
-  page that reaches past the window.
+  page that reaches past the window. A dismissed review counts as what it was
+  when it was given, so an approval a later push dismissed still times the
+  approval.
 - **GitLab**: merge requests created in the window, fifty to a page, with their
   notes. GitLab has no review object, so a comment by somebody else is a review,
   and approvals, change requests and readiness come from its system notes.

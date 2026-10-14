@@ -12,7 +12,7 @@ export const EXPORTED_REPORT_WINDOW: ReportWindow = '30'
 const ORG_FAN_OUT = 2
 
 export interface MetricsExportResult {
-  /** Orgs whose report went out. An org with no linked repository has nothing to say. */
+  /** Orgs whose report went out. An org with no repository its host answered for has nothing to say. */
   exported: number
   /** Orgs whose report could not be built, logged one by one. */
   failed: number

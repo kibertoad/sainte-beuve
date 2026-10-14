@@ -129,7 +129,10 @@ export const reviewReportSchema = v.object({
   projectId: v.nullable(v.string()),
   pullRequests: v.number(),
   metrics: reviewMetricsSchema,
-  /** Every repository read, most pull requests first. */
+  /**
+   * Every repository the host answered for, most pull requests first. One it
+   * would not read is only in `sources`, since it has no numbers to show.
+   */
   repositories: v.array(repositoryReportSchema),
   /** Worst first. Empty for a report on one repository, which has nothing to stand out from. */
   hotspots: v.array(hotspotSchema),
