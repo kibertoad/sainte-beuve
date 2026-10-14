@@ -30,14 +30,17 @@ const shown = computed(() => orderPeople(props.people, order.value, query.value)
       </UFormField>
     </div>
 
-    <p v-if="shown.length === 0" class="text-sm text-muted">Nobody matches.</p>
+    <p v-if="people.length === 0" class="text-sm text-muted">
+      Nobody opened or reviewed a pull request in the window.
+    </p>
+    <p v-else-if="shown.length === 0" class="text-sm text-muted">Nobody matches.</p>
     <ul v-else class="divide-y divide-default">
       <li
         v-for="person in shown"
         :key="`${person.provider}:${person.login}`"
         class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-4"
       >
-        <div class="min-w-0 sm:w-56">
+        <div class="w-full min-w-0 sm:w-56">
           <p class="font-medium truncate">{{ personName(person) }}</p>
           <p class="text-xs text-muted truncate">
             {{ person.login }} on {{ vcsDisplayName(person.provider) }}

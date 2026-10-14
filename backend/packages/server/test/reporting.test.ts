@@ -30,6 +30,7 @@ function timeline(number: number, overrides: Partial<PullRequestTimeline> = {}) 
     title: `Change ${number}`,
     url: `https://github.com/acme/api/pull/${number}`,
     authorLogin: 'bob',
+    authorBot: false,
     draft: false,
     createdAt: NOW - 10 * HOUR,
     readyAt: NOW - 10 * HOUR,

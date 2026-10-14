@@ -29,9 +29,9 @@ export function milestonesOf(pr: PullRequestTimeline, now: EpochMs): MilestoneOu
   const human = humanReviews(reviews)
   const approvals = reviews.filter((review) => review.kind === 'approved')
   return {
-    first_review: outcome(pr, earliest(reviews), now),
-    first_human_review: outcome(pr, earliest(human), now),
-    approval: outcome(pr, earliest(approvals), now),
+    first_review: outcome(pr, earliestReview(reviews)?.at ?? null, now),
+    first_human_review: outcome(pr, earliestReview(human)?.at ?? null, now),
+    approval: outcome(pr, earliestReview(approvals)?.at ?? null, now),
     merge: outcome(pr, pr.mergedAt, now),
   }
 }
@@ -52,9 +52,10 @@ function outcome(pr: PullRequestTimeline, at: EpochMs | null, now: EpochMs): Mil
   return { state: 'waiting', forMs: Math.max(0, now - pr.readyAt) }
 }
 
-function earliest(reviews: readonly ReviewEvent[]): EpochMs | null {
-  return reviews.reduce<EpochMs | null>(
-    (first, review) => (first === null || review.at < first ? review.at : first),
+/** The first of some reviews, or null when there are none. */
+export function earliestReview(reviews: readonly ReviewEvent[]): ReviewEvent | null {
+  return reviews.reduce<ReviewEvent | null>(
+    (first, review) => (first === null || review.at < first.at ? review : first),
     null,
   )
 }

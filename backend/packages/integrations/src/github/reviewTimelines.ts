@@ -38,7 +38,7 @@ const REVIEW_TIMELINES_QUERY = `query ReviewTimelines($owner: String!, $name: St
         createdAt
         mergedAt
         closedAt
-        author { login }
+        author { __typename login }
         reviews(first: ${REVIEWS_PER_PULL_REQUEST}, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
           nodes { id state submittedAt author { __typename login } }
         }
@@ -68,7 +68,7 @@ interface TimelinePullNode {
   createdAt: string
   mergedAt: string | null
   closedAt: string | null
-  author: { login: string } | null
+  author: { __typename: string; login: string } | null
   reviews: { nodes: TimelineReviewNode[] }
   timelineItems: { nodes: { createdAt?: string }[] } | null
   dismissals?: { nodes: TimelineDismissalNode[] } | null
@@ -142,6 +142,7 @@ function timelineOf(pull: TimelinePullNode): PullRequestTimeline {
     title: pull.title,
     url: pull.url,
     authorLogin: pull.author?.login ?? null,
+    authorBot: pull.author?.__typename === 'Bot',
     draft: pull.isDraft,
     createdAt,
     readyAt: readyEvent === undefined ? createdAt : Date.parse(readyEvent),

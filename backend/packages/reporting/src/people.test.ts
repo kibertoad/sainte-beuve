@@ -20,6 +20,7 @@ function pr(number: number, author: string, reviews: ReviewEvent[] = []): PullRe
     title: `Change ${number}`,
     url: `https://github.com/acme/api/pull/${number}`,
     authorLogin: author,
+    authorBot: false,
     draft: false,
     createdAt: READY,
     readyAt: READY,
@@ -36,7 +37,7 @@ function peopleIn(pullRequests: PullRequestTimeline[], provider: 'github' | 'git
     now: NOW,
     projectId: null,
     directory: [
-      { id: 'r-ada', displayName: 'Ada Lovelace', handles: { github: 'Ada', gitlab: null } },
+      { id: 'r-ada', displayName: 'Ada Lovelace', handles: { github: ' Ada ', gitlab: null } },
     ],
   }).people
 }
@@ -84,7 +85,10 @@ describe('people', () => {
   })
 
   it('leaves bots out, as authors and as reviewers', () => {
-    const people = peopleIn([pr(1, 'renovate[bot]', [review('copilot', 1), review('ada', 2)])])
+    const people = peopleIn([
+      pr(1, 'renovate[bot]', [review('copilot', 1), review('ada', 2)]),
+      { ...pr(2, 'release-app'), authorBot: true },
+    ])
     expect(people.map((person) => person.login)).toEqual(['ada'])
   })
 
