@@ -1,6 +1,7 @@
 import type {
   Hotspot,
   MilestoneStats,
+  PersonReport,
   RepositoryReport,
   ReviewMilestone,
 } from '@sainte-beuve/contracts'
@@ -56,4 +57,59 @@ export function hotspotSummary(hotspot: Hotspot): string {
     return `${count} waiting on ${milestone} longer than nearly anything else took`
   }
   return `Median ${milestone} ${formatDuration(hotspot.medianMs)}, against ${formatDuration(hotspot.overallMedianMs)} across the report`
+}
+
+export type PeopleOrder = 'reviewed' | 'authored' | 'wait'
+
+export const PEOPLE_ORDERS: { label: string; value: PeopleOrder }[] = [
+  { label: 'Most reviews', value: 'reviewed' },
+  { label: 'Most pull requests opened', value: 'authored' },
+  { label: 'Longest wait for a review', value: 'wait' },
+]
+
+/** The name a person goes by: their directory name, else their handle. */
+export function personName(person: Pick<PersonReport, 'displayName' | 'login'>): string {
+  return person.displayName ?? person.login
+}
+
+/**
+ * People in the chosen order, narrowed to the ones whose name or handle holds
+ * `query`. Ordered by wait, see `waitOf`.
+ */
+export function orderPeople(
+  people: readonly PersonReport[],
+  order: PeopleOrder,
+  query = '',
+): PersonReport[] {
+  const needle = query.trim().toLowerCase()
+  const matching = people.filter(
+    (person) =>
+      needle.length === 0 ||
+      person.login.toLowerCase().includes(needle) ||
+      (person.displayName?.toLowerCase().includes(needle) ?? false),
+  )
+  return matching.sort((a, b) => compareBy(order, a, b) || a.login.localeCompare(b.login))
+}
+
+function compareBy(order: PeopleOrder, a: PersonReport, b: PersonReport): number {
+  if (order === 'reviewed') return b.reviewed - a.reviewed
+  if (order === 'authored') return b.authored - a.authored
+  const [waitA, waitB] = [waitOf(a), waitOf(b)]
+  if (waitA === waitB) return 0
+  if (waitA === null) return 1
+  if (waitB === null) return -1
+  return waitB - waitA
+}
+
+/**
+ * How long a person's pull requests wait for a review: their median, raised to
+ * the longest one still waiting, which the median cannot see yet. Somebody whose
+ * pull requests were never reviewed is ranked by how long they have waited so
+ * far; null for somebody with nothing to time.
+ */
+function waitOf(person: PersonReport): number | null {
+  const median = person.authoredMetrics.first_human_review.medianMs
+  const waiting = person.longestWaitingMs
+  if (median === null) return waiting
+  return waiting === null ? median : Math.max(median, waiting)
 }

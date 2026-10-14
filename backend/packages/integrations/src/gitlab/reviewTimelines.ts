@@ -31,7 +31,7 @@ const REVIEW_TIMELINES_QUERY = `query ReviewTimelines($fullPath: ID!, $createdAf
         createdAt
         mergedAt
         closedAt
-        author { username }
+        author { username bot }
         notes(first: ${NOTES_PER_MERGE_REQUEST}) {
           nodes { createdAt system body author { username bot } }
         }
@@ -55,7 +55,7 @@ interface TimelineMergeNode {
   createdAt: string
   mergedAt: string | null
   closedAt: string | null
-  author: { username: string } | null
+  author: { username: string; bot: boolean } | null
   notes: { nodes: TimelineNote[] } | null
 }
 
@@ -121,6 +121,7 @@ function timelineOf(merge: TimelineMergeNode): PullRequestTimeline {
     title: merge.title,
     url: merge.webUrl,
     authorLogin: merge.author?.username ?? null,
+    authorBot: merge.author?.bot ?? false,
     draft: merge.draft,
     createdAt,
     readyAt: readyNote === undefined ? createdAt : Date.parse(readyNote.createdAt),

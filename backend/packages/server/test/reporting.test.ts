@@ -7,7 +7,15 @@ import type {
 } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import { runReviewMetricsExport } from '../src/index.js'
-import { buildHarness, environmentVcs, get, post, type TestHarness, viewerVcs } from './helpers.js'
+import {
+  addReviewer,
+  buildHarness,
+  environmentVcs,
+  get,
+  post,
+  type TestHarness,
+  viewerVcs,
+} from './helpers.js'
 
 // Reports through the app. The arithmetic is tested purely in
 // @sainte-beuve/reporting; this suite covers the host read per linked project,
@@ -22,6 +30,7 @@ function timeline(number: number, overrides: Partial<PullRequestTimeline> = {}) 
     title: `Change ${number}`,
     url: `https://github.com/acme/api/pull/${number}`,
     authorLogin: 'bob',
+    authorBot: false,
     draft: false,
     createdAt: NOW - 10 * HOUR,
     readyAt: NOW - 10 * HOUR,
@@ -120,6 +129,32 @@ describe('review reports', () => {
     expect(missing.status).toBe(404)
     const invalid = await harness.app.fetch(get('/api/v1/reports/reviews?days=8'))
     expect(invalid.status).toBe(400)
+  })
+
+  it('names the people behind the handles from the directory', async () => {
+    const harness = buildHarness({
+      vcs: environmentVcs(
+        vcsWith({
+          reviewTimelines: async () => ({
+            pullRequests: [
+              timeline(1, {
+                reviews: [{ login: 'Ada', bot: false, kind: 'approved', at: NOW - 8 * HOUR }],
+              }),
+            ],
+            truncated: false,
+          }),
+        }),
+      ),
+    })
+    await addReviewer(harness, { displayName: 'Ada Lovelace', handles: { github: 'ada' } })
+    await addProject(harness, 'api')
+
+    const { people } = await report(harness)
+    expect(people.map((person) => [person.login, person.displayName, person.reviewed])).toEqual([
+      ['Ada', 'Ada Lovelace', 1],
+      ['bob', null, 0],
+    ])
+    expect(people[1]?.authoredMetrics.approval.medianMs).toBe(2 * HOUR)
   })
 
   it('reports a host with no credential per repository rather than failing', async () => {

@@ -108,6 +108,8 @@ export interface PullRequestTimeline {
   title: string
   url: string
   authorLogin: string | null
+  /** The host marks the author as a machine (a GitHub App, a GitLab bot user). */
+  authorBot: boolean
   /** Still a draft now. */
   draft: boolean
   createdAt: EpochMs

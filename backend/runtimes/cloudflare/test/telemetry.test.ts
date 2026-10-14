@@ -49,6 +49,7 @@ describe('review metrics export on workerd', () => {
           },
           repositories: [],
           hotspots: [],
+          people: [],
           slowest: [],
           sources: [],
         },

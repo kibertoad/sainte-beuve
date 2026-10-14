@@ -14,6 +14,7 @@ import {
   type TimedPullRequest,
 } from './metrics.js'
 import { isTimed, milestonesOf } from './milestones.js'
+import { type DirectoryEntry, peopleOf } from './people.js'
 
 export interface ReviewReportInput {
   repositories: readonly RepositoryTimelines[]
@@ -21,6 +22,8 @@ export interface ReviewReportInput {
   now: EpochMs
   /** The project the report is narrowed to, or null for all of them. */
   projectId: string | null
+  /** Who the handles belong to, for the people in the report. */
+  directory?: readonly DirectoryEntry[]
 }
 
 /** The report, short of the per-repository read outcomes the caller adds. */
@@ -62,6 +65,7 @@ export function buildReviewReport(input: ReviewReportInput): ComputedReviewRepor
     metrics,
     repositories,
     hotspots: perRepository.length > 1 ? findHotspots(perRepository, metrics) : [],
+    people: peopleOf(perRepository, input.directory ?? []),
     slowest: slowest(all),
   }
 }

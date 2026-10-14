@@ -21,6 +21,7 @@ function pr(number: number, overrides: Partial<PullRequestTimeline> = {}): PullR
     title: `Change ${number}`,
     url: `https://github.com/acme/api/pull/${number}`,
     authorLogin: 'bob',
+    authorBot: false,
     draft: false,
     createdAt: readyAt,
     readyAt,

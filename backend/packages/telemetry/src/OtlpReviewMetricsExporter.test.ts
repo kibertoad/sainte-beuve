@@ -54,6 +54,7 @@ function orgReport(): OrgReviewReport {
         overdue: 0,
       },
     ],
+    people: [],
     slowest: [],
     sources: [],
   }
