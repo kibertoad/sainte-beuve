@@ -71,7 +71,8 @@ const shown = computed(() => orderPeople(props.people, order.value, query.value)
                 v-if="person.authoredMetrics.first_human_review.waiting > 0"
                 class="text-xs text-muted"
               >
-                ({{ person.authoredMetrics.first_human_review.waiting }} waiting)
+                ({{ person.authoredMetrics.first_human_review.waiting }} waiting, longest
+                {{ formatDuration(person.longestWaitingMs) }})
               </span>
             </dd>
           </div>

@@ -85,6 +85,7 @@ describe('orderPeople', () => {
         approval: stats(null),
         merge: stats(null),
       },
+      longestWaitingMs: null,
       ...fields,
     }
   }
@@ -99,6 +100,13 @@ describe('orderPeople', () => {
     expect(logins('reviewed')).toEqual(['ada', 'bob', 'cy'])
     expect(logins('authored')).toEqual(['bob', 'cy', 'ada'])
     expect(logins('wait')).toEqual(['bob', 'ada', 'cy'])
+  })
+
+  it('ranks a wait still running alongside the medians, so nobody unreviewed sorts last', () => {
+    const unreviewed = person('dee', { authored: 2, longestWaitingMs: 5 * DAY })
+    const stuck = person('eve', { authored: 3, longestWaitingMs: 2 * DAY }, 4 * HOUR)
+    const logins = orderPeople([...people, unreviewed, stuck], 'wait').map((entry) => entry.login)
+    expect(logins).toEqual(['dee', 'bob', 'eve', 'ada', 'cy'])
   })
 
   it('finds a person by name or handle, and names them by the directory first', () => {

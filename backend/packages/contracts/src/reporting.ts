@@ -138,6 +138,11 @@ export const personReportSchema = v.object({
   authored: v.number(),
   /** The milestones of the pull requests they opened. */
   authoredMetrics: reviewMetricsSchema,
+  /**
+   * How long the longest-waiting of their pull requests still without a human
+   * review has waited so far, or null when none is waiting.
+   */
+  longestWaitingMs: v.nullable(v.number()),
 })
 export type PersonReport = v.InferOutput<typeof personReportSchema>
 

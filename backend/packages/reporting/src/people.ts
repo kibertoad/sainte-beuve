@@ -109,5 +109,17 @@ function personReport(tally: Tally, person: DirectoryEntry | undefined): PersonR
     firstToReview: tally.firstToReview,
     authored: tally.authored.length,
     authoredMetrics: metricsOf(tally.authored),
+    longestWaitingMs: longestWaiting(tally.authored),
   }
+}
+
+function longestWaiting(authored: readonly TimedPullRequest[]): number | null {
+  let longest: number | null = null
+  for (const { milestones } of authored) {
+    const outcome = milestones.first_human_review
+    if (outcome.state === 'waiting' && (longest === null || outcome.forMs > longest)) {
+      longest = outcome.forMs
+    }
+  }
+  return longest
 }

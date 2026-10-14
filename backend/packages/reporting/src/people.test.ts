@@ -81,6 +81,8 @@ describe('people', () => {
       waiting: 1,
       medianMs: 4 * HOUR,
     })
+    expect(bob?.longestWaitingMs).toBe(5 * 24 * HOUR)
+    expect(people.find((person) => person.login === 'ada')?.longestWaitingMs).toBeNull()
     expect(bob?.reviewerId).toBeNull()
   })
 

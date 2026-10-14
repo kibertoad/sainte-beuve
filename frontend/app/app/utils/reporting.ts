@@ -74,8 +74,7 @@ export function personName(person: Pick<PersonReport, 'displayName' | 'login'>):
 
 /**
  * People in the chosen order, narrowed to the ones whose name or handle holds
- * `query`. Ordered by wait, somebody whose pull requests were never reviewed
- * sorts after everybody with a median.
+ * `query`. Ordered by wait, see `waitOf`.
  */
 export function orderPeople(
   people: readonly PersonReport[],
@@ -95,7 +94,22 @@ export function orderPeople(
 function compareBy(order: PeopleOrder, a: PersonReport, b: PersonReport): number {
   if (order === 'reviewed') return b.reviewed - a.reviewed
   if (order === 'authored') return b.authored - a.authored
-  const waitOf = (person: PersonReport) =>
-    person.authoredMetrics.first_human_review.medianMs ?? Number.NEGATIVE_INFINITY
-  return waitOf(b) - waitOf(a)
+  const [waitA, waitB] = [waitOf(a), waitOf(b)]
+  if (waitA === waitB) return 0
+  if (waitA === null) return 1
+  if (waitB === null) return -1
+  return waitB - waitA
+}
+
+/**
+ * How long a person's pull requests wait for a review: their median, raised to
+ * the longest one still waiting, which the median cannot see yet. Somebody whose
+ * pull requests were never reviewed is ranked by how long they have waited so
+ * far; null for somebody with nothing to time.
+ */
+function waitOf(person: PersonReport): number | null {
+  const median = person.authoredMetrics.first_human_review.medianMs
+  const waiting = person.longestWaitingMs
+  if (median === null) return waiting
+  return waiting === null ? median : Math.max(median, waiting)
 }

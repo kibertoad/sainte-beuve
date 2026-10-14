@@ -60,7 +60,12 @@ those waited for a review. For each person:
 - **First to review**: of those, the ones where theirs was the first human
   review.
 - **Opened**, and the milestones of the pull requests they opened, measured as
-  above. The screen shows the median wait for a first human review.
+  above. The screen shows the median wait for a first human review, and how
+  long the longest of those still waiting has waited so far.
+
+Ordered by wait, a person ranks by their median or by their longest wait still
+running, whichever is longer, so somebody whose pull requests nobody has
+reviewed yet is not sorted below everybody with a median.
 
 A person is a handle on one host. Where somebody in the Reviewers directory
 holds that handle, their name is shown beside it. Bots and AI reviewers are not
