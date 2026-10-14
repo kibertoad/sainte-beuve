@@ -117,6 +117,30 @@ export const slowPullRequestSchema = v.object({
 })
 export type SlowPullRequest = v.InferOutput<typeof slowPullRequestSchema>
 
+/**
+ * One person's part in a report: the reviews they gave on the pull requests
+ * opened in the window, and how quickly the ones they opened were reviewed.
+ * Keyed by their handle on one host; bots and AI reviewers are not people here.
+ */
+export const personReportSchema = v.object({
+  provider: vcsProviderSchema,
+  login: v.string(),
+  /** The directory row whose handle on this host it is, or null when nobody claims it. */
+  reviewerId: v.nullable(v.string()),
+  displayName: v.nullable(v.string()),
+  /** Pull requests by somebody else they reviewed, each counted once. */
+  reviewed: v.number(),
+  /** Of those, the ones they approved. */
+  approved: v.number(),
+  /** Of those, the ones where theirs was the first human review. */
+  firstToReview: v.number(),
+  /** Pull requests they opened in the window, drafts left out. */
+  authored: v.number(),
+  /** The milestones of the pull requests they opened. */
+  authoredMetrics: reviewMetricsSchema,
+})
+export type PersonReport = v.InferOutput<typeof personReportSchema>
+
 /** The most slow pull requests one report lists. */
 export const MAX_SLOW_PULL_REQUESTS = 10
 
@@ -136,6 +160,8 @@ export const reviewReportSchema = v.object({
   repositories: v.array(repositoryReportSchema),
   /** Worst first. Empty for a report on one repository, which has nothing to stand out from. */
   hotspots: v.array(hotspotSchema),
+  /** Everybody who reviewed or opened a pull request in the window, most reviews first. */
+  people: v.array(personReportSchema),
   /** The longest waits for a human review, longest first. */
   slowest: v.array(slowPullRequestSchema),
   /** Per repository, whether it could be read, and whether the read stopped short of the window. */

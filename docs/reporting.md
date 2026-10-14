@@ -48,6 +48,27 @@ stored, so a report covers history from before the deployment tracked anything.
 A read follows at most ten pages. A repository with more pull requests than that
 in the window is flagged on the screen, and a shorter window covers it in full.
 
+## People
+
+A report also lists everybody who reviewed or opened one of its pull requests,
+most reviews first, and can be ordered by pull requests opened or by how long
+those waited for a review. For each person:
+
+- **Reviewed**: pull requests by somebody else they reviewed. Each pull request
+  counts once, however many rounds of comments it took.
+- **Approved**: of those, the ones they approved.
+- **First to review**: of those, the ones where theirs was the first human
+  review.
+- **Opened**, and the milestones of the pull requests they opened, measured as
+  above. The screen shows the median wait for a first human review.
+
+A person is a handle on one host. Where somebody in the Reviewers directory
+holds that handle, their name is shown beside it. Bots and AI reviewers are not
+people here, as authors or as reviewers. Only reviews of pull requests opened in
+the window are counted, so a review given today on an older pull request is
+not. The people are on the screen and in the API, not in the OpenTelemetry
+export, where a series per person would grow with the org.
+
 ## Hotspots
 
 An org-wide report names the repositories that stand out on a milestone, worst

@@ -41,7 +41,10 @@ export class ReportingService {
     const days = Number(query.days ?? DEFAULT_REPORT_WINDOW)
     const projects = await this.projectsFor(query.projectId)
     const now = this.container.clock.now()
-    const reads = await this.readTimelines(projects, windowStart(now, days))
+    const [reads, directory] = await Promise.all([
+      this.readTimelines(projects, windowStart(now, days)),
+      this.container.repositories.reviewers.list(),
+    ])
     const computed = buildReviewReport({
       repositories: reads.flatMap(({ project, pullRequests }) =>
         pullRequests === null ? [] : [{ project, pullRequests }],
@@ -49,6 +52,7 @@ export class ReportingService {
       days,
       now,
       projectId: query.projectId ?? null,
+      directory,
     })
     return { ...computed, sources: reads.map((read) => read.source) }
   }

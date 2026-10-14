@@ -274,8 +274,10 @@ Each step gets its median, p90 and mean, and a count of the open pull requests
 still waiting on it, so the slowest ones are not hidden by not having finished.
 Across the whole org it names the **hotspots**: repositories whose median is
 well behind the rest, and ones with several pull requests left waiting longer
-than nearly anything else took. Below that are the longest waits for a human
-review, still open or not.
+than nearly anything else took. **People** shows who reviewed how many pull
+requests (and approved them, or got there first), and how long the pull
+requests each person opened waited for a review. Below that are the longest
+waits for a human review, still open or not.
 
 The history is read from GitHub and GitLab when you open the screen, so a
 report covers time before this deployment existed. The same numbers can be

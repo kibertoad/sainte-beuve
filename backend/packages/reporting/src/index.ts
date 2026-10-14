@@ -14,7 +14,9 @@ export {
   isTimed,
   type MilestoneOutcome,
   type MilestoneOutcomes,
+  humanReviews,
   milestonesOf,
+  reviewsByOthers,
 } from './milestones.js'
 export {
   buildReviewReport,
@@ -22,4 +24,5 @@ export {
   type ReviewReportInput,
   windowStart,
 } from './report.js'
+export { type DirectoryEntry, peopleOf } from './people.js'
 export { quantile, summarize } from './stats.js'

@@ -25,8 +25,8 @@ export function isTimed(pr: PullRequestTimeline): boolean {
  * a COMMENTED review on GitHub) are not reviews of it.
  */
 export function milestonesOf(pr: PullRequestTimeline, now: EpochMs): MilestoneOutcomes {
-  const reviews = pr.reviews.filter((review) => !isAuthor(pr, review.login))
-  const human = reviews.filter((review) => !isAutomatedReviewer(review.login, review.bot))
+  const reviews = reviewsByOthers(pr)
+  const human = humanReviews(reviews)
   const approvals = reviews.filter((review) => review.kind === 'approved')
   return {
     first_review: outcome(pr, earliest(reviews), now),
@@ -34,6 +34,16 @@ export function milestonesOf(pr: PullRequestTimeline, now: EpochMs): MilestoneOu
     approval: outcome(pr, earliest(approvals), now),
     merge: outcome(pr, pr.mergedAt, now),
   }
+}
+
+/** The reviews of a pull request by anybody but its author. */
+export function reviewsByOthers(pr: PullRequestTimeline): ReviewEvent[] {
+  return pr.reviews.filter((review) => !isAuthor(pr, review.login))
+}
+
+/** The ones a person gave, bots and AI reviewers left out. */
+export function humanReviews(reviews: readonly ReviewEvent[]): ReviewEvent[] {
+  return reviews.filter((review) => !isAutomatedReviewer(review.login, review.bot))
 }
 
 function outcome(pr: PullRequestTimeline, at: EpochMs | null, now: EpochMs): MilestoneOutcome {

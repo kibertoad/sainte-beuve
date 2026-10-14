@@ -1,6 +1,13 @@
-import type { Hotspot } from '@sainte-beuve/contracts'
+import type { Hotspot, PersonReport } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
-import { formatDuration, hotspotSummary, sampleLabel } from '../app/utils/reporting'
+import {
+  formatDuration,
+  hotspotSummary,
+  orderPeople,
+  type PeopleOrder,
+  personName,
+  sampleLabel,
+} from '../app/utils/reporting'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -51,5 +58,52 @@ describe('hotspotSummary', () => {
     expect(hotspotSummary(hotspot({ reason: 'stalled', milestone: 'approval', overdue: 3 }))).toBe(
       '3 open pull requests waiting on approval longer than nearly anything else took',
     )
+  })
+})
+
+describe('orderPeople', () => {
+  const stats = (medianMs: number | null) => ({
+    reached: medianMs === null ? 0 : 1,
+    waiting: 0,
+    medianMs,
+    p90Ms: medianMs,
+    meanMs: medianMs,
+  })
+  function person(login: string, fields: Partial<PersonReport>, waitMs: number | null = null) {
+    return {
+      provider: 'github' as const,
+      login,
+      reviewerId: null,
+      displayName: null,
+      reviewed: 0,
+      approved: 0,
+      firstToReview: 0,
+      authored: 0,
+      authoredMetrics: {
+        first_review: stats(waitMs),
+        first_human_review: stats(waitMs),
+        approval: stats(null),
+        merge: stats(null),
+      },
+      ...fields,
+    }
+  }
+  const people = [
+    person('ada', { reviewed: 5, authored: 1, displayName: 'Ada Lovelace' }, HOUR),
+    person('bob', { reviewed: 1, authored: 4 }, 3 * DAY),
+    person('cy', { reviewed: 1, authored: 2 }),
+  ]
+
+  it('orders by reviews, by pull requests opened, or by the longest wait', () => {
+    const logins = (order: PeopleOrder) => orderPeople(people, order).map((entry) => entry.login)
+    expect(logins('reviewed')).toEqual(['ada', 'bob', 'cy'])
+    expect(logins('authored')).toEqual(['bob', 'cy', 'ada'])
+    expect(logins('wait')).toEqual(['bob', 'ada', 'cy'])
+  })
+
+  it('finds a person by name or handle, and names them by the directory first', () => {
+    expect(orderPeople(people, 'reviewed', 'lovelace').map((entry) => entry.login)).toEqual(['ada'])
+    expect(personName(people[0]!)).toBe('Ada Lovelace')
+    expect(personName(people[1]!)).toBe('bob')
   })
 })

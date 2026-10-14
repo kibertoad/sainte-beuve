@@ -182,6 +182,8 @@ function nameOf(id: string): string {
         @select="(id) => (projectId = id)"
       />
 
+      <ReportPeopleTable :people="data.people" />
+
       <UCard>
         <template #header>
           <h2 class="font-semibold">Longest waits for a human review</h2>
