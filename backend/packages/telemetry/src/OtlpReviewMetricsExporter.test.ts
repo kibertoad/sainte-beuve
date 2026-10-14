@@ -61,9 +61,9 @@ function orgReport(): OrgReviewReport {
 }
 
 /** Every gauge one export recorded, by name. */
-async function exported(): Promise<Map<string, GaugeMetricData>> {
+async function exported(report = orgReport()): Promise<Map<string, GaugeMetricData>> {
   const memory = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE)
-  await new OtlpReviewMetricsExporter(CONFIG, () => memory).export([orgReport()])
+  await new OtlpReviewMetricsExporter(CONFIG, () => memory).export([report])
   const [resourceMetrics] = memory.getMetrics()
   expect(resourceMetrics?.resource.attributes['service.name']).toBe('sb-test')
   const metrics = resourceMetrics?.scopeMetrics[0]?.metrics ?? []
@@ -113,6 +113,23 @@ describe('OtlpReviewMetricsExporter', () => {
       'sainte_beuve.review.milestone': 'first_review',
       'sainte_beuve.review.hotspot_reason': 'slow',
     })
+  })
+
+  it('records nothing for a repository the host would not read', async () => {
+    const { org, report } = orgReport()
+    const source = { projectId: 'p2', provider: 'github' as const, owner: 'acme', repo: 'web' }
+    const unread = { ...source, pullRequests: 0, metrics: metrics(null) }
+    const byName = await exported({
+      org,
+      report: {
+        ...report,
+        repositories: [...report.repositories, unread],
+        sources: [{ ...source, ok: false, reason: 'no credential', truncated: false }],
+      },
+    })
+    const counts = byName.get('sainte_beuve.review.pull_requests')?.dataPoints ?? []
+    expect(counts.some((entry) => entry.attributes['vcs.repository.name'] === 'web')).toBe(false)
+    expect(counts.some((entry) => entry.attributes['vcs.repository.name'] === 'api')).toBe(true)
   })
 
   it('pushes OTLP JSON to the collector over the official HTTP exporter', async () => {

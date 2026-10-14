@@ -13,6 +13,9 @@ import type { WorkerEnv } from './env.js'
  * see deploy/backend.
  */
 
+/** The cron expression the review metrics export runs on when `REVIEW_METRICS_CRON` names none. */
+export const DEFAULT_REVIEW_METRICS_CRON = '0 * * * *'
+
 /**
  * Built once per isolate, not once per request. The app is the route table, four
  * sub-routers and a contract validator per route, all of which are the same for
@@ -20,9 +23,6 @@ import type { WorkerEnv } from './env.js'
  * exactly that reason. Rebuilding the app on each invocation would compile the
  * router again on a runtime billed by CPU time.
  */
-/** The cron expression the review metrics export runs on when `REVIEW_METRICS_CRON` names none. */
-export const DEFAULT_REVIEW_METRICS_CRON = '0 * * * *'
-
 const app = createApp({
   // The request's `waitUntil` goes down with the bindings, and it is what makes
   // the attention fan-out reliable rather than occasional: a publish follows a

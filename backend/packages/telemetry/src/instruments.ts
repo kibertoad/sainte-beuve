@@ -62,7 +62,10 @@ export function recordReport(gauges: Gauges, { org, report }: OrgReviewReport): 
   }
   recordMetrics(gauges, report.metrics, { ...base, 'sainte_beuve.report.scope': 'org' })
   const repositories = new Map(report.repositories.map((entry) => [entry.projectId, entry]))
+  // A repository the host would not read has no numbers, which is not the same as zero.
+  const unreadable = new Set(report.sources.filter((source) => !source.ok).map((s) => s.projectId))
   for (const repository of report.repositories) {
+    if (unreadable.has(repository.projectId)) continue
     recordMetrics(gauges, repository.metrics, { ...base, ...repositoryAttributes(repository) })
   }
   for (const hotspot of report.hotspots) {

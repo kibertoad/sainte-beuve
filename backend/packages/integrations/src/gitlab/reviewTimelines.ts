@@ -5,6 +5,7 @@ import type {
   ReviewEvent,
   ReviewTimelines,
 } from '@sainte-beuve/kernel'
+import { UpstreamFailedError } from '@sainte-beuve/kernel'
 import { MAX_PAGES } from './client.js'
 import { type GitLabHistoryRequest, gitlabGraphql } from './history.js'
 
@@ -85,24 +86,25 @@ export async function gitlabReviewTimelines(
   since: EpochMs,
   request: GitLabHistoryRequest,
 ): Promise<ReviewTimelines> {
+  const fullPath = `${project.owner}/${project.repo}`
   const merges: TimelineMergeNode[] = []
   let after: string | null = null
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const answer: ReviewTimelinesAnswer = await gitlabGraphql<ReviewTimelinesAnswer>(
       {
         query: REVIEW_TIMELINES_QUERY,
-        variables: {
-          fullPath: `${project.owner}/${project.repo}`,
-          createdAfter: new Date(since).toISOString(),
-          after,
-        },
+        variables: { fullPath, createdAfter: new Date(since).toISOString(), after },
       },
       request,
       'review timeline',
     )
+    // GitLab answers a project the token cannot see with `null` rather than an error.
     const connection = answer.data?.project?.mergeRequests
-    merges.push(...(connection?.nodes ?? []))
-    const endCursor = connection?.pageInfo.hasNextPage ? connection.pageInfo.endCursor : null
+    if (connection === undefined) {
+      throw new UpstreamFailedError(`GitLab has no project ${fullPath} this credential can read`)
+    }
+    merges.push(...connection.nodes)
+    const endCursor = connection.pageInfo.hasNextPage ? connection.pageInfo.endCursor : null
     if (endCursor === null) return { pullRequests: merges.map(timelineOf), truncated: false }
     after = endCursor
   }

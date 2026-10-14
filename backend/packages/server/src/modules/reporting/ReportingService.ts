@@ -1,10 +1,4 @@
-import type {
-  Project,
-  ReviewReport,
-  ReviewReportQuery,
-  VcsProvider,
-  WorkspaceSource,
-} from '@sainte-beuve/contracts'
+import type { Project, ReviewReport, ReviewReportQuery, VcsProvider } from '@sainte-beuve/contracts'
 import { DEFAULT_REPORT_WINDOW } from '@sainte-beuve/contracts'
 import {
   getErrorMessage,
@@ -12,11 +6,11 @@ import {
   type PullRequestTimeline,
   type VcsGateway,
 } from '@sainte-beuve/kernel'
-import { buildReviewReport } from '@sainte-beuve/reporting'
+import { buildReviewReport, windowStart } from '@sainte-beuve/reporting'
 import { mapWithConcurrency } from '../../concurrency.js'
 import type { AppContainer } from '../../container.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
-import { gatewaysByProvider, NO_CREDENTIAL } from '../workspace/sweep.js'
+import { gatewaysByProvider, NO_CREDENTIAL, sourceOf } from '../workspace/sweep.js'
 
 /**
  * How many repositories are read at once. Each read is a few GraphQL pages
@@ -24,8 +18,6 @@ import { gatewaysByProvider, NO_CREDENTIAL } from '../workspace/sweep.js'
  * the host's rate limit.
  */
 const REPOSITORY_FAN_OUT = 4
-
-const DAY_MS = 24 * 60 * 60 * 1000
 
 interface RepositoryRead {
   project: Project
@@ -47,7 +39,7 @@ export class ReportingService {
     const days = Number(query.days ?? DEFAULT_REPORT_WINDOW)
     const projects = await this.projectsFor(query.projectId)
     const now = this.container.clock.now()
-    const reads = await this.readTimelines(projects, now - days * DAY_MS)
+    const reads = await this.readTimelines(projects, windowStart(now, days))
     const computed = buildReviewReport({
       repositories: reads.map(({ project, pullRequests }) => ({ project, pullRequests })),
       days,
@@ -79,11 +71,11 @@ export class ReportingService {
   ): Promise<RepositoryRead> {
     const gateway = gateways.get(project.provider)
     if (gateway === undefined) {
-      return { project, pullRequests: [], source: sourceOf(project, false, NO_CREDENTIAL) }
+      return { project, pullRequests: [], source: readOf(project, false, NO_CREDENTIAL) }
     }
     try {
       const { pullRequests, truncated } = await gateway.reviewTimelines(project, since)
-      return { project, pullRequests, source: sourceOf(project, truncated) }
+      return { project, pullRequests, source: readOf(project, truncated) }
     } catch (err) {
       this.container.logger.warn(
         { err, projectId: project.id },
@@ -92,24 +84,16 @@ export class ReportingService {
       return {
         project,
         pullRequests: [],
-        source: sourceOf(project, false, getErrorMessage(err)),
+        source: readOf(project, false, getErrorMessage(err)),
       }
     }
   }
 }
 
-function sourceOf(
+function readOf(
   project: Project,
   truncated: boolean,
   reason?: string,
-): WorkspaceSource & { truncated: boolean } {
-  return {
-    projectId: project.id,
-    provider: project.provider,
-    owner: project.owner,
-    repo: project.repo,
-    ok: reason === undefined,
-    reason: reason ?? null,
-    truncated,
-  }
+): ReviewReport['sources'][number] {
+  return { ...sourceOf(project, reason), truncated }
 }

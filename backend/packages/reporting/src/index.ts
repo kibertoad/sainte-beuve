@@ -16,5 +16,10 @@ export {
   type MilestoneOutcomes,
   milestonesOf,
 } from './milestones.js'
-export { buildReviewReport, type ComputedReviewReport, type ReviewReportInput } from './report.js'
+export {
+  buildReviewReport,
+  type ComputedReviewReport,
+  type ReviewReportInput,
+  windowStart,
+} from './report.js'
 export { quantile, summarize } from './stats.js'

@@ -188,4 +188,10 @@ describe('GitLabVcsGateway.reviewTimelines', () => {
       },
     ])
   })
+
+  it('fails a project the credential cannot see instead of reading it as empty', async () => {
+    const { fetchImpl } = answering({ data: { project: null } })
+    const gateway = new GitLabVcsGateway({ token: 'glpat-x', fetchImpl })
+    await expect(gateway.reviewTimelines(PROJECT, SINCE)).rejects.toThrow(/acme\/api/)
+  })
 })

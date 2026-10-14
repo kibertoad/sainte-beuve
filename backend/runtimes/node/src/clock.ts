@@ -69,27 +69,29 @@ export function startReminderClock(container: AppContainer, intervalMs: number):
  * configured, so a deployment without one runs no timer at all. Skipped rather
  * than overlapped for the reason the reminder clock is: two passes would read
  * every repository twice and push two sets of the same gauges.
+ *
+ * The first pass runs at boot: a process restarted more often than the
+ * interval would otherwise never export at all.
  */
 export function startReviewMetricsClock(
   container: AppContainer,
   intervalMs: number,
 ): NodeJS.Timeout | null {
   if (container.reviewMetrics === null) return null
-  const timer = setInterval(
-    oneAtATime(
-      async () => {
-        try {
-          await runReviewMetricsExport(container)
-        } catch (err: unknown) {
-          container.logger.error({ err }, 'review metrics export failed')
-        }
-      },
-      () => {
-        container.logger.warn({ intervalMs }, 'review metrics export still running; skipping')
-      },
-    ),
-    intervalMs,
+  const pass = oneAtATime(
+    async () => {
+      try {
+        await runReviewMetricsExport(container)
+      } catch (err: unknown) {
+        container.logger.error({ err }, 'review metrics export failed')
+      }
+    },
+    () => {
+      container.logger.warn({ intervalMs }, 'review metrics export still running; skipping')
+    },
   )
+  pass()
+  const timer = setInterval(pass, intervalMs)
   timer.unref()
   return timer
 }

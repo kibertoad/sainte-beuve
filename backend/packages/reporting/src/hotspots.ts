@@ -4,7 +4,7 @@ import {
   type ReviewMetrics,
   type ReviewMilestone,
 } from '@sainte-beuve/contracts'
-import { metricsOf, type ReportedProject, type TimedPullRequest } from './metrics.js'
+import type { ReportedProject, TimedPullRequest } from './metrics.js'
 
 /** Fewer pull requests than this reaching a milestone is too few for a median to accuse anybody. */
 export const MIN_HOTSPOT_SAMPLE = 3
@@ -21,6 +21,7 @@ const FALLBACK_OVERDUE_MS = 24 * 60 * 60 * 1000
 interface RepositoryTimed {
   project: ReportedProject
   timed: readonly TimedPullRequest[]
+  metrics: ReviewMetrics
 }
 
 interface Ranked {
@@ -39,8 +40,7 @@ export function findHotspots(
   overall: ReviewMetrics,
 ): Hotspot[] {
   const ranked: Ranked[] = []
-  for (const { project, timed } of repositories) {
-    const metrics = metricsOf(timed)
+  for (const { project, timed, metrics } of repositories) {
     for (const milestone of REVIEW_MILESTONES) {
       const found = hotspotOf({ projectId: project.id, timed, milestone }, metrics, overall)
       if (found !== null) ranked.push(found)

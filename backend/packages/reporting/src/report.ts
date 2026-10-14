@@ -1,6 +1,7 @@
 import {
   MAX_SLOW_PULL_REQUESTS,
   type RepositoryReport,
+  type ReviewMetrics,
   type ReviewReport,
   type SlowPullRequest,
 } from '@sainte-beuve/contracts'
@@ -27,21 +28,26 @@ export type ComputedReviewReport = Omit<ReviewReport, 'sources'>
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+/** The start of a report's window: pull requests opened from here on are counted. */
+export function windowStart(now: EpochMs, days: number): EpochMs {
+  return now - days * DAY_MS
+}
+
 /**
  * How long the pull requests opened in the last `days` took to reach each
  * milestone, per repository and over all of them, the repositories that stand
  * out, and the longest waits for a human review.
  */
 export function buildReviewReport(input: ReviewReportInput): ComputedReviewReport {
-  const since = input.now - input.days * DAY_MS
-  const perRepository = input.repositories.map((repository) => ({
-    project: repository.project,
-    timed: timedPullRequests(repository, since, input.now),
-  }))
+  const since = windowStart(input.now, input.days)
+  const perRepository = input.repositories.map((repository) => {
+    const timed = timedPullRequests(repository, since, input.now)
+    return { project: repository.project, timed, metrics: metricsOf(timed) }
+  })
   const all = perRepository.flatMap((repository) => repository.timed)
   const metrics = metricsOf(all)
   const repositories = perRepository
-    .map(({ project, timed }) => repositoryReport(project, timed))
+    .map(({ project, timed, metrics: own }) => repositoryReport(project, timed.length, own))
     .sort(
       (a, b) =>
         b.pullRequests - a.pullRequests ||
@@ -76,15 +82,16 @@ function timedPullRequests(
 
 function repositoryReport(
   project: ReportedProject,
-  timed: readonly TimedPullRequest[],
+  pullRequests: number,
+  metrics: ReviewMetrics,
 ): RepositoryReport {
   return {
     projectId: project.id,
     provider: project.provider,
     owner: project.owner,
     repo: project.repo,
-    pullRequests: timed.length,
-    metrics: metricsOf(timed),
+    pullRequests,
+    metrics,
   }
 }
 

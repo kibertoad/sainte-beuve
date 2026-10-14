@@ -76,7 +76,7 @@ async function listen(
       github: githubSummary(config),
       gitlab: gitlabSummary(config),
       secrets: config.encryptionKey === null ? 'not configured' : 'configured',
-      reviewMetrics: config.reviewMetrics === null ? 'not configured' : config.reviewMetrics.url,
+      reviewMetrics: reviewMetricsSummary(config),
     },
     'sainte-beuve server listening',
   )
@@ -92,6 +92,19 @@ async function listen(
       // After the server, so a request in flight still has its connections.
       await store.close()
     },
+  }
+}
+
+/**
+ * The collector's origin. Never the whole URL: an OTLP endpoint can carry its
+ * credential in the userinfo or the query string.
+ */
+function reviewMetricsSummary(config: NodeConfig): string {
+  if (config.reviewMetrics === null) return 'not configured'
+  try {
+    return new URL(config.reviewMetrics.url).origin
+  } catch {
+    return 'configured'
   }
 }
 

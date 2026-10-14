@@ -10,12 +10,12 @@ A report covers the pull requests opened in a window (7, 14, 30 or 90 days).
 Each one is timed from the moment it was ready for review: when it was opened,
 or when it last left draft. Pull requests still in draft are left out.
 
-| Milestone          | When it is reached                                                    |
-| ------------------ | --------------------------------------------------------------------- |
-| First review       | The first review by anybody but the author, bots included             |
-| First human review | The same, with bots and AI reviewers left out                         |
-| Approval           | The first approval by anybody but the author                          |
-| Merge              | The merge                                                             |
+| Milestone          | When it is reached                                        |
+| ------------------ | --------------------------------------------------------- |
+| First review       | The first review by anybody but the author, bots included |
+| First human review | The same, with bots and AI reviewers left out             |
+| Approval           | The first approval by anybody but the author              |
+| Merge              | The merge                                                 |
 
 For each milestone a report gives the median, the p90 and the mean over the
 pull requests that reached it, and counts the open ones still waiting on it
@@ -63,33 +63,34 @@ A repository both slow and stalled on a milestone is reported stalled.
 
 Set an OTLP/HTTP endpoint and the deployment pushes every org's report over the
 last 30 days as gauges, on its own clock: hourly by default, as the Worker's
-second cron trigger and as `REVIEW_METRICS_INTERVAL_MS` on Node. It uses the
+second cron trigger and as `REVIEW_METRICS_INTERVAL_MS` on Node, where the first
+pass runs at boot. It uses the
 official OpenTelemetry JavaScript SDK (`@opentelemetry/sdk-metrics` and
 `@opentelemetry/exporter-metrics-otlp-http`), which sends over `fetch` in the
 Worker's bundle and over `node:http` on Node.
 
-| Variable                                                                    | Meaning                                                                |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`                                       | The full metrics URL, taken as written                                 |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`                                               | The collector's root; `/v1/metrics` is appended                        |
-| `OTEL_EXPORTER_OTLP_METRICS_HEADERS`, `OTEL_EXPORTER_OTLP_HEADERS`          | `key=value` pairs, comma-separated, values percent-decoded             |
-| `OTEL_SERVICE_NAME`                                                         | `service.name` on the resource, `sainte-beuve` by default              |
-| `REVIEW_METRICS_INTERVAL_MS` (Node)                                         | How often the export runs, an hour by default                          |
-| `REVIEW_METRICS_CRON` (Worker)                                              | Which cron trigger runs the export, `0 * * * *` by default             |
+| Variable                                                           | Meaning                                                    |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`                              | The full metrics URL, taken as written                     |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                                      | The collector's root; `/v1/metrics` is appended            |
+| `OTEL_EXPORTER_OTLP_METRICS_HEADERS`, `OTEL_EXPORTER_OTLP_HEADERS` | `key=value` pairs, comma-separated, values percent-decoded |
+| `OTEL_SERVICE_NAME`                                                | `service.name` on the resource, `sainte-beuve` by default  |
+| `REVIEW_METRICS_INTERVAL_MS` (Node)                                | How often the export runs, an hour by default              |
+| `REVIEW_METRICS_CRON` (Worker)                                     | Which cron trigger runs the export, `0 * * * *` by default |
 
 With no endpoint set the export does nothing. `/health` reports
 `reviewMetricsExport` either way.
 
 ### Metrics
 
-| Name                                              | Unit             | Value                                                   |
-| ------------------------------------------------- | ---------------- | ------------------------------------------------------- |
-| `sainte_beuve.review.time_to_first_review`        | `s`              | One point per `sainte_beuve.statistic`: p50, p90, mean  |
-| `sainte_beuve.review.time_to_first_human_review`  | `s`              | The same                                                |
-| `sainte_beuve.review.time_to_approval`            | `s`              | The same                                                |
-| `sainte_beuve.review.time_to_merge`               | `s`              | The same                                                |
-| `sainte_beuve.review.pull_requests`               | `{pull_request}` | Per `sainte_beuve.review.milestone` and `.state` (`reached`, `waiting`) |
-| `sainte_beuve.review.hotspot`                     |                  | 1 per repository and milestone named a hotspot          |
+| Name                                             | Unit             | Value                                                                   |
+| ------------------------------------------------ | ---------------- | ----------------------------------------------------------------------- |
+| `sainte_beuve.review.time_to_first_review`       | `s`              | One point per `sainte_beuve.statistic`: p50, p90, mean                  |
+| `sainte_beuve.review.time_to_first_human_review` | `s`              | The same                                                                |
+| `sainte_beuve.review.time_to_approval`           | `s`              | The same                                                                |
+| `sainte_beuve.review.time_to_merge`              | `s`              | The same                                                                |
+| `sainte_beuve.review.pull_requests`              | `{pull_request}` | Per `sainte_beuve.review.milestone` and `.state` (`reached`, `waiting`) |
+| `sainte_beuve.review.hotspot`                    |                  | 1 per repository and milestone named a hotspot                          |
 
 Every point carries `sainte_beuve.org` (the org's slug),
 `sainte_beuve.report.window_days` and `sainte_beuve.report.scope`. A point with
@@ -97,6 +98,7 @@ scope `org` is the whole org; a point with scope `repository` also carries
 `vcs.provider.name`, `vcs.owner.name` and `vcs.repository.name`. A hotspot point
 carries `sainte_beuve.review.milestone` and `sainte_beuve.review.hotspot_reason`.
 
-A statistic nothing reached is not exported rather than exported as zero. Each
+A statistic nothing reached is not exported rather than exported as zero, and
+neither is a repository its host would not read on that pass. Each
 pass builds its meter provider afresh, so a repository that is unlinked stops
 being reported on the next pass.

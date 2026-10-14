@@ -80,7 +80,7 @@ async function readProject(
   }
 }
 
-function sourceOf(project: Project, reason?: string): WorkspaceSource {
+export function sourceOf(project: Project, reason?: string): WorkspaceSource {
   return {
     projectId: project.id,
     provider: project.provider,
