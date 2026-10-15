@@ -21,6 +21,7 @@ const emit = defineEmits<{ changed: [] }>()
 
 const api = useSainteBeuveApi()
 const toast = useToast()
+const { showError } = useErrorToast()
 const { confirm } = useConfirm()
 
 const visible = computed(() => props.drafts.filter((entry) => entry.status !== 'discarded'))
@@ -50,7 +51,7 @@ async function attempt(key: string, failure: string, action: () => Promise<void>
   try {
     await action()
   } catch (err) {
-    toast.add({ color: 'error', title: failure, description: refusalMessage(err) })
+    showError(failure, err, refusalMessage(err))
   } finally {
     busy.value = null
     // A refused edit is usually a draft that moved, so the reload is the fix either way.

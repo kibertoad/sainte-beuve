@@ -1,11 +1,23 @@
 import type { MergeComment, MyPullRequest } from '@sainte-beuve/contracts'
+import { MAX_MERGE_COMMENT_LABEL } from '@sainte-beuve/contracts'
 
-/** A list as it should be saved: fields trimmed, and a row left entirely blank dropped. */
+/**
+ * A list as it should be saved: fields trimmed, a row left entirely blank dropped,
+ * and a row with no label named after the comment it posts.
+ */
 export function cleanMergeComments(comments: MergeComment[] | null): MergeComment[] | null {
   if (comments === null) return null
   return comments
-    .map((comment) => ({ label: comment.label.trim(), body: comment.body.trim() }))
+    .map((comment) => {
+      const body = comment.body.trim()
+      return { label: comment.label.trim() || defaultMergeCommentLabel(body), body }
+    })
     .filter((comment) => comment.label.length > 0 || comment.body.length > 0)
+}
+
+/** The button label a row gets when it is left without one. */
+export function defaultMergeCommentLabel(body: string): string {
+  return body.trim().slice(0, MAX_MERGE_COMMENT_LABEL).trim()
 }
 
 export function sameMergeComments(

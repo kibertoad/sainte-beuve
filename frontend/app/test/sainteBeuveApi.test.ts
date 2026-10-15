@@ -211,3 +211,15 @@ describe('createSainteBeuveApi', () => {
     expect(apiErrorMessage(failure)).toBe('fetch failed')
   })
 })
+
+describe('a refusal', () => {
+  it('names the route that refused, for the report its toast copies', async () => {
+    stubFetch(jsonResponse({ error: { code: 'unconfigured', message: 'not set' } }, 503))
+
+    const failure = await createSainteBeuveApi(API_BASE)
+      .getWorkspace()
+      .catch((err: unknown) => err)
+
+    expect((failure as ApiError).endpoint).toMatch(/^GET \/api\/v1\//)
+  })
+})

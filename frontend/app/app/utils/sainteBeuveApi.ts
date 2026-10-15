@@ -96,6 +96,8 @@ export class ApiError extends Error {
   readonly statusCode: number
   readonly code: string
   readonly details: unknown
+  /** The route that refused, as `PATCH /api/v1/org`. Set by the client that made the call. */
+  endpoint: string | null = null
 
   constructor(statusCode: number, code: string, message: string, details?: unknown) {
     super(message)
@@ -186,10 +188,13 @@ async function checkRequest(contract: ApiContract, params: unknown): Promise<voi
     await validate(schema as Parameters<typeof validate>[0], body)
   } catch (err) {
     if (err instanceof SchemaValidationError) {
+      // An object rather than a list, so `apiErrorMessage` does not repeat the
+      // paths the message already names.
       throw new ApiError(
         0,
         'invalid_request',
         `This request was refused before it was sent: ${issueSummary(err)}`,
+        { issues: err.issues.map((issue) => ({ path: issuePath(issue), message: issue.message })) },
       )
     }
     throw err
@@ -219,7 +224,19 @@ export function createSainteBeuveApi(apiBase: string) {
   // @sainte-beuve/server).
   const client = wretch(`${apiBase}${API_PREFIX}`).options({ credentials: 'include' })
 
-  async function call<TContract extends ApiContract>(
+  function call<TContract extends ApiContract>(
+    contract: TContract,
+    params: RequestParams<TContract>,
+  ): Promise<SuccessBody<TContract>> {
+    return send(contract, params).catch((err: unknown) => {
+      if (err instanceof ApiError) {
+        err.endpoint = `${contract.method.toUpperCase()} ${API_PREFIX}${mapApiContractToPath(contract)}`
+      }
+      throw err
+    })
+  }
+
+  async function send<TContract extends ApiContract>(
     contract: TContract,
     params: RequestParams<TContract>,
   ): Promise<SuccessBody<TContract>> {

@@ -10,7 +10,7 @@ import { GUIDED_REVIEW_QUESTION_MAX } from '@sainte-beuve/contracts'
 // review spends model budget on the cat-factory side.
 const route = useRoute()
 const api = useSainteBeuveApi()
-const toast = useToast()
+const { showError } = useErrorToast()
 
 const target = computed(() => targetFromQuery(route.query))
 const prUrl = computed(() => prUrlFromQuery(route.query))
@@ -63,11 +63,7 @@ async function open(): Promise<void> {
   try {
     data.value = await api.openGuidedReview(target.value)
   } catch (err) {
-    toast.add({
-      color: 'error',
-      title: 'Could not start the guided review',
-      description: refusalMessage(err),
-    })
+    showError('Could not start the guided review', err, refusalMessage(err))
   } finally {
     opening.value = false
   }

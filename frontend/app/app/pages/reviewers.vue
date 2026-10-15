@@ -39,7 +39,7 @@ const { skills: knownSkills, domains: knownDomains } = useKnownVocabulary({
 })
 const { busy, run } = useApiAction({ refresh })
 const capabilities = useCapabilities()
-const toast = useToast()
+const { showError } = useErrorToast()
 
 /** Whether cat-factory owns this reviewer's name, handles and team right now. */
 function managed(reviewer: Reviewer): boolean {
@@ -79,11 +79,7 @@ async function startEditing(reviewer: Reviewer) {
     try {
       editingTeams.value = (await api.reviewerTeamChoices(reviewer.id)).teams
     } catch (err) {
-      toast.add({
-        color: 'error',
-        title: 'Could not read their teams',
-        description: apiErrorMessage(err),
-      })
+      showError('Could not read their teams', err)
       return
     }
   }

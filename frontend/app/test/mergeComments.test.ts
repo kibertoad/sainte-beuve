@@ -12,6 +12,13 @@ describe('cleanMergeComments', () => {
     ).toStrictEqual([{ label: 'Queue', body: '/merge' }])
   })
 
+  it('labels a row left without one after the comment it posts', () => {
+    expect(cleanMergeComments([{ label: ' ', body: ' kargo:merge ' }])).toStrictEqual([
+      { label: 'kargo:merge', body: 'kargo:merge' },
+    ])
+    expect(cleanMergeComments([{ label: '', body: 'x'.repeat(100) }])?.[0]?.label).toHaveLength(60)
+  })
+
   it('keeps null, which inherits the level above', () => {
     expect(cleanMergeComments(null)).toBeNull()
   })

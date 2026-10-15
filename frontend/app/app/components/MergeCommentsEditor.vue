@@ -56,7 +56,7 @@ function remove(index: number) {
           <UInput
             :model-value="comment.label"
             class="w-full"
-            placeholder="Add to merge queue"
+            :placeholder="defaultMergeCommentLabel(comment.body) || 'Add to merge queue'"
             :disabled="disabled"
             @update:model-value="update(index, 'label', String($event))"
           />

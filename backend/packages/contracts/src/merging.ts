@@ -9,12 +9,15 @@ import { webUrlSchema } from './vcs.js'
 // comment schema, and none of them may be imported from here.
 // ---------------------------------------------------------------------------
 
+/** Short enough to fit on a button. */
+export const MAX_MERGE_COMMENT_LABEL = 60
+
 /**
  * A comment that asks a bot to merge, such as `/merge` for a merge queue.
  * `label` is the button; `body` is posted verbatim, because the bot parses it.
  */
 export const mergeCommentSchema = v.object({
-  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60)),
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_MERGE_COMMENT_LABEL)),
   body: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000)),
 })
 export type MergeComment = v.InferOutput<typeof mergeCommentSchema>

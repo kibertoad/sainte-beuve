@@ -17,7 +17,7 @@ const props = defineProps<{
 
 const api = useSainteBeuveApi()
 const capabilities = useCapabilities()
-const toast = useToast()
+const { showError } = useErrorToast()
 const busy = ref(false)
 
 async function file() {
@@ -40,11 +40,7 @@ async function fileOrExplain(): Promise<string | null> {
     })
     return run.reviewId
   } catch (err) {
-    toast.add({
-      color: 'error',
-      title: 'Could not request an AI review',
-      description: apiErrorMessage(err),
-    })
+    showError('Could not request an AI review', err)
     return refusedReviewId(err)
   }
 }

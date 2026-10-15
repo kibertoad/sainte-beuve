@@ -19,7 +19,7 @@ export interface ApiActionOptions {
 }
 
 export function useApiAction(options: ApiActionOptions = {}) {
-  const toast = useToast()
+  const { showError } = useErrorToast()
   /** Which key is mid-flight, for a per-row spinner. Null when nothing is. */
   const busy = ref<string | null>(null)
 
@@ -34,8 +34,7 @@ export function useApiAction(options: ApiActionOptions = {}) {
       await options.refresh?.()
       return true
     } catch (err) {
-      const description = (options.describe ?? apiErrorMessage)(err)
-      toast.add({ color: 'error', title: failure, description })
+      showError(failure, err, (options.describe ?? apiErrorMessage)(err))
       return false
     } finally {
       busy.value = null
