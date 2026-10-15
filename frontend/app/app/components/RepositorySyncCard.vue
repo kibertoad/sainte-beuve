@@ -59,7 +59,7 @@ function when(at: number | null): string {
       color="warning"
       variant="subtle"
       icon="i-lucide-triangle-alert"
-      title="The last sync did not complete"
+      title="The last sync reported a problem"
       :description="sync.error"
     />
     <UAlert

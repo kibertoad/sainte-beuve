@@ -36,6 +36,13 @@ const NOTHING_LISTED =
   'cat-factory lists no repository in any workspace this key reaches, so no project was ' +
   'removed. Link a repository in cat-factory, or check which workspaces the key belongs to.'
 
+const NO_PUSH_ADDRESS =
+  'The repositories and people synced, but cat-factory cannot push changes here, because this ' +
+  "deployment does not know its own public address. That is the server's API_BASE_URL " +
+  'environment variable, separate from the cat-factory base URL in these settings: set it to ' +
+  "the public https origin of this deployment's API, such as https://reviews.example.com. " +
+  'Until then, changes are picked up every few minutes.'
+
 /**
  * Keeps an org's projects to the repositories linked in its cat-factory
  * workspaces, and its reviewers and teams to the people and workspaces of the
@@ -57,8 +64,12 @@ export class RepositorySyncService {
   async syncNow(): Promise<void> {
     const gateway = await this.gateway()
     if (gateway === null) return
-    await this.run(gateway, 'reconcile').catch(() => undefined)
-    await this.registerWebhook(gateway)
+    const synced = await this.run(gateway, 'reconcile').then(
+      () => true,
+      () => false,
+    )
+    // Registering after a failed sync would overwrite the error that sync recorded.
+    if (synced) await this.registerWebhook(gateway)
   }
 
   /** The clock's share: catch up every few minutes, walk the snapshots daily. Answers projects changed. */
@@ -192,7 +203,7 @@ export class RepositorySyncService {
     if (url === null) {
       await this.record({
         webhook: 'failed',
-        error: 'API_BASE_URL is not set, so there is no address cat-factory could push to',
+        error: NO_PUSH_ADDRESS,
       })
       return
     }
