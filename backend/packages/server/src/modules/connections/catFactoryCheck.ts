@@ -117,11 +117,13 @@ const STEPS: readonly StepDefinition[] = [
     gates: false,
     judge: ({ report }) =>
       report.scope !== null && SCOPES_THAT_FILE_REVIEWS.has(report.scope)
-        ? passed(`The key has the ${report.scope} scope, which can file AI reviews.`)
+        ? passed(
+            `This key has the \`${report.scope}\` scope: guided review and AI review both work.`,
+          )
         : failed(
-            `The key has the ${report.scope ?? 'unknown'} scope. Filing an AI review needs decide, ` +
-              'because the review stops on its findings and waits for an answer. Guided review ' +
-              'works without it.',
+            `This key has the \`${report.scope ?? 'unknown'}\` scope. Guided review needs ` +
+              '`write`. AI review needs `decide`, because a review stops on its findings and ' +
+              'waits for an answer.',
           ),
   },
   { step: 'service', gates: false, judge: listed(SERVICE) },

@@ -97,6 +97,11 @@ async function check(): Promise<void> {
   }
 }
 
+/** A step message puts a scope in backticks, so it renders apart from the prose around it. */
+function segments(message: string): { text: string; code: boolean }[] {
+  return message.split('`').map((text, index) => ({ text, code: index % 2 === 1 }))
+}
+
 const STEP_ICON = {
   passed: { icon: 'i-lucide-circle-check', class: 'text-success' },
   failed: { icon: 'i-lucide-circle-x', class: 'text-error' },
@@ -198,7 +203,14 @@ const STEP_ICON = {
             :name="STEP_ICON[item.outcome].icon"
             :class="['size-4 mt-0.5 shrink-0', STEP_ICON[item.outcome].class]"
           />
-          <span class="min-w-0 break-words">{{ item.message }}</span>
+          <span class="min-w-0 break-words">
+            <template v-for="(part, index) in segments(item.message)" :key="index">
+              <code v-if="part.code" class="px-1 rounded bg-elevated font-mono text-xs">{{
+                part.text
+              }}</code>
+              <template v-else>{{ part.text }}</template>
+            </template>
+          </span>
         </li>
       </ul>
       <div v-if="result.services.length > 0" class="mt-3">
@@ -238,7 +250,8 @@ const STEP_ICON = {
       :status="keyStatus"
       :busy="busy"
       placeholder="cf_live_…"
-      description="The API key, minted in cat-factory under its API access tokens. AI review needs the decide scope, because a review stops on its findings and waits for an answer; guided review works with write. Sealed before it is stored and never shown again, and sent only to the saved base URL: changing the URL removes it. Test connection uses a key typed here before the stored one."
+      :idle-label="connection.config === null ? 'Stored, save the settings to use it' : undefined"
+      description="The API key, minted in cat-factory under its API access tokens. Guided review needs the write scope. AI review needs decide, because a review stops on its findings and waits for an answer. Sealed before it is stored and never shown again. Once the settings are saved it is sent only to their base URL, and changing that URL removes it. Test connection uses a key typed here, else the stored one."
       @save="emit('saveKey', $event)"
       @clear="emit('clearKey')"
     />

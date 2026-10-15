@@ -85,7 +85,9 @@ export class CatFactoryConnectionService {
    * Try a configuration without storing it. A key entered with it wins, so a
    * replacement can be tried before it replaces anything. The stored key is
    * used only against the stored base URL: sent anywhere else it would be
-   * readable by whoever answers there.
+   * readable by whoever answers there. With no base URL saved the key is bound
+   * to nothing yet, and the first save binds it to whatever URL it names, so a
+   * check against the URL typed in sends it nowhere a save could not.
    */
   async check(input: CheckCatFactory): Promise<CatFactoryCheck> {
     const { apiKey: entered, ...config } = input
@@ -99,10 +101,10 @@ export class CatFactoryConnectionService {
     return catFactoryCheck(config, key, await probe.probe())
   }
 
-  /** Opened only when the URL is the stored one, so a check elsewhere holds no plaintext. */
+  /** Opened only when the key is bound to this URL or to none, so a check elsewhere holds no plaintext. */
   private async storedKeyFor(baseUrl: string): Promise<{ apiKey: string | null; key: CheckedKey }> {
     const stored = await readCatFactoryConfig(this.container)
-    if (stored?.baseUrl === originOf(baseUrl)) {
+    if (stored === null || stored.baseUrl === originOf(baseUrl)) {
       const apiKey = await openCredential(this.container, 'cat-factory')
       return { apiKey, key: apiKey === null ? null : 'stored' }
     }

@@ -17,6 +17,8 @@ const props = defineProps<{
   description: string
   placeholder?: string
   busy?: boolean
+  /** The badge for a stored credential nothing reads, when the card knows what is missing. */
+  idleLabel?: string
 }>()
 
 const emit = defineEmits<{ save: [token: string]; clear: [] }>()
@@ -75,7 +77,7 @@ function lookup<T>(table: Record<string, T | undefined>, key: string): T | undef
 const badge = computed(() => {
   const { state, inUse } = props.status
   if (state === 'stored' && !inUse)
-    return { color: 'warning' as const, label: 'Stored, not in use' }
+    return { color: 'warning' as const, label: props.idleLabel ?? 'Stored, not in use' }
   return {
     color: lookup(STATE_COLOR, state) ?? ('neutral' as const),
     label: lookup(STATE_LABEL, state) ?? state,

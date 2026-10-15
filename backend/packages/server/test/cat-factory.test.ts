@@ -6,6 +6,7 @@ import type {
 } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import { withOrg } from '../src/container.js'
+import { clearCatFactoryConfig } from '../src/integrations/catFactoryConfig.js'
 import { resolveAiReview } from '../src/integrations/resolve.js'
 import { stubAiReview } from './ai-review-doubles.js'
 import { buildHarness, del, get, post, put, stubGateways, type TestHarness } from './helpers.js'
@@ -153,6 +154,15 @@ describe('checking a cat-factory configuration', () => {
     const result = await check(harness, { ...LOCAL, baseUrl: 'https://elsewhere.example.com' })
     expect(outcomes(result)).toMatchObject({ key: 'failed', reachable: 'skipped' })
     expect(asked).toStrictEqual([])
+  })
+
+  it('uses the stored key against any URL while no base URL is saved to bind it to', async () => {
+    const { harness, asked } = probing(ACCEPTED)
+    await connectCatFactory(harness)
+    await clearCatFactoryConfig(harness.container)
+    const result = await check(harness, LOCAL)
+    expect(outcomes(result)).toMatchObject({ key: 'passed', reachable: 'passed' })
+    expect(asked).toStrictEqual([{ baseUrl: LOCAL.baseUrl, apiKey: 'cf_live_test.secret' }])
   })
 
   it('points at the URL when nothing answers there', async () => {
