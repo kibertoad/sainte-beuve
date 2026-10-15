@@ -36,23 +36,20 @@ const NOTHING_LISTED =
   'cat-factory lists no repository in any workspace this key reaches, so no project was ' +
   'removed. Link a repository in cat-factory, or check which workspaces the key belongs to.'
 
-const PUSH_FIX =
-  'This is a server environment variable, not a setting on this screen, and it is separate from ' +
-  "the cat-factory base URL: set API_BASE_URL to the public https origin of this deployment's " +
-  'API, such as https://reviews.example.com (a tunnel will do on a laptop), and restart the ' +
-  'server. Until then the repositories and people still sync every few minutes.'
+const NO_PUSH_ADDRESS =
+  'cat-factory cannot push changes here: the API_BASE_URL environment variable is not set on ' +
+  'the server. This is a server environment variable, not a setting on this screen, and it is ' +
+  "separate from the cat-factory base URL: set it to this deployment's API origin, such as " +
+  'https://reviews.example.com, and restart the server. Until then the repositories and people ' +
+  'still sync every few minutes.'
 
-/** Why cat-factory cannot push to this deployment, or null when it can be asked to. */
-function pushAddressProblem(apiBaseUrl: string | null): string | null {
-  if (apiBaseUrl === null) {
-    return `cat-factory cannot push changes here: the API_BASE_URL environment variable is not set on the server. ${PUSH_FIX}`
-  }
-  // cat-factory refuses a plain http endpoint outright, loopback included.
-  if (!apiBaseUrl.startsWith('https://')) {
-    return `cat-factory cannot push changes here: it only pushes to https, and the API_BASE_URL environment variable on the server is ${apiBaseUrl}. ${PUSH_FIX}`
-  }
-  return null
-}
+/** Said after cat-factory's own refusal when the address it was given is plain http. */
+const HTTP_PUSH_HINT =
+  'API_BASE_URL, a server environment variable, is http. cat-factory takes an http push ' +
+  'address only where its NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS and ' +
+  'NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS allow that host, which a local cat-factory does for ' +
+  'localhost. Otherwise set API_BASE_URL to an https origin and restart the server. Until then ' +
+  'the repositories and people still sync every few minutes.'
 
 /**
  * Keeps an org's projects to the repositories linked in its cat-factory
@@ -210,10 +207,9 @@ export class RepositorySyncService {
   }
 
   private async registerWebhook(gateway: RepositoryDirectoryGateway): Promise<void> {
-    const problem = pushAddressProblem(this.container.apiBaseUrl)
     const url = await this.webhookUrl()
-    if (problem !== null || url === null) {
-      await this.record({ webhook: 'failed', error: problem })
+    if (url === null) {
+      await this.record({ webhook: 'failed', error: NO_PUSH_ADDRESS })
       return
     }
     const { webhookUrl: previous } = await this.state()
@@ -222,7 +218,8 @@ export class RepositorySyncService {
       await gateway.registerWebhook({ webhookId: await this.webhookId(url), url, secret })
       await this.record({ webhook: 'registered', webhookUrl: url })
     } catch (err) {
-      await this.record({ webhook: 'failed', webhookUrl: url, error: getErrorMessage(err) })
+      const hint = url.startsWith('http://') ? ` ${HTTP_PUSH_HINT}` : ''
+      await this.record({ webhook: 'failed', webhookUrl: url, error: getErrorMessage(err) + hint })
       return
     }
     // The id follows the URL, so the one enrolled for a former address is a separate webhook.

@@ -227,15 +227,24 @@ describe('repositories from cat-factory', () => {
     })
   })
 
-  it('asks for no push to a plain http address, and names the variable to change', async () => {
+  it('leaves a plain http address to cat-factory, and explains its refusal', async () => {
     const fake = await syncing([])
     Object.assign(fake.harness.container, { apiBaseUrl: 'http://localhost:8788' })
+    fake.gateway.registerWebhook = async () => {
+      throw new Error('cat-factory refused to register a directory webhook')
+    }
     const res = await fake.harness.app.fetch(post(SYNC_PATH, {}))
     const connection = (await res.json()) as CatFactoryConnection
-    expect(fake.registered).toEqual([])
     expect(connection.repositorySync).toMatchObject({ webhook: 'failed' })
-    expect(connection.repositorySync?.error).toMatch(/server environment variable/)
-    expect(connection.repositorySync?.error).toMatch(/is http:\/\/localhost:8788/)
+    expect(connection.repositorySync?.error).toMatch(/^cat-factory refused to register/)
+    expect(connection.repositorySync?.error).toMatch(/NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS/)
+  })
+
+  it('registers a plain http address that cat-factory accepts', async () => {
+    const fake = await syncing([])
+    Object.assign(fake.harness.container, { apiBaseUrl: 'http://localhost:8788' })
+    await fake.harness.app.fetch(post(SYNC_PATH, {}))
+    expect(fake.registered.map((r) => r.url)).toEqual([`http://localhost:8788${PUSH_PATH}`])
   })
 
   it('moves the webhook when this deployment moves to another address', async () => {
