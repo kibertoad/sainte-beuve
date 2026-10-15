@@ -200,6 +200,27 @@ describe('CatFactoryDirectoryGateway', () => {
     expect(store.entries.get('ws_1/101')).toEqual({ key: 'ws_1/101', seq: 6, repository: null })
   })
 
+  it('says which field cat-factory refused when it turns a webhook away', async () => {
+    const refusing = async () =>
+      json(
+        {
+          error: {
+            code: 'validation',
+            message: 'Request failed validation',
+            issues: [{ path: 'url', message: 'The webhook endpoint must be an https:// URL' }],
+          },
+        },
+        400,
+      )
+    await expect(
+      gateway(refusing).registerWebhook({
+        webhookId: 'sainte-beuve-1',
+        url: 'http://localhost:8788/webhooks/cat-factory/default',
+        secret: 'a-secret-of-sixteen-or-more',
+      }),
+    ).rejects.toThrow('(url: The webhook endpoint must be an https:// URL)')
+  })
+
   it('refuses a push whose signature does not verify, and writes nothing', async () => {
     const store = memoryStore()
     const outcome = await gateway(directoryAnswering()).receive(store, {

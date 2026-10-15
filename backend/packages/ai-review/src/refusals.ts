@@ -38,6 +38,15 @@ function reasonOf(err: unknown): { reason?: string } {
   return { reason: typeof details?.reason === 'string' ? details.reason : err.code }
 }
 
+/** The per-field reasons behind a schema refusal, whose message alone says only that it failed. */
+function issuesOf(err: CatFactoryApiError): string {
+  if (err.issues.length === 0) return ''
+  const listed = err.issues.map((issue) =>
+    issue.path ? `${issue.path}: ${issue.message}` : issue.message,
+  )
+  return ` (${listed.join('; ')})`
+}
+
 /**
  * A cat-factory refusal, as the fault sainte-beuve answers with.
  *
@@ -113,7 +122,7 @@ export function refusalFor(
     )
   }
   if (err instanceof CatFactoryValidationError) {
-    return new ValidationError(`cat-factory refused to ${detail}`, source)
+    return new ValidationError(`cat-factory refused to ${detail}${issuesOf(err)}`, source)
   }
   return new UpstreamFailedError(`cat-factory could not ${detail}`, source)
 }
