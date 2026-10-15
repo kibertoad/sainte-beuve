@@ -227,6 +227,17 @@ describe('repositories from cat-factory', () => {
     })
   })
 
+  it('asks for no push to a plain http address, and names the variable to change', async () => {
+    const fake = await syncing([])
+    Object.assign(fake.harness.container, { apiBaseUrl: 'http://localhost:8788' })
+    const res = await fake.harness.app.fetch(post(SYNC_PATH, {}))
+    const connection = (await res.json()) as CatFactoryConnection
+    expect(fake.registered).toEqual([])
+    expect(connection.repositorySync).toMatchObject({ webhook: 'failed' })
+    expect(connection.repositorySync?.error).toMatch(/server environment variable/)
+    expect(connection.repositorySync?.error).toMatch(/is http:\/\/localhost:8788/)
+  })
+
   it('moves the webhook when this deployment moves to another address', async () => {
     const fake = await syncing([])
     await fake.harness.app.fetch(post(SYNC_PATH, {}))

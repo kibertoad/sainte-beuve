@@ -36,12 +36,23 @@ const NOTHING_LISTED =
   'cat-factory lists no repository in any workspace this key reaches, so no project was ' +
   'removed. Link a repository in cat-factory, or check which workspaces the key belongs to.'
 
-const NO_PUSH_ADDRESS =
-  'The repositories and people synced, but cat-factory cannot push changes here, because this ' +
-  "deployment does not know its own public address. That is the server's API_BASE_URL " +
-  'environment variable, separate from the cat-factory base URL in these settings: set it to ' +
-  "the public https origin of this deployment's API, such as https://reviews.example.com. " +
-  'Until then, changes are picked up every few minutes.'
+const PUSH_FIX =
+  'This is a server environment variable, not a setting on this screen, and it is separate from ' +
+  "the cat-factory base URL: set API_BASE_URL to the public https origin of this deployment's " +
+  'API, such as https://reviews.example.com (a tunnel will do on a laptop), and restart the ' +
+  'server. Until then the repositories and people still sync every few minutes.'
+
+/** Why cat-factory cannot push to this deployment, or null when it can be asked to. */
+function pushAddressProblem(apiBaseUrl: string | null): string | null {
+  if (apiBaseUrl === null) {
+    return `cat-factory cannot push changes here: the API_BASE_URL environment variable is not set on the server. ${PUSH_FIX}`
+  }
+  // cat-factory refuses a plain http endpoint outright, loopback included.
+  if (!apiBaseUrl.startsWith('https://')) {
+    return `cat-factory cannot push changes here: it only pushes to https, and the API_BASE_URL environment variable on the server is ${apiBaseUrl}. ${PUSH_FIX}`
+  }
+  return null
+}
 
 /**
  * Keeps an org's projects to the repositories linked in its cat-factory
@@ -199,12 +210,10 @@ export class RepositorySyncService {
   }
 
   private async registerWebhook(gateway: RepositoryDirectoryGateway): Promise<void> {
+    const problem = pushAddressProblem(this.container.apiBaseUrl)
     const url = await this.webhookUrl()
-    if (url === null) {
-      await this.record({
-        webhook: 'failed',
-        error: NO_PUSH_ADDRESS,
-      })
+    if (problem !== null || url === null) {
+      await this.record({ webhook: 'failed', error: problem })
       return
     }
     const { webhookUrl: previous } = await this.state()
