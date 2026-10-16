@@ -357,19 +357,28 @@ cat-factory runs the AI review and the guided review. Everything about reaching
 it belongs to an org and is set on that org's Configuration screen, never in the
 environment:
 
-| Setting     | What it is                                             | Needed for                    |
-| ----------- | ------------------------------------------------------ | ----------------------------- |
-| Base URL    | The instance, `http://localhost:8787` for a local one  | both                          |
-| API key     | `cf_live_<keyId>.<secret>`, stored sealed              | both (`decide` for AI review) |
-| Service id  | The `blk_…` frame for a repository no service backs    | neither                       |
-| Pipeline id | Overrides the review task's own pipeline (`pl_review`) | neither                       |
+| Setting     | What it is                                             | Needed for                                                 |
+| ----------- | ------------------------------------------------------ | ---------------------------------------------------------- |
+| Base URL    | The instance, `http://localhost:8787` for a local one  | both                                                       |
+| API key     | `cf_live_<keyId>.<secret>`, stored sealed              | both (`decide` for AI review, `admin` to add a repository) |
+| Service id  | The `blk_…` frame for a repository no service backs    | neither                                                    |
+| Pipeline id | Overrides the review task's own pipeline (`pl_review`) | neither                                                    |
 
 An AI review is filed under the service that backs its repository, read from
 the cat-factory workspace that links it, and in that workspace. The repository
 mirror described under "Repositories come from cat-factory" is what says which
-workspaces link it. The service id is the fallback for a repository no service
-backs, a monorepo for one, filed in the linking workspace that holds it, and a
-review on such a repository is refused while it is unset.
+workspaces link it.
+
+A repository no workspace links yet is added: linked into the workspace where
+most of the owner's other repositories are, else the key's only workspace, and
+given a service named after it. That needs the `admin` scope, which cat-factory
+requires to create a service. The directory is followed straight after, so the
+repository is registered here without waiting for the clock.
+
+The service id is the fallback for a repository no service backs otherwise: a
+monorepo, a key below `admin`, or no single workspace to add it to. It is filed
+in the linking workspace that holds it, and a review on such a repository is
+refused while it is unset, with a link that adds the repository in cat-factory.
 
 A guided review needs no service, but it lives in a workspace too, and a key
 reaching several workspaces is refused a call that names none. It is opened in

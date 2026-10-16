@@ -118,7 +118,10 @@ const STEPS: readonly StepDefinition[] = [
     judge: ({ report }) =>
       report.scope !== null && SCOPES_THAT_FILE_REVIEWS.has(report.scope)
         ? passed(
-            `This key has the \`${report.scope}\` scope: guided review and AI review both work.`,
+            `This key has the \`${report.scope}\` scope: guided review and AI review both work.` +
+              (report.scope === 'admin'
+                ? ' AI review also adds a repository cat-factory has no service for.'
+                : ' With `admin`, AI review would also add a repository cat-factory has no service for.'),
           )
         : failed(
             `This key has the \`${report.scope ?? 'unknown'}\` scope. Guided review needs ` +

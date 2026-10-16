@@ -33,9 +33,12 @@ It comes back and waits, and the row opens on what it found: each finding with
 its severity, the file and line it is about, and the fix it suggests.
 
 The review is filed under the cat-factory service that backs the pull request's
-repository, in the workspace that links it. A repository no service backs (a
-monorepo, say) goes under the default service the org sets on the Configuration
-screen, and with none set the button says which of the two to fix.
+repository, in the workspace that links it. A repository no workspace links yet
+is linked and given a service of its own, which registers it here too, when the
+key has the `admin` scope and there is one workspace to put it in. A repository
+no service backs otherwise (a monorepo, say) goes under the default service the
+org sets on the Configuration screen, and with none set the button offers a link
+that adds it in cat-factory.
 
 You are the gate. Tick the ones worth saying out loud (the blockers and the highs
 start ticked), **Dismiss** the noise, and then choose:

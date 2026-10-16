@@ -111,6 +111,12 @@ export class RepositorySyncService {
     return this.run(gateway, 'catch-up')
   }
 
+  /** Follow the change feed now, for a caller that just changed the directory. Answers projects changed. */
+  async catchUpNow(): Promise<number> {
+    const gateway = await this.gateway()
+    return gateway === null ? 0 : this.run(gateway, 'catch-up')
+  }
+
   /** Take a push. Null when the org has nothing a push could be verified against. */
   async receive(headers: Headers, rawBody: string): Promise<DirectoryDeliveryOutcome | null> {
     const [gateway, secret] = await Promise.all([

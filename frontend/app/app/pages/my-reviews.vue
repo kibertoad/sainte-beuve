@@ -198,11 +198,7 @@ function committedTo(pullRequest: PullRequestRef): boolean {
               >
                 Hand back
               </UButton>
-              <AiReviewButton
-                v-if="commitment.projectId !== null"
-                :pull-request="commitment.pullRequest"
-                :title="commitment.title"
-              />
+              <AiReviewButton :pull-request="commitment.pullRequest" :title="commitment.title" />
               <UButton
                 :to="safeHref(commitment.pullRequest.url)"
                 target="_blank"

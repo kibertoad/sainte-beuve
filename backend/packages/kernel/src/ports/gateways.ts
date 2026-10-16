@@ -103,6 +103,18 @@ export interface AiReviewReport {
  * the run on every call, and would silently act on a different run than the one
  * whose findings the caller is looking at.
  */
+/** What placing a task in cat-factory needs to know about the pull request's repository. */
+export interface CatFactoryPlacementTarget {
+  pullRequest: PullRequestRef
+  /** The org mirror's keys for the repository, one per workspace linking it. */
+  directoryKeys: readonly string[]
+  /**
+   * The mirror's keys for the owner's other repositories, which say where a
+   * repository no workspace links yet belongs.
+   */
+  ownerDirectoryKeys?: readonly string[]
+}
+
 export interface AiReviewGateway {
   /**
    * Hand a pull request to cat-factory. Resolves once the task is accepted, not
@@ -110,26 +122,25 @@ export interface AiReviewGateway {
    *
    * The task goes under the service that backs the pull request's repository,
    * found through `directoryKeys`: the keys the org's repository mirror holds
-   * that repository under, one per workspace linking it. When no service backs
-   * it, the task goes to the default service, and with no default it is refused
-   * naming both fixes.
+   * that repository under, one per workspace linking it. A repository no
+   * workspace links is linked and given a service of its own where the key may
+   * (`admin`) and one workspace is the place for it: the one most of
+   * `ownerDirectoryKeys` sit in, else the key's only one. Otherwise the task goes to the default service, and with no
+   * default it is refused with a link that adds the repository in cat-factory.
    */
-  requestReview(input: {
-    pullRequest: PullRequestRef
-    title: string
-    instructions: string | null
-    directoryKeys: readonly string[]
-  }): Promise<AiReviewHandle>
+  requestReview(
+    input: CatFactoryPlacementTarget & {
+      title: string
+      instructions: string | null
+    },
+  ): Promise<AiReviewHandle>
   /**
    * Hand a pull request whose branch conflicts with its base to cat-factory's
    * conflict resolver, which merges the base in, resolves the conflicts and
    * pushes to the pull request's own branch. Resolves once the task is accepted.
    * Placed as `requestReview` places a review, through the same `directoryKeys`.
    */
-  requestConflictResolution(input: {
-    pullRequest: PullRequestRef
-    directoryKeys: readonly string[]
-  }): Promise<AiReviewHandle>
+  requestConflictResolution(input: CatFactoryPlacementTarget): Promise<AiReviewHandle>
   /** Poll one delegated run. The Worker cron and the Node scheduler both drive this. */
   getStatus(input: { taskId: string } & AiReviewWorkspace): Promise<AiReviewReport>
   /**

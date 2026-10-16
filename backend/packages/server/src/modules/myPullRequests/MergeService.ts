@@ -24,7 +24,7 @@ import { requireCapability } from '../../http/errors.js'
 import { resolveAiReview, VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
-import { catFactoryDirectoryKeys } from '../projects/directoryKeys.js'
+import { catFactoryPlacementKeys } from '../projects/directoryKeys.js'
 import { NO_CREDENTIAL } from '../workspace/sweep.js'
 import {
   directMergeFor,
@@ -136,7 +136,7 @@ export class MergeService {
     const pullRequest = { ...address, url: status.url }
     const handle = await catFactory.gateway.requestConflictResolution({
       pullRequest,
-      directoryKeys: await catFactoryDirectoryKeys(this.container, pullRequest),
+      ...(await catFactoryPlacementKeys(this.container, pullRequest)),
     })
     this.container.logger.info(
       { projectId: project.id, number: input.number, taskId: handle.taskId },
