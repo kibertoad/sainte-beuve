@@ -1,6 +1,7 @@
 ---
 '@sainte-beuve/contracts': minor
 '@sainte-beuve/reviewers': minor
+'@sainte-beuve/app': minor
 ---
 
 My Reviews hides pull requests opened by Dependabot or Renovate by default, as PRs to review does.
