@@ -4,11 +4,20 @@ import type { PullRequestToReview } from '@sainte-beuve/contracts'
 // The open pull requests in the linked repositories the viewer is best placed to
 // review next. The server ranks them; this shows the order and why.
 const api = useSainteBeuveApi()
+const route = useRoute()
+const router = useRouter()
+
+// Dependency bots are hidden by default. The choice lives in the URL, like the My PRs filters.
+const showDependencyBots = ref(route.query.dependencyBots === 'show')
+watch(showDependencyBots, (show) => {
+  void router.replace({ query: { ...route.query, dependencyBots: show ? 'show' : undefined } })
+})
 
 const { data, pending, error, refresh } = useAsyncData(
   'to-review',
-  () => api.listPullRequestsToReview(),
-  { lazy: true },
+  () =>
+    api.listPullRequestsToReview({ dependencyBots: showDependencyBots.value ? 'show' : 'hide' }),
+  { lazy: true, watch: [showDependencyBots] },
 )
 
 const unreadable = computed(() => data.value?.sources.filter((source) => !source.ok) ?? [])
@@ -41,6 +50,10 @@ async function takeOn(pr: PullRequestToReview) {
       >
         Refresh
       </UButton>
+    </div>
+
+    <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-end">
+      <USwitch v-model="showDependencyBots" label="Show Dependabot and Renovate" />
     </div>
 
     <LoadingSpinner v-if="pending && data !== undefined" label="Updating…" class="mb-3" />

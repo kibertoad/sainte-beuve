@@ -11,7 +11,7 @@ export function toReviewController(): Hono<AppEnv> {
 
   buildHonoRoute(app, listPullRequestsToReviewContract, async (c) => {
     const service = new ToReviewService(c.get('container'), principalOf(c))
-    return c.json(await service.list(), 200)
+    return c.json(await service.list(c.req.valid('query')), 200)
   })
 
   return app

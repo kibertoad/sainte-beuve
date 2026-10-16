@@ -11,6 +11,15 @@ import { workspaceSourceSchema } from './workspace.js'
 // without a review and on how well the viewer fits them.
 // ---------------------------------------------------------------------------
 
+/** Whether pull requests Dependabot or Renovate opened are listed. Hidden unless `show`. */
+export const dependencyBotsFilterSchema = v.picklist(['hide', 'show'])
+export type DependencyBotsFilter = v.InferOutput<typeof dependencyBotsFilterSchema>
+
+export const toReviewQuerySchema = v.object({
+  dependencyBots: v.optional(dependencyBotsFilterSchema),
+})
+export type ToReviewQuery = v.InferOutput<typeof toReviewQuerySchema>
+
 /** The most pull requests one read returns. */
 export const MAX_PULL_REQUESTS_TO_REVIEW = 50
 

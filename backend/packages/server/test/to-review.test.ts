@@ -119,6 +119,21 @@ describe('PRs to review', () => {
     })
   })
 
+  it('hides Dependabot and Renovate pull requests unless asked to show them', async () => {
+    const pulls = [
+      pr(1, 'api'),
+      pr(2, 'api', { authorLogin: 'dependabot[bot]' }),
+      pr(3, 'api', { authorLogin: 'renovate[bot]' }),
+    ]
+    const harness = buildHarness({ vcs: environmentVcs(vcsWith(pulls, {})) })
+    await addProject(harness, 'api')
+
+    expect(numbers(await list(harness))).toStrictEqual([1])
+    const res = await harness.app.fetch(get('/api/v1/to-review?dependencyBots=show'))
+    const shown = (await res.json()) as PullRequestsToReview
+    expect(numbers(shown).toSorted()).toStrictEqual([1, 2, 3])
+  })
+
   it('counts the commitments other people made', async () => {
     const harness = buildHarness({ vcs: environmentVcs(vcsWith([pr(1, 'api')], {})) })
     await addProject(harness, 'api')

@@ -1,7 +1,8 @@
-import type { PullRequestsToReview, Reviewer } from '@sainte-beuve/contracts'
+import type { PullRequestsToReview, Reviewer, ToReviewQuery } from '@sainte-beuve/contracts'
 import { handleOf, MAX_PULL_REQUESTS_TO_REVIEW } from '@sainte-beuve/contracts'
 import type { AuthorTally, VcsGateway } from '@sainte-beuve/kernel'
 import {
+  isDependencyBot,
   isReviewableBy,
   isSameHandle,
   type OpenReviews,
@@ -32,12 +33,13 @@ export class ToReviewService {
     private readonly principal: RequestPrincipal,
   ) {}
 
-  async list(): Promise<PullRequestsToReview> {
+  async list(query: ToReviewQuery): Promise<PullRequestsToReview> {
     const resolutions = new VcsResolutions(this.container)
     const viewer = await new ViewerService(this.container, this.principal, resolutions).current()
     const { repositories } = this.container
     const projects = await repositories.projects.list()
-    const reads = await sweepProjects(this.container, resolutions, projects)
+    const swept = await sweepProjects(this.container, resolutions, projects)
+    const reads = query.dependencyBots === 'show' ? swept : swept.map(withoutDependencyBots)
     const candidates = reads.filter((read) =>
       read.pullRequests.some((pr) => isReviewableBy(pr, viewer.reviewer)),
     )
@@ -106,6 +108,13 @@ export class ToReviewService {
       )
       return new Map()
     }
+  }
+}
+
+function withoutDependencyBots(read: ProjectRead): ProjectRead {
+  return {
+    ...read,
+    pullRequests: read.pullRequests.filter((pr) => !isDependencyBot(pr.authorLogin)),
   }
 }
 
