@@ -61,6 +61,7 @@ defineProps<{
         </div>
         <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
           <slot name="actions" :pull-request="pr" />
+          <PullRequestAssessment :pull-request="pr.pullRequest" />
           <AiReviewButton
             :pull-request="pr.pullRequest"
             :title="pr.title"

@@ -408,6 +408,17 @@ cat-factory until an admin saves them.
 guided review, for any member. The board and the guided review page read it to
 warn before a button fails.
 
+### Assessing a pull request
+
+Every pull request row offers **Assess** while cat-factory is configured. It
+asks cat-factory's assessor (`POST /api/v1/pr-assessments`, no risk policy)
+for the pull request's risk, impact and complexity, and keeps them per pull
+request in `pull_request_assessments`, so every list shows them beside the
+row. A pull request assessed before answers its stored scores without asking
+again. Nothing is approved and no board row is opened: the risk policy's own
+assessments do that, and they record their cat-factory scores in the same
+store. A list reads its rows' scores in one lookup.
+
 ### Running on a personal model subscription
 
 cat-factory runs a model subscription (a Claude subscription, say) only for the

@@ -43,6 +43,7 @@ import type { RequestParams, SuccessBody } from './contractCall'
 import { attentionCalls } from './attentionApi'
 import { capabilityCalls } from './capabilitiesApi'
 import { aiReviewCalls } from './aiReviewApi'
+import { assessmentCalls } from './assessmentApi'
 import { catFactoryPersonalCalls } from './catFactoryPersonalApi'
 import { guidedReviewCalls, sessionAddress } from './guidedReviewApi'
 import { myPullRequestCalls } from './myPullRequestsApi'
@@ -344,6 +345,7 @@ export function createSainteBeuveApi(
       call(assignReviewersContract, { pathParams: { reviewId }, body: { count } }),
 
     ...aiReviewCalls(call),
+    ...assessmentCalls(call),
     ...catFactoryPersonalCalls(call),
     ...attentionCalls(call),
     ...guidedReviewCalls(call),

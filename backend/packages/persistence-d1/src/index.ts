@@ -43,6 +43,7 @@
 //  | `external_directory` | `(org_id, source, kind, key)`  | `seq`                                                      |
 //  | `risk_assessments`   | `(org_id, review_id)`          | `status`, `updated_at`                                     |
 //  | `host_snapshots`     | `(org_id, source, key)`        | `fetched_at`                                               |
+//  | `pull_request_assessments` | `(org_id, pull_request_key)` | `assessed_at`                                       |
 
 import type { PersistenceProvider } from '@sainte-beuve/kernel'
 import { D1SqlDriver } from './D1SqlDriver.js'

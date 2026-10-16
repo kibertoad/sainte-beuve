@@ -12,6 +12,7 @@ import {
   UnavailableError,
   type VcsGateway,
 } from '@sainte-beuve/kernel'
+import { assessmentOf } from '../assessments/PullRequestAssessmentService.js'
 import { aiReviewOutcome } from '@sainte-beuve/risk'
 import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
@@ -199,6 +200,12 @@ export class RiskAssessmentService {
       headSha: status.headSha,
       policy,
     })
+    // cat-factory's scores are what the lists show for a pull request; the heuristic's are not.
+    if (policy.assessor === 'cat-factory') {
+      await this.container.repositories.pullRequestAssessments.put(
+        assessmentOf(review.pullRequest, scored, this.container.clock.now()),
+      )
+    }
     const assessed = await this.save(row, {
       ...scored,
       assessor: policy.assessor,

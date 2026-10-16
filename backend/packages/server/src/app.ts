@@ -24,6 +24,7 @@ import { authController } from './modules/auth/AuthController.js'
 import { capabilitiesController } from './modules/capabilities/CapabilitiesController.js'
 import { authentication } from './modules/auth/principal.js'
 import { connectController } from './modules/connections/ConnectController.js'
+import { pullRequestAssessmentController } from './modules/assessments/PullRequestAssessmentController.js'
 import { catFactoryPersonalController } from './modules/catFactoryPersonal/CatFactoryPersonalController.js'
 import { connectionsController } from './modules/connections/ConnectionsController.js'
 import { healthController } from './modules/health/HealthController.js'
@@ -351,6 +352,7 @@ function mountApiRoutes(app: Hono<AppEnv>): void {
   app.route('/api/v1', settingsController())
   app.route('/api/v1', connectionsController())
   app.route('/api/v1', catFactoryPersonalController())
+  app.route('/api/v1', pullRequestAssessmentController())
 }
 
 export function createApp(options: AppOptions): Hono<AppEnv> {

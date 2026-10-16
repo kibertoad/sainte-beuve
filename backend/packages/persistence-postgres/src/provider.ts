@@ -17,6 +17,7 @@ import { PostgresOrgRepository } from './orgs.js'
 import { PostgresReviewerRepository } from './reviewers.js'
 import { PostgresReminderRepository, PostgresReviewRequestRepository } from './reviews.js'
 import { PostgresHostSnapshotRepository } from './host-snapshots.js'
+import { PostgresPullRequestAssessmentRepository } from './pull-request-assessments.js'
 import { PostgresRiskAssessmentRepository } from './risk-assessments.js'
 import { firstOr } from './rows.js'
 import { apiKeys, projects, sessions } from './schema.js'
@@ -73,6 +74,7 @@ class PostgresPersistence implements PersistenceProvider {
       externalDirectory: new PostgresExternalDirectoryRepository(db, orgId),
       riskAssessments: new PostgresRiskAssessmentRepository(db, orgId),
       hostSnapshots: new PostgresHostSnapshotRepository(db, orgId),
+      pullRequestAssessments: new PostgresPullRequestAssessmentRepository(db, orgId),
     }
   }
 

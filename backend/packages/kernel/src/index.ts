@@ -74,6 +74,7 @@ export type {
   GuidedReviewWatchEvent,
 } from './ports/guided-review.js'
 export type { HostSnapshotRepository, StoredHostSnapshot } from './ports/host-snapshots.js'
+export type { PullRequestAssessmentRepository } from './ports/pull-request-assessments.js'
 export type {
   IntegrationConfigRepository,
   StoredIntegrationConfig,

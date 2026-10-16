@@ -41,25 +41,26 @@ query will omit: in the key, a statement that forgot the org does not quietly
 read another one's rows, it fails to parse. See [orgs.md](./orgs.md) for how the
 org gets there — no port method takes one, and no service passes one.
 
-| Table                   | Key                           | Columns beside `data`                                                                                                           |
-| ----------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `orgs`                  | `id`                          | `slug` (UNIQUE), `created_at`                                                                                                   |
-| `reviewers`             | `(org_id, id)`                | `outstanding_reviews`, `created_at`                                                                                             |
-| `review_requests`       | `(org_id, id)`                | `status`, `pull_request_key`, `repo_key`, `created_at`                                                                          |
-| `reminders`             | `(org_id, id)`                | `review_id`, `status`, `due_at`, `claimed_at`                                                                                   |
-| `ai_review_runs`        | `(org_id, id)`                | `review_id`, `status`, `requested_at`, `last_polled_at`                                                                         |
-| `integration_tokens`    | `(org_id, integration_id)`    | `sealed`, `hint`, `subject`, `subject_is_bot`, `updated_at` (no payload)                                                        |
-| `integration_configs`   | `(org_id, integration_id)`    | `updated_at`                                                                                                                    |
-| `projects`              | `(org_id, id)`                | `ref_key` (UNIQUE per org), `created_at`                                                                                        |
-| `external_repositories` | `(org_id, source, key)`       | `seq`                                                                                                                           |
-| `external_directory`    | `(org_id, source, kind, key)` | `seq`                                                                                                                           |
-| `risk_assessments`      | `(org_id, review_id)`         | `status`, `updated_at`                                                                                                          |
-| `host_snapshots`        | `(org_id, source, key)`       | `fetched_at` (a kept host read; see [Kept host reads](#kept-host-reads))                                                        |
-| `identities`            | `(org_id, provider, subject)` | `reviewer_id`                                                                                                                   |
-| `attention_requests`    | `(org_id, id)`                | `status`, `created_at`, `revision` (moved on by every write, so an answer writes only over the row it read)                     |
-| `review_commitments`    | `(org_id, id)`                | `reviewer_id`, `pull_request_key`, `created_at`                                                                                 |
-| `sessions`              | `(org_id, id)`                | `token_digest` (UNIQUE globally), `reviewer_id`, `provider`, `subject`, `created_at`, `last_seen_at`, `expires_at` (no payload) |
-| `api_keys`              | `(org_id, id)`                | `token_digest` (UNIQUE globally), `label`, `role`, `hint`, `created_by`, `created_at`, `last_used_at` (no payload)              |
+| Table                      | Key                           | Columns beside `data`                                                                                                           |
+| -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `orgs`                     | `id`                          | `slug` (UNIQUE), `created_at`                                                                                                   |
+| `reviewers`                | `(org_id, id)`                | `outstanding_reviews`, `created_at`                                                                                             |
+| `review_requests`          | `(org_id, id)`                | `status`, `pull_request_key`, `repo_key`, `created_at`                                                                          |
+| `reminders`                | `(org_id, id)`                | `review_id`, `status`, `due_at`, `claimed_at`                                                                                   |
+| `ai_review_runs`           | `(org_id, id)`                | `review_id`, `status`, `requested_at`, `last_polled_at`                                                                         |
+| `integration_tokens`       | `(org_id, integration_id)`    | `sealed`, `hint`, `subject`, `subject_is_bot`, `updated_at` (no payload)                                                        |
+| `integration_configs`      | `(org_id, integration_id)`    | `updated_at`                                                                                                                    |
+| `projects`                 | `(org_id, id)`                | `ref_key` (UNIQUE per org), `created_at`                                                                                        |
+| `external_repositories`    | `(org_id, source, key)`       | `seq`                                                                                                                           |
+| `external_directory`       | `(org_id, source, kind, key)` | `seq`                                                                                                                           |
+| `risk_assessments`         | `(org_id, review_id)`         | `status`, `updated_at`                                                                                                          |
+| `host_snapshots`           | `(org_id, source, key)`       | `fetched_at` (a kept host read; see [Kept host reads](#kept-host-reads))                                                        |
+| `pull_request_assessments` | `(org_id, pull_request_key)`  | `assessed_at` (cat-factory's scores for one pull request)                                                                       |
+| `identities`               | `(org_id, provider, subject)` | `reviewer_id`                                                                                                                   |
+| `attention_requests`       | `(org_id, id)`                | `status`, `created_at`, `revision` (moved on by every write, so an answer writes only over the row it read)                     |
+| `review_commitments`       | `(org_id, id)`                | `reviewer_id`, `pull_request_key`, `created_at`                                                                                 |
+| `sessions`                 | `(org_id, id)`                | `token_digest` (UNIQUE globally), `reviewer_id`, `provider`, `subject`, `created_at`, `last_seen_at`, `expires_at` (no payload) |
+| `api_keys`                 | `(org_id, id)`                | `token_digest` (UNIQUE globally), `label`, `role`, `hint`, `created_by`, `created_at`, `last_used_at` (no payload)              |
 
 The two digests are the exception, and unique across EVERY org: a digest is what
 decides which org a request is in, so it is read before there is an org to scope

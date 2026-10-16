@@ -350,6 +350,7 @@ function offersComments(pr: MyPullRequest): boolean {
                 :pull-request="pr.pullRequest"
                 @linked="refreshAfterLink"
               />
+              <PullRequestAssessment :pull-request="pr.pullRequest" />
               <AiReviewButton
                 :pull-request="pr.pullRequest"
                 :title="pr.title"

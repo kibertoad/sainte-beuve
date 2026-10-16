@@ -620,6 +620,10 @@ describe('with cat-factory', () => {
       verdict: { policyName: 'Balanced' },
     })
     expect(github.approvals[0]?.body).toContain('within the Balanced risk policy')
+    // The scores are kept for the pull request too, so every list shows them.
+    expect(await harness.container.repositories.pullRequestAssessments.get(PR)).toMatchObject({
+      scores: { complexity: 0.2, risk: 0.15, impact: 0.1 },
+    })
   })
 
   it('lists the cat-factory policies for the picker, or says why it cannot', async () => {

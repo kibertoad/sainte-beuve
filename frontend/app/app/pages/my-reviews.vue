@@ -198,6 +198,7 @@ function committedTo(pullRequest: PullRequestRef): boolean {
               >
                 Hand back
               </UButton>
+              <PullRequestAssessment :pull-request="commitment.pullRequest" />
               <AiReviewButton :pull-request="commitment.pullRequest" :title="commitment.title" />
               <UButton
                 :to="safeHref(commitment.pullRequest.url)"
