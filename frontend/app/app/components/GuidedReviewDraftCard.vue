@@ -81,7 +81,11 @@ async function copy(): Promise<void> {
     await navigator.clipboard.writeText(props.draft.body)
     toast.add({ color: 'success', title: 'Comment copied' })
   } catch {
-    toast.add({ color: 'error', title: 'Could not copy the comment' })
+    toast.add({
+      color: 'error',
+      title: 'Could not copy the comment',
+      duration: ERROR_TOAST_DURATION_MS,
+    })
   }
 }
 </script>

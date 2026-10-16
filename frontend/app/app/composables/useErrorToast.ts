@@ -1,4 +1,10 @@
 /**
+ * How long an error toast stays up, unless dismissed: long enough to read the
+ * message, and to click a fix it offers.
+ */
+export const ERROR_TOAST_DURATION_MS = 30_000
+
+/**
  * Show a failure as a toast that copies a full report of it when clicked.
  *
  * The toast has room for one sentence; whoever files the ticket needs the route,
@@ -15,7 +21,11 @@ export function useErrorToast() {
       await navigator.clipboard.writeText(report)
       toast.add({ color: 'success', title: 'Error details copied' })
     } catch {
-      toast.add({ color: 'error', title: 'Could not copy the error details' })
+      toast.add({
+        color: 'error',
+        title: 'Could not copy the error details',
+        duration: ERROR_TOAST_DURATION_MS,
+      })
     }
   }
 
@@ -39,8 +49,7 @@ export function useErrorToast() {
       description,
       onClick: () => void copy(report),
       actions,
-      // Long enough to read the fix and click it.
-      ...(actions.length > 0 ? { duration: 20_000 } : {}),
+      duration: ERROR_TOAST_DURATION_MS,
     })
   }
 

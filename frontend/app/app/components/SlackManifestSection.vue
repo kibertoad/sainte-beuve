@@ -19,7 +19,11 @@ async function copy(): Promise<void> {
     await navigator.clipboard.writeText(text.value)
     toast.add({ color: 'success', title: 'Manifest copied' })
   } catch {
-    toast.add({ color: 'error', title: 'Could not copy the manifest' })
+    toast.add({
+      color: 'error',
+      title: 'Could not copy the manifest',
+      duration: ERROR_TOAST_DURATION_MS,
+    })
   }
 }
 </script>
