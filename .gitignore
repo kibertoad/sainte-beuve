@@ -156,3 +156,6 @@ vite.config.ts.timestamp-*
 
 # JetBrains
 .idea/
+
+# Agent worktrees, each its own checkout
+.claude/worktrees/
