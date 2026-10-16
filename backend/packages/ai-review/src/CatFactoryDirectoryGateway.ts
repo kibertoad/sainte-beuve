@@ -1,5 +1,5 @@
 import { type DirectoryStore, DirectorySyncer, type SyncResult } from '@cat-factory/directory-sync'
-import { CatFactoryClient } from '@cat-factory/sdk'
+import { CatFactoryClient, CatFactoryValidationError } from '@cat-factory/sdk'
 import type { DirectoryReach } from '@sainte-beuve/contracts'
 import {
   type CatFactoryAccess,
@@ -93,12 +93,22 @@ export class CatFactoryDirectoryGateway implements RepositoryDirectoryGateway {
    * reach is what tells "no users" apart from "users this key may not read".
    */
   private async reportOf(result: SyncResult): Promise<DirectorySyncReport> {
-    const reach: DirectoryReach | null = result.reconciled
-      ? (await this.client.me.get()).workspaceIds === null
-        ? 'account'
-        : 'workspaces'
-      : null
+    const reach = result.reconciled ? await this.reach() : null
     return { cursor: result.cursor, reconciled: result.reconciled, reach }
+  }
+
+  /**
+   * Null when cat-factory will not say. `/api/v1/me` is workspace-scoped and refuses a
+   * key reaching several workspaces that names none, and a diagnostic must not fail the
+   * walk it reports on.
+   */
+  private async reach(): Promise<DirectoryReach | null> {
+    try {
+      return (await this.client.me.get()).workspaceIds === null ? 'account' : 'workspaces'
+    } catch (err) {
+      if (err instanceof CatFactoryValidationError) return null
+      throw err
+    }
   }
 
   private syncer(store: DirectoryMirrorStore, webhookSecret?: string): DirectorySyncer {

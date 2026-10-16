@@ -174,6 +174,22 @@ describe('CatFactoryDirectoryGateway', () => {
     expect(store.directory.get('group:ws_1')?.record).toEqual({ id: 'ws_1', name: 'Core' })
   })
 
+  it('finishes the walk with no reach when cat-factory wants a workspace named to say', async () => {
+    const answering = directoryAnswering()
+    const several: typeof globalThis.fetch = async (input, init) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname
+      if (path !== '/api/v1/me') return answering(input, init)
+      const refusal = {
+        code: 'validation',
+        message: 'This key reaches several workspaces',
+        details: { reason: 'workspace_required' },
+      }
+      return json({ error: refusal }, 422)
+    }
+    const report = await gateway(several).reconcile(memoryStore())
+    expect(report).toMatchObject({ reconciled: true, reach: null })
+  })
+
   it('reports no reach when it only followed the feed', async () => {
     const store = memoryStore()
     await store.setCursor(5)
