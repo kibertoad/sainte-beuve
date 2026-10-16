@@ -13,7 +13,7 @@ awaited read at setup buys nothing and costs the whole wait.
   until the answer was down. It is started and not awaited; the rail already
   renders around a null answer, and now the two reads overlap.
 - **Pages read lazily and say what they are waiting for.** `useAsyncData(...,
-{ lazy: true })` on the workspace, board, projects, reviewers and configuration
+  { lazy: true })` on the workspace, board, projects, reviewers and configuration
   screens, with a `LoadingCard` skeleton shaped like the rows that are coming.
   Awaited, Suspense held the PREVIOUS screen on screen until the list was down,
   validated and mounted, so clicking a destination looked like nothing had

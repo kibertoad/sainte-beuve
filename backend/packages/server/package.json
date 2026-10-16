@@ -40,12 +40,12 @@
     "@sainte-beuve/risk": "workspace:*",
     "@toad-contracts/core": "1.0.0",
     "@toad-contracts/hono": "1.0.0",
-    "hono": "^4.13.7"
+    "hono": "^4.13.13"
   },
   "devDependencies": {
     "@sainte-beuve/persistence-memory": "workspace:*",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.6.5",
     "typescript": "7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.4"
   }
 }

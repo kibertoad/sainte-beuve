@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
+import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin'
 import { defineConfig } from 'vitest/config'
 
 // The D1 conformance suite runs inside workerd, against a real D1 database.
@@ -22,4 +22,8 @@ export default defineConfig({
       miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
     }),
   ],
+  // Vitest 5's filesystem module cache breaks every workerd suite with "File path
+  // must be a file: URL". Fixed in @cloudflare/vitest-plugin 1.4.3
+  // (cloudflare/workers-sdk#16163); drop this once the plugin moves past it.
+  test: { fsModuleCache: false },
 })

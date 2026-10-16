@@ -3,7 +3,7 @@ import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 
 /** What a board row records for an author nobody could name. */
-export const UNKNOWN_AUTHOR = 'unknown'
+const UNKNOWN_AUTHOR = 'unknown'
 
 /**
  * The author as the host reports it, for a row about to be opened without one.

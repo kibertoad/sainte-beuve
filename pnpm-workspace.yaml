@@ -16,25 +16,25 @@ packages:
 # a null-instance read. Keep these in lockstep with the `vue` range in
 # frontend/app/package.json and with whatever Nuxt resolves on the next bump.
 overrides:
-  vue: 3.5.42
-  vue-router: 5.3.1
-  # `@cloudflare/workers-types` IS a workerd date (5.20260815.1 <-> workerd
-  # 1.20260815.1), so a second copy means part of the tree typechecks against a
+  vue: 3.5.44
+  vue-router: 5.4.0
+  # `@cloudflare/workers-types` IS a workerd date (5.20261012.1 <-> workerd
+  # 1.20261012.x), so a second copy means part of the tree typechecks against a
   # runtime the rest of it does not run. Optional-peer slots float it even with
   # every workspace declaration pinned exact: wrangler wherever a package
   # declares wrangler without the types beside it, and `autoInstallPeers` then
   # fills the slot from the newest published version. The date here is DERIVED
   # from the workerd we actually run, which is the one
-  # `@cloudflare/vitest-pool-workers` pins (wrangler 4.124.0 + miniflare
-  # 5.20260815.0-alpha). Move it with wrangler, never on its own.
-  '@cloudflare/workers-types': 5.20260815.1
+  # `@cloudflare/vitest-plugin` pins (wrangler 4.151.0 + miniflare
+  # 5.20261012.0-beta). Move it with wrangler, never on its own.
+  '@cloudflare/workers-types': 5.20261012.1
 
 # NO `wrangler` override, deliberately. The invariant is ONE wrangler (and
 # through it one workerd + one miniflare): the Worker suite runs inside the
 # pool's workerd and `wrangler deploy` ships wrangler's, so two copies mean the
 # runtime the tests prove is a different build from the runtime that ships. An
 # override is the wrong tool because it OVERRIDES
-# `@cloudflare/vitest-pool-workers`'s exact pin instead of TRACKING it. What
+# `@cloudflare/vitest-plugin`'s exact pin instead of TRACKING it. What
 # holds the invariant is an exact `wrangler` version in every package that
 # declares it, matching whatever the pool pins.
 

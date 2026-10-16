@@ -62,7 +62,7 @@ Three rules hold the shape:
   lands in the other in the same change.
 - **One facade over the source-control hosts.** GitHub and GitLab are two
   adapters behind one `VcsGateway`, resolved per host by `resolveVcs(container,
-provider)` from that host's own credential. Above the adapter there is no
+  provider)` from that host's own credential. Above the adapter there is no
   branch on which host a project is on, and no field named after one: a person
   carries a HANDLE PER HOST rather than a `githubLogin`.
 
@@ -212,7 +212,7 @@ lists it. What that slice decided, in short:
   underlying `SchemaValidationError` carries a JSON blob of every issue and says
   nothing about where it came from; what reaches the screen is the route and the
   first few field paths (`GET /reviewers did not match its contract:
-reviewers.0.handles: ...`). The request side is checked first and separately,
+  reviewers.0.handles: ...`). The request side is checked first and separately,
   under `invalid_request`, so a value somebody typed is never reported as the route
   breaking its contract, and anything left under `contract_mismatch` is
   response-side by construction.

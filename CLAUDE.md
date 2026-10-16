@@ -72,21 +72,21 @@ disable.
 - The store suites are one shared list of cases run three ways: in Node for the
   in-memory store, in Node against PGlite for Postgres, and inside workerd
   against a migrated D1. Assert store behaviour there, not in a service suite.
-- The Worker suite runs inside workerd (`@cloudflare/vitest-pool-workers`) and stays
+- The Worker suite runs inside workerd (`@cloudflare/vitest-plugin`) and stays
   a smoke suite: it proves the bundle boots on the runtime it deploys to, nothing
   else. Behaviour belongs in the server suite.
 
 ## Dependency pins that are not preferences
 
-- **One wrangler, one workerd, one miniflare.** `@cloudflare/vitest-pool-workers`
-  pins wrangler exactly; every package that declares wrangler matches that pin. Two
-  copies mean the runtime the tests prove is a different build from the one that
-  ships.
+- **One wrangler, one workerd, one miniflare.** `@cloudflare/vitest-plugin` is
+  pinned exact and pins wrangler exactly; every package that declares wrangler
+  matches that pin. Two copies mean the runtime the tests prove is a different
+  build from the one that ships.
 - **`@cloudflare/workers-types` is a workerd date.** Its version is derived from the
   workerd we run, and it is pinned in `pnpm-workspace.yaml` because optional-peer
   slots would otherwise float it. Move it with wrangler, never on its own.
-- **Vitest stays on 4.x** while the Workers pool peers on `^4.1.0`. Move both
-  together.
+- **Vitest moves with the Workers plugin.** It is on 5.x, inside the plugin's
+  `vitest` peer range. Check that range before a Vitest major.
 - **Drizzle is pinned exact, on a 1.0 release candidate.** `drizzle-orm` and
   `drizzle-kit` move together, because the generated migrations and the runtime
   that applies them come from one release. Regenerate with

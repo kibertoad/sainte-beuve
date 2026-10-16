@@ -14,7 +14,7 @@ import { GITLAB_GRAPHQL_ROOT, gitlabRequest } from './client.js'
  */
 
 /** How many of the most recently updated merge requests one read looks at. */
-export const HISTORY_MERGE_REQUESTS = 100
+const HISTORY_MERGE_REQUESTS = 100
 
 const PAST_ACTIVITY_QUERY = `query PastActivity($fullPath: ID!, $updatedAfter: Time!) {
   project(fullPath: $fullPath) {

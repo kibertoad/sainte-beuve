@@ -31,13 +31,13 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/contracts": "^0.366.0",
+    "@cat-factory/contracts": "^0.372.0",
     "@toad-contracts/core": "1.0.0",
     "@toad-contracts/valibot": "1.0.0",
     "valibot": "^1.5.0"
   },
   "devDependencies": {
     "typescript": "7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.4"
   }
 }

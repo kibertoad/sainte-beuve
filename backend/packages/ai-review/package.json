@@ -31,14 +31,14 @@
     "test:run": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@cat-factory/directory-sync": "^0.2.1",
-    "@cat-factory/sdk": "^0.58.0",
+    "@cat-factory/directory-sync": "^0.2.2",
+    "@cat-factory/sdk": "^0.62.0",
     "@sainte-beuve/contracts": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.6.5",
     "typescript": "7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.4"
   }
 }

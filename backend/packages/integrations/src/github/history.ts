@@ -16,7 +16,7 @@ import { GITHUB_API_BASE_URL, githubRequest } from './client.js'
  */
 
 /** How many of the most recently updated pull requests one read looks at. GitHub's cap per page. */
-export const HISTORY_PULL_REQUESTS = 100
+const HISTORY_PULL_REQUESTS = 100
 
 /** How many verdicts one pull request contributes. More reviewers than this on one change is rare. */
 const HISTORY_REVIEWS_PER_PULL_REQUEST = 50

@@ -89,7 +89,7 @@ Breaking, in the honest direction:
 - On a `required` deployment, an account nobody registered is answered 403 at
   sign-in instead of becoming a member. People who have already signed in are
   unaffected; to go back to the old behaviour, `PATCH
-/api/v1/settings/orgs/current` with `{"enrolment":"open"}`.
+  /api/v1/settings/orgs/current` with `{"enrolment":"open"}`.
 - A pre-registered `admin` row is adopted as a `member` once the org has an admin
   who has signed in. Promote them afterwards, when you can see which account took
   the row.

@@ -2,7 +2,7 @@ import type { RepositoryCandidate, RepositoryLookup } from '@sainte-beuve/contra
 import { githubApiStatusOf } from './client.js'
 
 /** How many suggestions one lookup returns. A short list is what a form can show under a field. */
-export const LOOKUP_LIMIT = 10
+const LOOKUP_LIMIT = 10
 
 interface GitHubRepository {
   name: string

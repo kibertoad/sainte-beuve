@@ -30,7 +30,7 @@ export const SESSION_COOKIE = 'sb_session'
  * is that the caller is not yet anybody. It lives as long as the state it is
  * paired with. See `RoundTripState`.
  */
-export const FLOW_COOKIE = 'sb_flow'
+const FLOW_COOKIE = 'sb_flow'
 
 /**
  * Whether the SPA is on a different site from the API, decided by hostname.

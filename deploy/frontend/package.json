@@ -15,11 +15,11 @@
   },
   "dependencies": {
     "@sainte-beuve/app": "workspace:*",
-    "nuxt": "^4.5.2"
+    "nuxt": "^4.6.1"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vue-tsc": "^3.3.11",
-    "wrangler": "4.124.0"
+    "vue-tsc": "^3.3.13",
+    "wrangler": "4.151.0"
   }
 }

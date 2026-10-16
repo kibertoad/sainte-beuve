@@ -210,9 +210,9 @@ answer to issue their fetch; the shell only renders a name from it.
 **Fix.**
 
 - In the shell, `void auth.refresh()` or `useAsyncData('auth', ..., { lazy:
-true })`; the `whoami` computed already tolerates null.
+  true })`; the `whoami` computed already tolerates null.
 - On Configuration, reuse the auth state already held (`if (auth.state.value
-=== null) await auth.refresh()`).
+  === null) await auth.refresh()`).
 - `lazy: true` on the page reads, with a skeleton while `pending && !data`.
   `AiReviewPanel.vue:17-21` already does exactly this and says why.
 - `<link rel="preconnect">` to the API origin in `app.head` so the TLS
@@ -467,7 +467,7 @@ only `max`.
 - Node's default `keepAliveTimeout` is five seconds, shorter than the idle
   timeout of every common load balancer, which is the classic cause of
   sporadic 502s under keep-alive. `serverOptions: { keepAliveTimeout: 65_000,
-headersTimeout: 66_000 }` in the Node facade only; it is a transport concern
+  headersTimeout: 66_000 }` in the Node facade only; it is a transport concern
   the Worker has no equivalent of, so not a symmetry break.
 - Nothing bounds request bodies, so a POST buffers the whole body before
   validation. `bodyLimit` from `hono/body-limit` belongs in `createApp` so both
@@ -648,7 +648,7 @@ Worth recording so the next pass does not re-find it.
 - **Counters and claims are single atomic statements**: `adjustOutstanding` is
   an `UPDATE ... GREATEST(..., 0)` excluded from the upsert branch;
   `identities.link` and `orgs.create` are one `INSERT ... ON CONFLICT ...
-RETURNING`; `cancelScheduledForReview` is one multi-row upsert on Postgres
+  RETURNING`; `cancelScheduledForReview` is one multi-row upsert on Postgres
   and one `batch()` on D1.
 - **The tick cannot overlap on Node** (`oneAtATime`) and is detached with
   `waitUntil` on the Worker; passengers are isolated from nudges.

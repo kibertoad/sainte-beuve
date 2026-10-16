@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
+import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin'
 import { defineConfig } from 'vitest/config'
 
 // The Worker suite runs inside the real Workers runtime (workerd, the same engine
@@ -47,4 +47,8 @@ export default defineConfig({
       },
     }),
   ],
+  // Vitest 5's filesystem module cache breaks every workerd suite with "File path
+  // must be a file: URL". Fixed in @cloudflare/vitest-plugin 1.4.3
+  // (cloudflare/workers-sdk#16163); drop this once the plugin moves past it.
+  test: { fsModuleCache: false },
 })

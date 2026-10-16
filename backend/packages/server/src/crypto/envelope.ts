@@ -16,7 +16,7 @@ import { base64url, base64urlToBytes, SecretDecryptError } from '@sainte-beuve/k
  * function of it anyone can invert.
  */
 
-export const VERSION = 'v1'
+const VERSION = 'v1'
 export const SALT_BYTES = 16
 export const IV_BYTES = 12
 export const KEY_ID_BYTES = 8

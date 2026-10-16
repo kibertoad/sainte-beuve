@@ -33,7 +33,7 @@ when they open the workspace from the phone the Slack nudge arrived on.
   actions below, side by side again at `sm`. That is the workspace's three lists,
   the attention inbox, the board, the reviewer directory, the project registry
   and each AI-review finding — all of which had the same `items-start
-justify-between gap-4` and now have the same stacked form under it.
+  justify-between gap-4` and now have the same stacked form under it.
 - **A title is clamped to two lines rather than truncated to one.** A pull
   request title cut at one line on a 375px screen is two words and an ellipsis,
   which is not enough to tell two of somebody's own branches apart.

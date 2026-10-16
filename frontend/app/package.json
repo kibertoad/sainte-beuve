@@ -24,20 +24,20 @@
     "test:run": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@nuxt/ui": "^4.11.1",
+    "@nuxt/ui": "^4.11.3",
     "@sainte-beuve/contracts": "workspace:*",
     "@toad-contracts/core": "1.0.0",
     "@toad-contracts/frontend-http-client": "1.0.1",
     "valibot": "^1.5.0",
-    "vue": "3.5.42",
+    "vue": "3.5.44",
     "wretch": "^3.0.9"
   },
   "devDependencies": {
-    "happy-dom": "^20.14.0",
-    "nuxt": "^4.5.2",
+    "happy-dom": "^21.0.1",
+    "nuxt": "^4.6.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11",
-    "vue-tsc": "^3.3.11"
+    "vitest": "^5.0.4",
+    "vue-tsc": "^3.3.13"
   },
   "peerDependencies": {
     "nuxt": "^4.5.2"
