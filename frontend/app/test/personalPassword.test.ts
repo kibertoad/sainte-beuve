@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   PERSONAL_PASSWORD_EXPIRY_BUFFER_MS,
   PERSONAL_PASSWORD_TTL_MS,
@@ -6,8 +6,8 @@ import {
   forgetCachedPassword,
   personalPasswordCacheKey,
   readCachedPassword,
-  sendsPersonalPassword,
 } from '../app/utils/personalPassword'
+import { createSainteBeuveApi } from '../app/utils/sainteBeuveApi'
 
 function memoryStorage(): Storage {
   const items = new Map<string, string>()
@@ -60,15 +60,36 @@ describe('the cached personal password', () => {
 })
 
 describe('which calls carry it', () => {
-  it('rides only on the calls that file or answer a review', () => {
-    const api = 'http://localhost:8788/api/v1'
-    expect(sendsPersonalPassword(`${api}/ai-review`, 'POST')).toBe(true)
-    expect(sendsPersonalPassword(`${api}/reviews/r-1/ai-review`, 'POST')).toBe(true)
-    expect(sendsPersonalPassword(`${api}/ai-review/runs/run-1/resolve`, 'POST')).toBe(true)
-    expect(sendsPersonalPassword(`${api}/my-pull-requests/resolve-conflicts`, 'POST')).toBe(true)
-    expect(sendsPersonalPassword(`${api}/reviews/r-1/risk-assessment`, 'POST')).toBe(true)
-    expect(sendsPersonalPassword(`${api}/risk-assessments`, 'GET')).toBe(false)
-    expect(sendsPersonalPassword(`${api}/reviews/r-1/ai-review`, 'GET')).toBe(false)
-    expect(sendsPersonalPassword(`${api}/reviews`, 'POST')).toBe(false)
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('rides only on the calls that file or answer a review', async () => {
+    const sent: { url: string; password: string | null }[] = []
+    vi.stubGlobal('fetch', (url: string, init: RequestInit = {}): Promise<Response> => {
+      sent.push({
+        url: String(url),
+        password: new Headers(init.headers).get('x-personal-password'),
+      })
+      return Promise.resolve(new Response(null, { status: 500 }))
+    })
+    const api = createSainteBeuveApi('http://localhost:8788', { personalPassword: () => 'pw' })
+
+    const calls = [
+      () => api.requestAiReview('r-1'),
+      () => api.requestRiskAssessment('r-1'),
+      () => api.resumeAiReview('run-1'),
+      () => api.getRiskAssessment('r-1'),
+      () => api.listReviews(),
+    ]
+    for (const call of calls) await expect(call()).rejects.toThrow()
+
+    expect(sent.map((call) => [new URL(call.url).pathname, call.password])).toEqual([
+      ['/api/v1/reviews/r-1/ai-review', 'pw'],
+      ['/api/v1/reviews/r-1/risk-assessment', 'pw'],
+      ['/api/v1/ai-review/runs/run-1/resume', 'pw'],
+      ['/api/v1/reviews/r-1/risk-assessment', null],
+      ['/api/v1/reviews', null],
+    ])
   })
 })

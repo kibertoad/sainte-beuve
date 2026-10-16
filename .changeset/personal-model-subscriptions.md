@@ -12,6 +12,7 @@ card), and their personal password travels as `X-Personal-Password` on the calls
 answer a review, never stored. The org learns once, from cat-factory refusing its own key with
 `individual_model_unsupported` or `providers_unconfigured`, that its reviews need this; after that
 they go straight through the person's key, and a call missing the key or the password is refused
-before reaching cat-factory with `details.reason: cat_factory_personal_route`. The SPA prompts for
-what is missing, caches the password for 40 hours, and retries. Saving the cat-factory settings
+before reaching cat-factory with `details.reason: cat_factory_personal_route`, as is a filing
+that acts for nobody (a label, a bot command, Slack, a policy on the clock). The SPA prompts for
+what is missing, caches the password for 40 hours (forgotten on sign-out), and retries. Saving the cat-factory settings
 forgets what was learned; moving to another instance drops every personal key.

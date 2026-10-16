@@ -428,16 +428,21 @@ until cat-factory refuses it with `individual_model_unsupported` or
 saved, every call that files or answers a review goes through the acting
 person's own key and password. A call missing either is refused here, before it
 reaches cat-factory, with `details.reason: cat_factory_personal_route` and what
-is missing in `need`, and the SPA asks for it and makes the call again. Polls,
-the clock, webhooks and Slack stay on the org's key: reading a run needs no
-password.
+is missing in `need`, and the SPA asks for it and makes the call again. The
+person's credential is checked last, after every other refusal the call can
+meet, so nobody types a password to be told the pull request is not theirs.
+
+Polls stay on the org's key, since reading a run needs no password. A filing
+that acts for nobody (the AI-review label, a bot command, Slack, a risk policy
+on the clock) is refused here once the route is learned: cat-factory would
+accept its task before refusing to start it, and leave one behind each time.
 
 The password is never stored here. The SPA keeps it in `localStorage` for 40
 hours, keyed by backend and person, stops sending it with 8 hours left so a run
 never outlives it, and sends it only on the calls that file or answer a review
-(a risk assessment among them, since a policy can require an AI review).
-The server reads it off that request, passes it to cat-factory in the same
-header, and writes it nowhere.
+(`personalPasswordContracts`; a risk assessment is among them, since a policy can
+require an AI review). Signing out forgets it. The server reads it off that
+request, passes it to cat-factory in the same header, and writes it nowhere.
 
 ### Repositories come from cat-factory
 

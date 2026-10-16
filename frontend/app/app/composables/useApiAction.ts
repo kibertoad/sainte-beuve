@@ -20,6 +20,7 @@ export interface ApiActionOptions {
 
 export function useApiAction(options: ApiActionOptions = {}) {
   const { showError } = useErrorToast()
+  const prompt = usePersonalRoutePrompt()
   /** Which key is mid-flight, for a per-row spinner. Null when nothing is. */
   const busy = ref<string | null>(null)
 
@@ -30,15 +31,32 @@ export function useApiAction(options: ApiActionOptions = {}) {
   ): Promise<boolean> {
     busy.value = key
     try {
+      return await attempt(action, failure, key)
+    } finally {
+      busy.value = null
+    }
+  }
+
+  /**
+   * One try. A refusal the person fixes in the personal-route prompt is tried
+   * again inside the same `run`, so the caller's own handling of the answer
+   * still runs on the retry that worked.
+   */
+  async function attempt(
+    action: () => Promise<unknown>,
+    failure: string,
+    key: string | null,
+  ): Promise<boolean> {
+    try {
       await action()
       await options.refresh?.()
       return true
     } catch (err) {
+      const supplied = prompt.supply(err)
+      if (supplied !== null) return (await supplied) && attempt(action, failure, key)
       const retry = () => void run(action, failure, key)
       showError(failure, err, (options.describe ?? apiErrorMessage)(err), retry)
       return false
-    } finally {
-      busy.value = null
     }
   }
 

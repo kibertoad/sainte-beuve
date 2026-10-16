@@ -4,14 +4,14 @@ import { rememberPersonalPassword } from '../utils/personalPassword'
 // What a review on the person's own subscription still needs from them, asked
 // once and then remembered: the password for 40 hours in this browser, the key
 // on the server. Mounted once, in the shell; `usePersonalRoutePrompt` opens it.
-const { pending, close } = usePersonalRoutePrompt()
+const { pending, settle } = usePersonalRoutePrompt()
 const apiBase = useRuntimeConfig().public.apiBase
 const password = ref('')
 
 const open = computed({
   get: () => pending.value !== null,
   set: (value: boolean) => {
-    if (!value) close()
+    if (!value) settle(false)
   },
 })
 
@@ -27,17 +27,11 @@ const TITLES = {
 
 const title = computed(() => (pending.value === null ? '' : TITLES[pending.value.need]))
 
-function again(): void {
-  const retry = pending.value?.retry ?? null
-  close()
-  retry?.()
-}
-
 function submit(): void {
   if (password.value.length === 0) return
   rememberPersonalPassword(apiBase, password.value)
   password.value = ''
-  again()
+  settle(true)
 }
 </script>
 
@@ -49,7 +43,7 @@ function submit(): void {
           AI reviews here run on a personal model subscription, which cat-factory opens only through
           a key you minted as yourself.
         </p>
-        <CatFactoryPersonalKeyCard @saved="again()" />
+        <CatFactoryPersonalKeyCard @saved="settle(true)" />
       </div>
       <form
         v-else-if="pending?.need === 'password' || pending?.need === 'wrong_password'"
@@ -70,7 +64,7 @@ function submit(): void {
           placeholder="Personal password"
         />
         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <UButton variant="ghost" color="neutral" class="justify-center" @click="close()">
+          <UButton variant="ghost" color="neutral" class="justify-center" @click="settle(false)">
             Cancel
           </UButton>
           <UButton type="submit" class="justify-center" :disabled="password.length === 0">

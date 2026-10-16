@@ -1,3 +1,4 @@
+import { forgetPersonalPassword } from '../utils/personalPassword'
 import type { AuthState } from '@sainte-beuve/contracts'
 
 /**
@@ -106,8 +107,12 @@ export function useAuthState() {
    * The in-flight promise goes with it: a read started before the sign-out is
    * answering the old question, so a caller arriving after must not be handed
    * it. The generation above is what stops that read writing its answer back.
+   *
+   * The cached cat-factory personal password goes too, while the browser still
+   * knows whose it is: a shared machine keeps none after a sign-out.
    */
   function invalidate(): void {
+    forgetPersonalPassword(api.apiBase)
     generation += 1
     inFlight = null
     state.value = null

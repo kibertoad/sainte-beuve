@@ -1,11 +1,12 @@
-import { PERSONAL_PASSWORD_HEADER } from '@sainte-beuve/contracts'
-import type { ConfiguredMiddleware } from 'wretch'
+import { PERSONAL_PASSWORD_HEADER, personalPasswordContracts } from '@sainte-beuve/contracts'
+import type { ApiContract } from '@toad-contracts/core'
+import type { Wretch } from 'wretch'
 
 /**
  * The cat-factory personal password, cached in this browser the way cat-factory's
  * own app caches it: so a person running reviews on their subscription is not
  * asked on every one. It is sent only as a header on the calls that file or
- * answer a review, and the server stores it nowhere.
+ * answer a review (`personalPasswordContracts`), and the server stores it nowhere.
  */
 
 /** How long a typed password is kept, as cat-factory keeps it. */
@@ -17,16 +18,6 @@ export const PERSONAL_PASSWORD_TTL_MS = 40 * 60 * 60 * 1000
  * for twelve hours).
  */
 export const PERSONAL_PASSWORD_EXPIRY_BUFFER_MS = 8 * 60 * 60 * 1000
-
-/**
- * The calls that file or answer a review, which are the only ones the password rides on.
- * A risk assessment is one: a policy that requires an AI review files it.
- */
-const ACTING_PATH = /\/(ai-review|resolve-conflicts|risk-assessment)(\/|$)/
-
-export function sendsPersonalPassword(url: string, method: string): boolean {
-  return method.toUpperCase() !== 'GET' && ACTING_PATH.test(new URL(url, 'http://local').pathname)
-}
 
 /** FNV-1a, so the key names the backend without spelling its URL out in storage. */
 function fnv1a(text: string): string {
@@ -118,19 +109,13 @@ export function forgetPersonalPassword(apiBase: string): void {
     forgetCachedPassword(storage, personalPasswordCacheKey(apiBase, actingViewer))
 }
 
-/**
- * The cached cat-factory personal password, as a header on the calls that file or
- * answer a review, read at send time so a password typed a moment ago is on the
- * retry. No other call carries it.
- */
+/** The client for one call: carrying the cached password on the routes that take it. */
 export function withPersonalPassword(
+  client: Wretch,
+  contract: ApiContract,
   password: (() => string | null) | undefined,
-): ConfiguredMiddleware {
-  return (next) => (url, opts) => {
-    const value = password?.() ?? null
-    if (value === null || !sendsPersonalPassword(url, opts.method ?? 'GET')) return next(url, opts)
-    const headers = new Headers(opts.headers as HeadersInit | undefined)
-    headers.set(PERSONAL_PASSWORD_HEADER, value)
-    return next(url, { ...opts, headers })
-  }
+): Wretch {
+  if (!personalPasswordContracts.has(contract)) return client
+  const value = password?.() ?? null
+  return value === null ? client : client.headers({ [PERSONAL_PASSWORD_HEADER]: value })
 }

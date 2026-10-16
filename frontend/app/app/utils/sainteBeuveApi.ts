@@ -227,9 +227,7 @@ export function createSainteBeuveApi(
   // folds `APP_BASE_URL`'s origin into its CORS list rather than leaving a
   // hosted deployment on the wildcard it ships (see `withAppOrigin` in
   // @sainte-beuve/server).
-  const client = wretch(`${apiBase}${API_PREFIX}`)
-    .options({ credentials: 'include' })
-    .middlewares([withPersonalPassword(options.personalPassword)])
+  const client = wretch(`${apiBase}${API_PREFIX}`).options({ credentials: 'include' })
 
   function call<TContract extends ApiContract>(
     contract: TContract,
@@ -251,7 +249,11 @@ export function createSainteBeuveApi(
 
     let outcome: Awaited<ReturnType<typeof sendByApiContract<TContract, false, true>>>
     try {
-      outcome = await sendByApiContract<TContract, false, true>(client, contract, params)
+      outcome = await sendByApiContract<TContract, false, true>(
+        withPersonalPassword(client, contract, options.personalPassword),
+        contract,
+        params,
+      )
     } catch (err) {
       throw toClientError(contract, err)
     }
