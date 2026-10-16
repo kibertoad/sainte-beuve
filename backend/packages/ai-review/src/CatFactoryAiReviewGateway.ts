@@ -162,6 +162,9 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
         title: `Review ${ref}: ${input.title}`.slice(0, 200),
         description: brief.slice(0, 2000),
         taskType: 'review',
+        // What cat-factory reviews: its input gate refuses a review task whose fields name no
+        // pull request, whatever the description says.
+        fields: { prNumber: input.pullRequest.number, prUrl: input.pullRequest.url },
       },
       pipelineId: this.options.pipelineId,
     })

@@ -309,6 +309,7 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
       '/api/v1/services/svc-1/tasks',
       '/api/v1/tasks/task-1/start',
     ])
+    expect(calls[1]?.body).toMatchObject({ fields: { prNumber: 7, prUrl: PULL_REQUEST.url } })
   })
 
   it('files under the service backing the repository, in the workspace that links it', async () => {
