@@ -1,6 +1,7 @@
 import type { MyPullRequests, OpenPullRequest, Project } from '@sainte-beuve/contracts'
 import type { VcsIdentityGateway } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
+import { SNAPSHOT_MAX_AGE } from '../src/integrations/hostSnapshots.js'
 import {
   buildHarness,
   cookieJar,
@@ -96,6 +97,8 @@ describe('listing', () => {
     await list(harness, '?owner=ACME')
     expect(vcs.listed.map((project) => project.repo)).toStrictEqual(['api', 'web'])
     vcs.listed.length = 0
+    // Past the kept snapshot, so the second listing asks the host again.
+    harness.clock.advance(SNAPSHOT_MAX_AGE.openPullRequests)
     await list(harness, `?projectId=${api.id}`)
     expect(vcs.listed.map((project) => project.repo)).toStrictEqual(['api'])
   })

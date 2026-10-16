@@ -26,6 +26,7 @@ import {
 import { SqlExternalDirectoryRepository } from './external-directory.js'
 import { SqlRiskAssessmentRepository } from './risk-assessments.js'
 import { SqlExternalRepositoryRepository } from './external-repositories.js'
+import { SqlHostSnapshotRepository } from './host-snapshots.js'
 import { SqlIntegrationConfigRepository, SqlIntegrationTokenRepository } from './settings.js'
 import { SqlTeamRepository } from './teams.js'
 import { SqlIdentityRepository, SqlProjectRepository } from './workspace.js'
@@ -75,6 +76,7 @@ class D1Persistence implements PersistenceProvider {
       externalRepositories: new SqlExternalRepositoryRepository(db, orgId),
       externalDirectory: new SqlExternalDirectoryRepository(db, orgId),
       riskAssessments: new SqlRiskAssessmentRepository(db, orgId),
+      hostSnapshots: new SqlHostSnapshotRepository(db, orgId),
     }
   }
 

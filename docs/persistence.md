@@ -54,6 +54,7 @@ org gets there — no port method takes one, and no service passes one.
 | `external_repositories` | `(org_id, source, key)`       | `seq`                                                                                                                           |
 | `external_directory`    | `(org_id, source, kind, key)` | `seq`                                                                                                                           |
 | `risk_assessments`      | `(org_id, review_id)`         | `status`, `updated_at`                                                                                                          |
+| `host_snapshots`        | `(org_id, source, key)`       | `fetched_at` (a kept host read; see [Kept host reads](#kept-host-reads))                                                        |
 | `identities`            | `(org_id, provider, subject)` | `reviewer_id`                                                                                                                   |
 | `attention_requests`    | `(org_id, id)`                | `status`, `created_at`, `revision` (moved on by every write, so an answer writes only over the row it read)                     |
 | `review_commitments`    | `(org_id, id)`                | `reviewer_id`, `pull_request_key`, `created_at`                                                                                 |
@@ -158,6 +159,28 @@ it and the rest skip; in memory it is a check-and-set. The payload is written
 whole rather than edited in place, because the status is a column AND a field of
 the payload, and `jsonb_set`/`json_set` is the dialect branch these two packages
 exist not to have.
+
+## Kept host reads
+
+`host_snapshots` holds what the screens read from GitHub and GitLab, so a burst
+of page loads asks the host once. A row is one raw host read, kept before any
+viewer or filter is applied, so every user and every screen in the org shares
+it:
+
+| Key                       | Read                                         | Kept for |
+| ------------------------- | -------------------------------------------- | -------- |
+| `open-pulls:owner/repo`   | a repository's open pull requests            | 2 min    |
+| `open-reviews:owner/repo` | who reviewed each of them                    | 5 min    |
+| `activity:owner/repo`     | who reviewed and authored in the window      | 1 h      |
+| `status:owner/repo#n`     | one pull request's approval and mergeability | 2 min    |
+| `search:role:handle`      | a host search for one person in one role     | 3 min    |
+
+`readThroughSnapshot` in `@sainte-beuve/server` serves a row while it is
+younger than its age, reads the host again when it is older, and serves the
+older row when that read fails, so a rate-limited host leaves the screens on
+older data instead of on an error. A row that no longer decodes against its
+schema in `@sainte-beuve/contracts` is a miss. Merging, risk assessment and the
+reminder clock read the host directly, because they act on what they read.
 
 ## Migrations
 

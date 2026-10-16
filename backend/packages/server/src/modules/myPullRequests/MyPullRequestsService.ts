@@ -8,7 +8,11 @@ import type {
   PullRequestStatus,
   Viewer,
 } from '@sainte-beuve/contracts'
-import { MY_PULL_REQUESTS_LIMIT } from '@sainte-beuve/contracts'
+import {
+  hostSnapshotSchemas,
+  MY_PULL_REQUESTS_LIMIT,
+  snapshotDecoder,
+} from '@sainte-beuve/contracts'
 import { getErrorMessage, type VcsGateway } from '@sainte-beuve/kernel'
 import {
   matchesStatusFilter,
@@ -19,6 +23,7 @@ import {
 } from '@sainte-beuve/reviewers'
 import { mapWithConcurrency } from '../../concurrency.js'
 import type { AppContainer } from '../../container.js'
+import { readThroughSnapshot, SNAPSHOT_MAX_AGE } from '../../integrations/hostSnapshots.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
@@ -33,6 +38,8 @@ import { type MergeContext, mergeContextOf, toMyPullRequest } from './mergeConte
  * learn the awaiting filter is empty.
  */
 const STATUS_READ_LIMIT = 30
+
+const decodePullRequestStatus = snapshotDecoder(hostSnapshotSchemas.pullRequestStatus)
 
 const STATUS_CONCURRENCY = 5
 
@@ -171,13 +178,33 @@ export class MyPullRequestsService {
     })
   }
 
+  /** Kept while the pull request has not moved: a kept status from an older update is a miss. */
+  private async statusOf(gateway: VcsGateway, pr: OpenPullRequest): Promise<PullRequestStatus> {
+    const { provider, owner, repo, number } = pr.pullRequest
+    const { updatedAt } = pr
+    const read = await readThroughSnapshot(this.container, {
+      source: provider,
+      key: `status:${owner.toLowerCase()}/${repo.toLowerCase()}#${number}`,
+      maxAgeMs: SNAPSHOT_MAX_AGE.pullRequestStatus,
+      decode: (value) => {
+        const kept = decodePullRequestStatus(value)
+        return kept?.updatedAt === updatedAt ? kept : null
+      },
+      fetch: async () => ({
+        updatedAt,
+        status: await gateway.pullRequestStatus({ provider, owner, repo, number }),
+      }),
+    })
+    return read.status
+  }
+
   private async readStatus(candidate: Candidate): Promise<StatusRead> {
     const { gateway } = candidate
     if (gateway === null) return { status: null, error: 'no credential for this host' }
-    const { provider, owner, repo, number } = candidate.pullRequest.pullRequest
+    const { owner, repo, number } = candidate.pullRequest.pullRequest
     try {
       return {
-        status: await gateway.pullRequestStatus({ provider, owner, repo, number }),
+        status: await this.statusOf(gateway, candidate.pullRequest),
         error: null,
       }
     } catch (err) {

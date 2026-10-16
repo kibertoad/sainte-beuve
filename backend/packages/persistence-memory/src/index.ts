@@ -5,6 +5,7 @@ export { InMemoryApiKeyRepository, InMemorySessionRepository } from './auth-stor
 export { InMemoryIntegrationConfigRepository } from './config-stores.js'
 export { InMemoryExternalDirectoryRepository } from './external-directory.js'
 export { InMemoryExternalRepositoryRepository } from './external-repositories.js'
+export { InMemoryHostSnapshotRepository } from './host-snapshots.js'
 export { InMemoryOrgRepository } from './orgs.js'
 export { createInMemoryPersistence } from './provider.js'
 export { InMemoryRiskAssessmentRepository } from './risk-assessments.js'

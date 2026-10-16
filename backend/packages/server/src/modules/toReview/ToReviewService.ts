@@ -1,5 +1,10 @@
 import type { PullRequestsToReview, Reviewer, ToReviewQuery } from '@sainte-beuve/contracts'
-import { handleOf, MAX_PULL_REQUESTS_TO_REVIEW } from '@sainte-beuve/contracts'
+import {
+  handleOf,
+  hostSnapshotSchemas,
+  MAX_PULL_REQUESTS_TO_REVIEW,
+  snapshotDecoder,
+} from '@sainte-beuve/contracts'
 import type { AuthorTally, VcsGateway } from '@sainte-beuve/kernel'
 import {
   isDependencyBot,
@@ -11,11 +16,18 @@ import {
   type RepositoryToReview,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { mapWithConcurrency } from '../../concurrency.js'
+import { readThroughSnapshot, SNAPSHOT_MAX_AGE } from '../../integrations/hostSnapshots.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
 import { readRepositoryActivity } from '../reviewers/pastReviews.js'
-import { gatewaysByProvider, type ProjectRead, sweepProjects } from '../workspace/sweep.js'
+import {
+  gatewaysByProvider,
+  HOST_READ_CONCURRENCY,
+  type ProjectRead,
+  sweepProjects,
+} from '../workspace/sweep.js'
 
 /**
  * PRs to review: the open pull requests in the linked repositories the viewer
@@ -48,13 +60,11 @@ export class ToReviewService {
       candidates.map((read) => read.project),
     )
     const [repositoriesToReview, commitments] = await Promise.all([
-      Promise.all(
-        candidates.map((read) =>
-          this.repositoryToReview(read, {
-            viewer: viewer.reviewer,
-            gateway: gateways.get(read.project.provider) ?? null,
-          }),
-        ),
+      mapWithConcurrency(candidates, HOST_READ_CONCURRENCY, (read) =>
+        this.repositoryToReview(read, {
+          viewer: viewer.reviewer,
+          gateway: gateways.get(read.project.provider) ?? null,
+        }),
       ),
       repositories.commitments.listByPullRequests(
         candidates.flatMap((read) => read.pullRequests.map((pr) => pr.pullRequest)),
@@ -99,7 +109,14 @@ export class ToReviewService {
   ): Promise<Map<number, OpenReviews>> {
     if (gateway === null) return new Map()
     try {
-      const reviews = await gateway.openPullRequestReviews(read.project)
+      const { project } = read
+      const reviews = await readThroughSnapshot(this.container, {
+        source: project.provider,
+        key: `open-reviews:${project.owner.toLowerCase()}/${project.repo.toLowerCase()}`,
+        maxAgeMs: SNAPSHOT_MAX_AGE.openReviews,
+        decode: decodeOpenReviews,
+        fetch: () => gateway.openPullRequestReviews(project),
+      })
       return new Map(reviews.map((entry) => [entry.number, entry]))
     } catch (err) {
       this.container.logger.warn(
@@ -110,6 +127,8 @@ export class ToReviewService {
     }
   }
 }
+
+const decodeOpenReviews = snapshotDecoder(hostSnapshotSchemas.openReviews)
 
 function withoutDependencyBots(read: ProjectRead): ProjectRead {
   return {

@@ -12,6 +12,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import type { EpochMs } from '../domain/types.js'
 import type { ApiKeyRepository, SessionRepository } from './auth.js'
+import type { HostSnapshotRepository } from './host-snapshots.js'
 import type { IntegrationConfigRepository } from './integration-config.js'
 import type { ExternalDirectoryRepository } from './external-directory.js'
 import type { ExternalRepositoryRepository } from './external-repositories.js'
@@ -295,4 +296,5 @@ export interface Repositories {
   externalRepositories: ExternalRepositoryRepository
   externalDirectory: ExternalDirectoryRepository
   riskAssessments: RiskAssessmentRepository
+  hostSnapshots: HostSnapshotRepository
 }

@@ -1,4 +1,4 @@
-import type { PullRequestRef } from '@sainte-beuve/contracts'
+import { hostSnapshotSchemas, type PullRequestRef, snapshotDecoder } from '@sainte-beuve/contracts'
 import type { AuthorTally, ProjectActivity, VcsGateway } from '@sainte-beuve/kernel'
 import {
   PAST_REVIEW_READ_LIMIT,
@@ -7,6 +7,7 @@ import {
   type ReviewHistory,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
+import { readThroughSnapshot, SNAPSHOT_MAX_AGE } from '../../integrations/hostSnapshots.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 
 type Repository = Pick<PullRequestRef, 'provider' | 'owner' | 'repo'>
@@ -57,6 +58,8 @@ export async function readRepositoryActivity(
   return { history: { board, host: host.reviewers }, authors: host.authors }
 }
 
+const decodeActivity = snapshotDecoder(hostSnapshotSchemas.activity)
+
 /**
  * The host's tallies, or none. Best-effort like every other host read on this
  * path: a host that is not configured, or is down, leaves the board's count to
@@ -73,7 +76,14 @@ async function hostActivity(
         ? ((await resolveVcs(container, ref.provider))?.gateway ?? null)
         : read.gateway
     if (gateway === null) return NO_ACTIVITY
-    return await gateway.pastActivity(ref, since)
+    // Keyed without `since`: the window is long next to how long a snapshot is kept.
+    return await readThroughSnapshot(container, {
+      source: ref.provider,
+      key: `activity:${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}`,
+      maxAgeMs: SNAPSHOT_MAX_AGE.activity,
+      decode: decodeActivity,
+      fetch: () => gateway.pastActivity(ref, since),
+    })
   } catch (err) {
     container.logger.warn(
       { err, provider: ref.provider, owner: ref.owner, repo: ref.repo },

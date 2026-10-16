@@ -26,6 +26,7 @@
 import { apiKeyCases, sessionCases } from './auth-cases.js'
 import { aiReviewCases, integrationTokenCases, reviewCases } from './board-cases.js'
 import { reviewHistoryCases } from './history-cases.js'
+import { hostSnapshotCases, hostSnapshotTenancyCases } from './host-snapshot-cases.js'
 import { reminderCases } from './reminder-cases.js'
 import type { ConformanceCase } from './case.js'
 import { attentionChangeCases } from './attention-change-cases.js'
@@ -63,6 +64,7 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
   ...externalRepositoryCases,
   ...externalDirectoryCases,
   ...riskAssessmentCases,
+  ...hostSnapshotCases,
 ]
 
 /**
@@ -77,6 +79,7 @@ export const tenancyConformanceCases: readonly TenancyCase[] = [
   ...externalRepositoryTenancyCases,
   ...externalDirectoryTenancyCases,
   ...riskAssessmentTenancyCases,
+  ...hostSnapshotTenancyCases,
   ...sessionCases,
   ...apiKeyCases,
 ]

@@ -1,11 +1,19 @@
-import type {
-  OpenPullRequest,
-  Project,
-  VcsProvider,
-  WorkspaceSource,
+import {
+  hostSnapshotSchemas,
+  type OpenPullRequest,
+  type Project,
+  snapshotDecoder,
+  type VcsProvider,
+  type WorkspaceSource,
 } from '@sainte-beuve/contracts'
 import { getErrorMessage, type VcsGateway } from '@sainte-beuve/kernel'
+import { mapWithConcurrency } from '../../concurrency.js'
 import type { AppContainer } from '../../container.js'
+import {
+  openPullRequestsKey,
+  readThroughSnapshot,
+  SNAPSHOT_MAX_AGE,
+} from '../../integrations/hostSnapshots.js'
 import type { VcsResolutions } from '../../integrations/resolve.js'
 
 /**
@@ -21,6 +29,11 @@ import type { VcsResolutions } from '../../integrations/resolve.js'
 export const NO_CREDENTIAL =
   'no credential for this host: connect it on the Configuration screen, or set its token on the deployment'
 
+/** Repositories read at once. GitHub's secondary rate limit punishes a burst, not a total. */
+export const HOST_READ_CONCURRENCY = 4
+
+export const decodeOpenPullRequests = snapshotDecoder(hostSnapshotSchemas.openPullRequests)
+
 export interface ProjectRead {
   project: Project
   pullRequests: OpenPullRequest[]
@@ -33,10 +46,8 @@ export async function sweepProjects(
   projects: readonly Project[],
 ): Promise<ProjectRead[]> {
   const gateways = await gatewaysByProvider(resolutions, projects)
-  return Promise.all(
-    projects.map((project) =>
-      readProject(container, project, gateways.get(project.provider) ?? null),
-    ),
+  return mapWithConcurrency(projects, HOST_READ_CONCURRENCY, (project) =>
+    readProject(container, project, gateways.get(project.provider) ?? null),
   )
 }
 
@@ -69,7 +80,13 @@ async function readProject(
     return { project, pullRequests: [], source: sourceOf(project, NO_CREDENTIAL) }
   }
   try {
-    const pullRequests = await gateway.listOpenPullRequests(project)
+    const pullRequests = await readThroughSnapshot(container, {
+      source: project.provider,
+      key: openPullRequestsKey(project),
+      maxAgeMs: SNAPSHOT_MAX_AGE.openPullRequests,
+      decode: decodeOpenPullRequests,
+      fetch: () => gateway.listOpenPullRequests(project),
+    })
     return { project, pullRequests, source: sourceOf(project) }
   } catch (err) {
     container.logger.warn(

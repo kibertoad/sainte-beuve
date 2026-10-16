@@ -2,7 +2,9 @@ import type { HostSearch, OpenPullRequest, VcsProvider, Viewer } from '@sainte-b
 import { handleOf, VCS_PROVIDERS } from '@sainte-beuve/contracts'
 import { getErrorMessage, type PullRequestSearchRole, type VcsGateway } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
+import { readThroughSnapshot, SNAPSHOT_MAX_AGE } from '../../integrations/hostSnapshots.js'
 import type { VcsResolutions } from '../../integrations/resolve.js'
+import { decodeOpenPullRequests } from './sweep.js'
 
 /**
  * The viewer's open pull requests in each role asked for, on each host they have
@@ -67,9 +69,15 @@ async function searchHost(
   try {
     const found = await Promise.all(
       roles.map(async (role) =>
-        (await gateway.searchOpenPullRequests({ username: handle, role })).map(
-          (pullRequest): SearchHit => ({ role, pullRequest, gateway }),
-        ),
+        (
+          await readThroughSnapshot(container, {
+            source: provider,
+            key: `search:${role}:${handle.toLowerCase()}`,
+            maxAgeMs: SNAPSHOT_MAX_AGE.search,
+            decode: decodeOpenPullRequests,
+            fetch: () => gateway.searchOpenPullRequests({ username: handle, role }),
+          })
+        ).map((pullRequest): SearchHit => ({ role, pullRequest, gateway })),
       ),
     )
     return { found: found.flat(), searches: [{ provider, ok: true, reason: null }] }
