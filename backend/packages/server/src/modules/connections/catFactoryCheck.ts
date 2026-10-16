@@ -37,7 +37,7 @@ const SCOPES_THAT_FILE_REVIEWS = new Set(['decide', 'admin'])
 /** What a key that was refused at authentication is told, by the probe's outcome. */
 const REFUSALS: Partial<Record<CatFactoryProbeReport['outcome'], string>> = {
   unauthorized: 'cat-factory does not accept this key',
-  refused: 'cat-factory refused the request',
+  refused: 'cat-factory refused a request',
 }
 
 /** The two ids the instance is asked to recognise, and how each is reported. */
@@ -80,7 +80,7 @@ const KEY_VERDICTS: Record<NonNullable<CheckedKey> | 'none', Verdict> = {
   entered: passed('Checking the key entered above.'),
   stored: passed('Checking the stored key.'),
   elsewhere: failed(
-    'The stored key is only sent to the saved base URL. Paste the key for this one above to check it.',
+    'The stored key is only sent to the saved API URL. Paste the key for this one above to check it.',
   ),
   none: failed('There is no key to check with: paste one, or store one first.'),
 }
