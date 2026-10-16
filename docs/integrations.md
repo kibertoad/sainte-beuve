@@ -434,7 +434,8 @@ password.
 
 The password is never stored here. The SPA keeps it in `localStorage` for 40
 hours, keyed by backend and person, stops sending it with 8 hours left so a run
-never outlives it, and sends it only on the calls that file or answer a review.
+never outlives it, and sends it only on the calls that file or answer a review
+(a risk assessment among them, since a policy can require an AI review).
 The server reads it off that request, passes it to cat-factory in the same
 header, and writes it nowhere.
 

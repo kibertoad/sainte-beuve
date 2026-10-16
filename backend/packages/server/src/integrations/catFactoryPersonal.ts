@@ -13,6 +13,7 @@ import {
   type CredentialSource,
   openCredential,
   type Resolved,
+  resolveAiReview,
 } from './resolve.js'
 
 /**
@@ -98,21 +99,17 @@ export interface ActingAiReview extends Resolved<AiReviewGateway, CredentialSour
 export async function resolveActingAiReview(
   container: AppContainer,
 ): Promise<ActingAiReview | null> {
-  const access = await catFactoryAccess(container)
-  if (access === null || container.gateways === null) return null
   const actor = container.catFactoryActor
-  const personal = actor !== null && (await personalRouteRequired(container))
+  const [access, required] = await Promise.all([
+    catFactoryAccess(container),
+    actor === null ? false : personalRouteRequired(container),
+  ])
+  if (access === null || container.gateways === null) return null
+  const personal = actor !== null && required
   const acting = personal ? await personalAccess(container, access, actor) : access
-  const { config, apiKey } = acting
-  const gateway = container.gateways.aiReview({
-    baseUrl: config.baseUrl,
-    appUrl: config.appUrl,
-    apiKey,
-    serviceId: config.serviceId,
-    pipelineId: config.pipelineId,
-    personalPassword: personal ? actor.personalPassword : null,
-  })
-  return { gateway, source: 'stored', personal }
+  const password = personal ? actor.personalPassword : null
+  const resolved = await resolveAiReview(container, Promise.resolve(acting), password)
+  return resolved === null ? null : { ...resolved, personal }
 }
 
 async function personalAccess(

@@ -66,6 +66,8 @@ describe('which calls carry it', () => {
     expect(sendsPersonalPassword(`${api}/reviews/r-1/ai-review`, 'POST')).toBe(true)
     expect(sendsPersonalPassword(`${api}/ai-review/runs/run-1/resolve`, 'POST')).toBe(true)
     expect(sendsPersonalPassword(`${api}/my-pull-requests/resolve-conflicts`, 'POST')).toBe(true)
+    expect(sendsPersonalPassword(`${api}/reviews/r-1/risk-assessment`, 'POST')).toBe(true)
+    expect(sendsPersonalPassword(`${api}/risk-assessments`, 'GET')).toBe(false)
     expect(sendsPersonalPassword(`${api}/reviews/r-1/ai-review`, 'GET')).toBe(false)
     expect(sendsPersonalPassword(`${api}/reviews`, 'POST')).toBe(false)
   })

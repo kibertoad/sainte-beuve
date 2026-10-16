@@ -42,10 +42,12 @@ interface Personal {
   targets: CatFactoryReviewTarget[]
   /** What the next filing throws, once; null files it. */
   refuse: Error | null
+  /** The scope the probe reports for a key being stored. */
+  scope: string
 }
 
 async function personalDeployment(): Promise<Personal> {
-  const state: Personal = { harness: null as never, targets: [], refuse: null }
+  const state: Personal = { harness: null as never, targets: [], refuse: null, scope: 'decide' }
   const stub = stubAiReview()
   const gateway: AiReviewGateway = {
     ...stub,
@@ -71,7 +73,7 @@ async function personalDeployment(): Promise<Personal> {
           probe: async () => ({
             outcome: 'ok',
             detail: null,
-            scope: 'decide',
+            scope: state.scope,
             services: [],
             pipelines: [],
           }),
@@ -199,6 +201,15 @@ describe('AI reviews on a personal subscription', () => {
     )
     expect(saved.status).toBe(200)
     expect((await personal(state)).personalRoute).toBe('not_known')
+  })
+
+  it('refuses to store a key that cannot answer a review', async () => {
+    state.scope = 'write'
+    const res = await state.harness.app.fetch(
+      put('/api/v1/me/cat-factory/key', { token: PERSONAL_KEY }),
+    )
+    expect(res.status).toBe(400)
+    expect((await personal(state)).key.stored).toBe(false)
   })
 
   it("drops everybody's personal key when the org moves to another instance", async () => {

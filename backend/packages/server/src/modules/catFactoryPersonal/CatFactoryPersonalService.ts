@@ -1,11 +1,12 @@
 import { type CatFactoryPersonal, personalCatFactoryKey } from '@sainte-beuve/contracts'
-import { UnavailableError, ValidationError } from '@sainte-beuve/kernel'
+import { type CatFactoryProbeReport, UnavailableError, ValidationError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { hintOfToken } from '../../crypto/tokens.js'
 import { requireCapability } from '../../http/errors.js'
 import { readCatFactoryConfig } from '../../integrations/catFactoryConfig.js'
 import { personalRouteRequired } from '../../integrations/catFactoryPersonal.js'
 import type { RequestPrincipal } from '../auth/principal.js'
+import { SCOPES_THAT_FILE_REVIEWS } from '../connections/catFactoryCheck.js'
 import { ViewerService } from '../identity/ViewerService.js'
 
 const NO_CIPHER =
@@ -14,12 +15,33 @@ const NOT_CONFIGURED =
   'cat-factory is not configured for this org yet: an admin sets its URL and key on the Configuration screen first'
 const NO_ADAPTERS = 'This deployment wired no cat-factory adapter, so a key cannot be checked'
 
+/** Refuse a key the probe says cannot file and answer a review. */
+function refuseUnusable(report: CatFactoryProbeReport, baseUrl: string): void {
+  const detail = report.detail ?? 'no detail'
+  if (report.outcome === 'unreachable') {
+    throw new UnavailableError(
+      `cat-factory could not be asked about this key at ${baseUrl}: ${detail}`,
+    )
+  }
+  if (report.outcome !== 'ok') {
+    throw new ValidationError(`cat-factory does not accept this key: ${detail}`)
+  }
+  if (report.scope !== null && !SCOPES_THAT_FILE_REVIEWS.has(report.scope)) {
+    throw new ValidationError(
+      `This key has the \`${report.scope}\` scope. AI reviews need \`decide\` or above: mint one with it in cat-factory`,
+    )
+  }
+}
+
 /**
  * The caller's own cat-factory key: the one cat-factory runs their model
  * subscription through. Stored sealed beside the org's credentials, under a key
  * named after the reviewer, and only ever sent to the org's cat-factory.
  */
 export class CatFactoryPersonalService {
+  /** Resolved once per request: in an open deployment it asks the source-control host. */
+  private keyIdResolution: Promise<ReturnType<typeof personalCatFactoryKey>> | null = null
+
   constructor(
     private readonly container: AppContainer,
     private readonly principal: RequestPrincipal,
@@ -27,7 +49,7 @@ export class CatFactoryPersonalService {
 
   async read(): Promise<CatFactoryPersonal> {
     const [key, required] = await Promise.all([
-      this.container.repositories.integrationTokens.get(await this.keyId()),
+      this.keyId().then((keyId) => this.container.repositories.integrationTokens.get(keyId)),
       personalRouteRequired(this.container),
     ])
     return {
@@ -42,16 +64,7 @@ export class CatFactoryPersonalService {
     const config = requireCapability(await readCatFactoryConfig(this.container), NOT_CONFIGURED)
     const factory = requireCapability(this.container.gateways, NO_ADAPTERS)
     const report = await factory.catFactoryProbe({ baseUrl: config.baseUrl, apiKey: token }).probe()
-    if (report.outcome === 'unauthorized') {
-      throw new ValidationError(
-        `cat-factory does not accept this key: ${report.detail ?? 'no detail'}`,
-      )
-    }
-    if (report.outcome === 'unreachable') {
-      throw new UnavailableError(
-        `cat-factory could not be asked about this key at ${config.baseUrl}: ${report.detail ?? 'no detail'}`,
-      )
-    }
+    refuseUnusable(report, config.baseUrl)
     const keyId = await this.keyId()
     await this.container.repositories.integrationTokens.put({
       integrationId: keyId,
@@ -70,8 +83,10 @@ export class CatFactoryPersonalService {
     return this.read()
   }
 
-  private async keyId(): Promise<ReturnType<typeof personalCatFactoryKey>> {
-    const viewer = await new ViewerService(this.container, this.principal).current()
-    return personalCatFactoryKey(viewer.reviewer.id)
+  private keyId(): Promise<ReturnType<typeof personalCatFactoryKey>> {
+    this.keyIdResolution ??= new ViewerService(this.container, this.principal)
+      .current()
+      .then((viewer) => personalCatFactoryKey(viewer.reviewer.id))
+    return this.keyIdResolution
   }
 }

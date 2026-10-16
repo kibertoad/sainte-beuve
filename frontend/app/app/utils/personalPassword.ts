@@ -18,8 +18,11 @@ export const PERSONAL_PASSWORD_TTL_MS = 40 * 60 * 60 * 1000
  */
 export const PERSONAL_PASSWORD_EXPIRY_BUFFER_MS = 8 * 60 * 60 * 1000
 
-/** The calls that file or answer a review, which are the only ones the password rides on. */
-const ACTING_PATH = /\/(ai-review|resolve-conflicts)(\/|$)/
+/**
+ * The calls that file or answer a review, which are the only ones the password rides on.
+ * A risk assessment is one: a policy that requires an AI review files it.
+ */
+const ACTING_PATH = /\/(ai-review|resolve-conflicts|risk-assessment)(\/|$)/
 
 export function sendsPersonalPassword(url: string, method: string): boolean {
   return method.toUpperCase() !== 'GET' && ACTING_PATH.test(new URL(url, 'http://local').pathname)

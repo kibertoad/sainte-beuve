@@ -32,7 +32,7 @@ const failed = (message: string): Verdict => ({ outcome: 'failed', message })
 const skipped = (message: string): Verdict => ({ outcome: 'skipped', message })
 
 /** cat-factory's scope ladder is inclusive, so a rung at or above `decide` can file a review. */
-const SCOPES_THAT_FILE_REVIEWS = new Set(['decide', 'admin'])
+export const SCOPES_THAT_FILE_REVIEWS: ReadonlySet<string> = new Set(['decide', 'admin'])
 
 /** What a key that was refused at authentication is told, by the probe's outcome. */
 const REFUSALS: Partial<Record<CatFactoryProbeReport['outcome'], string>> = {
