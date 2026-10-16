@@ -138,6 +138,8 @@ describe('AI reviews on a personal subscription', () => {
     expect(await personal(state)).toStrictEqual({
       personalRoute: 'required',
       key: { stored: false, hint: null },
+      mintKeyUrl:
+        'https://cat-factory.example.com/?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1',
     })
   })
 
@@ -214,6 +216,26 @@ describe('AI reviews on a personal subscription', () => {
     const read = await state.harness.app.fetch(get(`/api/v1/reviews/${opened.id}/ai-review`))
     expect(read.status).toBe(200)
     expect(state.targets.at(-1)).toMatchObject({ apiKey: ORG_KEY })
+  })
+
+  it('links the key form to the app URL when cat-factory serves it apart from the API', async () => {
+    await writeCatFactoryConfig(state.harness.container, {
+      baseUrl: 'https://cat-factory.example.com',
+      appUrl: 'https://app.cat-factory.example.com',
+      serviceId: 'svc-1',
+      pipelineId: null,
+    })
+    expect((await personal(state)).mintKeyUrl).toBe(
+      'https://app.cat-factory.example.com/?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1',
+    )
+  })
+
+  it('refuses a value that is not a cat-factory API key, such as the personal password', async () => {
+    const res = await state.harness.app.fetch(
+      put('/api/v1/me/cat-factory/key', { token: 'hunter2' }),
+    )
+    expect(res.status).toBe(400)
+    expect((await personal(state)).key.stored).toBe(false)
   })
 
   it('forgets the learned route when the cat-factory settings are saved', async () => {

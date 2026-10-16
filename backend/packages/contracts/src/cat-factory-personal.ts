@@ -63,12 +63,30 @@ export const catFactoryPersonalSchema = v.object({
     /** The last four characters of the stored key. Null when there is none. */
     hint: v.nullable(v.string()),
   }),
+  /**
+   * cat-factory's API tokens window, opened ready to mint the key this needs:
+   * `decide` scope, running as the person. Null while cat-factory is not configured.
+   */
+  mintKeyUrl: v.nullable(v.string()),
 })
 export type CatFactoryPersonal = v.InferOutput<typeof catFactoryPersonalSchema>
 
+/** What every cat-factory API key starts with, as cat-factory mints them. */
+const API_KEY_PREFIX = 'cf_live_'
+
 export const setCatFactoryPersonalKeySchema = v.object({
-  token: v.pipe(v.string(), v.trim(), v.minLength(8), v.maxLength(1024)),
+  token: v.pipe(
+    v.string(),
+    v.trim(),
+    v.startsWith(
+      API_KEY_PREFIX,
+      `A cat-factory API key starts with ${API_KEY_PREFIX}. Your personal password is not stored ` +
+        'here: it is asked for when a review needs it',
+    ),
+    v.maxLength(1024),
+  ),
 })
+
 export type SetCatFactoryPersonalKey = v.InferOutput<typeof setCatFactoryPersonalKeySchema>
 
 /** The store key one person's cat-factory key is held under, beside the org's credentials. */

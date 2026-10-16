@@ -34,6 +34,20 @@ function refuseUnusable(report: CatFactoryProbeReport, baseUrl: string): void {
 }
 
 /**
+ * cat-factory's deep link into its API tokens window, prefilled for the key a
+ * review on a personal subscription needs. Nothing is minted until the person
+ * confirms it there.
+ */
+function mintPersonalKeyUrl(appUrl: string): string {
+  const url = new URL(`${appUrl.replace(/\/+$/, '')}/`)
+  url.searchParams.set('newApiKey', '1')
+  url.searchParams.set('label', 'sainte-beuve')
+  url.searchParams.set('scope', 'decide')
+  url.searchParams.set('runsAsSelf', '1')
+  return url.toString()
+}
+
+/**
  * The caller's own cat-factory key: the one cat-factory runs their model
  * subscription through. Stored sealed beside the org's credentials, under a key
  * named after the reviewer, and only ever sent to the org's cat-factory.
@@ -48,13 +62,15 @@ export class CatFactoryPersonalService {
   ) {}
 
   async read(): Promise<CatFactoryPersonal> {
-    const [key, required] = await Promise.all([
+    const [key, required, config] = await Promise.all([
       this.keyId().then((keyId) => this.container.repositories.integrationTokens.get(keyId)),
       personalRouteRequired(this.container),
+      readCatFactoryConfig(this.container),
     ])
     return {
       personalRoute: required ? 'required' : 'not_known',
       key: { stored: key !== null, hint: key?.hint ?? null },
+      mintKeyUrl: config === null ? null : mintPersonalKeyUrl(config.appUrl ?? config.baseUrl),
     }
   }
 

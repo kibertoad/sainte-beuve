@@ -52,10 +52,10 @@ onMounted(load)
       <div class="min-w-0">
         <p class="font-medium">Your cat-factory key</p>
         <p class="text-sm text-muted">
-          For AI reviews on your own model subscription. Mint it in cat-factory under API access
-          tokens with "Runs as" set to yourself and the decide scope. Sealed before it is stored and
-          sent only to this org's cat-factory. Your personal password is asked for when a review
-          needs it, kept in this browser for 40 hours, and never stored here.
+          For AI reviews on your own model subscription. Mint it in cat-factory with "Runs as" set
+          to yourself and the decide scope: the button opens that form filled in. Sealed before it
+          is stored and sent only to this org's cat-factory. Your personal password is asked for
+          when a review needs it, kept in this browser for 40 hours, and never stored here.
         </p>
       </div>
       <UBadge
@@ -66,6 +66,16 @@ onMounted(load)
         {{ personal?.key.stored ? `Stored, ends ${personal.key.hint}` : 'Not stored' }}
       </UBadge>
     </div>
+    <UButton
+      v-if="personal?.mintKeyUrl"
+      :to="personal.mintKeyUrl"
+      target="_blank"
+      icon="i-lucide-external-link"
+      variant="soft"
+      class="justify-center mb-3 w-full sm:w-auto"
+    >
+      Mint a key in cat-factory
+    </UButton>
     <div class="flex flex-col gap-2 sm:flex-row">
       <UInput
         v-model="draft"
