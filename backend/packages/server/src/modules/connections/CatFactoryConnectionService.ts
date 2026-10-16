@@ -13,6 +13,7 @@ import {
   writeCatFactoryConfig,
 } from '../../integrations/catFactoryConfig.js'
 import { resolveCapabilities } from '../../integrations/capabilities.js'
+import { forgetPersonalKeys, forgetPersonalRoute } from '../../integrations/catFactoryPersonal.js'
 import {
   readRepositorySyncState,
   repositorySyncOf,
@@ -61,6 +62,8 @@ export class CatFactoryConnectionService {
       await new RepositorySyncService(this.container).forget()
       await this.dropKey()
     }
+    // New settings may be a new pipeline, so whether it needs a personal subscription is learned again.
+    await forgetPersonalRoute(this.container)
     await writeCatFactoryConfig(this.container, config)
     return this.read()
   }
@@ -77,6 +80,7 @@ export class CatFactoryConnectionService {
   async clear(): Promise<CatFactoryConnection> {
     await new RepositorySyncService(this.container).forget()
     await this.dropKey()
+    await forgetPersonalRoute(this.container)
     await clearCatFactoryConfig(this.container)
     return this.read()
   }
@@ -112,7 +116,9 @@ export class CatFactoryConnectionService {
     return { apiKey: null, key: held === null ? null : 'elsewhere' }
   }
 
+  /** The org's key and every person's: each is valid only on the instance that minted it. */
   private async dropKey(): Promise<void> {
     await this.container.repositories.integrationTokens.delete('cat-factory')
+    await forgetPersonalKeys(this.container)
   }
 }

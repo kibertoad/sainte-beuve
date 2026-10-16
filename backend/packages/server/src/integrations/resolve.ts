@@ -1,6 +1,7 @@
 import type {
   CatFactoryConfig,
   IntegrationId,
+  PersonalCatFactoryKey,
   VcsAuthMethod,
   RepositorySyncSecretKey,
   VcsOauthCredentialKey,
@@ -368,7 +369,7 @@ export async function repositoryDirectoryAccess(
  */
 export async function openCredential(
   container: AppContainer,
-  key: IntegrationId | VcsOauthCredentialKey | RepositorySyncSecretKey,
+  key: IntegrationId | VcsOauthCredentialKey | RepositorySyncSecretKey | PersonalCatFactoryKey,
 ): Promise<string | null> {
   const { secrets, repositories, logger } = container
   if (secrets === null) return null

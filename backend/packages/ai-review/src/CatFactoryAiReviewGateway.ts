@@ -40,6 +40,8 @@ export interface CatFactoryOptions {
    * cat-factory use it; null asks the instance, then falls back to `baseUrl`.
    */
   appUrl?: string | null
+  /** Sent as `X-Personal-Password` on every call, for a key bound to the person it acts for. */
+  personalPassword?: string | null
   /**
    * A cat-factory public-API key: `cf_live_<keyId>.<secret>`. It needs the
    * `decide` scope rather than just `write`: a `review` task PARKS on its
@@ -130,6 +132,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
       apiKey: options.apiKey,
       userAgent: 'sainte-beuve',
       ...(workspaceId === undefined ? {} : { workspaceId }),
+      ...(options.personalPassword ? { personalPassword: options.personalPassword } : {}),
       // Deadlined at the transport, with the shared rule every adapter that
       // calls a host we do not control now carries (`withDeadline` in the
       // kernel). This was the first path to need it and the reason it exists:

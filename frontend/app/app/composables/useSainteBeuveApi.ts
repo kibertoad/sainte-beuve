@@ -1,3 +1,4 @@
+import { currentPersonalPassword } from '../utils/personalPassword'
 import { createSainteBeuveApi, type SainteBeuveApi } from '../utils/sainteBeuveApi'
 
 /**
@@ -24,7 +25,9 @@ export function useSainteBeuveApi(): SainteBeuveApi {
   const existing = clients.get(apiBase)
   if (existing !== undefined) return existing
 
-  const created = createSainteBeuveApi(apiBase)
+  const created = createSainteBeuveApi(apiBase, {
+    personalPassword: () => currentPersonalPassword(apiBase),
+  })
   clients.set(apiBase, created)
   return created
 }

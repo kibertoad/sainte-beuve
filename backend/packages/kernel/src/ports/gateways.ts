@@ -188,6 +188,12 @@ export interface CatFactoryReviewTarget extends CatFactoryAccess {
   /** Where the instance serves its web app, for links into it. Null asks the instance. */
   appUrl: string | null
   /**
+   * The acting person's personal password, sent to cat-factory as
+   * `X-Personal-Password` so a run can use their model subscription. Only with
+   * a key that person minted as themselves; null for the org's key.
+   */
+  personalPassword?: string | null
+  /**
    * The service a review goes under when no service backs its repository in
    * cat-factory. Null files a review only under its repository's own service.
    */

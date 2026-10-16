@@ -9,6 +9,11 @@ import type { CredentialSource } from '../../integrations/resolve.js'
 import { admitAiReview, confirmAiReviewAdmission } from './admission.js'
 import { abandonIfOrphaned } from './orphans.js'
 import { NOT_POLLED, type PollOutcome, parkedAtFor, parksIn, replanForPark } from './park.js'
+import {
+  type ActingAiReview,
+  learningPersonalRoute,
+  resolveActingAiReview,
+} from '../../integrations/catFactoryPersonal.js'
 import { fileWithCatFactory } from './filing.js'
 import { curationFor } from './reconcile.js'
 
@@ -59,16 +64,17 @@ export class AiReviewService {
    * `VcsResolutions` does the same job for source control.
    */
   private resolution: Promise<Resolved<AiReviewGateway, CredentialSource> | null> | null = null
+  private actingResolution: Promise<ActingAiReview | null> | null = null
 
   constructor(private readonly container: AppContainer) {}
 
   async request(
     reviewId: string,
     instructions: string | null,
-    filing?: Resolved<AiReviewGateway, CredentialSource>,
+    filing?: ActingAiReview,
   ): Promise<AiReviewRun> {
     const { repositories, clock, ids } = this.container
-    const resolved = filing ?? (await this.gateway())
+    const resolved = filing ?? (await this.acting())
     const review = assertFound(
       await repositories.reviews.getById(reviewId),
       `No review request ${reviewId}`,
@@ -92,7 +98,9 @@ export class AiReviewService {
       completedAt: null,
     })
     await confirmAiReviewAdmission(this.container, run)
-    return fileWithCatFactory(this.container, resolved.gateway, run, { review, instructions })
+    return learningPersonalRoute(this.container, resolved, () =>
+      fileWithCatFactory(this.container, resolved.gateway, run, { review, instructions }),
+    )
   }
 
   /**
@@ -191,6 +199,16 @@ export class AiReviewService {
    */
   async gateway(): Promise<Resolved<AiReviewGateway, CredentialSource>> {
     return requireCapability(await this.resolved(), NOT_CONFIGURED)
+  }
+
+  /**
+   * The gateway a call that files or answers a review goes through: the acting
+   * person's own key where the org needs one. Polls stay on `gateway`, since a
+   * read needs no personal password.
+   */
+  async acting(): Promise<ActingAiReview> {
+    this.actingResolution ??= resolveActingAiReview(this.container)
+    return requireCapability(await this.actingResolution, NOT_CONFIGURED)
   }
 
   /** The resolution this request is working with. See {@link resolution}. */

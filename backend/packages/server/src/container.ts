@@ -26,6 +26,7 @@ import type {
 } from '@sainte-beuve/kernel'
 import { DEFAULT_REMINDER_POLICY, systemClock, uuidGenerator } from '@sainte-beuve/kernel'
 import type { SecretsWiring } from './crypto/WebCryptoSecretCipher.js'
+import type { RequestPrincipal } from './modules/auth/principal.js'
 import { InMemoryAttentionBus } from './realtime/InMemoryAttentionBus.js'
 import { scopedBus } from './realtime/scopedBus.js'
 import {
@@ -259,6 +260,18 @@ export interface AppContainer {
    * `callbackOrigin`.
    */
   apiBaseUrl: string | null
+  /**
+   * The person a request acts for in cat-factory, bound per request beside the
+   * org: what lets a review run on their own model subscription. Null on the
+   * clock, the webhooks and an API key, which act for nobody.
+   */
+  catFactoryActor: CatFactoryActor | null
+}
+
+/** A person, and the personal password their request carried, if any. Never stored. */
+export interface CatFactoryActor {
+  principal: RequestPrincipal
+  personalPassword: string | null
 }
 
 export interface ContainerOptions {
@@ -326,7 +339,16 @@ export function createContainer(options: ContainerOptions): AppContainer {
     auth: authWiring(options.auth),
     appBaseUrl: configured(options.appBaseUrl),
     apiBaseUrl: configured(options.apiBaseUrl),
+    catFactoryActor: null,
   }
+}
+
+/** The same container, acting for one person in cat-factory. */
+export function withCatFactoryActor(
+  container: AppContainer,
+  catFactoryActor: CatFactoryActor | null,
+): AppContainer {
+  return { ...container, catFactoryActor }
 }
 
 /**

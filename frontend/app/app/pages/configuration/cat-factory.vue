@@ -86,6 +86,7 @@ async function syncRepositories() {
       @save-key="save('cat-factory', $event, card?.key ?? null)"
       @clear-key="clear('cat-factory')"
     />
+    <CatFactoryPersonalKeyCard v-if="data" />
     <RepositorySyncCard
       v-if="data?.connections.catFactory.repositorySync"
       :sync="data.connections.catFactory.repositorySync"
