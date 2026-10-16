@@ -7,7 +7,7 @@ import type {
   IntegrationTokenStatus,
 } from '@sainte-beuve/contracts'
 
-// This org's cat-factory: where the instance is, the service an AI review goes
+// This org's cat-factory: where its API and its app are, the service an AI review goes
 // under when no service backs its repository, which pipeline they run on, and
 // the key. All of it is the org's and set here; none of it comes from the
 // deployment's environment.
@@ -40,10 +40,11 @@ defineExpose({ key: { clearDraft: () => keyField.value?.clearDraft() } })
 const api = useSainteBeuveApi()
 
 /** The form starts from what is stored, else from what the deployment suggests. */
-function initial(): { baseUrl: string; serviceId: string; pipelineId: string } {
+function initial(): { baseUrl: string; appUrl: string; serviceId: string; pipelineId: string } {
   const from = props.connection.config ?? props.connection.suggested
   return {
     baseUrl: from?.baseUrl ?? '',
+    appUrl: from?.appUrl ?? '',
     serviceId: from?.serviceId ?? '',
     pipelineId: from?.pipelineId ?? '',
   }
@@ -57,6 +58,7 @@ const form = reactive(initial())
 watch(
   [
     () => props.connection.config?.baseUrl,
+    () => props.connection.config?.appUrl,
     () => props.connection.config?.serviceId,
     () => props.connection.config?.pipelineId,
   ],
@@ -66,6 +68,7 @@ watch(
 /** Blank fields are absent, not empty strings. */
 const config = computed<CatFactoryConfig>(() => ({
   baseUrl: form.baseUrl.trim(),
+  appUrl: form.appUrl.trim() || null,
   serviceId: form.serviceId.trim() || null,
   pipelineId: form.pipelineId.trim() || null,
 }))
@@ -135,12 +138,19 @@ const STEP_ICON = {
     />
 
     <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[10rem_1fr] sm:items-center">
-      <label for="cf-base-url" class="text-sm font-medium">Base URL</label>
+      <label for="cf-base-url" class="text-sm font-medium">API URL</label>
       <UInput
         id="cf-base-url"
         v-model="form.baseUrl"
         class="w-full"
         placeholder="http://localhost:8787"
+      />
+      <label for="cf-app-url" class="text-sm font-medium">App URL</label>
+      <UInput
+        id="cf-app-url"
+        v-model="form.appUrl"
+        class="w-full"
+        placeholder="Optional: where the web app is, if not at the API URL"
       />
       <label for="cf-service" class="text-sm font-medium">Default service id</label>
       <UInput
@@ -251,7 +261,7 @@ const STEP_ICON = {
       :busy="busy"
       placeholder="cf_live_…"
       :idle-label="connection.config === null ? 'Stored, save the settings to use it' : undefined"
-      description="The API key, minted in cat-factory under its API access tokens. Guided review needs the write scope. AI review needs decide, because a review stops on its findings and waits for an answer. Sealed before it is stored and never shown again. Once the settings are saved it is sent only to their base URL, and changing that URL removes it. Test connection uses a key typed here, else the stored one."
+      description="The API key, minted in cat-factory under its API access tokens. Guided review needs the write scope. AI review needs decide, because a review stops on its findings and waits for an answer. Sealed before it is stored and never shown again. Once the settings are saved it is sent only to their API URL, and changing that URL removes it. Test connection uses a key typed here, else the stored one."
       @save="emit('saveKey', $event)"
       @clear="emit('clearKey')"
     />

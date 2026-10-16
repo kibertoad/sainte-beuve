@@ -5,6 +5,7 @@ describe('localConfig', () => {
   it('suggests the defaults a local cat-factory serves with', () => {
     expect(localConfig({}).catFactorySuggestion).toStrictEqual({
       baseUrl: 'http://localhost:8787',
+      appUrl: null,
       serviceId: null,
       pipelineId: 'pl_review',
     })

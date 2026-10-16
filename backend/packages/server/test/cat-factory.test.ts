@@ -67,6 +67,19 @@ describe('configuring cat-factory', () => {
     expect(await tokens.get('cat-factory')).toBeNull()
   })
 
+  it('stores the app URL apart from the API URL, and keeps the key when only it moves', async () => {
+    const harness = await connectCatFactory(buildHarness(catFactoryWired({})))
+    const { integrationConfigs, integrationTokens } = harness.container.repositories
+    await harness.app.fetch(
+      put(CONFIG_PATH, { ...LOCAL, baseUrl: STORED_URL, appUrl: 'https://app.example.com/' }),
+    )
+    expect((await integrationConfigs.get('cat-factory'))?.values).toMatchObject({
+      baseUrl: STORED_URL,
+      appUrl: 'https://app.example.com',
+    })
+    expect(await integrationTokens.get('cat-factory')).not.toBeNull()
+  })
+
   it('drops the stored key with the settings', async () => {
     const harness = await connectCatFactory(buildHarness(catFactoryWired({})))
     await harness.app.fetch(del(CONFIG_PATH))

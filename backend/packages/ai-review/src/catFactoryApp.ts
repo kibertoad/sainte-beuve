@@ -15,15 +15,17 @@ export function addRepositoryUrl(appUrl: string, pullRequest: PullRequestRef): s
 }
 
 /**
- * Where the instance serves its web app, from `GET /api/v1/deployment`. Falls
- * back to the API's own base URL, which is what cat-factory answers itself when
- * no separate app URL is configured, and what a release without the read needs.
+ * Where the instance serves its web app: the org's configured app URL, else
+ * what `GET /api/v1/deployment` answers, else the API's own base URL, which is
+ * what cat-factory answers itself when no separate app URL is configured.
  */
 export async function appUrlOf(access: {
   baseUrl: string
+  appUrl?: string | null
   apiKey: string
   fetch?: typeof globalThis.fetch
 }): Promise<string> {
+  if (access.appUrl != null) return access.appUrl
   try {
     const response = await withDeadline(access.fetch)(`${access.baseUrl}/api/v1/deployment`, {
       headers: { authorization: `Bearer ${access.apiKey}` },

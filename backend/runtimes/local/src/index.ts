@@ -58,6 +58,7 @@ export interface LocalOptions {
  */
 const LOCAL_CAT_FACTORY: NonNullable<NodeConfig['catFactorySuggestion']> = {
   baseUrl: 'http://localhost:8787',
+  appUrl: null,
   serviceId: null,
   pipelineId: 'pl_review',
 }

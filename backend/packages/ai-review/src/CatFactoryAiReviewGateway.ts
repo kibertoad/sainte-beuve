@@ -35,6 +35,11 @@ export interface CatFactoryOptions {
   /** Origin of the cat-factory instance, e.g. `http://localhost:8787` for a local one. */
   baseUrl: string
   /**
+   * Origin of its web app, when it is served apart from the API. The links into
+   * cat-factory use it; null asks the instance, then falls back to `baseUrl`.
+   */
+  appUrl?: string | null
+  /**
    * A cat-factory public-API key: `cf_live_<keyId>.<secret>`. It needs the
    * `decide` scope rather than just `write`: a `review` task PARKS on its
    * findings, and cat-factory refuses to start a run that the calling key could
@@ -214,7 +219,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     }
     return {
       taskId: task.taskId,
-      url: `${this.options.baseUrl}/tasks/${task.taskId}`,
+      url: `${this.options.appUrl ?? this.options.baseUrl}/tasks/${task.taskId}`,
       workspaceId: placement.workspaceId,
     }
   }

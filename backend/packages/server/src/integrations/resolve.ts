@@ -303,6 +303,7 @@ export async function resolveAiReview(
   const { config, apiKey } = access
   const gateway = container.gateways?.aiReview({
     baseUrl: config.baseUrl,
+    appUrl: config.appUrl,
     apiKey,
     serviceId: config.serviceId,
     pipelineId: config.pipelineId,

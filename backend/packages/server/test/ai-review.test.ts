@@ -147,6 +147,7 @@ describe('curating a delegated AI review', () => {
     const parked = await parkedRun(loop)
     await writeCatFactoryConfig(loop.harness.container, {
       baseUrl: 'https://cat-factory.example.com',
+      appUrl: null,
       serviceId: null,
       pipelineId: null,
     })

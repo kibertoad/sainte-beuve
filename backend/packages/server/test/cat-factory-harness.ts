@@ -43,6 +43,7 @@ export async function connectCatFactory<T extends { container: AppContainer }>(
   if (cipher === null) throw new Error('connectCatFactory needs a cipher: use catFactoryWired')
   await writeCatFactoryConfig(container, {
     baseUrl: 'https://cat-factory.example.com',
+    appUrl: null,
     serviceId: 'svc-1',
     pipelineId: null,
   })

@@ -5,6 +5,7 @@ const INTEGRATION_ID = 'cat-factory'
 
 /** The optional fields, stored only when set. `baseUrl` is the one that is always there. */
 const OPTIONAL_FIELDS = [
+  'appUrl',
   'serviceId',
   'pipelineId',
 ] as const satisfies readonly (keyof CatFactoryConfig)[]
@@ -32,7 +33,8 @@ export async function writeCatFactoryConfig(
 ): Promise<void> {
   const set = OPTIONAL_FIELDS.flatMap((field) => {
     const value = config[field]
-    return value === null ? [] : [[field, value]]
+    if (value === null) return []
+    return [[field, field === 'appUrl' ? originOf(value) : value]]
   })
   await container.repositories.integrationConfigs.put({
     integrationId: INTEGRATION_ID,

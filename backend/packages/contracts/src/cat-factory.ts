@@ -14,13 +14,15 @@ import { vcsProviderSchema } from './vcs.js'
 // ---------------------------------------------------------------------------
 
 /** An instance origin. HTTP is accepted because a local cat-factory serves plain HTTP on loopback. */
-const baseUrlSchema = v.pipe(
-  v.string(),
-  v.trim(),
-  v.url(),
-  v.regex(/^https?:\/\//i, 'The base URL has to be an http or https URL'),
-  v.maxLength(512),
-)
+function originSchema(name: string) {
+  return v.pipe(
+    v.string(),
+    v.trim(),
+    v.url(),
+    v.regex(/^https?:\/\//i, `The ${name} has to be an http or https URL`),
+    v.maxLength(512),
+  )
+}
 
 /** A cat-factory id, as it appears in its own API. Blank is normalised to null by the caller. */
 const catFactoryIdSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
@@ -30,7 +32,14 @@ const catFactoryIdSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLen
  * it is write-only and stored sealed, beside the other credentials.
  */
 export const catFactoryConfigSchema = v.object({
-  baseUrl: baseUrlSchema,
+  /** Where the API answers. Every call goes here, and the key is sent nowhere else. */
+  baseUrl: originSchema('base URL'),
+  /**
+   * Where the web app is served, for the links a screen offers into cat-factory
+   * (a task, the add-service window). A deployment can serve the app and the API
+   * on different origins. Null asks the instance, then falls back to `baseUrl`.
+   */
+  appUrl: v.optional(v.nullable(originSchema('app URL')), null),
   /**
    * The service (repository frame) an AI review goes under when no service
    * backs its repository in cat-factory, a monorepo for one. A review normally

@@ -27,7 +27,7 @@ async function saveConfig(config: CatFactoryConfig) {
       description:
         'A key works only on the instance that minted it, so the stored key is removed. AI ' +
         'reviews already running on the old instance can no longer be followed.',
-      confirmLabel: 'Change the base URL',
+      confirmLabel: 'Change the API URL',
     }))
   if (!confirmed) return
   await run(

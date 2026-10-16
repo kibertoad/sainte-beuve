@@ -24,6 +24,7 @@ type Routes = Record<string, { status?: number; body: unknown }>
 function gatewayOver(
   routes: Routes,
   serviceId: string | null = 'svc-1',
+  appUrl: string | null = null,
 ): {
   gateway: CatFactoryAiReviewGateway
   calls: Call[]
@@ -31,6 +32,7 @@ function gatewayOver(
   const calls: Call[] = []
   const gateway = new CatFactoryAiReviewGateway({
     baseUrl: 'https://cat-factory.example.com',
+    appUrl,
     apiKey: 'cf_live_key.secret',
     serviceId,
     fetch: async (input, init) => {
@@ -217,6 +219,21 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
     expect(calls[1]).toMatchObject({ path: '/api/v1/tasks/task-1/start', body: {} })
   })
 
+  it('links the task into the app URL when the app is served apart from the API', async () => {
+    const { gateway } = gatewayOver(
+      { '/tasks': { body: task() }, '/start': { body: task({ status: 'running' }) } },
+      'svc-1',
+      'https://app.cat-factory.example.com',
+    )
+
+    const handle = await gateway.requestConflictResolution({
+      pullRequest: PULL_REQUEST,
+      directoryKeys: [],
+    })
+
+    expect(handle.url).toBe('https://app.cat-factory.example.com/tasks/task-1')
+  })
+
   it('files under the service backing the repository, in the workspace that links it', async () => {
     const { gateway, calls } = gatewayOver({
       '/repos': { body: repos({ repoId: 42, serviceId: 'svc-42' }) },
@@ -387,6 +404,25 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
       },
     })
     expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos', '/api/v1/deployment'])
+  })
+
+  it('links into the configured app URL without asking cat-factory where its app is', async () => {
+    const { gateway, calls } = gatewayOver(
+      {
+        '/repos': { body: repos() },
+        '/deployment': { body: { appUrl: 'https://elsewhere.example.com' } },
+      },
+      null,
+      'https://app.cat-factory.example.com',
+    )
+
+    await expect(filing(gateway, ['ws-a/42'])).rejects.toMatchObject({
+      details: {
+        addRepositoryUrl:
+          'https://app.cat-factory.example.com/?addRepo=kibertoad%2Fsainte-beuve&provider=github',
+      },
+    })
+    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos'])
   })
 
   it('links into the API origin when cat-factory cannot say where its app is', async () => {
