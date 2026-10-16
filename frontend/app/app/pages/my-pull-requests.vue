@@ -38,7 +38,7 @@ function queryValue(key: string): string | undefined {
 const status = ref<MyPullRequestStatusFilter>(
   statuses.find((option) => option.value === queryValue('status'))?.value ?? 'awaiting',
 )
-const owner = ref(queryValue('owner') ?? ALL)
+const { owner, ownerQuery } = useOwnerFilter(ALL)
 const projectId = ref(queryValue('projectId') ?? ALL)
 const linkedOnly = ref(queryValue('scope') === 'linked')
 
@@ -47,7 +47,7 @@ watch([status, owner, projectId, linkedOnly], () => {
   void router.replace({
     query: {
       status: status.value === 'awaiting' ? undefined : status.value,
-      owner: owner.value === ALL ? undefined : owner.value,
+      owner: ownerQuery.value,
       projectId: projectId.value === ALL ? undefined : projectId.value,
       scope: linkedOnly.value ? 'linked' : undefined,
     },
@@ -59,7 +59,10 @@ const projects = useAsyncData('my-pull-requests-projects', () => api.listProject
 })
 
 const ownerOptions = computed(() => {
-  const owners = [...new Set((projects.data.value?.projects ?? []).map((p) => p.owner))].sort()
+  const linked = (projects.data.value?.projects ?? []).map((p) => p.owner)
+  // The chosen owner too, so a default owner nothing is registered under still shows as chosen.
+  const chosen = owner.value === ALL ? [] : [owner.value]
+  const owners = [...new Set([...linked, ...chosen])].sort()
   return [{ label: 'All owners', value: ALL }, ...owners.map((value) => ({ label: value, value }))]
 })
 

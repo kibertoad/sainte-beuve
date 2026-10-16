@@ -17,7 +17,7 @@ function queryValue(key: string): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-const owner = ref(queryValue('owner') ?? ALL)
+const { owner, ownerQuery } = useOwnerFilter(ALL)
 const linkedOnly = ref(queryValue('scope') === 'linked')
 // Dependency bots are hidden by default, as on PRs to review.
 const showDependencyBots = ref(queryValue('dependencyBots') === 'show')
@@ -26,7 +26,7 @@ const showDependencyBots = ref(queryValue('dependencyBots') === 'show')
 watch([owner, linkedOnly, showDependencyBots], () => {
   void router.replace({
     query: {
-      owner: owner.value === ALL ? undefined : owner.value,
+      owner: ownerQuery.value,
       scope: linkedOnly.value ? 'linked' : undefined,
       dependencyBots: showDependencyBots.value ? 'show' : undefined,
     },
