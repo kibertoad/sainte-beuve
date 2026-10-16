@@ -21,7 +21,8 @@ import {
 import { isSameHandle } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
-import { resolveAiReview, VcsResolutions } from '../../integrations/resolve.js'
+import { resolveActingAiReview } from '../../integrations/catFactoryPersonal.js'
+import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
 import { catFactoryPlacementKeys } from '../projects/directoryKeys.js'
@@ -129,15 +130,18 @@ export class MergeService {
    * call, as a merge is: it changes their branch.
    */
   async resolveConflicts(input: ResolveConflicts): Promise<ConflictResolution> {
-    const catFactory = requireCapability(await resolveAiReview(this.container), NO_CAT_FACTORY)
+    const catFactory = requireCapability(
+      await resolveActingAiReview(this.container),
+      NO_CAT_FACTORY,
+    )
     const { project, address, status } = await this.authored(input, NOT_YOURS_TO_RESOLVE)
     if (status.mergeability === 'checking') throw new ConflictError(STILL_CHECKING)
     if (status.mergeability !== 'conflicting') throw new ConflictError(NO_CONFLICTS)
     const pullRequest = { ...address, url: status.url }
-    const handle = await catFactory.gateway.requestConflictResolution({
-      pullRequest,
-      ...(await catFactoryPlacementKeys(this.container, pullRequest)),
-    })
+    const keys = await catFactoryPlacementKeys(this.container, pullRequest)
+    const handle = await catFactory.act((gateway) =>
+      gateway.requestConflictResolution({ pullRequest, ...keys }),
+    )
     this.container.logger.info(
       { projectId: project.id, number: input.number, taskId: handle.taskId },
       'handed a conflicting pull request to cat-factory',

@@ -1,7 +1,7 @@
 import type { AiReviewRun } from '@sainte-beuve/contracts'
 import { AI_REVIEW_IN_FLIGHT_STATUSES } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
-import { assertFound, getErrorMessage } from '@sainte-beuve/kernel'
+import { assertFound, ConflictError, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { type Resolved, resolveAiReview } from '../../integrations/resolve.js'
@@ -9,6 +9,10 @@ import type { CredentialSource } from '../../integrations/resolve.js'
 import { admitAiReview, confirmAiReviewAdmission } from './admission.js'
 import { abandonIfOrphaned } from './orphans.js'
 import { NOT_POLLED, type PollOutcome, parkedAtFor, parksIn, replanForPark } from './park.js'
+import {
+  type ActingAiReview,
+  resolveActingAiReview,
+} from '../../integrations/catFactoryPersonal.js'
 import { fileWithCatFactory } from './filing.js'
 import { curationFor } from './reconcile.js'
 
@@ -43,6 +47,15 @@ import { curationFor } from './reconcile.js'
 export const NOT_CONFIGURED =
   'cat-factory is not configured for this org: an admin sets its base URL and an API key with the `decide` scope on the Configuration screen'
 
+/**
+ * What a filing nobody in particular asked for (a label, a bot command, Slack, a
+ * policy on the clock) answers once the org's reviews need a person's own
+ * subscription. Refused here because cat-factory would accept the task before
+ * refusing to start it, leaving one behind each time.
+ */
+const NO_PERSON =
+  "AI reviews in this org run on a person's own model subscription in cat-factory, so one has to be requested by a person in sainte-beuve"
+
 /** The states a poll can still learn something from. Anything else is settled. */
 const IN_FLIGHT = new Set<AiReviewRun['status']>(AI_REVIEW_IN_FLIGHT_STATUSES)
 
@@ -59,21 +72,25 @@ export class AiReviewService {
    * `VcsResolutions` does the same job for source control.
    */
   private resolution: Promise<Resolved<AiReviewGateway, CredentialSource> | null> | null = null
+  private actingResolution: Promise<ActingAiReview | null> | null = null
 
   constructor(private readonly container: AppContainer) {}
 
   async request(
     reviewId: string,
     instructions: string | null,
-    filing?: Resolved<AiReviewGateway, CredentialSource>,
+    filing?: ActingAiReview,
   ): Promise<AiReviewRun> {
     const { repositories, clock, ids } = this.container
-    const resolved = filing ?? (await this.gateway())
+    const resolved = filing ?? (await this.acting())
     const review = assertFound(
       await repositories.reviews.getById(reviewId),
       `No review request ${reviewId}`,
     )
+    if (resolved.personalRouteRequired && !resolved.personal) throw new ConflictError(NO_PERSON)
     await admitAiReview(this.container, review.id)
+    // The person's credential, refused before a run row is written for a call that never left.
+    await resolved.open()
     const run = await repositories.aiReviewRuns.create({
       id: ids.next(),
       reviewId,
@@ -92,7 +109,9 @@ export class AiReviewService {
       completedAt: null,
     })
     await confirmAiReviewAdmission(this.container, run)
-    return fileWithCatFactory(this.container, resolved.gateway, run, { review, instructions })
+    return resolved.act((gateway) =>
+      fileWithCatFactory(this.container, gateway, run, { review, instructions }),
+    )
   }
 
   /**
@@ -191,6 +210,16 @@ export class AiReviewService {
    */
   async gateway(): Promise<Resolved<AiReviewGateway, CredentialSource>> {
     return requireCapability(await this.resolved(), NOT_CONFIGURED)
+  }
+
+  /**
+   * The gateway a call that files or answers a review goes through: the acting
+   * person's own key where the org needs one. Polls stay on `gateway`, since a
+   * read needs no personal password.
+   */
+  async acting(): Promise<ActingAiReview> {
+    this.actingResolution ??= resolveActingAiReview(this.container)
+    return requireCapability(await this.actingResolution, NOT_CONFIGURED)
   }
 
   /** The resolution this request is working with. See {@link resolution}. */

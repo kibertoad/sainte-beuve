@@ -10,11 +10,13 @@ export const ERROR_TOAST_DURATION_MS = 30_000
  * The toast has room for one sentence; whoever files the ticket needs the route,
  * the status, the refused fields and the page as well. See `errorReport`. A
  * refusal with a fix to offer gets it as buttons (`refusalActions`), with
- * `retry` after it when the caller can run the action again.
+ * `retry` after it when the caller can run the action again. A refusal the person can
+ * fix with their own cat-factory credential opens that prompt instead.
  */
 export function useErrorToast() {
   const toast = useToast()
   const api = useSainteBeuveApi()
+  const prompt = usePersonalRoutePrompt()
 
   async function copy(report: string): Promise<void> {
     try {
@@ -35,6 +37,7 @@ export function useErrorToast() {
     description = apiErrorMessage(err),
     retry?: () => void,
   ): void {
+    if (prompt.takeOver(err, retry)) return
     const report = errorReport(title, err, {
       page: window.location.href,
       apiBase: api.apiBase || window.location.origin,

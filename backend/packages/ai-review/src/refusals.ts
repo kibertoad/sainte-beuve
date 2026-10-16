@@ -30,12 +30,17 @@ import {
  */
 interface CatFactoryRefusalDetails extends UpstreamDetails {
   reason?: string
+  vendor?: string
 }
 
-function reasonOf(err: unknown): { reason?: string } {
+function reasonOf(err: unknown): { reason?: string; vendor?: string } {
   if (!(err instanceof CatFactoryApiError)) return {}
-  const details = err.details as { reason?: unknown } | null | undefined
-  return { reason: typeof details?.reason === 'string' ? details.reason : err.code }
+  const details = err.details as { reason?: unknown; vendor?: unknown } | null | undefined
+  return {
+    reason: typeof details?.reason === 'string' ? details.reason : err.code,
+    // The subscription vendor a personal-credential refusal names.
+    ...(typeof details?.vendor === 'string' ? { vendor: details.vendor } : {}),
+  }
 }
 
 /** The per-field reasons behind a schema refusal, whose message alone says only that it failed. */

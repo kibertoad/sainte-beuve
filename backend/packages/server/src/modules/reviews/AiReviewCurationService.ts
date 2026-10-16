@@ -35,8 +35,8 @@ export class AiReviewCurationService {
    * the fresh row.
    */
   async dismissFinding(runId: string, findingId: string): Promise<AiReviewRun> {
-    const { gateway, target } = await this.curating(runId)
-    const curation = await gateway.dismissFinding({ ...target, findingId })
+    const { act, target } = await this.curating(runId)
+    const curation = await act((gateway) => gateway.dismissFinding({ ...target, findingId }))
     if (curation === null) return this.runs.get(runId)
     return assertFound(
       await this.container.repositories.aiReviewRuns.update(runId, { curation }),
@@ -58,10 +58,10 @@ export class AiReviewCurationService {
    * longer once it has, so the second is refused upstream as a conflict.
    */
   async challenge(runId: string, findingId: string, question: string | null): Promise<AiReviewRun> {
-    const { gateway, target } = await this.curating(runId)
+    const { act, target } = await this.curating(runId)
     const run = await this.runs.get(runId)
     refuseUnlessAdmitted(decideChallengeAdmission(run, findingId), findingId)
-    await gateway.challengeFinding({ ...target, findingId, question })
+    await act((gateway) => gateway.challengeFinding({ ...target, findingId, question }))
     await this.recordChallenged(run, findingId)
     return this.runs.get(runId)
   }
@@ -88,21 +88,23 @@ export class AiReviewCurationService {
         `\`${resolution.action}\` needs at least one finding selected. Use \`finish\` to close a review without posting anything`,
       )
     }
-    const { gateway, target } = await this.curating(runId)
+    const { act, target } = await this.curating(runId)
     refuseRetracted(await this.runs.get(runId), resolution)
-    await gateway.resolveReview({ ...target, ...resolution })
+    await act((gateway) => gateway.resolveReview({ ...target, ...resolution }))
     return this.runs.get(runId)
   }
 
   /** Re-dispatch the slices a stalled review never got back, then re-read the run. */
   async resume(runId: string): Promise<AiReviewRun> {
-    const { gateway, target } = await this.curating(runId)
-    await gateway.resumeReview(target)
+    const { act, target } = await this.curating(runId)
+    await act((gateway) => gateway.resumeReview(target))
     return this.runs.get(runId)
   }
 
   /**
-   * The gateway, and the cat-factory run and workspace, a curation verb needs.
+   * The cat-factory run and workspace a curation verb needs, and `act`, which
+   * runs it on the acting person's credential and learns from a refusal (see
+   * `ActingAiReview`).
    *
    * A run with no cat-factory run id yet is a CONFLICT rather than a fault, and
    * it answers 409 rather than 404 so a caller can act on the difference: the
@@ -110,21 +112,21 @@ export class AiReviewCurationService {
    * again in a moment, where a 404 says the run is gone and to stop.
    */
   private async curating(runId: string): Promise<{
-    gateway: AiReviewGateway
+    act: <T>(call: (gateway: AiReviewGateway) => Promise<T>) => Promise<T>
     target: { runId: string } & AiReviewWorkspace
   }> {
     const run = assertFound(
       await this.container.repositories.aiReviewRuns.getById(runId),
       `No AI review run ${runId}`,
     )
-    const { gateway } = await this.runs.gateway()
     if (run.catFactoryRunId === null) {
       throw new ConflictError(
         `AI review run ${runId} has no cat-factory run yet, so there is nothing to curate. Poll it again in a moment`,
       )
     }
+    const acting = await this.runs.acting()
     return {
-      gateway,
+      act: (call) => acting.act(call),
       target: { runId: run.catFactoryRunId, workspaceId: run.catFactoryWorkspaceId },
     }
   }

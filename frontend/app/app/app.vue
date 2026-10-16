@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { setPersonalPasswordViewer } from './utils/personalPassword'
 // The layer's root: the destinations, and the page beside them. A consuming
 // deployment inherits this unless it ships its own.
 //
@@ -20,6 +21,13 @@ const auth = useAuthState()
 // rail renders a name from it, and `whoami` already tolerates null — so the read
 // is started and the shell renders around it.
 void auth.refresh()
+
+// The cached cat-factory personal password is one per person, so the client is told who is acting.
+watch(
+  () => auth.viewer.value?.reviewer.id ?? null,
+  (viewerId) => setPersonalPasswordViewer(viewerId),
+  { immediate: true },
+)
 
 // The overlay rail's open state, and the closes that go with it. A slideover
 // left standing over the page it just navigated to — or over the wide-screen
@@ -70,5 +78,6 @@ const { open: navOpen, close: closeNav } = useNavigationOverlay()
       how two of them end up open at the same time. See `useConfirm`.
     -->
     <ConfirmDialog />
+    <PersonalRouteModal />
   </UApp>
 </template>

@@ -38,10 +38,12 @@ import {
 } from '@toad-contracts/core'
 import { sendByApiContract, UnexpectedResponseError } from '@toad-contracts/frontend-http-client'
 import wretch from 'wretch'
+import { withPersonalPassword } from './personalPassword'
 import type { RequestParams, SuccessBody } from './contractCall'
 import { attentionCalls } from './attentionApi'
 import { capabilityCalls } from './capabilitiesApi'
 import { aiReviewCalls } from './aiReviewApi'
+import { catFactoryPersonalCalls } from './catFactoryPersonalApi'
 import { guidedReviewCalls, sessionAddress } from './guidedReviewApi'
 import { myPullRequestCalls } from './myPullRequestsApi'
 import { myReviewCalls } from './myReviewsApi'
@@ -208,7 +210,10 @@ async function checkRequest(contract: ApiContract, params: unknown): Promise<voi
  * by a suite with nothing else around it. `useSainteBeuveApi` is the composable
  * that reads the URL out of runtime config and calls this.
  */
-export function createSainteBeuveApi(apiBase: string) {
+export function createSainteBeuveApi(
+  apiBase: string,
+  options: { personalPassword?: () => string | null } = {},
+) {
   // `credentials: 'include'`, because the session is an `HttpOnly` cookie and
   // the SPA is served from its own origin: without it a browser sends the
   // cookie only same-origin, so a deployment whose API is on another host would
@@ -244,7 +249,11 @@ export function createSainteBeuveApi(apiBase: string) {
 
     let outcome: Awaited<ReturnType<typeof sendByApiContract<TContract, false, true>>>
     try {
-      outcome = await sendByApiContract<TContract, false, true>(client, contract, params)
+      outcome = await sendByApiContract<TContract, false, true>(
+        withPersonalPassword(client, contract, options.personalPassword),
+        contract,
+        params,
+      )
     } catch (err) {
       throw toClientError(contract, err)
     }
@@ -335,6 +344,7 @@ export function createSainteBeuveApi(apiBase: string) {
       call(assignReviewersContract, { pathParams: { reviewId }, body: { count } }),
 
     ...aiReviewCalls(call),
+    ...catFactoryPersonalCalls(call),
     ...attentionCalls(call),
     ...guidedReviewCalls(call),
     ...myPullRequestCalls(call),

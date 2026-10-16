@@ -1,6 +1,7 @@
 import type {
   CatFactoryConfig,
   IntegrationId,
+  PersonalCatFactoryKey,
   VcsAuthMethod,
   RepositorySyncSecretKey,
   VcsOauthCredentialKey,
@@ -10,6 +11,7 @@ import { DEFAULT_ORG_ID, vcsOauthCredentialKey, vcsPatCredentialKey } from '@sai
 import {
   type AiReviewGateway,
   type ChatGateway,
+  type GatewayFactory,
   getErrorMessage,
   type GuidedReviewGateway,
   isSecretDecryptError,
@@ -299,16 +301,28 @@ export async function resolveAiReview(
   pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
 ): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
   const access = await pending
-  if (access === null) return null
+  if (access === null || container.gateways === null) return null
+  return { gateway: aiReviewGatewayFor(container.gateways, access, null), source: 'stored' }
+}
+
+/**
+ * The AI reviewer on one cat-factory credential. `personalPassword` goes only
+ * with a key a person minted as themselves; see `resolveActingAiReview`.
+ */
+export function aiReviewGatewayFor(
+  gateways: GatewayFactory,
+  access: CatFactoryOrgAccess,
+  personalPassword: string | null,
+): AiReviewGateway {
   const { config, apiKey } = access
-  const gateway = container.gateways?.aiReview({
+  return gateways.aiReview({
     baseUrl: config.baseUrl,
     appUrl: config.appUrl,
     apiKey,
     serviceId: config.serviceId,
     pipelineId: config.pipelineId,
+    personalPassword,
   })
-  return gateway === undefined ? null : { gateway, source: 'stored' }
 }
 
 /** The guided reviewer for this org: the same key and instance, and no service. */
@@ -368,7 +382,7 @@ export async function repositoryDirectoryAccess(
  */
 export async function openCredential(
   container: AppContainer,
-  key: IntegrationId | VcsOauthCredentialKey | RepositorySyncSecretKey,
+  key: IntegrationId | VcsOauthCredentialKey | RepositorySyncSecretKey | PersonalCatFactoryKey,
 ): Promise<string | null> {
   const { secrets, repositories, logger } = container
   if (secrets === null) return null

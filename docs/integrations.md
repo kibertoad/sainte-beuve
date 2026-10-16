@@ -408,6 +408,42 @@ cat-factory until an admin saves them.
 guided review, for any member. The board and the guided review page read it to
 warn before a button fails.
 
+### Running on a personal model subscription
+
+cat-factory runs a model subscription (a Claude subscription, say) only for the
+person it belongs to: through an API key that person minted as themselves, with
+"Runs as" set to them, and their personal password in an `X-Personal-Password`
+header on each call that starts or answers a run. The org's key acts for nobody,
+so a pipeline whose models need a subscription refuses it.
+
+Each person stores their own key under "Your cat-factory key", on the
+cat-factory screen or in the prompt a review opens when it needs one. It is
+sealed under `cat-factory-personal:<reviewerId>` beside the org's credentials,
+sent only to the org's instance, and dropped with everybody else's when the org
+moves to another instance.
+
+Whether the org needs this is learned, once. Reviews file with the org's key
+until cat-factory refuses it with `individual_model_unsupported` or
+`providers_unconfigured`; from then on, until the cat-factory settings are next
+saved, every call that files or answers a review goes through the acting
+person's own key and password. A call missing either is refused here, before it
+reaches cat-factory, with `details.reason: cat_factory_personal_route` and what
+is missing in `need`, and the SPA asks for it and makes the call again. The
+person's credential is checked last, after every other refusal the call can
+meet, so nobody types a password to be told the pull request is not theirs.
+
+Polls stay on the org's key, since reading a run needs no password. A filing
+that acts for nobody (the AI-review label, a bot command, Slack, a risk policy
+on the clock) is refused here once the route is learned: cat-factory would
+accept its task before refusing to start it, and leave one behind each time.
+
+The password is never stored here. The SPA keeps it in `localStorage` for 40
+hours, keyed by backend and person, stops sending it with 8 hours left so a run
+never outlives it, and sends it only on the calls that file or answer a review
+(`personalPasswordContracts`; a risk assessment is among them, since a policy can
+require an AI review). Signing out forgets it. The server reads it off that
+request, passes it to cat-factory in the same header, and writes it nowhere.
+
 ### Repositories come from cat-factory
 
 Once an org has a base URL and a key, its repository list is the set of

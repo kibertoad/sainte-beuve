@@ -5,7 +5,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
-import { resolveAiReview } from '../../integrations/resolve.js'
+import { resolveActingAiReview } from '../../integrations/catFactoryPersonal.js'
 import { AiReviewService, NOT_CONFIGURED } from './AiReviewService.js'
 import { readPullRequestAuthor } from './pullRequestAuthor.js'
 import { ReviewService } from './ReviewService.js'
@@ -23,7 +23,7 @@ export async function requestPullRequestAiReview(
   container: AppContainer,
   input: RequestPullRequestAiReview,
 ): Promise<AiReviewRun> {
-  const filing = requireCapability(await resolveAiReview(container), NOT_CONFIGURED)
+  const filing = requireCapability(await resolveActingAiReview(container), NOT_CONFIGURED)
   const review = await boardRowFor(container, input)
   return new AiReviewService(container).request(review.id, input.instructions, filing)
 }

@@ -1,9 +1,14 @@
 import type { Role } from '@sainte-beuve/contracts'
-import { DEFAULT_ORG_ID } from '@sainte-beuve/contracts'
+import { DEFAULT_ORG_ID, PERSONAL_PASSWORD_HEADER } from '@sainte-beuve/contracts'
 import type { EpochMs, StoredSession } from '@sainte-beuve/kernel'
 import { ForbiddenError, RateLimitedError, UnauthenticatedError } from '@sainte-beuve/kernel'
 import type { Context, Input, MiddlewareHandler } from 'hono'
-import { type AppContainer, withOrg } from '../../container.js'
+import {
+  type AppContainer,
+  type CatFactoryActor,
+  withCatFactoryActor,
+  withOrg,
+} from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import type { CredentialThrottle } from '../../http/throttle.js'
 import { ApiKeyService, type ApiKeyPrincipal, isMintedKey } from './ApiKeyService.js'
@@ -158,6 +163,22 @@ function orgOf(principal: RequestPrincipal): string {
 }
 
 /**
+ * Who the request acts for in cat-factory. An API key is nobody, so it acts
+ * through the org's key alone; the password is taken only from a person.
+ */
+function actorOf<E extends AppEnv, P extends string, I extends Input>(
+  c: Ctx<E, P, I>,
+  principal: RequestPrincipal,
+): CatFactoryActor | null {
+  if (principal.kind === 'api_key') return null
+  const password = c.req.header(PERSONAL_PASSWORD_HEADER)
+  return {
+    principal,
+    personalPassword: password === undefined || password === '' ? null : password,
+  }
+}
+
+/**
  * Put the caller on the context, BIND THE CONTAINER TO THEIR ORG, and refuse an
  * anonymous one where the deployment said to.
  *
@@ -177,7 +198,10 @@ export function authentication(options: AuthenticationOptions): MiddlewareHandle
     const container = c.get('container')
     const principal = await resolve(container, c, options)
     c.set('principal', principal)
-    c.set('container', withOrg(container, orgOf(principal)))
+    c.set(
+      'container',
+      withCatFactoryActor(withOrg(container, orgOf(principal)), actorOf(c, principal)),
+    )
     if (
       container.auth.mode === 'required' &&
       principal.kind === 'anonymous' &&
