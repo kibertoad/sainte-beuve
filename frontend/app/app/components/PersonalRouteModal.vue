@@ -23,6 +23,7 @@ const TITLES = {
   wrong_password: 'That password did not work',
   subscription: 'Connect your subscription in cat-factory',
   subscription_expired: 'Your subscription has expired',
+  workspace: "Your key does not reach this repository's workspace",
 } as const
 
 const title = computed(() => (pending.value === null ? '' : TITLES[pending.value.need]))
@@ -38,8 +39,15 @@ function submit(): void {
 <template>
   <UModal v-model:open="open" :title="title">
     <template #body>
-      <div v-if="pending?.need === 'personal_key'" class="flex flex-col gap-3">
-        <p class="text-sm text-muted">
+      <div
+        v-if="pending?.need === 'personal_key' || pending?.need === 'workspace'"
+        class="flex flex-col gap-3"
+      >
+        <p v-if="pending.need === 'workspace'" class="text-sm text-muted">
+          The repository is linked in a cat-factory workspace your stored key does not reach. Join
+          that workspace in cat-factory, or replace the key with one that follows your memberships.
+        </p>
+        <p v-else class="text-sm text-muted">
           AI reviews here run on a personal model subscription, which cat-factory opens only through
           a key you minted as yourself.
         </p>

@@ -21,6 +21,7 @@ export const PERSONAL_PASSWORD_HEADER = 'x-personal-password'
  * - `password`: their personal password, which the SPA asks for and caches
  * - `wrong_password`: the password sent did not open their subscription
  * - `subscription` / `subscription_expired`: nothing to open, connect or renew it in cat-factory
+ * - `workspace`: their key does not reach the cat-factory workspace the repository is in
  * - `retry`: the org has just been found to need the personal route, and the person has what
  *   it takes, so the same call made again goes that way
  */
@@ -30,6 +31,7 @@ export const personalRouteNeedSchema = v.picklist([
   'wrong_password',
   'subscription',
   'subscription_expired',
+  'workspace',
   'retry',
 ])
 export type PersonalRouteNeed = v.InferOutput<typeof personalRouteNeedSchema>

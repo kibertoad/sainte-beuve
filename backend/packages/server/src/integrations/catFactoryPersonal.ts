@@ -30,12 +30,18 @@ const ROUTING_ID = 'cat-factory-routing'
 /** cat-factory's reasons for refusing the org's key a model only a person may run. */
 const ORG_KEY_REFUSALS = new Set(['individual_model_unsupported', 'providers_unconfigured'])
 
-/** cat-factory's `credential_required` reasons, as what the person has to supply. */
-const CREDENTIAL_NEEDS: Record<string, PersonalRouteNeed> = {
+/**
+ * cat-factory's refusals of the person's own key, as what the person has to
+ * supply: its `credential_required` reasons, and a workspace outside the key's
+ * reach, which a key following its person's memberships meets only where the
+ * person is not a member.
+ */
+const PERSONAL_KEY_NEEDS: Record<string, PersonalRouteNeed> = {
   password_required: 'password',
   wrong_password: 'wrong_password',
   no_subscription: 'subscription',
   subscription_expired: 'subscription_expired',
+  workspace_not_found: 'workspace',
 }
 
 const NEED_MESSAGES: Record<PersonalRouteNeed, string> = {
@@ -49,6 +55,9 @@ const NEED_MESSAGES: Record<PersonalRouteNeed, string> = {
     'cat-factory holds no personal subscription for you. Connect one in cat-factory, then try again',
   subscription_expired:
     'Your personal subscription in cat-factory has expired. Renew it there, then try again',
+  workspace:
+    'Your cat-factory key does not reach the workspace this repository is linked in. Join that ' +
+    'workspace in cat-factory, or mint a key that follows your memberships, then try again',
   retry:
     'AI reviews here run on a personal model subscription. Your key is stored, so try again to ' +
     'run this on it',
@@ -161,7 +170,7 @@ async function lesson(
 ): Promise<unknown> {
   const { reason, vendor } = upstreamReasonOf(err)
   if (reason === null) return err
-  const need = CREDENTIAL_NEEDS[reason]
+  const need = PERSONAL_KEY_NEEDS[reason]
   if (acting.personal && need !== undefined) return personalRouteRefusal(need, vendor)
   const actor = container.catFactoryActor
   if (acting.personal || actor === null || !ORG_KEY_REFUSALS.has(reason)) return err

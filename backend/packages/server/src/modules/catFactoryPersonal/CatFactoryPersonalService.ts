@@ -44,6 +44,8 @@ function mintPersonalKeyUrl(appUrl: string): string {
   url.searchParams.set('label', 'sainte-beuve')
   url.searchParams.set('scope', 'decide')
   url.searchParams.set('runsAsSelf', '1')
+  // One key for every workspace the person is in, now and later, rather than the one it is minted from.
+  url.searchParams.set('reach', 'memberships')
   return url.toString()
 }
 

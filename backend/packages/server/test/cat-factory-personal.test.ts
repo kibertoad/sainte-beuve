@@ -3,6 +3,7 @@ import {
   type AiReviewGateway,
   type CatFactoryReviewTarget,
   ConflictError,
+  NotFoundError,
   type GuidedReviewGateway,
   UnavailableError,
 } from '@sainte-beuve/kernel'
@@ -139,7 +140,7 @@ describe('AI reviews on a personal subscription', () => {
       personalRoute: 'required',
       key: { stored: false, hint: null },
       mintKeyUrl:
-        'https://cat-factory.example.com/?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1',
+        'https://cat-factory.example.com/?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1&reach=memberships',
     })
   })
 
@@ -226,7 +227,7 @@ describe('AI reviews on a personal subscription', () => {
       pipelineId: null,
     })
     expect((await personal(state)).mintKeyUrl).toBe(
-      'https://app.cat-factory.example.com/?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1',
+      'https://app.cat-factory.example.com/?newApiKey=1&label=sainte-beuve&scope=decide&runsAsSelf=1&reach=memberships',
     )
   })
 
@@ -236,6 +237,14 @@ describe('AI reviews on a personal subscription', () => {
     )
     expect(res.status).toBe(400)
     expect((await personal(state)).key.stored).toBe(false)
+  })
+
+  it("says so when the person's key does not reach the repository's workspace", async () => {
+    state.refuse = new ConflictError('refused', upstream('individual_model_unsupported'))
+    await file(state)
+    await storeKey(state)
+    state.refuse = new NotFoundError('refused', upstream('workspace_not_found'))
+    expect(await need(await file(state, PASSWORD))).toBe('workspace')
   })
 
   it('forgets the learned route when the cat-factory settings are saved', async () => {

@@ -420,7 +420,10 @@ Each person stores their own key under "Your cat-factory key", on the
 cat-factory screen or in the prompt a review opens when it needs one. It is
 sealed under `cat-factory-personal:<reviewerId>` beside the org's credentials,
 sent only to the org's instance, and dropped with everybody else's when the org
-moves to another instance.
+moves to another instance. The mint link asks cat-factory for a key whose reach follows the person's workspace
+memberships (`reach=memberships`), so one key covers every workspace they are in as they join
+and leave; a repository in a workspace the key does not reach is refused with
+`need: workspace`.
 
 Whether the org needs this is learned, once. Reviews file with the org's key
 until cat-factory refuses it with `individual_model_unsupported` or

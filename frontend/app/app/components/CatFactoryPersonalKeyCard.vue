@@ -53,7 +53,8 @@ onMounted(load)
         <p class="font-medium">Your cat-factory key</p>
         <p class="text-sm text-muted">
           For AI reviews on your own model subscription. Mint it in cat-factory with "Runs as" set
-          to yourself and the decide scope: the button opens that form filled in. Sealed before it
+          to yourself, the decide scope, and a reach that follows your memberships, so one key
+          covers every workspace you are in: the button opens that form filled in. Sealed before it
           is stored and sent only to this org's cat-factory. Your personal password is asked for
           when a review needs it, kept in this browser for 40 hours, and never stored here.
         </p>
