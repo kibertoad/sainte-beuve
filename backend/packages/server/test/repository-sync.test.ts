@@ -5,6 +5,7 @@ import type {
   RepositoryDirectoryGateway,
   DirectoryMirrorStore,
 } from '@sainte-beuve/kernel'
+import { ForbiddenError, ValidationError } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import { runReminderTick } from '../src/reminders/tick.js'
 import { stubAiReview } from './ai-review-doubles.js'
@@ -231,13 +232,28 @@ describe('repositories from cat-factory', () => {
     const fake = await syncing([])
     Object.assign(fake.harness.container, { apiBaseUrl: 'http://localhost:8788' })
     fake.gateway.registerWebhook = async () => {
-      throw new Error('cat-factory refused to register a directory webhook')
+      throw new ValidationError('cat-factory refused to register a directory webhook')
     }
     const res = await fake.harness.app.fetch(post(SYNC_PATH, {}))
     const connection = (await res.json()) as CatFactoryConnection
     expect(connection.repositorySync).toMatchObject({ webhook: 'failed' })
-    expect(connection.repositorySync?.error).toMatch(/^cat-factory refused to register/)
+    expect(connection.repositorySync?.error).toMatch(
+      /^cat-factory refused to register a directory webhook\. API_BASE_URL/,
+    )
     expect(connection.repositorySync?.error).toMatch(/NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS/)
+  })
+
+  it('reports a scope refusal on its own, with no http hint', async () => {
+    const fake = await syncing([])
+    Object.assign(fake.harness.container, { apiBaseUrl: 'http://localhost:8788' })
+    fake.gateway.registerWebhook = async () => {
+      throw new ForbiddenError('This needs an API key carrying the `admin` scope')
+    }
+    const res = await fake.harness.app.fetch(post(SYNC_PATH, {}))
+    const connection = (await res.json()) as CatFactoryConnection
+    expect(connection.repositorySync?.error).toBe(
+      'This needs an API key carrying the `admin` scope.',
+    )
   })
 
   it('registers a plain http address that cat-factory accepts', async () => {

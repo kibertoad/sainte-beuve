@@ -4,6 +4,7 @@ import {
   type DirectoryMirrorStore,
   type DirectorySyncReport,
   type RepositoryDirectoryGateway,
+  ValidationError,
   base64url,
   getErrorMessage,
 } from '@sainte-beuve/kernel'
@@ -50,6 +51,17 @@ const HTTP_PUSH_HINT =
   'NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS allow that host, which a local cat-factory does for ' +
   'localhost. Otherwise set API_BASE_URL to an https origin and restart the server. Until then ' +
   'the repositories and people still sync every few minutes.'
+
+/**
+ * cat-factory's refusal as one sentence, with the http hint only when cat-factory
+ * rejected the request itself: a scope or key refusal says nothing about the address.
+ */
+function registrationError(err: unknown, url: string): string {
+  const message = getErrorMessage(err)
+  const sentence = /[.!?]$/.test(message) ? message : `${message}.`
+  const httpRefused = err instanceof ValidationError && url.startsWith('http://')
+  return httpRefused ? `${sentence} ${HTTP_PUSH_HINT}` : sentence
+}
 
 /**
  * Keeps an org's projects to the repositories linked in its cat-factory
@@ -218,8 +230,7 @@ export class RepositorySyncService {
       await gateway.registerWebhook({ webhookId: await this.webhookId(url), url, secret })
       await this.record({ webhook: 'registered', webhookUrl: url })
     } catch (err) {
-      const hint = url.startsWith('http://') ? ` ${HTTP_PUSH_HINT}` : ''
-      await this.record({ webhook: 'failed', webhookUrl: url, error: getErrorMessage(err) + hint })
+      await this.record({ webhook: 'failed', webhookUrl: url, error: registrationError(err, url) })
       return
     }
     // The id follows the URL, so the one enrolled for a former address is a separate webhook.
