@@ -21,10 +21,7 @@ import {
 import { isSameHandle } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
-import {
-  learningPersonalRoute,
-  resolveActingAiReview,
-} from '../../integrations/catFactoryPersonal.js'
+import { resolveActingAiReview } from '../../integrations/catFactoryPersonal.js'
 import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { ViewerService } from '../identity/ViewerService.js'
@@ -142,8 +139,8 @@ export class MergeService {
     if (status.mergeability !== 'conflicting') throw new ConflictError(NO_CONFLICTS)
     const pullRequest = { ...address, url: status.url }
     const keys = await catFactoryPlacementKeys(this.container, pullRequest)
-    const handle = await learningPersonalRoute(this.container, catFactory, () =>
-      catFactory.gateway.requestConflictResolution({ pullRequest, ...keys }),
+    const handle = await catFactory.act((gateway) =>
+      gateway.requestConflictResolution({ pullRequest, ...keys }),
     )
     this.container.logger.info(
       { projectId: project.id, number: input.number, taskId: handle.taskId },

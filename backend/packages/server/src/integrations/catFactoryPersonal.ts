@@ -4,16 +4,19 @@ import {
   type PersonalRouteNeed,
   personalCatFactoryKey,
 } from '@sainte-beuve/contracts'
-import { type AiReviewGateway, ConflictError, isDomainError } from '@sainte-beuve/kernel'
+import {
+  type AiReviewGateway,
+  ConflictError,
+  type GatewayFactory,
+  isDomainError,
+} from '@sainte-beuve/kernel'
 import type { AppContainer, CatFactoryActor } from '../container.js'
 import { ViewerService } from '../modules/identity/ViewerService.js'
 import {
+  aiReviewGatewayFor,
   type CatFactoryOrgAccess,
   catFactoryAccess,
-  type CredentialSource,
   openCredential,
-  type Resolved,
-  resolveAiReview,
 } from './resolve.js'
 
 /**
@@ -51,10 +54,7 @@ const NEED_MESSAGES: Record<PersonalRouteNeed, string> = {
     'run this on it',
 }
 
-export function personalRouteRefusal(
-  need: PersonalRouteNeed,
-  vendor: string | null,
-): ConflictError {
+function personalRouteRefusal(need: PersonalRouteNeed, vendor: string | null): ConflictError {
   const details: CatFactoryPersonalRoute = { reason: CAT_FACTORY_PERSONAL_ROUTE, need, vendor }
   return new ConflictError(NEED_MESSAGES[need], details)
 }
@@ -77,71 +77,83 @@ export async function forgetPersonalKeys(container: AppContainer): Promise<void>
 }
 
 /** The reviewer a request acts for. Resolved only once the personal route is needed. */
-export async function actingReviewerId(
-  container: AppContainer,
-  actor: CatFactoryActor,
-): Promise<string> {
+async function actingReviewerId(container: AppContainer, actor: CatFactoryActor): Promise<string> {
   return (await new ViewerService(container, actor.principal).current()).reviewer.id
 }
 
-/** An AI reviewer acting for the request's person, and whether it is their key. */
-export interface ActingAiReview extends Resolved<AiReviewGateway, CredentialSource> {
+/**
+ * The AI reviewer for a request that files or answers a review.
+ *
+ * The credential is opened only when a call is made (`open`, `act`), so every
+ * check a service makes in front of the call refuses first: nobody is asked for
+ * a password to be told the pull request is not theirs.
+ */
+export interface ActingAiReview {
+  /** Whether calls go through the acting person's own key and password. */
   personal: boolean
+  /** Whether the org is known to need the personal route, whoever is acting. */
+  personalRouteRequired: boolean
+  /** The gateway on the acting credential. Refuses, without asking cat-factory, when the person's key or password is missing. */
+  open(): Promise<AiReviewGateway>
+  /** One call on the acting credential, learning from how cat-factory refuses it. */
+  act<T>(call: (gateway: AiReviewGateway) => Promise<T>): Promise<T>
 }
 
 /**
- * The AI reviewer for a request that files or answers a review. The org's key,
- * unless the org is known to need the personal route and the request acts for
- * a person, when it is that person's own key and password. Refused here,
- * without asking cat-factory, when either is missing: cat-factory would only
- * refuse it too.
+ * The org's key, unless the org is known to need the personal route and the
+ * request acts for a person, when it is that person's own key and password.
+ * Null when cat-factory is not configured.
  */
 export async function resolveActingAiReview(
   container: AppContainer,
 ): Promise<ActingAiReview | null> {
-  const actor = container.catFactoryActor
+  const { catFactoryActor: actor, gateways } = container
   const [access, required] = await Promise.all([
     catFactoryAccess(container),
-    actor === null ? false : personalRouteRequired(container),
+    personalRouteRequired(container),
   ])
-  if (access === null || container.gateways === null) return null
+  if (access === null || gateways === null) return null
   const personal = actor !== null && required
-  const acting = personal ? await personalAccess(container, access, actor) : access
-  const password = personal ? actor.personalPassword : null
-  const resolved = await resolveAiReview(container, Promise.resolve(acting), password)
-  return resolved === null ? null : { ...resolved, personal }
+  let opened: Promise<AiReviewGateway> | null = null
+  const acting: ActingAiReview = {
+    personal,
+    personalRouteRequired: required,
+    open: () => {
+      opened ??= personal
+        ? personalGateway(container, { gateways, access, actor })
+        : Promise.resolve(aiReviewGatewayFor(gateways, access, null))
+      return opened
+    },
+    act: async (call) => {
+      const gateway = await acting.open()
+      try {
+        return await call(gateway)
+      } catch (err) {
+        throw await lesson(container, acting, err)
+      }
+    },
+  }
+  return acting
 }
 
-async function personalAccess(
+async function personalGateway(
   container: AppContainer,
-  access: CatFactoryOrgAccess,
-  actor: CatFactoryActor,
-): Promise<CatFactoryOrgAccess> {
+  acting: { gateways: GatewayFactory; access: CatFactoryOrgAccess; actor: CatFactoryActor },
+): Promise<AiReviewGateway> {
+  const { gateways, access, actor } = acting
   const reviewerId = await actingReviewerId(container, actor)
   const apiKey = await openCredential(container, personalCatFactoryKey(reviewerId))
   if (apiKey === null) throw personalRouteRefusal('personal_key', null)
   if (actor.personalPassword === null) throw personalRouteRefusal('password', null)
-  return { config: access.config, apiKey }
+  return aiReviewGatewayFor(gateways, { config: access.config, apiKey }, actor.personalPassword)
 }
 
 /**
- * Run one acting call, and learn from how cat-factory refuses it. The org's key
- * refused for a model only a person may run marks the org as needing the
- * personal route, and the person is told what to supply; a personal-credential
- * refusal on the person's key becomes the same refusal. Anything else passes.
+ * What cat-factory's refusal of an acting call teaches. The org's key refused
+ * for a model only a person may run marks the org as needing the personal
+ * route, and the person is told what to supply; a personal-credential refusal
+ * on the person's key becomes the same refusal. Anything else passes.
  */
-export async function learningPersonalRoute<T>(
-  container: AppContainer,
-  acting: ActingAiReview,
-  call: () => Promise<T>,
-): Promise<T> {
-  try {
-    return await call()
-  } catch (err) {
-    throw await lesson(container, acting, err)
-  }
-}
-
 async function lesson(
   container: AppContainer,
   acting: ActingAiReview,

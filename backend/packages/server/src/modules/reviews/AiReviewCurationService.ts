@@ -8,7 +8,6 @@ import {
   retractedFindingIds,
 } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
-import { learningPersonalRoute } from '../../integrations/catFactoryPersonal.js'
 import { AiReviewService } from './AiReviewService.js'
 
 /**
@@ -105,7 +104,7 @@ export class AiReviewCurationService {
   /**
    * The cat-factory run and workspace a curation verb needs, and `act`, which
    * runs it on the acting person's credential and learns from a refusal (see
-   * `learningPersonalRoute`).
+   * `ActingAiReview`).
    *
    * A run with no cat-factory run id yet is a CONFLICT rather than a fault, and
    * it answers 409 rather than 404 so a caller can act on the difference: the
@@ -127,7 +126,7 @@ export class AiReviewCurationService {
     }
     const acting = await this.runs.acting()
     return {
-      act: (call) => learningPersonalRoute(this.container, acting, () => call(acting.gateway)),
+      act: (call) => acting.act(call),
       target: { runId: run.catFactoryRunId, workspaceId: run.catFactoryWorkspaceId },
     }
   }

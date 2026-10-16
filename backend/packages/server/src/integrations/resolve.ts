@@ -11,6 +11,7 @@ import { DEFAULT_ORG_ID, vcsOauthCredentialKey, vcsPatCredentialKey } from '@sai
 import {
   type AiReviewGateway,
   type ChatGateway,
+  type GatewayFactory,
   getErrorMessage,
   type GuidedReviewGateway,
   isSecretDecryptError,
@@ -294,19 +295,27 @@ export async function resolveGitLabBotUsername(container: AppContainer): Promise
  * repository in cat-factory, and the org's service id is only the fallback for
  * a repository with none, so whether a review can be filed is a question about
  * one repository that `requestReview` answers when it is asked.
- *
- * `personalPassword` goes only with a key a person minted as themselves; see
- * `resolveActingAiReview`.
  */
 export async function resolveAiReview(
   container: AppContainer,
   pending: Promise<CatFactoryOrgAccess | null> = catFactoryAccess(container),
-  personalPassword: string | null = null,
 ): Promise<Resolved<AiReviewGateway, CredentialSource> | null> {
   const access = await pending
-  if (access === null) return null
+  if (access === null || container.gateways === null) return null
+  return { gateway: aiReviewGatewayFor(container.gateways, access, null), source: 'stored' }
+}
+
+/**
+ * The AI reviewer on one cat-factory credential. `personalPassword` goes only
+ * with a key a person minted as themselves; see `resolveActingAiReview`.
+ */
+export function aiReviewGatewayFor(
+  gateways: GatewayFactory,
+  access: CatFactoryOrgAccess,
+  personalPassword: string | null,
+): AiReviewGateway {
   const { config, apiKey } = access
-  const gateway = container.gateways?.aiReview({
+  return gateways.aiReview({
     baseUrl: config.baseUrl,
     appUrl: config.appUrl,
     apiKey,
@@ -314,7 +323,6 @@ export async function resolveAiReview(
     pipelineId: config.pipelineId,
     personalPassword,
   })
-  return gateway === undefined ? null : { gateway, source: 'stored' }
 }
 
 /** The guided reviewer for this org: the same key and instance, and no service. */

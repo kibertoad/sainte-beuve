@@ -8,6 +8,7 @@ import {
 } from '@sainte-beuve/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { writeCatFactoryConfig } from '../src/integrations/catFactoryConfig.js'
+import { AiReviewService } from '../src/modules/reviews/AiReviewService.js'
 import { stubAiReview } from './ai-review-doubles.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
 import {
@@ -160,6 +161,32 @@ describe('AI reviews on a personal subscription', () => {
     await storeKey(state)
     state.refuse = new ConflictError('refused', upstream('individual_model_unsupported'))
     expect(await need(await file(state, PASSWORD))).toBe('retry')
+  })
+
+  it('refuses a filing for a run already in flight before asking for the password', async () => {
+    state.refuse = new ConflictError('refused', upstream('individual_model_unsupported'))
+    await file(state)
+    await storeKey(state)
+    const opened = await review(state)
+    const url = `/api/v1/reviews/${opened.id}/ai-review`
+    expect((await state.harness.app.fetch(post(url, {}, PASSWORD))).status).toBe(202)
+
+    expect(await need(await state.harness.app.fetch(post(url, {})))).toBeUndefined()
+  })
+
+  it('refuses a filing nobody asked for once the route is learned, without calling cat-factory', async () => {
+    state.refuse = new ConflictError('refused', upstream('individual_model_unsupported'))
+    await file(state)
+    const opened = await review(state)
+    const before = state.targets.length
+
+    await expect(
+      new AiReviewService(state.harness.container).request(opened.id, null),
+    ).rejects.toThrow(/requested by a person/)
+    expect(state.targets).toHaveLength(before)
+    expect(await state.harness.container.repositories.aiReviewRuns.listByReview(opened.id)).toEqual(
+      [],
+    )
   })
 
   it("passes on cat-factory's refusal of the person's password", async () => {
