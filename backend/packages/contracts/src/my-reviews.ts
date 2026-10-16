@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { openPullRequestSchema, repoOwnerSchema } from './vcs.js'
+import { dependencyBotsFilterSchema, openPullRequestSchema, repoOwnerSchema } from './vcs.js'
 import {
   hostSearchSchema,
   placedCommitmentSchema,
@@ -15,6 +15,7 @@ import {
 export const myReviewsQuerySchema = v.object({
   scope: v.optional(workspaceScopeSchema),
   owner: v.optional(repoOwnerSchema),
+  dependencyBots: v.optional(dependencyBotsFilterSchema),
 })
 export type MyReviewsQuery = v.InferOutput<typeof myReviewsQuerySchema>
 

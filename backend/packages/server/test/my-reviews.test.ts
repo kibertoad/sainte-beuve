@@ -76,6 +76,24 @@ describe('My Reviews', () => {
     expect(linked.reviewed).toStrictEqual([])
   })
 
+  it('hides Dependabot and Renovate pull requests unless asked to show them', async () => {
+    const pulls = [
+      pr(1, 'api', { requestedReviewerLogins: ['ada'] }),
+      pr(2, 'api', { requestedReviewerLogins: ['ada'], authorLogin: 'dependabot[bot]' }),
+      pr(3, 'web', { authorLogin: 'renovate[bot]' }),
+    ]
+    const harness = buildHarness({ vcs: environmentVcs(viewerVcs('ada', pulls, {}, [3])) })
+    await addProject(harness, 'api')
+
+    const hidden = await list(harness)
+    expect(hidden.requested.map((row) => row.pullRequest.number)).toStrictEqual([1])
+    expect(hidden.reviewed).toStrictEqual([])
+
+    const shown = await list(harness, '?dependencyBots=show')
+    expect(shown.requested.map((row) => row.pullRequest.number)).toStrictEqual([2, 1])
+    expect(shown.reviewed.map((row) => row.pullRequest.number)).toStrictEqual([3])
+  })
+
   it('still lists the linked review requests when the host refuses the search', async () => {
     const vcs = viewerVcs('ada', [pr(1, 'api', { requestedReviewerLogins: ['ada'] })])
     const refusing = {

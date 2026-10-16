@@ -7,6 +7,7 @@ import type {
   Project,
   ReviewCommitment,
 } from '@sainte-beuve/contracts'
+import { isDependencyBot } from './dependencyBots.js'
 import { repositoryKey } from './repositories.js'
 
 export interface ReviewListsInput {
@@ -35,6 +36,8 @@ export interface ReviewLists {
  * repository the search can see, so a row is kept once, by its URL. A
  * commitment requests its reviewer on the host, so a pull request they
  * committed to is listed under `committed` and not again under `requested`.
+ * Dependabot and Renovate pull requests are left out of `requested` and
+ * `reviewed` unless the query shows them; a commitment is always kept.
  */
 export function assembleReviewLists(input: ReviewListsInput, query: MyReviewsQuery): ReviewLists {
   const projectIdOf = projectIndex(input.projects)
@@ -42,6 +45,8 @@ export function assembleReviewLists(input: ReviewListsInput, query: MyReviewsQue
     if (query.scope === 'linked' && projectIdOf(ref) === null) return false
     return query.owner === undefined || ref.owner.toLowerCase() === query.owner.toLowerCase()
   }
+  const listed = (pr: OpenPullRequest): boolean =>
+    inScope(pr.pullRequest) && (query.dependencyBots === 'show' || !isDependencyBot(pr.authorLogin))
   const toRow = (pr: OpenPullRequest): MyReview => ({
     ...pr,
     projectId: projectIdOf(pr.pullRequest),
@@ -56,12 +61,12 @@ export function assembleReviewLists(input: ReviewListsInput, query: MyReviewsQue
     (pr) => !requestedUrls.has(pr.pullRequest.url),
   )
   return {
-    requested: byRecency(requested.filter((pr) => inScope(pr.pullRequest))).map(toRow),
+    requested: byRecency(requested.filter(listed)).map(toRow),
     committed: placeCommitments(
       input.commitments.filter((commitment) => inScope(commitment.pullRequest)),
       input.projects,
     ),
-    reviewed: byRecency(reviewed.filter((pr) => inScope(pr.pullRequest))).map(toRow),
+    reviewed: byRecency(reviewed.filter(listed)).map(toRow),
   }
 }
 

@@ -19,13 +19,16 @@ function queryValue(key: string): string | undefined {
 
 const owner = ref(queryValue('owner') ?? ALL)
 const linkedOnly = ref(queryValue('scope') === 'linked')
+// Dependency bots are hidden by default, as on PRs to review.
+const showDependencyBots = ref(queryValue('dependencyBots') === 'show')
 
 // The filters live in the URL, so a filtered view can be bookmarked and shared.
-watch([owner, linkedOnly], () => {
+watch([owner, linkedOnly, showDependencyBots], () => {
   void router.replace({
     query: {
       owner: owner.value === ALL ? undefined : owner.value,
       scope: linkedOnly.value ? 'linked' : undefined,
+      dependencyBots: showDependencyBots.value ? 'show' : undefined,
     },
   })
 })
@@ -38,8 +41,9 @@ const { data, pending, error, refresh } = useAsyncData(
     api.listMyReviews({
       owner: owner.value === ALL ? undefined : owner.value,
       scope: linkedOnly.value ? 'linked' : 'all',
+      dependencyBots: showDependencyBots.value ? 'show' : 'hide',
     }),
-  { lazy: true, watch: [owner, linkedOnly] },
+  { lazy: true, watch: [owner, linkedOnly, showDependencyBots] },
 )
 
 // The owners of the linked projects and of whatever is listed, so an owner
@@ -112,6 +116,11 @@ function committedTo(pullRequest: PullRequestRef): boolean {
         <USelect v-model="owner" :items="ownerOptions" value-key="value" class="w-full sm:w-48" />
       </UFormField>
       <USwitch v-model="linkedOnly" label="Linked repositories only" class="sm:pb-1.5" />
+      <USwitch
+        v-model="showDependencyBots"
+        label="Show Dependabot and Renovate"
+        class="sm:pb-1.5"
+      />
     </div>
 
     <LoadingSpinner v-if="pending && data !== undefined" label="Updating…" class="mb-3" />

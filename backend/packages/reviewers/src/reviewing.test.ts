@@ -108,6 +108,24 @@ describe('assembleReviewLists', () => {
     expect(numbers(byOwner.requested)).toStrictEqual([2, 1])
     expect(byOwner.committed).toMatchObject([{ id: 'c1', projectId: null }])
   })
+
+  it('leaves out Dependabot and Renovate pull requests unless asked to show them', () => {
+    const bot = (number: number, authorLogin: string) => ({ ...pr('api', number), authorLogin })
+    const found = input({
+      requestedFound: [pr('api', 1), bot(2, 'dependabot[bot]')],
+      reviewedFound: [pr('api', 3), bot(4, 'renovate[bot]')],
+      commitments: [commitmentOn(bot(5, 'renovate[bot]'))],
+    })
+
+    const hidden = assembleReviewLists(found, {})
+    expect(numbers(hidden.requested)).toStrictEqual([1])
+    expect(numbers(hidden.reviewed)).toStrictEqual([3])
+    expect(numbers(hidden.committed)).toStrictEqual([5])
+
+    const shown = assembleReviewLists(found, { dependencyBots: 'show' })
+    expect(numbers(shown.requested)).toStrictEqual([2, 1])
+    expect(numbers(shown.reviewed)).toStrictEqual([4, 3])
+  })
 })
 
 describe('placeCommitments', () => {

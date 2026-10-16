@@ -171,6 +171,10 @@ export const openPullRequestSchema = v.object({
 })
 export type OpenPullRequest = v.InferOutput<typeof openPullRequestSchema>
 
+/** Whether pull requests Dependabot or Renovate opened are listed. Hidden unless `show`. */
+export const dependencyBotsFilterSchema = v.picklist(['hide', 'show'])
+export type DependencyBotsFilter = v.InferOutput<typeof dependencyBotsFilterSchema>
+
 /**
  * A person's handle on each host.
  *

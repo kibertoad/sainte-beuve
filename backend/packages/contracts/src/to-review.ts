@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { domainSchema } from './orgs.js'
 import { skillSchema } from './reviewers.js'
-import { openPullRequestSchema } from './vcs.js'
+import { dependencyBotsFilterSchema, openPullRequestSchema } from './vcs.js'
 import { workspaceSourceSchema } from './workspace.js'
 
 // ---------------------------------------------------------------------------
@@ -10,10 +10,6 @@ import { workspaceSourceSchema } from './workspace.js'
 // have not reviewed yet lead; the rest are ranked on how long they have gone
 // without a review and on how well the viewer fits them.
 // ---------------------------------------------------------------------------
-
-/** Whether pull requests Dependabot or Renovate opened are listed. Hidden unless `show`. */
-export const dependencyBotsFilterSchema = v.picklist(['hide', 'show'])
-export type DependencyBotsFilter = v.InferOutput<typeof dependencyBotsFilterSchema>
 
 export const toReviewQuerySchema = v.object({
   dependencyBots: v.optional(dependencyBotsFilterSchema),
