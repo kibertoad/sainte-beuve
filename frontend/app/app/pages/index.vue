@@ -236,11 +236,7 @@ async function release(commitmentId: string) {
               >
                 Hand back
               </UButton>
-              <AiReviewButton
-                v-if="commitment.projectId !== null"
-                :pull-request="commitment.pullRequest"
-                :title="commitment.title"
-              />
+              <AiReviewButton :pull-request="commitment.pullRequest" :title="commitment.title" />
               <UButton
                 :to="guidedReviewRoute(commitment.pullRequest)"
                 size="sm"

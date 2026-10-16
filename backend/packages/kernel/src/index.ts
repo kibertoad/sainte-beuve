@@ -45,6 +45,7 @@ export type {
   CatFactoryAccess,
   CatFactoryProbe,
   CatFactoryProbeReport,
+  CatFactoryPlacementTarget,
   CatFactoryReviewTarget,
   AttentionAskNotice,
   ChatGateway,

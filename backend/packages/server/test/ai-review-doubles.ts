@@ -51,7 +51,12 @@ export function aiFinding(
  * to it rather than by scripting a sequence of responses.
  */
 export interface StubAiReview extends AiReviewGateway {
-  requested: { title: string; instructions: string | null; directoryKeys: readonly string[] }[]
+  requested: {
+    title: string
+    instructions: string | null
+    directoryKeys: readonly string[]
+    ownerDirectoryKeys?: readonly string[]
+  }[]
   /** The pull requests handed to the conflict resolver, in order. */
   conflictsResolved: { pullRequest: PullRequestRef; directoryKeys: readonly string[] }[]
   dismissed: { runId: string; findingId: string }[]
@@ -115,8 +120,8 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
       ...report,
     },
     requestReview: async (input) => {
-      const { title, instructions, directoryKeys } = input
-      stub.requested.push({ title, instructions, directoryKeys })
+      const { title, instructions, directoryKeys, ownerDirectoryKeys } = input
+      stub.requested.push({ title, instructions, directoryKeys, ownerDirectoryKeys })
       // Numbered, not fixed: a case about the clock's rotation files several
       // reviews and asserts WHICH of them a given tick polled.
       const taskId = `cf-task-${stub.requested.length}`

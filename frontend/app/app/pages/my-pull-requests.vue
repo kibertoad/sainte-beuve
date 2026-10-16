@@ -348,7 +348,6 @@ function offersComments(pr: MyPullRequest): boolean {
                 @linked="refreshAfterLink"
               />
               <AiReviewButton
-                v-if="pr.projectId !== null"
                 :pull-request="pr.pullRequest"
                 :title="pr.title"
                 :author-login="pr.authorLogin"

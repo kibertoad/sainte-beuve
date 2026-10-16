@@ -184,6 +184,27 @@ describe('curating a delegated AI review', () => {
     expect(new Set(loop.catFactory.workspaces)).toStrictEqual(new Set(['ws-a']))
   })
 
+  /** Where a repository no workspace links belongs is told by where the owner's others are. */
+  it("files a repository the directory does not list with the owner's other keys", async () => {
+    const { externalRepositories } = loop.harness.container.repositories
+    const listed = (key: string, owner: string, repo: string) => ({
+      source: 'cat-factory',
+      key,
+      seq: 1,
+      repository: { provider: 'github' as const, owner, repo, id: key.split('/')[1] ?? key },
+    })
+    await externalRepositories.apply(
+      listed('ws-a/43', PR.owner.toUpperCase(), 'another-repository'),
+    )
+    await externalRepositories.apply(listed('ws-b/50', 'somebody-else', PR.repo))
+
+    await parkedRun(loop)
+    expect(loop.catFactory.requested[0]).toMatchObject({
+      directoryKeys: [],
+      ownerDirectoryKeys: ['ws-a/43'],
+    })
+  })
+
   /**
    * The host's id survives a rename the mirror has not caught up with, and a
    * repository recreated under the old name is a different one.

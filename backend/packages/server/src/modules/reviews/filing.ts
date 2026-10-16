@@ -2,7 +2,24 @@ import type { AiReviewRun, ReviewRequest } from '@sainte-beuve/contracts'
 import type { AiReviewGateway } from '@sainte-beuve/kernel'
 import { assertFound, getErrorMessage } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
-import { catFactoryDirectoryKeys } from '../projects/directoryKeys.js'
+import { catFactoryPlacementKeys } from '../projects/directoryKeys.js'
+import { RepositorySyncService } from '../projects/RepositorySyncService.js'
+
+/**
+ * Follow cat-factory's directory now, after filing for a repository no
+ * workspace linked: filing links it, and this registers it here without waiting
+ * for the clock. Best effort, since the clock gets there anyway.
+ */
+async function adoptLinked(container: AppContainer): Promise<void> {
+  try {
+    await new RepositorySyncService(container).catchUpNow()
+  } catch (err) {
+    container.logger.warn(
+      { reason: getErrorMessage(err) },
+      'the repository directory could not be followed after filing a review',
+    )
+  }
+}
 
 /**
  * Hand a review to cat-factory for a run row already written in `requested`,
@@ -19,12 +36,14 @@ export async function fileWithCatFactory(
   const { repositories, clock } = container
   const { review, instructions } = input
   try {
+    const keys = await catFactoryPlacementKeys(container, review.pullRequest)
     const handle = await gateway.requestReview({
       pullRequest: review.pullRequest,
       title: review.title,
       instructions,
-      directoryKeys: await catFactoryDirectoryKeys(container, review.pullRequest),
+      ...keys,
     })
+    if (keys.directoryKeys.length === 0) await adoptLinked(container)
     return assertFound(
       await repositories.aiReviewRuns.update(run.id, {
         status: 'running',

@@ -1,4 +1,4 @@
-import type { ProjectRef } from '@sainte-beuve/contracts'
+import type { ExternalRepository, ProjectRef } from '@sainte-beuve/contracts'
 import type { AppContainer } from '../../container.js'
 import { CAT_FACTORY_SOURCE } from './RepositorySyncService.js'
 
@@ -19,20 +19,44 @@ export async function catFactoryDirectoryKeys(
   container: AppContainer,
   ref: ProjectRef,
 ): Promise<string[]> {
+  return (await catFactoryPlacementKeys(container, ref)).directoryKeys
+}
+
+/**
+ * The repository's keys, and the keys of the owner's other repositories, which
+ * is where cat-factory is told to link the repository when no workspace does.
+ */
+export async function catFactoryPlacementKeys(
+  container: AppContainer,
+  ref: ProjectRef,
+): Promise<{ directoryKeys: string[]; ownerDirectoryKeys: string[] }> {
   const { projects, externalRepositories } = container.repositories
   const [project, entries] = await Promise.all([
     projects.getByRef(ref),
     externalRepositories.list(CAT_FACTORY_SOURCE),
   ])
   const externalId = project?.external?.source === CAT_FACTORY_SOURCE ? project.external.id : null
-  return entries
-    .filter(({ repository }) => {
-      if (repository === null || repository.provider !== ref.provider) return false
-      if (externalId !== null) return repository.id === externalId
-      return sameName(repository.owner, ref.owner) && sameName(repository.repo, ref.repo)
-    })
-    .map((entry) => entry.key)
-    .sort()
+  const listed = entries.filter(
+    (
+      entry,
+    ): entry is ExternalRepository & {
+      repository: NonNullable<ExternalRepository['repository']>
+    } => entry.repository !== null && entry.repository.provider === ref.provider,
+  )
+  const isThis = ({ repository }: (typeof listed)[number]): boolean =>
+    externalId !== null
+      ? repository.id === externalId
+      : sameName(repository.owner, ref.owner) && sameName(repository.repo, ref.repo)
+  return {
+    directoryKeys: keysOf(listed.filter(isThis)),
+    ownerDirectoryKeys: keysOf(
+      listed.filter((entry) => !isThis(entry) && sameName(entry.repository.owner, ref.owner)),
+    ),
+  }
+}
+
+function keysOf(entries: readonly ExternalRepository[]): string[] {
+  return entries.map((entry) => entry.key).sort()
 }
 
 /** GitHub and GitLab both treat owner and repository names case-insensitively. */

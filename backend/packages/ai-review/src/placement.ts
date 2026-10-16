@@ -6,6 +6,7 @@ import {
 import { UnavailableError, formatPullRequest } from '@sainte-beuve/kernel'
 import { addRepositoryUrl } from './catFactoryApp.js'
 import { type DirectoryLocation, locationOf } from './directoryKeys.js'
+import { provisionService } from './provisioning.js'
 import { refusalFor } from './refusals.js'
 import type { WorkspaceClients } from './workspaceClients.js'
 
@@ -22,13 +23,18 @@ export interface PlacementRequest {
   directoryKeys: readonly string[]
   /** The service a task goes under when none backs its repository. */
   defaultServiceId: string | null
+  /** The mirror's keys for the owner's other repositories: where a new one belongs. */
+  ownerDirectoryKeys: readonly string[]
   /** Where cat-factory serves its app, asked only when the refusal needs a link into it. */
   appUrl: () => Promise<string>
 }
 
 /**
  * The service that backs the pull request's repository in a workspace linking
- * it, else the default service, in whichever linking workspace holds it.
+ * it, else the default service, in whichever linking workspace holds it. A
+ * repository no workspace links is first linked and given a service of its own
+ * (`provisionService`), so it is registered rather than filed under another
+ * repository's service.
  *
  * The first key whose workspace backs the repository wins, so a lookup refused
  * in one workspace does not stop filing when another backs it. A repository no
@@ -55,6 +61,13 @@ export async function placeTask(
   if (backed !== undefined) return backed.value
   const refused = lookups.find((lookup) => lookup.status === 'rejected')
   if (refused !== undefined) throw refused.reason
+  if (locations.length === 0) {
+    const provisioned = await provisionService(clients, {
+      pullRequest,
+      ownerDirectoryKeys: request.ownerDirectoryKeys,
+    })
+    if (provisioned !== null) return provisioned
+  }
   if (defaultServiceId === null) throw await repositoryMissing(pullRequest, request.appUrl)
   const workspaces = [...new Set(locations.map((location) => location.workspaceId))]
   return {

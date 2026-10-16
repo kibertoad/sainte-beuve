@@ -261,7 +261,7 @@ const STEP_ICON = {
       :busy="busy"
       placeholder="cf_live_…"
       :idle-label="connection.config === null ? 'Stored, save the settings to use it' : undefined"
-      description="The API key, minted in cat-factory under its API access tokens. Guided review needs the write scope. AI review needs decide, because a review stops on its findings and waits for an answer. Sealed before it is stored and never shown again. Once the settings are saved it is sent only to their API URL, and changing that URL removes it. Test connection uses a key typed here, else the stored one."
+      description="The API key, minted in cat-factory under its API access tokens. Guided review needs the write scope. AI review needs decide, because a review stops on its findings and waits for an answer, and admin lets it add a repository cat-factory has no service for. Sealed before it is stored and never shown again. Once the settings are saved it is sent only to their API URL, and changing that URL removes it. Test connection uses a key typed here, else the stored one."
       @save="emit('saveKey', $event)"
       @clear="emit('clearKey')"
     />

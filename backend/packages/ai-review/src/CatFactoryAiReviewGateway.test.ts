@@ -211,12 +211,14 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
       url: 'https://cat-factory.example.com/tasks/task-1',
       workspaceId: null,
     })
-    expect(calls[0]?.body).toMatchObject({
+    // No workspace links the repository, and this key cannot say where to link it.
+    expect(calls[0]?.path).toBe('/api/v1/directory/reach')
+    expect(calls[1]?.body).toMatchObject({
       taskType: 'resolve-conflicts',
       fields: { prNumber: 7, prUrl: 'https://github.com/kibertoad/sainte-beuve/pull/7' },
       title: 'Resolve conflicts in kibertoad/sainte-beuve#7',
     })
-    expect(calls[1]).toMatchObject({ path: '/api/v1/tasks/task-1/start', body: {} })
+    expect(calls[2]).toMatchObject({ path: '/api/v1/tasks/task-1/start', body: {} })
   })
 
   it('links the task into the app URL when the app is served apart from the API', async () => {
@@ -280,7 +282,10 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
       message: expect.stringContaining(message),
       details: { upstream: 'cat-factory', reason: 'attached_pr_repo_mismatch' },
     })
-    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/services/svc-1/tasks'])
+    expect(calls.map((call) => call.path)).toStrictEqual([
+      '/api/v1/directory/reach',
+      '/api/v1/services/svc-1/tasks',
+    ])
   })
 })
 
@@ -297,6 +302,7 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
       workspaceId: null,
     })
     expect(calls.map((call) => call.path)).toStrictEqual([
+      '/api/v1/directory/reach',
       '/api/v1/services/svc-1/tasks',
       '/api/v1/tasks/task-1/start',
     ])

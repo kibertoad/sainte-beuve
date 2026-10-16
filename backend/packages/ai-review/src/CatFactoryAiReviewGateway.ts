@@ -4,11 +4,12 @@ import {
   type CreatePublicTask,
   type PublicRun,
 } from '@cat-factory/sdk'
-import type { AiReviewCuration, AiReviewResolution, PullRequestRef } from '@sainte-beuve/contracts'
+import type { AiReviewCuration, AiReviewResolution } from '@sainte-beuve/contracts'
 import {
   type AiReviewGateway,
   type AiReviewHandle,
   type AiReviewReport,
+  type CatFactoryPlacementTarget,
   formatPullRequest,
   withDeadline,
 } from '@sainte-beuve/kernel'
@@ -141,12 +142,9 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     })
   }
 
-  async requestReview(input: {
-    pullRequest: PullRequestRef
-    title: string
-    instructions: string | null
-    directoryKeys: readonly string[]
-  }): Promise<AiReviewHandle> {
+  async requestReview(
+    input: CatFactoryPlacementTarget & { title: string; instructions: string | null },
+  ): Promise<AiReviewHandle> {
     const ref = formatPullRequest(input.pullRequest)
     const brief = [`Review ${ref}: ${input.pullRequest.url}`, input.instructions]
       .filter((line): line is string => line !== null && line.length > 0)
@@ -162,10 +160,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     })
   }
 
-  async requestConflictResolution(input: {
-    pullRequest: PullRequestRef
-    directoryKeys: readonly string[]
-  }): Promise<AiReviewHandle> {
+  async requestConflictResolution(input: CatFactoryPlacementTarget): Promise<AiReviewHandle> {
     const ref = formatPullRequest(input.pullRequest)
     return this.fileAndStart(input, {
       kind: 'conflict resolution',
@@ -193,12 +188,14 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
    * nothing filed from here has anything to edit.
    */
   private async fileAndStart(
-    target: { pullRequest: PullRequestRef; directoryKeys: readonly string[] },
+    target: CatFactoryPlacementTarget,
     filing: { kind: string; task: CreatePublicTask; pipelineId: string | undefined },
   ): Promise<AiReviewHandle> {
     const { kind, task: body, pipelineId } = filing
     const placement = await placeTask(this.clients, {
-      ...target,
+      pullRequest: target.pullRequest,
+      directoryKeys: target.directoryKeys,
+      ownerDirectoryKeys: target.ownerDirectoryKeys ?? [],
       defaultServiceId: this.options.serviceId,
       appUrl: () => appUrlOf(this.options),
     })
