@@ -12,6 +12,7 @@ import {
   formatPullRequest,
   withDeadline,
 } from '@sainte-beuve/kernel'
+import { appUrlOf } from './catFactoryApp.js'
 import { curationOf } from './curation.js'
 import { placeTask } from './placement.js'
 import { refusalFor } from './refusals.js'
@@ -194,6 +195,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     const placement = await placeTask(this.clients, {
       ...target,
       defaultServiceId: this.options.serviceId,
+      appUrl: () => appUrlOf(this.options),
     })
     const client = this.clients.in(placement.workspaceId)
     let task: { taskId: string }

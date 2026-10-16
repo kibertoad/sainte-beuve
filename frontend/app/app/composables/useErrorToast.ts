@@ -2,7 +2,9 @@
  * Show a failure as a toast that copies a full report of it when clicked.
  *
  * The toast has room for one sentence; whoever files the ticket needs the route,
- * the status, the refused fields and the page as well. See `errorReport`.
+ * the status, the refused fields and the page as well. See `errorReport`. A
+ * refusal with a fix to offer gets it as buttons (`refusalActions`), with
+ * `retry` after it when the caller can run the action again.
  */
 export function useErrorToast() {
   const toast = useToast()
@@ -17,19 +19,28 @@ export function useErrorToast() {
     }
   }
 
-  function showError(title: string, err: unknown, description = apiErrorMessage(err)): void {
+  function showError(
+    title: string,
+    err: unknown,
+    description = apiErrorMessage(err),
+    retry?: () => void,
+  ): void {
     const report = errorReport(title, err, {
       page: window.location.href,
       apiBase: api.apiBase || window.location.origin,
       at: new Date(),
       userAgent: navigator.userAgent,
     })
+    const actions = refusalActions(err, retry)
     toast.add({
       color: 'error',
       icon: 'i-lucide-clipboard-copy',
       title,
       description,
       onClick: () => void copy(report),
+      actions,
+      // Long enough to read the fix and click it.
+      ...(actions.length > 0 ? { duration: 20_000 } : {}),
     })
   }
 

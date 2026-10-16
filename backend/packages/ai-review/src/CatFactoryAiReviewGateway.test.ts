@@ -365,14 +365,39 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
     expect(calls.at(-2)?.path).toBe('/api/v1/services/svc-42/tasks')
   })
 
-  it('refuses naming both fixes when nothing backs the repository and there is no default', async () => {
-    const { gateway, calls } = gatewayOver({ '/repos': { body: repos() } }, null)
+  it('refuses with a link that adds the repository when nothing backs it and there is no default', async () => {
+    const { gateway, calls } = gatewayOver(
+      {
+        '/repos': { body: repos() },
+        '/deployment': { body: { appUrl: 'https://app.cat-factory.example.com/' } },
+      },
+      null,
+    )
 
     await expect(filing(gateway, ['ws-a/42'])).rejects.toMatchObject({
       code: 'unavailable',
-      message: /Create a service for the repository in cat-factory, or set a default service id/,
+      message:
+        /Add kibertoad\/sainte-beuve as a service in cat-factory, or set a default service id/,
+      details: {
+        reason: 'cat_factory_repository_missing',
+        repository: 'kibertoad/sainte-beuve',
+        provider: 'github',
+        addRepositoryUrl:
+          'https://app.cat-factory.example.com/?addRepo=kibertoad%2Fsainte-beuve&provider=github',
+      },
     })
-    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos'])
+    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos', '/api/v1/deployment'])
+  })
+
+  it('links into the API origin when cat-factory cannot say where its app is', async () => {
+    const { gateway } = gatewayOver({ '/repos': { body: repos() } }, null)
+
+    await expect(filing(gateway, ['ws-a/42'])).rejects.toMatchObject({
+      details: {
+        addRepositoryUrl:
+          'https://cat-factory.example.com/?addRepo=kibertoad%2Fsainte-beuve&provider=github',
+      },
+    })
   })
 
   /**

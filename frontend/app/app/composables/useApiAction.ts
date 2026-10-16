@@ -34,7 +34,8 @@ export function useApiAction(options: ApiActionOptions = {}) {
       await options.refresh?.()
       return true
     } catch (err) {
-      showError(failure, err, (options.describe ?? apiErrorMessage)(err))
+      const retry = () => void run(action, failure, key)
+      showError(failure, err, (options.describe ?? apiErrorMessage)(err), retry)
       return false
     } finally {
       busy.value = null

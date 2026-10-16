@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { peopleSyncSchema } from './external-directory.js'
+import { vcsProviderSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
 // cat-factory connection wire contracts.
@@ -122,3 +123,26 @@ export const catFactoryCheckSchema = v.object({
   pipelines: v.array(v.object({ id: v.string(), name: v.string() })),
 })
 export type CatFactoryCheck = v.InferOutput<typeof catFactoryCheckSchema>
+
+/**
+ * The `details` of the refusal to file work for a repository that no
+ * cat-factory service backs, when the org has no default service either.
+ * `addRepositoryUrl` opens cat-factory's add-service window with the repository
+ * picked, so a screen can offer it as the fix and then a retry.
+ */
+export const CAT_FACTORY_REPOSITORY_MISSING = 'cat_factory_repository_missing'
+
+export const catFactoryRepositoryMissingSchema = v.object({
+  reason: v.literal(CAT_FACTORY_REPOSITORY_MISSING),
+  /** `owner/name`, as the pull request names it. */
+  repository: v.string(),
+  provider: vcsProviderSchema,
+  addRepositoryUrl: v.string(),
+})
+export type CatFactoryRepositoryMissing = v.InferOutput<typeof catFactoryRepositoryMissingSchema>
+
+/** The refusal's details when that is what they are, else null. */
+export function repositoryMissingOf(details: unknown): CatFactoryRepositoryMissing | null {
+  const parsed = v.safeParse(catFactoryRepositoryMissingSchema, details)
+  return parsed.success ? parsed.output : null
+}

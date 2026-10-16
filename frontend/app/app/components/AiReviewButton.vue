@@ -40,7 +40,7 @@ async function fileOrExplain(): Promise<string | null> {
     })
     return run.reviewId
   } catch (err) {
-    showError('Could not request an AI review', err)
+    showError('Could not request an AI review', err, apiErrorMessage(err), () => void file())
     return refusedReviewId(err)
   }
 }

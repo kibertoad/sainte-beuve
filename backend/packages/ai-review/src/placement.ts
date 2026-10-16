@@ -1,5 +1,10 @@
-import type { PullRequestRef } from '@sainte-beuve/contracts'
+import {
+  CAT_FACTORY_REPOSITORY_MISSING,
+  type CatFactoryRepositoryMissing,
+  type PullRequestRef,
+} from '@sainte-beuve/contracts'
 import { UnavailableError, formatPullRequest } from '@sainte-beuve/kernel'
+import { addRepositoryUrl } from './catFactoryApp.js'
 import { type DirectoryLocation, locationOf } from './directoryKeys.js'
 import { refusalFor } from './refusals.js'
 import type { WorkspaceClients } from './workspaceClients.js'
@@ -17,6 +22,8 @@ export interface PlacementRequest {
   directoryKeys: readonly string[]
   /** The service a task goes under when none backs its repository. */
   defaultServiceId: string | null
+  /** Where cat-factory serves its app, asked only when the refusal needs a link into it. */
+  appUrl: () => Promise<string>
 }
 
 /**
@@ -48,17 +55,33 @@ export async function placeTask(
   if (backed !== undefined) return backed.value
   const refused = lookups.find((lookup) => lookup.status === 'rejected')
   if (refused !== undefined) throw refused.reason
-  if (defaultServiceId === null) {
-    throw new UnavailableError(
-      `Cannot file a cat-factory task for ${formatPullRequest(pullRequest)}: no cat-factory service backs its repository and no default service is set. ` +
-        'Create a service for the repository in cat-factory, or set a default service id on the Configuration screen',
-    )
-  }
+  if (defaultServiceId === null) throw await repositoryMissing(pullRequest, request.appUrl)
   const workspaces = [...new Set(locations.map((location) => location.workspaceId))]
   return {
     serviceId: defaultServiceId,
     workspaceId: await workspaceHolding(clients, defaultServiceId, workspaces),
   }
+}
+
+/**
+ * The refusal for a repository no service backs, carrying the link that adds
+ * one in cat-factory, so a screen offers the fix rather than describing it.
+ */
+async function repositoryMissing(
+  pullRequest: PullRequestRef,
+  appUrl: () => Promise<string>,
+): Promise<UnavailableError> {
+  const details: CatFactoryRepositoryMissing = {
+    reason: CAT_FACTORY_REPOSITORY_MISSING,
+    repository: `${pullRequest.owner}/${pullRequest.repo}`,
+    provider: pullRequest.provider,
+    addRepositoryUrl: addRepositoryUrl(await appUrl(), pullRequest),
+  }
+  return new UnavailableError(
+    `Cannot file a cat-factory task for ${formatPullRequest(pullRequest)}: no cat-factory service backs its repository and no default service is set. ` +
+      `Add ${details.repository} as a service in cat-factory, or set a default service id on the Configuration screen`,
+    details,
+  )
 }
 
 /**
