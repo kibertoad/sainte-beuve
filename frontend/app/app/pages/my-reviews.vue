@@ -138,30 +138,6 @@ function committedTo(pullRequest: PullRequestRef): boolean {
         :description="search.reason ?? 'No reason given.'"
       />
 
-      <PullRequestList
-        title="Asked to review"
-        description="The host is waiting on your review."
-        empty="Nobody is waiting on you."
-        :pull-requests="data.requested"
-      >
-        <template #actions="{ pullRequest }">
-          <LinkRepositoryButton
-            v-if="pullRequest.projectId === null"
-            :pull-request="pullRequest.pullRequest"
-            @linked="refreshAfterLink"
-          />
-          <UButton
-            v-if="!committedTo(pullRequest.pullRequest)"
-            size="sm"
-            variant="ghost"
-            :loading="busy === pullRequest.pullRequest.url"
-            @click="takeOn(pullRequest)"
-          >
-            I will review it
-          </UButton>
-        </template>
-      </PullRequestList>
-
       <UCard>
         <template #header>
           <div class="flex items-baseline justify-between gap-3">
@@ -181,16 +157,21 @@ function committedTo(pullRequest: PullRequestRef): boolean {
           <div
             v-for="commitment in data.committed"
             :key="commitment.id"
-            class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+            class="flex flex-col gap-2 py-3 pl-3 border-l-2 border-l-primary first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
           >
             <div class="min-w-0">
-              <ULink
-                :to="safeHref(commitment.pullRequest.url)"
-                target="_blank"
-                class="font-medium line-clamp-2"
-              >
-                {{ commitment.title }}
-              </ULink>
+              <div class="flex items-center gap-2 min-w-0">
+                <ULink
+                  :to="safeHref(commitment.pullRequest.url)"
+                  target="_blank"
+                  class="font-medium line-clamp-2"
+                >
+                  {{ commitment.title }}
+                </ULink>
+                <UBadge size="sm" variant="subtle" color="primary" class="shrink-0">
+                  You committed
+                </UBadge>
+              </div>
               <p class="text-xs text-muted">{{ formatPullRequestRef(commitment.pullRequest) }}</p>
             </div>
             <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
@@ -228,11 +209,48 @@ function committedTo(pullRequest: PullRequestRef): boolean {
       </UCard>
 
       <PullRequestList
+        title="Asked to review"
+        description="The host is waiting on your review."
+        empty="Nobody is waiting on you."
+        :pull-requests="data.requested"
+        :marked="(pr) => committedTo(pr.pullRequest)"
+      >
+        <template #actions="{ pullRequest }">
+          <LinkRepositoryButton
+            v-if="pullRequest.projectId === null"
+            :pull-request="pullRequest.pullRequest"
+            @linked="refreshAfterLink"
+          />
+          <UButton
+            v-if="!committedTo(pullRequest.pullRequest)"
+            size="sm"
+            variant="ghost"
+            :loading="busy === pullRequest.pullRequest.url"
+            @click="takeOn(pullRequest)"
+          >
+            I will review it
+          </UButton>
+        </template>
+      </PullRequestList>
+
+      <PullRequestList
         title="Reviewed"
         description="Still open, and you have reviewed them. One you are asked to look at again moves up."
         empty="Nothing you reviewed is still open."
         :pull-requests="data.reviewed"
+        :marked="(pr) => committedTo(pr.pullRequest)"
       >
+        <template #details="{ pullRequest }">
+          <UBadge
+            v-if="committedTo(pullRequest.pullRequest)"
+            size="sm"
+            variant="subtle"
+            color="primary"
+            class="mt-1.5"
+          >
+            You committed
+          </UBadge>
+        </template>
         <template #actions="{ pullRequest }">
           <LinkRepositoryButton
             v-if="pullRequest.projectId === null"

@@ -8,6 +8,7 @@ const DAY = 24 * HOUR
 function reasons(fields: Partial<ToReviewReasons> = {}): ToReviewReasons {
   return {
     committedAt: null,
+    commitmentId: null,
     requested: false,
     othersCommitted: 0,
     reviewerLogins: [],

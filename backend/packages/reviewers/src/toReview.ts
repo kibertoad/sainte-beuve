@@ -154,10 +154,14 @@ function reviewReasons(
 function commitmentReasons(
   commitments: readonly ReviewCommitment[],
   viewerId: string,
-): Pick<PullRequestToReview['reasons'], 'committedAt' | 'othersCommitted'> {
+): Pick<PullRequestToReview['reasons'], 'committedAt' | 'commitmentId' | 'othersCommitted'> {
   const own = commitments.find((commitment) => commitment.reviewerId === viewerId)
   const others = new Set(commitments.map((c) => c.reviewerId).filter((id) => id !== viewerId))
-  return { committedAt: own?.createdAt ?? null, othersCommitted: others.size }
+  return {
+    committedAt: own?.createdAt ?? null,
+    commitmentId: own?.id ?? null,
+    othersCommitted: others.size,
+  }
 }
 
 /** The score a row is ranked on below the viewer's own promises. */

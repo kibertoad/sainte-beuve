@@ -30,6 +30,16 @@ async function takeOn(pr: PullRequestToReview) {
     pr.pullRequest.url,
   )
 }
+
+async function handBack(pr: PullRequestToReview, commitmentId: string) {
+  await run(
+    () => api.releaseCommitment(commitmentId),
+    'Could not release the commitment',
+    pr.pullRequest.url,
+  )
+}
+
+const committed = (pr: PullRequestToReview) => pr.reasons.commitmentId !== null
 </script>
 
 <template>
@@ -77,6 +87,7 @@ async function takeOn(pr: PullRequestToReview) {
         description="The ones you committed to lead, then the ones waiting longest for a review."
         empty="Nothing in the linked repositories is waiting on a review."
         :pull-requests="data.pullRequests"
+        :marked="committed"
       >
         <template #details="{ pullRequest }">
           <div class="flex flex-wrap gap-1 mt-1.5">
@@ -94,7 +105,17 @@ async function takeOn(pr: PullRequestToReview) {
         </template>
         <template #actions="{ pullRequest }">
           <UButton
-            v-if="pullRequest.reasons.committedAt === null"
+            v-if="pullRequest.reasons.commitmentId !== null"
+            size="sm"
+            variant="ghost"
+            color="neutral"
+            :loading="busy === pullRequest.pullRequest.url"
+            @click="handBack(pullRequest, pullRequest.reasons.commitmentId)"
+          >
+            Hand back
+          </UButton>
+          <UButton
+            v-else
             size="sm"
             variant="ghost"
             :loading="busy === pullRequest.pullRequest.url"

@@ -27,6 +27,8 @@ export const MAX_PULL_REQUESTS_TO_REVIEW = 50
 export const toReviewReasonsSchema = v.object({
   /** When the viewer committed to reviewing it here, or null. Committed ones lead the list. */
   committedAt: v.nullable(v.number()),
+  /** The viewer's commitment, which releasing it names. Null when they made none. */
+  commitmentId: v.nullable(v.string()),
   /** The host is waiting on the viewer's review. */
   requested: v.boolean(),
   /** How many other people committed to reviewing it here. */

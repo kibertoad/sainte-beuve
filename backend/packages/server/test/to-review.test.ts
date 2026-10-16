@@ -3,6 +3,7 @@ import type { VcsGateway } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   buildHarness,
+  del,
   environmentVcs,
   get,
   openPullRequest,
@@ -132,6 +133,23 @@ describe('PRs to review', () => {
     const res = await harness.app.fetch(get('/api/v1/to-review?dependencyBots=show'))
     const shown = (await res.json()) as PullRequestsToReview
     expect(numbers(shown).toSorted()).toStrictEqual([1, 2, 3])
+  })
+
+  it('names the viewer commitment, and drops it once released', async () => {
+    const harness = buildHarness({ vcs: environmentVcs(vcsWith([pr(1, 'api')], {})) })
+    await addProject(harness, 'api')
+    const committed = await harness.app.fetch(
+      post('/api/v1/commitments', { pullRequest: pr(1, 'api').pullRequest, title: 'Mine' }),
+    )
+    const { id } = (await committed.json()) as { id: string }
+
+    expect((await list(harness)).pullRequests[0]?.reasons.commitmentId).toBe(id)
+    const released = await harness.app.fetch(del(`/api/v1/commitments/${id}`))
+    expect(released.status).toBe(200)
+    expect((await list(harness)).pullRequests[0]?.reasons).toMatchObject({
+      committedAt: null,
+      commitmentId: null,
+    })
   })
 
   it('counts the commitments other people made', async () => {

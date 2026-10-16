@@ -15,6 +15,8 @@ defineProps<{
   pullRequests: T[]
   /** What to say when there is nothing, which is the state most people are in. */
   empty: string
+  /** Rows to set apart with an accent, such as the ones the viewer committed to. */
+  marked?: (pr: T) => boolean
 }>()
 
 /**
@@ -46,6 +48,7 @@ function isLinked(pr: OpenPullRequest): boolean {
         v-for="pr in pullRequests"
         :key="pr.pullRequest.url"
         class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+        :class="{ 'border-l-2 border-l-primary pl-3': marked?.(pr) }"
       >
         <div class="min-w-0">
           <div class="flex items-center gap-2 min-w-0">

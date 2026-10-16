@@ -113,6 +113,11 @@ describe('rankPullRequestsToReview', () => {
     )
     expect(numbers(rows)).toStrictEqual([3, 2, 1])
     expect(rows[0]?.reasons.committedAt).toBe(NOW - 2 * DAY)
+    expect(rows.map((row) => row.reasons.commitmentId)).toStrictEqual([
+      'viewer-3',
+      'viewer-2',
+      null,
+    ])
   })
 
   it('ranks the pull request unreviewed for longest higher', () => {
@@ -128,7 +133,7 @@ describe('rankPullRequestsToReview', () => {
   it('prefers an unreviewed pull request nobody committed to', () => {
     const rows = rank([repository({ pullRequests: [pr(1), pr(2)] })], [commitment(1, 'other')])
     expect(numbers(rows)).toStrictEqual([2, 1])
-    expect(rows[1]?.reasons.othersCommitted).toBe(1)
+    expect(rows[1]?.reasons).toMatchObject({ othersCommitted: 1, commitmentId: null })
   })
 
   it('stops counting the wait once somebody reviewed it', () => {
@@ -246,6 +251,7 @@ describe('rankPullRequestsToReview', () => {
 describe('scoreOf', () => {
   const none = {
     committedAt: null,
+    commitmentId: null,
     requested: false,
     othersCommitted: 0,
     reviewerLogins: [],
