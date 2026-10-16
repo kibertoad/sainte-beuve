@@ -221,6 +221,27 @@ describe('CatFactoryDirectoryGateway', () => {
     ).rejects.toThrow('(url: The webhook endpoint must be an https:// URL)')
   })
 
+  it('names the reach, not the scope, when a key limited to some workspaces is turned away', async () => {
+    const refusing = async () =>
+      json(
+        {
+          error: {
+            code: 'forbidden',
+            message: 'Directory webhooks need a key that reaches every workspace',
+            details: { reason: 'account_scope_required' },
+          },
+        },
+        403,
+      )
+    const refusal = gateway(refusing).registerWebhook({
+      webhookId: 'sainte-beuve-1',
+      url: 'https://reviews.example.com/webhooks/cat-factory/default',
+      secret: 'a-secret-of-sixteen-or-more',
+    })
+    await expect(refusal).rejects.toThrow(/reach is all workspaces/)
+    await expect(refusal).rejects.not.toThrow(/scope/)
+  })
+
   it('refuses a push whose signature does not verify, and writes nothing', async () => {
     const store = memoryStore()
     const outcome = await gateway(directoryAnswering()).receive(store, {

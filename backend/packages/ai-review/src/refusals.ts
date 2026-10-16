@@ -48,6 +48,21 @@ function issuesOf(err: CatFactoryApiError): string {
 }
 
 /**
+ * What to change about the key after a 403. cat-factory refuses a key for its scope
+ * or for its workspace reach, and naming the scope after a reach refusal sends an
+ * operator to a setting their key already has right.
+ */
+function forbiddenFix(source: CatFactoryRefusalDetails, scope: string): string {
+  if (source.reason === 'account_scope_required') {
+    return (
+      'This needs an API key whose reach is all workspaces. In cat-factory, an account admin ' +
+      'sets the reach when creating the token, with the UI in advanced mode'
+    )
+  }
+  return `This needs an API key carrying the \`${scope}\` scope or above`
+}
+
+/**
  * A cat-factory refusal, as the fault sainte-beuve answers with.
  *
  * Every call this package makes is translated here, FILING included. The refusal
@@ -99,7 +114,7 @@ export function refusalFor(
   }
   if (err instanceof CatFactoryForbiddenError) {
     return new ForbiddenError(
-      `cat-factory refused to ${detail}. This needs an API key carrying the \`${scope}\` scope`,
+      `cat-factory refused to ${detail}. ${forbiddenFix(source, scope)}`,
       source,
     )
   }
