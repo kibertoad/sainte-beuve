@@ -73,8 +73,21 @@ describe('curating a delegated AI review', () => {
     const run = await delegate(loop)
     expect(loop.catFactory.requested).toHaveLength(1)
     expect(run.catFactoryTaskId).toBe('cf-task-1')
-    expect(run.catFactoryUrl).toBe('https://cat-factory.example.com/tasks/cf-task-1')
+    expect(run.catFactoryUrl).toBe('https://cat-factory.example.com/?block=cf-task-1&run=cf-run-1')
     expect(run.status).toBe('running')
+  })
+
+  it("links a run into cat-factory's app as it is configured now, not as it was at filing", async () => {
+    const run = await delegate(loop)
+    await writeCatFactoryConfig(loop.harness.container, {
+      baseUrl: 'https://cat-factory.example.com',
+      appUrl: 'https://app.cat-factory.example.com',
+      serviceId: 'svc-1',
+      pipelineId: null,
+    })
+    expect((await listRuns(loop, run.reviewId)).catFactoryUrl).toBe(
+      'https://app.cat-factory.example.com/?block=cf-task-1&run=cf-run-1',
+    )
   })
 
   it('sends the curated selection to cat-factory and answers 202', async () => {

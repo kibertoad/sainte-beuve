@@ -1,4 +1,5 @@
 import {
+  type AiReviewRun,
   challengeAiReviewFindingContract,
   dismissAiReviewFindingContract,
   getAiReviewRunContract,
@@ -10,9 +11,11 @@ import {
 } from '@sainte-beuve/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import type { AppContainer } from '../../container.js'
 import type { AppEnv } from '../../http/env.js'
 import { AiReviewCurationService } from './AiReviewCurationService.js'
 import { AiReviewService } from './AiReviewService.js'
+import { withCatFactoryLink, withCatFactoryLinks } from './catFactoryLinks.js'
 import { requestPullRequestAiReview } from './pullRequestAiReview.js'
 
 /**
@@ -27,35 +30,52 @@ import { requestPullRequestAiReview } from './pullRequestAiReview.js'
  */
 export function aiReviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
+  mountFilingAndReads(app)
+  mountCuration(app)
+  return app
+}
 
+/** A run as a route answers it, with its link into cat-factory built now (see `withCatFactoryLinks`). */
+type Linked = (run: Promise<AiReviewRun>) => Promise<AiReviewRun>
+
+function linking(container: AppContainer): Linked {
+  return async (run) => withCatFactoryLink(container, await run)
+}
+
+function mountFilingAndReads(app: Hono<AppEnv>): void {
   // 202, not 201: cat-factory has accepted the task, and the findings arrive later.
   buildHonoRoute(app, requestAiReviewContract, async (c) => {
     const service = new AiReviewService(c.get('container'))
     const { reviewId } = c.req.valid('param')
-    return c.json(await service.request(reviewId, c.req.valid('json').instructions), 202)
+    const run = service.request(reviewId, c.req.valid('json').instructions)
+    return c.json(await linking(c.get('container'))(run), 202)
   })
 
   // The same filing from a row that is not on the board yet: the workspace, My
   // PRs and My Reviews. The run names the board row it was filed on.
   buildHonoRoute(app, requestPullRequestAiReviewContract, async (c) => {
-    return c.json(await requestPullRequestAiReview(c.get('container'), c.req.valid('json')), 202)
+    const run = requestPullRequestAiReview(c.get('container'), c.req.valid('json'))
+    return c.json(await linking(c.get('container'))(run), 202)
   })
 
   buildHonoRoute(app, listAiReviewRunsContract, async (c) => {
     const service = new AiReviewService(c.get('container'))
     const { reviewId } = c.req.valid('param')
-    return c.json({ runs: await service.listByReview(reviewId) }, 200)
+    const runs = await withCatFactoryLinks(c.get('container'), await service.listByReview(reviewId))
+    return c.json({ runs }, 200)
   })
 
   buildHonoRoute(app, getAiReviewRunContract, async (c) => {
     const service = new AiReviewService(c.get('container'))
-    return c.json(await service.get(c.req.valid('param').runId), 200)
+    return c.json(await linking(c.get('container'))(service.get(c.req.valid('param').runId)), 200)
   })
+}
 
+function mountCuration(app: Hono<AppEnv>): void {
   buildHonoRoute(app, dismissAiReviewFindingContract, async (c) => {
     const service = new AiReviewCurationService(c.get('container'))
     const { runId, findingId } = c.req.valid('param')
-    return c.json(await service.dismissFinding(runId, findingId), 200)
+    return c.json(await linking(c.get('container'))(service.dismissFinding(runId, findingId)), 200)
   })
 
   // 202 for the three below: cat-factory challenges, resolves and resumes
@@ -64,19 +84,22 @@ export function aiReviewController(): Hono<AppEnv> {
   buildHonoRoute(app, challengeAiReviewFindingContract, async (c) => {
     const service = new AiReviewCurationService(c.get('container'))
     const { runId, findingId } = c.req.valid('param')
-    return c.json(await service.challenge(runId, findingId, c.req.valid('json').question), 202)
+    const run = service.challenge(runId, findingId, c.req.valid('json').question)
+    return c.json(await linking(c.get('container'))(run), 202)
   })
 
   buildHonoRoute(app, resolveAiReviewContract, async (c) => {
     const service = new AiReviewCurationService(c.get('container'))
     const { action, findingIds } = c.req.valid('json')
-    return c.json(await service.resolve(c.req.valid('param').runId, { action, findingIds }), 202)
+    const run = service.resolve(c.req.valid('param').runId, { action, findingIds })
+    return c.json(await linking(c.get('container'))(run), 202)
   })
 
   buildHonoRoute(app, resumeAiReviewContract, async (c) => {
     const service = new AiReviewCurationService(c.get('container'))
-    return c.json(await service.resume(c.req.valid('param').runId), 202)
+    return c.json(
+      await linking(c.get('container'))(service.resume(c.req.valid('param').runId)),
+      202,
+    )
   })
-
-  return app
 }

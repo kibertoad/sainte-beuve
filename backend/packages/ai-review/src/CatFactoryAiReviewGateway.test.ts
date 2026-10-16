@@ -198,7 +198,7 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
   it('files a resolve-conflicts task naming the pull request, and starts its own pipeline', async () => {
     const { gateway, calls } = gatewayOver({
       '/tasks': { body: task() },
-      '/start': { body: task({ status: 'running' }) },
+      '/start': { body: task({ status: 'running', runId: 'run-1' }) },
     })
 
     const handle = await gateway.requestConflictResolution({
@@ -208,7 +208,7 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
 
     expect(handle).toStrictEqual({
       taskId: 'task-1',
-      url: 'https://cat-factory.example.com/tasks/task-1',
+      url: 'https://cat-factory.example.com/?block=task-1&run=run-1',
       workspaceId: null,
     })
     // No workspace links the repository, and this key cannot say where to link it.
@@ -223,7 +223,10 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
 
   it('links the task into the app URL when the app is served apart from the API', async () => {
     const { gateway } = gatewayOver(
-      { '/tasks': { body: task() }, '/start': { body: task({ status: 'running' }) } },
+      {
+        '/tasks': { body: task() },
+        '/start': { body: task({ status: 'running', runId: 'run-1' }) },
+      },
       'svc-1',
       'https://app.cat-factory.example.com',
     )
@@ -233,7 +236,7 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
       directoryKeys: [],
     })
 
-    expect(handle.url).toBe('https://app.cat-factory.example.com/tasks/task-1')
+    expect(handle.url).toBe('https://app.cat-factory.example.com/?block=task-1&run=run-1')
   })
 
   it('files under the service backing the repository, in the workspace that links it', async () => {
@@ -293,12 +296,12 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
   it('files the task and starts it, and reports the handle the loop is tracked by', async () => {
     const { gateway, calls } = gatewayOver({
       '/tasks': { body: task() },
-      '/start': { body: task({ status: 'running' }) },
+      '/start': { body: task({ status: 'running', runId: 'run-1' }) },
     })
 
     expect(await filing(gateway)).toStrictEqual({
       taskId: 'task-1',
-      url: 'https://cat-factory.example.com/tasks/task-1',
+      url: 'https://cat-factory.example.com/?block=task-1&run=run-1',
       workspaceId: null,
     })
     expect(calls.map((call) => call.path)).toStrictEqual([
@@ -314,10 +317,13 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
         body: repos({ repoId: 41, serviceId: 'svc-other' }, { repoId: 42, serviceId: 'svc-42' }),
       },
       '/tasks': { body: task({ serviceId: 'svc-42' }) },
-      '/start': { body: task({ status: 'running' }) },
+      '/start': { body: task({ status: 'running', runId: 'run-1' }) },
     })
 
-    expect((await filing(gateway, ['ws-a/42'])).workspaceId).toBe('ws-a')
+    const handle = await filing(gateway, ['ws-a/42'])
+    expect(handle.workspaceId).toBe('ws-a')
+    // The link pins the board the task was filed in, which is what opens it there.
+    expect(handle.url).toBe('https://cat-factory.example.com/?ws=ws-a&block=task-1&run=run-1')
     expect(calls.map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
       { path: '/api/v1/repos', workspace: 'ws-a' },
       { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-a' },

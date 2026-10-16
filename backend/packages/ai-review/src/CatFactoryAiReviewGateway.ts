@@ -4,7 +4,11 @@ import {
   type CreatePublicTask,
   type PublicRun,
 } from '@cat-factory/sdk'
-import type { AiReviewCuration, AiReviewResolution } from '@sainte-beuve/contracts'
+import {
+  type AiReviewCuration,
+  type AiReviewResolution,
+  catFactoryRunUrl,
+} from '@sainte-beuve/contracts'
 import {
   type AiReviewGateway,
   type AiReviewHandle,
@@ -209,8 +213,12 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     } catch (err) {
       throw refusalFor(err, `file a ${kind} task for ${formatPullRequest(target.pullRequest)}`)
     }
+    let started: { runId: string | null }
     try {
-      await client.tasks.start(task.taskId, pipelineId === undefined ? {} : { pipelineId })
+      started = await client.tasks.start(
+        task.taskId,
+        pipelineId === undefined ? {} : { pipelineId },
+      )
     } catch (err) {
       // Through the same translation as every other call, because this is where a
       // `write`-scope key is turned away: the run would park, so cat-factory will
@@ -219,7 +227,11 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     }
     return {
       taskId: task.taskId,
-      url: `${this.options.appUrl ?? this.options.baseUrl}/tasks/${task.taskId}`,
+      url: catFactoryRunUrl(this.options.appUrl ?? this.options.baseUrl, {
+        workspaceId: placement.workspaceId,
+        taskId: task.taskId,
+        runId: started.runId,
+      }),
       workspaceId: placement.workspaceId,
     }
   }
