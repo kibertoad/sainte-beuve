@@ -227,13 +227,6 @@ export const aiReviewCurationSchema = v.object({
   /** The reviewer's overall assessment of the pull request, once it has one. */
   summary: v.optional(v.nullable(v.string()), null),
   slices: v.optional(v.array(aiReviewSliceSchema), []),
-  /** What a `post` queued for the fixer, to run once the comments are up. */
-  fixFindingIds: v.optional(v.array(v.string()), []),
-  /**
-   * Whether the instance takes `fixFindingIds` on a `post`. An older one drops
-   * the field without a word, so a split it cannot run is refused here instead.
-   */
-  combinesPostAndFix: v.optional(v.boolean(), false),
 })
 export type AiReviewCuration = v.InferOutput<typeof aiReviewCurationSchema>
 

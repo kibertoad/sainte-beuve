@@ -88,7 +88,6 @@ export class AiReviewCurationService {
     const { act, target } = await this.curating(runId)
     const run = await this.runs.get(runId)
     refuseRetracted(run, resolution)
-    refuseUnsupportedSplit(run, resolution)
     await act((gateway) => gateway.resolveReview({ ...target, ...resolution }))
     return this.runs.get(runId)
   }
@@ -139,18 +138,6 @@ export class AiReviewCurationService {
 }
 
 function refuseMalformed(resolution: ResolveAiReview): void {
-  if (resolution.fixFindingIds.length > 0 && resolution.action !== 'post') {
-    throw new ValidationError(
-      `\`fixFindingIds\` goes with \`post\` only. Send the findings to fix as \`findingIds\` on a \`fix\``,
-    )
-  }
-  const commented = new Set(resolution.findingIds)
-  const both = resolution.fixFindingIds.filter((findingId) => commented.has(findingId))
-  if (both.length > 0) {
-    throw new ValidationError(
-      `${[...new Set(both)].join(', ')} cannot be commented on and fixed in one resolution. Name each finding once`,
-    )
-  }
   if (resolution.action === 'finish' || resolution.findingIds.length > 0) return
   throw new ValidationError(
     `\`${resolution.action}\` needs at least one finding selected. Use \`finish\` to close a review without posting anything`,
@@ -160,19 +147,10 @@ function refuseMalformed(resolution: ResolveAiReview): void {
 function refuseRetracted(run: AiReviewRun, resolution: ResolveAiReview): void {
   if (resolution.action === 'finish') return
   const retracted = retractedFindingIds(run.curation)
-  const named = [...resolution.findingIds, ...resolution.fixFindingIds].filter((findingId) =>
-    retracted.has(findingId),
-  )
+  const named = resolution.findingIds.filter((findingId) => retracted.has(findingId))
   if (named.length === 0) return
   throw new ValidationError(
     `A challenge retracted ${[...new Set(named)].join(', ')}, so it can no longer be acted on. Leave it out of the selection`,
-  )
-}
-
-function refuseUnsupportedSplit(run: AiReviewRun, resolution: ResolveAiReview): void {
-  if (resolution.fixFindingIds.length === 0 || run.curation?.combinesPostAndFix === true) return
-  throw new ConflictError(
-    'This cat-factory cannot post comments and fix findings in one pass. Post or fix on its own, or upgrade cat-factory',
   )
 }
 

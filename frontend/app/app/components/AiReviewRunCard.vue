@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { AiReviewRun, ResolveAiReviewInput } from '@sainte-beuve/contracts'
-import { applyLabel, type FindingChoice, planOf } from '../utils/aiReviewPlan'
+import { applyLabel, planOf, type ReviewOutcome } from '../utils/aiReviewPlan'
 import { aiReviewStatusColor, aiReviewStatusLabel } from '../utils/aiReviewStatus'
 
 // One delegated review, followed from filing to the last comment or commit.
 //
 // The screen exists for the parked state: cat-factory hands back what it found
-// and does nothing until somebody says what each finding deserves (a comment, a
-// fix, or nothing). Everything else here is context for that decision.
+// and does nothing until somebody settles it, either with comments for the
+// author or with fixes cat-factory commits, on the findings they pick.
+// Everything else here is context for that decision.
 const props = defineProps<{
   run: AiReviewRun
   /** Which action is mid-flight on this run, so one button spins and the rest lock. */
@@ -22,18 +23,31 @@ const emit = defineEmits<{
 
 const curation = computed(() => props.run.curation)
 const awaiting = computed(() => props.run.status === 'awaiting_selection')
-const { choices, choose, chooseWhere, reset, drafted } = useFindingChoices(() => props.run)
-const plan = computed(() =>
-  curation.value === null ? null : planOf(curation.value, choices.value),
-)
+const { draft, settleBy, pick, pickWhere, reset, drafted } = useReviewDraft(() => props.run)
+const plan = computed(() => (curation.value === null ? null : planOf(curation.value, draft.value)))
 
-function chooseSeverities(severities: string[], choice: FindingChoice): void {
-  chooseWhere((finding) => severities.includes(finding.severity), choice)
+const outcomes: { value: ReviewOutcome; label: string; icon: string; hint: string }[] = [
+  {
+    value: 'comment',
+    label: 'Comment for the author',
+    icon: 'i-lucide-message-square',
+    hint: 'The picked findings go on the pull request as review comments, for its author to address.',
+  },
+  {
+    value: 'fix',
+    label: 'Fix with cat-factory',
+    icon: 'i-lucide-wrench',
+    hint: "cat-factory's fixer commits fixes for the picked findings onto the branch. Nothing is posted.",
+  },
+]
+const outcomeHint = computed(() => outcomes.find((o) => o.value === draft.value.outcome)?.hint)
+
+function pickSeverities(severities: string[]): void {
+  pickWhere((finding) => severities.includes(finding.severity))
 }
 
 function apply(): void {
-  const resolution = plan.value?.resolution
-  if (resolution) emit('resolve', resolution, reset)
+  if (plan.value) emit('resolve', plan.value.resolution, reset)
 }
 </script>
 
@@ -83,56 +97,66 @@ function apply(): void {
       </p>
 
       <template v-else>
-        <div
-          v-if="awaiting"
-          class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-        >
+        <div v-if="awaiting" class="flex flex-col gap-2">
           <p class="text-sm">
-            Decide what each finding deserves: a comment on the pull request, a fix committed by
-            cat-factory, or nothing.
+            Settle the review one way: comment so the author fixes what you pick, or have
+            cat-factory fix it.
           </p>
-          <UDropdownMenu
-            :items="[
-              [
-                {
-                  label: 'Blockers and highs: fix',
-                  onSelect: () => chooseSeverities(['blocker', 'high'], 'fix'),
-                },
-                {
-                  label: 'Blockers and highs: comment',
-                  onSelect: () => chooseSeverities(['blocker', 'high'], 'comment'),
-                },
-                {
-                  label: 'Mediums: comment',
-                  onSelect: () => chooseSeverities(['medium'], 'comment'),
-                },
-                {
-                  label: 'Lows and nits: ignore',
-                  onSelect: () => chooseSeverities(['low', 'nit'], 'ignore'),
-                },
-              ],
-              [{ label: 'Back to the defaults', disabled: !drafted, onSelect: reset }],
-            ]"
-          >
-            <UButton
-              size="sm"
-              variant="outline"
-              color="neutral"
-              icon="i-lucide-list-checks"
-              class="self-start"
-              :disabled="busy === 'resolve'"
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-wrap gap-2" role="group" aria-label="How the review settles">
+              <UButton
+                v-for="option in outcomes"
+                :key="option.value"
+                size="sm"
+                :icon="option.icon"
+                :color="draft.outcome === option.value ? 'primary' : 'neutral'"
+                :variant="draft.outcome === option.value ? 'solid' : 'outline'"
+                :aria-pressed="draft.outcome === option.value"
+                :disabled="busy === 'resolve'"
+                @click="settleBy(option.value)"
+              >
+                {{ option.label }}
+              </UButton>
+            </div>
+            <UDropdownMenu
+              :items="[
+                [
+                  {
+                    label: 'Blockers and highs',
+                    onSelect: () => pickSeverities(['blocker', 'high']),
+                  },
+                  {
+                    label: 'Mediums and up',
+                    onSelect: () => pickSeverities(['blocker', 'high', 'medium']),
+                  },
+                  { label: 'Everything', onSelect: () => pickWhere(() => true) },
+                  { label: 'Nothing', onSelect: () => pickWhere(() => false) },
+                ],
+                [{ label: 'Back to the defaults', disabled: !drafted, onSelect: reset }],
+              ]"
             >
-              Choose by severity
-            </UButton>
-          </UDropdownMenu>
+              <UButton
+                size="sm"
+                variant="outline"
+                color="neutral"
+                icon="i-lucide-list-checks"
+                class="self-start"
+                :disabled="busy === 'resolve'"
+              >
+                Pick by severity
+              </UButton>
+            </UDropdownMenu>
+          </div>
+          <p class="text-xs text-muted">{{ outcomeHint }}</p>
         </div>
         <AiReviewFindings
           :curation="curation"
           :challenged-finding-ids="run.challengedFindingIds"
-          :choices="choices"
+          :picks="draft.picks"
+          :outcome="draft.outcome"
           :awaiting="awaiting"
           :busy="busy"
-          @choose="choose"
+          @pick="pick"
           @challenge="(findingId, question) => emit('challenge', findingId, question)"
         />
       </template>
@@ -142,16 +166,16 @@ function apply(): void {
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div class="text-sm">
           <p>
-            {{ plan.comment.length }} to comment &middot; {{ plan.fix.length }} to fix &middot;
-            {{ plan.ignore.length }} ignored
+            {{ plan.picked.length }}
+            {{ plan.outcome === 'comment' ? 'to comment on' : 'to fix' }} &middot;
+            {{ plan.left.length }} left out
           </p>
-          <p v-if="plan.blocked" class="text-error mt-1">{{ plan.blocked }}</p>
-          <p v-else class="text-muted mt-1">Nothing reaches the pull request until you apply.</p>
+          <p class="text-muted mt-1">Nothing reaches the pull request until you apply.</p>
         </div>
         <UButton
-          :icon="plan.comment.length + plan.fix.length === 0 ? 'i-lucide-archive' : 'i-lucide-send'"
-          :color="plan.comment.length + plan.fix.length === 0 ? 'neutral' : 'primary'"
-          :disabled="plan.resolution === null || (busy !== null && busy !== 'resolve')"
+          :icon="plan.picked.length === 0 ? 'i-lucide-archive' : 'i-lucide-send'"
+          :color="plan.picked.length === 0 ? 'neutral' : 'primary'"
+          :disabled="busy !== null && busy !== 'resolve'"
           :loading="busy === 'resolve'"
           class="self-start sm:self-auto"
           @click="apply"

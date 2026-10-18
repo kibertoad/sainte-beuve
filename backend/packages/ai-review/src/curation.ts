@@ -80,24 +80,6 @@ function postReportOf(decision: PublicPrReviewDecision): AiReviewPostReport | nu
 }
 
 /**
- * The findings queued for the fixer behind a post, and whether the instance
- * queues them at all. Read loosely because the published SDK predates the
- * field (kibertoad/cat-factory, `fixFindingIds` on the pr-review decision): an
- * instance that serves it always serves it, so its absence is the answer.
- */
-function fixQueueOf(decision: PublicPrReviewDecision): {
-  fixFindingIds: string[]
-  combinesPostAndFix: boolean
-} {
-  const queued: unknown = (decision as { fixFindingIds?: unknown }).fixFindingIds
-  if (!Array.isArray(queued)) return { fixFindingIds: [], combinesPostAndFix: false }
-  return {
-    fixFindingIds: queued.filter((id): id is string => typeof id === 'string'),
-    combinesPostAndFix: true,
-  }
-}
-
-/**
  * How many slices the reviewer cut the diff into. cat-factory records the
  * slicing only when the review parks, so while it is still reviewing the count
  * is the reviewer's own to-do list, one entry per slice.
@@ -136,7 +118,6 @@ function toCuration(
       rationale: slice.rationale,
       paths: [...slice.paths],
     })),
-    ...fixQueueOf(decision),
   }
 }
 

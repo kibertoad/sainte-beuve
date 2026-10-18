@@ -90,8 +90,8 @@ function mountCuration(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, resolveAiReviewContract, async (c) => {
     const service = new AiReviewCurationService(c.get('container'))
-    const { action, findingIds, fixFindingIds } = c.req.valid('json')
-    const run = service.resolve(c.req.valid('param').runId, { action, findingIds, fixFindingIds })
+    const { action, findingIds } = c.req.valid('json')
+    const run = service.resolve(c.req.valid('param').runId, { action, findingIds })
     return c.json(await linking(c.get('container'))(run), 202)
   })
 

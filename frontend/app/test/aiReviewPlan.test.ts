@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest'
 import {
   activityLine,
   applyLabel,
-  initialChoices,
+  initialDraft,
   journeyOf,
   planOf,
   progressFraction,
-  reconcileChoices,
+  reconcileDraft,
 } from '../app/utils/aiReviewPlan'
 
 function finding(findingId: string, overrides: Partial<AiReviewFinding> = {}): AiReviewFinding {
@@ -43,8 +43,6 @@ function curation(overrides: Partial<AiReviewCuration> = {}): AiReviewCuration {
     maxResumeAttempts: 3,
     summary: null,
     slices: [],
-    fixFindingIds: [],
-    combinesPostAndFix: true,
     ...overrides,
   }
 }
@@ -73,86 +71,76 @@ function run(overrides: Partial<AiReviewRun> = {}): AiReviewRun {
 
 const RETRACTED = { status: 'retracted' as const, question: null, justification: 'no' }
 
-describe('initialChoices', () => {
-  it('starts the blockers and highs on a comment and the rest on ignore', () => {
+describe('initialDraft', () => {
+  it('opens on comments with the blockers and highs picked', () => {
     const state = curation({
       findings: [finding('a', { severity: 'blocker' }), finding('b', { severity: 'nit' })],
     })
-    expect(initialChoices(state)).toStrictEqual({ a: 'comment', b: 'ignore' })
-  })
-
-  it('opens on what cat-factory recorded, fixes included', () => {
-    const state = curation({
-      findings: [finding('a', { severity: 'blocker' }), finding('b'), finding('c')],
-      selectedFindingIds: ['b'],
-      fixFindingIds: ['c'],
+    expect(initialDraft(state)).toStrictEqual({
+      outcome: 'comment',
+      picks: { a: true, b: false },
     })
-    expect(initialChoices(state)).toStrictEqual({ a: 'ignore', b: 'comment', c: 'fix' })
   })
 
-  it('never starts a retracted finding on anything but ignore', () => {
+  it('opens on what cat-factory recorded', () => {
+    const state = curation({
+      findings: [finding('a', { severity: 'blocker' }), finding('b')],
+      selectedFindingIds: ['b'],
+    })
+    expect(initialDraft(state).picks).toStrictEqual({ a: false, b: true })
+  })
+
+  it('never starts a retracted finding picked', () => {
     const state = curation({
       findings: [finding('a', { severity: 'blocker', challenge: RETRACTED })],
     })
-    expect(initialChoices(state)).toStrictEqual({ a: 'ignore' })
+    expect(initialDraft(state).picks).toStrictEqual({ a: false })
   })
 })
 
-describe('reconcileChoices', () => {
-  it('keeps what was chosen, defaults an arrival, and drops a retraction to ignore', () => {
+describe('reconcileDraft', () => {
+  it('keeps the outcome and the picks, defaults an arrival, and unpicks a retraction', () => {
     const findings = [
       finding('a'),
       finding('b', { severity: 'high' }),
       finding('c', { challenge: RETRACTED }),
     ]
-    expect(reconcileChoices(findings, { a: 'fix', c: 'comment', gone: 'fix' })).toStrictEqual({
-      a: 'fix',
-      b: 'comment',
-      c: 'ignore',
+    const held = { outcome: 'fix' as const, picks: { a: true, c: true, gone: true } }
+    expect(reconcileDraft(findings, held)).toStrictEqual({
+      outcome: 'fix',
+      picks: { a: true, b: true, c: false },
     })
   })
 })
 
 describe('planOf', () => {
   const state = curation({ findings: [finding('a'), finding('b'), finding('c')] })
+  const picks = { a: true, b: true, c: false }
 
-  it('posts and queues the fixes in one resolution', () => {
-    const plan = planOf(state, { a: 'comment', b: 'fix', c: 'ignore' })
-    expect(plan.resolution).toStrictEqual({
-      action: 'post',
-      findingIds: ['a'],
-      fixFindingIds: ['b'],
-    })
-    expect(plan.ignore).toStrictEqual(['c'])
-    expect(applyLabel(plan)).toBe('Post 1 comment, then fix 1 finding')
+  it('posts the picked findings as comments', () => {
+    const plan = planOf(state, { outcome: 'comment', picks })
+    expect(plan.resolution).toStrictEqual({ action: 'post', findingIds: ['a', 'b'] })
+    expect(plan.left).toStrictEqual(['c'])
+    expect(applyLabel(plan)).toBe('Post 2 comments')
   })
 
-  it('refuses a split on an instance that cannot run one', () => {
-    const plan = planOf(curation({ ...state, combinesPostAndFix: false }), {
-      a: 'comment',
-      b: 'fix',
-    })
-    expect(plan.resolution).toBeNull()
-    expect(plan.blocked).toMatch(/cannot post comments and fix/)
+  it('hands the picked findings to the fixer', () => {
+    const plan = planOf(state, { outcome: 'fix', picks })
+    expect(plan.resolution).toStrictEqual({ action: 'fix', findingIds: ['a', 'b'] })
+    expect(applyLabel(plan)).toBe('Fix 2 findings')
   })
 
-  it('fixes alone, posts alone, or closes with nothing chosen', () => {
-    expect(planOf(state, { a: 'fix', b: 'fix' }).resolution).toStrictEqual({
-      action: 'fix',
-      findingIds: ['a', 'b'],
-    })
-    expect(planOf(state, { c: 'comment' }).resolution).toStrictEqual({
-      action: 'post',
-      findingIds: ['c'],
-    })
-    const none = planOf(state, {})
+  it('closes with nothing picked, whatever the outcome', () => {
+    const none = planOf(state, { outcome: 'fix', picks: {} })
     expect(none.resolution).toStrictEqual({ action: 'finish', findingIds: [] })
     expect(applyLabel(none)).toBe('Close without posting')
   })
 
   it('leaves a retracted finding out whatever it was set to', () => {
     const retracted = curation({ findings: [finding('a', { challenge: RETRACTED })] })
-    expect(planOf(retracted, { a: 'fix' }).resolution?.action).toBe('finish')
+    expect(planOf(retracted, { outcome: 'fix', picks: { a: true } }).resolution.action).toBe(
+      'finish',
+    )
   })
 })
 
