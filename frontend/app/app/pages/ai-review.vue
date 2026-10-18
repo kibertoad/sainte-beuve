@@ -118,8 +118,8 @@ async function resume(runId: string): Promise<void> {
     <div class="flex flex-col gap-1">
       <h1 class="text-xl font-semibold">AI review</h1>
       <p class="text-sm text-muted">
-        cat-factory reviews the pull request and you decide what each finding deserves: a comment, a
-        fix it commits for you, or nothing.
+        cat-factory reviews the pull request and you settle it one way: comments for the author on
+        the findings you pick, or fixes cat-factory commits for them.
       </p>
     </div>
 

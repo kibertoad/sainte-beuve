@@ -517,8 +517,6 @@ function parkedWith(
     maxResumeAttempts: 2,
     summary: null,
     slices: [],
-    fixFindingIds: [],
-    combinesPostAndFix: false,
   }
 }
 

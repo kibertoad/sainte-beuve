@@ -102,7 +102,7 @@ describe('curating a delegated AI review', () => {
 
     expect(res.status).toBe(202)
     expect(loop.catFactory.resolved).toStrictEqual([
-      { runId: 'cf-run-1', action: 'post', findingIds: ['f-1'], fixFindingIds: [] },
+      { runId: 'cf-run-1', action: 'post', findingIds: ['f-1'] },
     ])
   })
 
@@ -123,7 +123,7 @@ describe('curating a delegated AI review', () => {
     )
     expect(res.status).toBe(202)
     expect(loop.catFactory.resolved).toStrictEqual([
-      { runId: 'cf-run-1', action: 'finish', findingIds: [], fixFindingIds: [] },
+      { runId: 'cf-run-1', action: 'finish', findingIds: [] },
     ])
   })
 

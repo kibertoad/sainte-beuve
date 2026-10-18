@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AiReviewCuration, AiReviewFinding, AiReviewSeverity } from '@sainte-beuve/contracts'
 import { challengedFindingIdsOf, AI_REVIEW_CHALLENGE_LIMIT } from '@sainte-beuve/contracts'
-import type { FindingChoice, FindingChoices } from '../utils/aiReviewPlan'
+import type { FindingPicks, ReviewOutcome } from '../utils/aiReviewPlan'
 
 // The findings of one AI review, grouped under the slice of the diff each came
 // from, so a curator reads a refactor's findings together rather than in one
@@ -9,13 +9,14 @@ import type { FindingChoice, FindingChoices } from '../utils/aiReviewPlan'
 const props = defineProps<{
   curation: AiReviewCuration
   challengedFindingIds: string[]
-  choices: FindingChoices
+  picks: FindingPicks
+  outcome: ReviewOutcome
   awaiting: boolean
   busy: string | null
 }>()
 
 const emit = defineEmits<{
-  choose: [findingId: string, choice: FindingChoice]
+  pick: [findingId: string, picked: boolean]
   challenge: [findingId: string, question: string | null]
 }>()
 
@@ -71,7 +72,6 @@ const challengesSpent = computed(
 )
 
 const posted = computed(() => new Set(props.curation.postedFindingIds))
-const queued = computed(() => new Set(props.curation.fixFindingIds))
 </script>
 
 <template>
@@ -101,13 +101,13 @@ const queued = computed(() => new Set(props.curation.fixFindingIds))
           v-for="finding in group.findings"
           :key="finding.findingId"
           :finding="finding"
-          :choice="choices[finding.findingId] ?? 'ignore'"
+          :picked="picks[finding.findingId] === true"
+          :outcome="outcome"
           :awaiting="awaiting"
           :posted="posted.has(finding.findingId)"
-          :queued-for-fix="queued.has(finding.findingId) && curation.status === 'posting'"
           :challenges-spent="challengesSpent"
           :busy="busy"
-          @choose="(choice) => emit('choose', finding.findingId, choice)"
+          @pick="(picked) => emit('pick', finding.findingId, picked)"
           @challenge="(question) => emit('challenge', finding.findingId, question)"
         />
       </div>

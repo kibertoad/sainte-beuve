@@ -23,7 +23,6 @@ import { curationOf } from './curation.js'
 import { placeTask } from './placement.js'
 import { progressOf } from './progress.js'
 import { refusalFor } from './refusals.js'
-import { resolutionBodyOf } from './resolution.js'
 import { WorkspaceClients } from './workspaceClients.js'
 
 /**
@@ -325,7 +324,10 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
   ): Promise<void> {
     const { decisions } = this.clients.in(input.workspaceId)
     await this.curating(`resolve the review as \`${input.action}\``, input.runId, () =>
-      decisions.resolvePrReview(input.runId, resolutionBodyOf(input)),
+      decisions.resolvePrReview(input.runId, {
+        action: input.action,
+        findingIds: input.findingIds,
+      }),
     )
   }
 

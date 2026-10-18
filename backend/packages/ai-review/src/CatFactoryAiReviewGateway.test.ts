@@ -520,8 +520,6 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
       slices: [
         { sliceId: 'slice-1', title: 'polling', rationale: 'the loop', paths: ['src/poll.ts'] },
       ],
-      fixFindingIds: [],
-      combinesPostAndFix: false,
     })
   })
 
@@ -605,7 +603,6 @@ describe('CatFactoryAiReviewGateway curation', () => {
       workspaceId: 'ws-a',
       action: 'post',
       findingIds: ['f-1', 'f-2'],
-      fixFindingIds: [],
     })
 
     expect(calls).toStrictEqual([
@@ -736,7 +733,6 @@ describe('CatFactoryAiReviewGateway curation', () => {
         workspaceId: null,
         action: 'post',
         findingIds: ['f-1'],
-        fixFindingIds: [],
       }),
     ).rejects.toMatchObject({ code: 'forbidden', message: /`decide` scope/ })
   })
@@ -766,7 +762,6 @@ describe('CatFactoryAiReviewGateway curation', () => {
         workspaceId: null,
         action: 'finish',
         findingIds: [],
-        fixFindingIds: [],
       }),
     ).rejects.toMatchObject({ code: 'upstream_failed' })
   })

@@ -36,7 +36,7 @@ const postFailed = computed(() => {
 const fixed = computed(() => {
   const curation = props.run.curation
   if (props.run.status !== 'completed' || curation === null) return false
-  return curation.status === 'fixing' || curation.fixFindingIds.length > 0
+  return curation.status === 'fixing'
 })
 </script>
 
@@ -62,8 +62,7 @@ const fixed = computed(() => {
           </li>
         </ul>
         <p class="mt-2 text-xs">
-          Applying again skips what already landed, so the same comments cannot go up twice. Any
-          fixes queued behind them wait for a pass that lands every comment.
+          Applying again skips what already landed, so the same comments cannot go up twice.
         </p>
       </template>
     </UAlert>

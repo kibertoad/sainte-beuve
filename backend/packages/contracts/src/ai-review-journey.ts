@@ -47,10 +47,12 @@ export const aiReviewProgressSchema = v.object({
 export type AiReviewProgress = v.InferOutput<typeof aiReviewProgressSchema>
 
 /**
- * What to do with the curated selection.
+ * What to do with the curated selection. A review settles one way: the findings
+ * go to the author as comments, or cat-factory fixes them itself. Handing some
+ * to each would leave the author fixing beside a fixer that commits onto the
+ * same branch.
  *
- * - `post` publishes the selected findings as inline pull-request comments,
- *   and hands `fixFindingIds` to the fixer once they are up.
+ * - `post` publishes the selected findings as inline pull-request comments.
  * - `fix` hands the selected findings to a fixer that commits onto the
  *   reviewed branch.
  * - `finish` completes the review having posted nothing, which is the exit for a
@@ -67,13 +69,6 @@ export const resolveAiReviewSchema = v.object({
    * selection there is a caller that meant `finish`. Ignored for `finish`.
    */
   findingIds: v.optional(v.array(v.string()), []),
-  /**
-   * With `post` only: the findings the fixer addresses after the comments are
-   * up. Comments go first because they anchor on the reviewed commit, which the
-   * fixer's commits move on from. A finding is in one list or the other, never
-   * both. Needs a cat-factory that reports `combinesPostAndFix` on the curation.
-   */
-  fixFindingIds: v.optional(v.array(v.string()), []),
 })
 export type ResolveAiReview = v.InferOutput<typeof resolveAiReviewSchema>
 /** What a CALLER sends: the schema before defaults. */

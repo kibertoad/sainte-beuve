@@ -1,13 +1,11 @@
 import type { PublicDecisionList, PublicRun } from '@cat-factory/sdk'
-import type { ResolveAiReview } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { curationOf } from './curation.js'
 import { progressOf } from './progress.js'
-import { resolutionBodyOf } from './resolution.js'
 
 /**
  * The projections from cat-factory's run and decision onto the review screen's
- * journey: progress, the slice count, the fix queue, and the resolution body.
+ * journey: progress and the slice count.
  * The wire round trip is the gateway suite's; these are the rules.
  */
 const REVIEWER_STEP = {
@@ -49,10 +47,6 @@ function decisions(overrides: Record<string, unknown> = {}): PublicDecisionList 
   } as never
 }
 
-function resolution(overrides: Partial<ResolveAiReview> = {}): ResolveAiReview {
-  return { action: 'post', findingIds: ['f-1'], fixFindingIds: [], ...overrides }
-}
-
 describe('progressOf', () => {
   it('reports the step the run is on', () => {
     expect(progressOf(run())).toStrictEqual({
@@ -78,31 +72,5 @@ describe('curationOf', () => {
     const state = curationOf(decisions({ status: 'awaiting_selection', slices: [slice] }))
     expect(state?.sliceCount).toBe(1)
     expect(state?.slices).toStrictEqual([slice])
-  })
-
-  it('reads an instance without a fix queue as unable to combine', () => {
-    const state = curationOf(decisions())
-    expect(state?.fixFindingIds).toStrictEqual([])
-    expect(state?.combinesPostAndFix).toBe(false)
-  })
-
-  it('reads the fix queue, and an instance that serves one as able to combine', () => {
-    const state = curationOf(decisions({ status: 'posting', fixFindingIds: ['f-2'] }))
-    expect(state?.fixFindingIds).toStrictEqual(['f-2'])
-    expect(state?.combinesPostAndFix).toBe(true)
-  })
-})
-
-describe('resolutionBodyOf', () => {
-  it('queues the findings to fix behind the post', () => {
-    expect(resolutionBodyOf(resolution({ fixFindingIds: ['f-2'] }))).toStrictEqual({
-      action: 'post',
-      findingIds: ['f-1'],
-      fixFindingIds: ['f-2'],
-    })
-  })
-
-  it('sends a plain post the way an older instance reads it', () => {
-    expect(resolutionBodyOf(resolution())).toStrictEqual({ action: 'post', findingIds: ['f-1'] })
   })
 })

@@ -136,8 +136,6 @@ function parked(findings: AiReviewFinding[]): {
       maxResumeAttempts: 2,
       summary: null,
       slices: [],
-      fixFindingIds: [],
-      combinesPostAndFix: false,
     },
   }
 }

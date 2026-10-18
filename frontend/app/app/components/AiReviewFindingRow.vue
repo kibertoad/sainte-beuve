@@ -4,19 +4,19 @@ import type {
   AiReviewFinding,
   AiReviewSeverity,
 } from '@sainte-beuve/contracts'
-import type { FindingChoice } from '../utils/aiReviewPlan'
+import type { ReviewOutcome } from '../utils/aiReviewPlan'
 
-// One finding of an AI review: what it says, what the curator wants done with
-// it, and the challenge that sends it back to cat-factory's investigator, which
+// One finding of an AI review: what it says, whether the review's outcome acts
+// on it, and the challenge that sends it back to cat-factory's investigator, which
 // upholds, amends or retracts it.
 const props = defineProps<{
   finding: AiReviewFinding
-  choice: FindingChoice
+  /** Whether the review's outcome acts on this finding. */
+  picked: boolean
+  outcome: ReviewOutcome
   /** Whether the review is waiting on its curator, which every control here needs. */
   awaiting: boolean
   posted: boolean
-  /** Queued for the fixer behind a post that is under way. */
-  queuedForFix: boolean
   /** Whether the review has challenged as many findings as it may. */
   challengesSpent: boolean
   /** Which action is mid-flight on the run, so one button spins and the rest lock. */
@@ -24,7 +24,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  choose: [choice: FindingChoice]
+  pick: [picked: boolean]
   challenge: [question: string | null]
 }>()
 
@@ -54,11 +54,10 @@ const verdictLabel: Record<AiReviewChallengeStatus, string> = {
   failed: 'investigation failed',
 }
 
-const options: { value: FindingChoice; label: string; icon: string; color: BadgeColor }[] = [
-  { value: 'comment', label: 'Comment', icon: 'i-lucide-message-square', color: 'info' },
-  { value: 'fix', label: 'Fix', icon: 'i-lucide-wrench', color: 'warning' },
-  { value: 'ignore', label: 'Ignore', icon: 'i-lucide-eye-off', color: 'neutral' },
-]
+const pickLabel: Record<ReviewOutcome, { label: string; icon: string }> = {
+  comment: { label: 'Comment', icon: 'i-lucide-message-square' },
+  fix: { label: 'Fix', icon: 'i-lucide-wrench' },
+}
 
 const challengeState = computed(() => props.finding.challenge)
 const retracted = computed(() => challengeState.value?.status === 'retracted')
@@ -99,9 +98,6 @@ const location = computed(() => codeLocation(props.finding))
           {{ finding.title }}
         </span>
         <UBadge v-if="posted" size="sm" variant="subtle" color="success">commented</UBadge>
-        <UBadge v-if="queuedForFix" size="sm" variant="subtle" color="warning">
-          queued for the fixer
-        </UBadge>
         <UBadge
           v-if="challengeState"
           size="sm"
@@ -150,20 +146,18 @@ const location = computed(() => codeLocation(props.finding))
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-col sm:items-end">
-      <UFieldGroup v-if="awaiting && !retracted" size="sm">
-        <UButton
-          v-for="option in options"
-          :key="option.value"
-          :icon="option.icon"
-          :color="choice === option.value ? option.color : 'neutral'"
-          :variant="choice === option.value ? 'solid' : 'outline'"
-          :aria-pressed="choice === option.value"
-          :disabled="busy === 'resolve'"
-          @click="emit('choose', option.value)"
-        >
-          {{ option.label }}
-        </UButton>
-      </UFieldGroup>
+      <UButton
+        v-if="awaiting && !retracted"
+        size="sm"
+        :icon="picked ? pickLabel[outcome].icon : 'i-lucide-eye-off'"
+        :color="picked ? 'primary' : 'neutral'"
+        :variant="picked ? 'solid' : 'outline'"
+        :aria-pressed="picked"
+        :disabled="busy === 'resolve'"
+        @click="emit('pick', !picked)"
+      >
+        {{ picked ? pickLabel[outcome].label : 'Left out' }}
+      </UButton>
       <UButton
         v-if="challengeable && !asking"
         size="sm"

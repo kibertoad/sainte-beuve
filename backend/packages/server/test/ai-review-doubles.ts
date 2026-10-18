@@ -24,8 +24,6 @@ export function curation(overrides: Partial<AiReviewCuration> = {}): AiReviewCur
     maxResumeAttempts: 3,
     summary: null,
     slices: [],
-    fixFindingIds: [],
-    combinesPostAndFix: false,
     ...overrides,
   }
 }

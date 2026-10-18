@@ -46,8 +46,6 @@ function parked(
     maxResumeAttempts: 3,
     summary: null,
     slices: [],
-    fixFindingIds: [],
-    combinesPostAndFix: false,
   }
 }
 
