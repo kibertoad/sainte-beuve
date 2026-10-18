@@ -70,8 +70,8 @@ export const resolveAiReviewSchema = v.object({
   /**
    * With `post` only: the findings the fixer addresses after the comments are
    * up. Comments go first because they anchor on the reviewed commit, which the
-   * fixer's commits move on from. Needs a cat-factory that reports
-   * `combinesPostAndFix` on the curation.
+   * fixer's commits move on from. A finding is in one list or the other, never
+   * both. Needs a cat-factory that reports `combinesPostAndFix` on the curation.
    */
   fixFindingIds: v.optional(v.array(v.string()), []),
 })

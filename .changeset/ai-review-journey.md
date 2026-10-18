@@ -24,7 +24,8 @@ parked-review Slack nudge all lead there.
 which needs a cat-factory that serves `fixFindingIds` on the pr-review decision
 (kibertoad/cat-factory#2440). The curation reports that as `combinesPostAndFix`,
 and a split sent to an older instance is refused with a 409 rather than posted
-without its fixes. The curation also carries the reviewer's `summary`, its
+without its fixes. A finding named in both `findingIds` and `fixFindingIds` is
+refused with a 400. The curation also carries the reviewer's `summary`, its
 `slices`, each finding's `sliceId` and the queued `fixFindingIds`; a run carries
 the `progress` of the step it is on.
 

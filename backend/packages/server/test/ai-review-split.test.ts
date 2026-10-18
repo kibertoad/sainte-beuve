@@ -83,6 +83,17 @@ describe('posting some findings and fixing others in one resolution', () => {
     expect(loop.catFactory.resolved).toStrictEqual([])
   })
 
+  it('refuses a finding named for both a comment and a fix', async () => {
+    const run = await parked(loop, true)
+
+    const res = await loop.harness.app.fetch(
+      resolve(run.id, { action: 'post', findingIds: ['f-1', 'f-2'], fixFindingIds: ['f-2'] }),
+    )
+
+    expect(res.status).toBe(400)
+    expect(loop.catFactory.resolved).toStrictEqual([])
+  })
+
   it('refuses to fix a finding a challenge retracted', async () => {
     const run = await parked(loop, true)
     const state = loop.catFactory.report.curation!

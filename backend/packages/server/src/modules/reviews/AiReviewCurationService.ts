@@ -144,6 +144,13 @@ function refuseMalformed(resolution: ResolveAiReview): void {
       `\`fixFindingIds\` goes with \`post\` only. Send the findings to fix as \`findingIds\` on a \`fix\``,
     )
   }
+  const commented = new Set(resolution.findingIds)
+  const both = resolution.fixFindingIds.filter((findingId) => commented.has(findingId))
+  if (both.length > 0) {
+    throw new ValidationError(
+      `${[...new Set(both)].join(', ')} cannot be commented on and fixed in one resolution. Name each finding once`,
+    )
+  }
   if (resolution.action === 'finish' || resolution.findingIds.length > 0) return
   throw new ValidationError(
     `\`${resolution.action}\` needs at least one finding selected. Use \`finish\` to close a review without posting anything`,
