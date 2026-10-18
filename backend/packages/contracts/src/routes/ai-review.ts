@@ -5,8 +5,8 @@ import {
   challengeAiReviewFindingSchema,
   requestAiReviewSchema,
   requestPullRequestAiReviewSchema,
-  resolveAiReviewSchema,
 } from '../ai-review.js'
+import { resolveAiReviewSchema } from '../ai-review-journey.js'
 import { errorResponses, singleStringParam, stringParams } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -109,7 +109,8 @@ export const challengeAiReviewFindingContract = defineApiContract({
  *
  * 202 rather than 200: cat-factory resolves asynchronously, so what comes back
  * is the review having ACCEPTED the instruction, not the comments being up. The
- * receipt arrives on a later read, as `postReport` on the curation.
+ * receipt arrives on a later read, as `postReport` on the curation, and a fix
+ * queued behind a post starts once that receipt says every comment landed.
  */
 export const resolveAiReviewContract = defineApiContract({
   method: 'post',

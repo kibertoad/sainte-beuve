@@ -502,6 +502,7 @@ function parkedWith(
       severity,
       category: 'correctness',
       suggestedFix: null,
+      sliceId: null,
       challenge: null,
     })),
     selectedFindingIds: [],
@@ -514,6 +515,10 @@ function parkedWith(
     lastActivityAt: null,
     resumeAttempts: 0,
     maxResumeAttempts: 2,
+    summary: null,
+    slices: [],
+    fixFindingIds: [],
+    combinesPostAndFix: false,
   }
 }
 

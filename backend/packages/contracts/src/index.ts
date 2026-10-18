@@ -2,6 +2,7 @@
 // backend facade. Domain models first, then the route contracts built on them.
 
 export * from './ai-review.js'
+export * from './ai-review-journey.js'
 export * from './attention.js'
 export * from './auth.js'
 export * from './capabilities.js'

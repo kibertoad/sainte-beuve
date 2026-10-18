@@ -37,3 +37,24 @@ export function boardReviewPath(reviewId: string): string {
 export function boardReviewUrl(appBaseUrl: string, reviewId: string): string {
   return `${appBaseUrl.replace(/\/+$/, '')}${boardReviewPath(reviewId)}`
 }
+
+/**
+ * The AI review screen of one board row: where its runs are followed and their
+ * findings settled. Keyed by the review like the board, so a message about a
+ * parked run still lands on the right row's reviews after another run is filed.
+ */
+export const AI_REVIEW_PATH = '/ai-review'
+
+/** Which run of the review the screen opens on. Without it, the newest. */
+export const AI_REVIEW_RUN_QUERY = 'run'
+
+export function aiReviewPath(reviewId: string, runId?: string): string {
+  const review = `${AI_REVIEW_PATH}?${BOARD_REVIEW_QUERY}=${encodeURIComponent(reviewId)}`
+  return runId === undefined
+    ? review
+    : `${review}&${AI_REVIEW_RUN_QUERY}=${encodeURIComponent(runId)}`
+}
+
+export function aiReviewUrl(appBaseUrl: string, reviewId: string): string {
+  return `${appBaseUrl.replace(/\/+$/, '')}${aiReviewPath(reviewId)}`
+}

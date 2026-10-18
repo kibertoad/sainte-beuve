@@ -1,5 +1,5 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
-import { boardReviewUrl } from '@sainte-beuve/contracts'
+import { aiReviewUrl, boardReviewUrl } from '@sainte-beuve/contracts'
 import { formatPullRequest } from '@sainte-beuve/kernel'
 import { SLACK_ACTIONS } from './commands.js'
 
@@ -86,17 +86,13 @@ export function announcementMessage(review: ReviewRequest): SlackMessage {
 /**
  * One scheduled nudge, worded by what the nudge is for.
  *
- * The parked AI review is the one that names the BOARD rather than the pull
- * request as the thing to open, because it is the one whose answer is not on the
- * pull request: nothing has been posted there yet, and the point of the loop is
- * that nothing is until somebody has said which findings deserve it.
+ * The parked AI review links its own screen rather than the board, because it
+ * is the one whose answer is not on the pull request: nothing has been posted
+ * there yet, and the point of the loop is that nothing is until somebody has
+ * said what each finding deserves.
  *
- * The board URL comes from `boardReviewPath` in the contracts rather than being
- * written here. It was written here, as `/reviews/<id>`, and the SPA has never
- * had that route: every nudge this deployment ever sent landed on an error page
- * with no way back, and the parked-review nudge — the one message whose whole
- * point is that the answer is NOT on the pull request — was the one it hurt
- * most.
+ * Both URLs come from the screen paths in the contracts rather than being
+ * written here, so a renamed route cannot leave every nudge pointing at a 404.
  */
 export function reminderMessage(
   reminder: Reminder,
@@ -112,10 +108,11 @@ export function reminderMessage(
     return { text: `${link} is past its review deadline.${board}` }
   }
   if (reminder.kind === 'ai_review_parked') {
+    const screen = appBaseUrl === undefined ? '' : ` ${aiReviewUrl(appBaseUrl, review.id)}`
     return {
       text:
-        `The AI review of ${link} has finished and is waiting on somebody to say which ` +
-        `findings are worth posting.${board}`,
+        `The AI review of ${link} has finished and is waiting on somebody to say what to do ` +
+        `with its findings.${screen}`,
     }
   }
   return { text: `Reminder: ${link} is waiting on your review.${board}` }

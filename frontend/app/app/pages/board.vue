@@ -7,6 +7,7 @@ import type {
 } from '@sainte-beuve/contracts'
 import {
   ACTIVE_REVIEW_STATUSES,
+  aiReviewPath,
   ALL_REVIEW_STATUSES,
   BOARD_REVIEW_QUERY,
   formatPullRequestRef,
@@ -191,7 +192,7 @@ function toggle(reviewId: string) {
 
 async function requestAiReview(review: BoardReview) {
   const filed = await run(() => api.requestAiReview(review.id), 'Could not request an AI review')
-  if (filed) expanded.value = new Set(expanded.value).add(review.id)
+  if (filed) await navigateTo(aiReviewPath(review.id))
 }
 
 /** Whether the linked review turned out not to be on the board at all. */

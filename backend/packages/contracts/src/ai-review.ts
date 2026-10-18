@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { aiReviewProgressSchema, aiReviewSliceSchema } from './ai-review-journey.js'
 import { pullRequestRefSchema, webUrlSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
@@ -124,6 +125,8 @@ export const aiReviewFindingSchema = v.object({
    * existed has no key for it. See `parkedAt` on the run.
    */
   challenge: v.optional(v.nullable(aiReviewFindingChallengeSchema), null),
+  /** The slice the finding came from, or null for one that matched none. */
+  sliceId: v.optional(v.nullable(v.string()), null),
 })
 export type AiReviewFinding = v.InferOutput<typeof aiReviewFindingSchema>
 
@@ -221,6 +224,16 @@ export const aiReviewCurationSchema = v.object({
   /** How many resumes this review has spent, and the ceiling cat-factory enforces. */
   resumeAttempts: v.number(),
   maxResumeAttempts: v.number(),
+  /** The reviewer's overall assessment of the pull request, once it has one. */
+  summary: v.optional(v.nullable(v.string()), null),
+  slices: v.optional(v.array(aiReviewSliceSchema), []),
+  /** What a `post` queued for the fixer, to run once the comments are up. */
+  fixFindingIds: v.optional(v.array(v.string()), []),
+  /**
+   * Whether the instance takes `fixFindingIds` on a `post`. An older one drops
+   * the field without a word, so a split it cannot run is refused here instead.
+   */
+  combinesPostAndFix: v.optional(v.boolean(), false),
 })
 export type AiReviewCuration = v.InferOutput<typeof aiReviewCurationSchema>
 
@@ -298,6 +311,8 @@ export const aiReviewRunSchema = v.object({
    */
   parkedAt: v.optional(v.nullable(v.number()), null),
   completedAt: v.nullable(v.number()),
+  /** Where the step cat-factory is on has got, as of the last poll. Null on a settled run. */
+  progress: v.optional(v.nullable(aiReviewProgressSchema), null),
 })
 export type AiReviewRun = v.InferOutput<typeof aiReviewRunSchema>
 
@@ -325,28 +340,6 @@ export const requestPullRequestAiReviewSchema = v.object({
 export type RequestPullRequestAiReview = v.InferOutput<typeof requestPullRequestAiReviewSchema>
 /** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
 export type RequestPullRequestAiReviewInput = v.InferInput<typeof requestPullRequestAiReviewSchema>
-
-/**
- * What to do with the curated selection.
- *
- * - `post` publishes the selected findings as inline pull-request comments.
- * - `fix` hands them to a fixer that commits onto the reviewed branch.
- * - `finish` completes the review having posted nothing, which is the exit for a
- *   run whose findings are all noise. Without it a parked review has no end.
- */
-export const aiReviewResolutionSchema = v.picklist(['finish', 'fix', 'post'])
-export type AiReviewResolution = v.InferOutput<typeof aiReviewResolutionSchema>
-
-export const resolveAiReviewSchema = v.object({
-  action: aiReviewResolutionSchema,
-  /**
-   * The findings to act on. Required non-empty for `post` and `fix`, because both
-   * reach the real pull request and an empty selection there is a caller that
-   * meant `finish`. Ignored for `finish`.
-   */
-  findingIds: v.optional(v.array(v.string()), []),
-})
-export type ResolveAiReview = v.InferOutput<typeof resolveAiReviewSchema>
 
 /** Ask cat-factory's investigator to re-examine one finding. */
 export const challengeAiReviewFindingSchema = v.object({

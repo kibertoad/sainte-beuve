@@ -6,7 +6,8 @@ import {
 } from '@cat-factory/sdk'
 import {
   type AiReviewCuration,
-  type AiReviewResolution,
+  type AiReviewProgress,
+  type ResolveAiReview,
   catFactoryRunUrl,
 } from '@sainte-beuve/contracts'
 import {
@@ -20,7 +21,9 @@ import {
 import { appUrlOf } from './catFactoryApp.js'
 import { curationOf } from './curation.js'
 import { placeTask } from './placement.js'
+import { progressOf } from './progress.js'
 import { refusalFor } from './refusals.js'
+import { resolutionBodyOf } from './resolution.js'
 import { WorkspaceClients } from './workspaceClients.js'
 
 /**
@@ -103,6 +106,7 @@ const NO_RUN_YET: AiReviewReport = {
   summary: null,
   failureReason: null,
   curation: null,
+  progress: null,
 }
 
 /**
@@ -247,10 +251,9 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     // no decision left to read, because the entry leaves cat-factory's list with
     // the loop it belongs to, so the second call would answer nothing on every
     // poll of every finished review.
-    const curation =
-      TERMINAL_STATUSES[run.status] === undefined
-        ? await this.readCuration(client, run.runId)
-        : null
+    const inFlight = TERMINAL_STATUSES[run.status] === undefined
+    const progress = inFlight ? progressOf(run) : null
+    const curation = inFlight ? await this.readCuration(client, run.runId, progress) : null
     const status = statusOf(run, curation)
     return {
       status,
@@ -258,6 +261,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
       summary: status === 'completed' ? summaryOf(run.steps) : null,
       failureReason: run.error?.message ?? null,
       curation,
+      progress,
     }
   }
 
@@ -285,9 +289,10 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
   private async readCuration(
     client: CatFactoryClient,
     runId: string,
+    progress: AiReviewProgress | null,
   ): Promise<AiReviewCuration | null> {
     try {
-      return curationOf(await client.decisions.list(runId))
+      return curationOf(await client.decisions.list(runId), progress)
     } catch (err) {
       if (err instanceof CatFactoryNotFoundError) return null
       throw refusalFor(err, `report the decisions for run ${runId}`)
@@ -315,18 +320,12 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     )
   }
 
-  async resolveReview(input: {
-    runId: string
-    action: AiReviewResolution
-    findingIds: string[]
-    workspaceId: string | null
-  }): Promise<void> {
+  async resolveReview(
+    input: { runId: string; workspaceId: string | null } & ResolveAiReview,
+  ): Promise<void> {
     const { decisions } = this.clients.in(input.workspaceId)
     await this.curating(`resolve the review as \`${input.action}\``, input.runId, () =>
-      decisions.resolvePrReview(input.runId, {
-        action: input.action,
-        findingIds: input.findingIds,
-      }),
+      decisions.resolvePrReview(input.runId, resolutionBodyOf(input)),
     )
   }
 

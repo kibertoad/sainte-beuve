@@ -1,7 +1,8 @@
-import type { AiReviewResolution, RequestPullRequestAiReviewInput } from '@sainte-beuve/contracts'
+import type { RequestPullRequestAiReviewInput, ResolveAiReviewInput } from '@sainte-beuve/contracts'
 import {
   challengeAiReviewFindingContract,
   dismissAiReviewFindingContract,
+  getReviewContract,
   listAiReviewRunsContract,
   requestAiReviewContract,
   requestPullRequestAiReviewContract,
@@ -23,6 +24,8 @@ export function aiReviewCalls(call: ContractCaller) {
      */
     requestPullRequestAiReview: (body: RequestPullRequestAiReviewInput) =>
       call(requestPullRequestAiReviewContract, { body }),
+    /** The board row the runs belong to: the pull request the review screen is about. */
+    getReview: (reviewId: string) => call(getReviewContract, { pathParams: { reviewId } }),
     /** Every delegated run for one review. Each in-flight one is POLLED to answer this. */
     listAiReviewRuns: (reviewId: string) =>
       call(listAiReviewRunsContract, { pathParams: { reviewId } }),
@@ -39,8 +42,8 @@ export function aiReviewCalls(call: ContractCaller) {
      * instruction: cat-factory posts asynchronously, and what landed shows up on a
      * later read as the curation's `postReport`.
      */
-    resolveAiReview: (runId: string, action: AiReviewResolution, findingIds: string[]) =>
-      call(resolveAiReviewContract, { pathParams: { runId }, body: { action, findingIds } }),
+    resolveAiReview: (runId: string, body: ResolveAiReviewInput) =>
+      call(resolveAiReviewContract, { pathParams: { runId }, body }),
     resumeAiReview: (runId: string) =>
       call(resumeAiReviewContract, { pathParams: { runId }, body: {} }),
   }

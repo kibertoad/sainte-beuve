@@ -8,6 +8,7 @@ import type {
   AiReviewFinding,
   AiReviewFindingChallenge,
   AiReviewPostReport,
+  AiReviewProgress,
 } from '@sainte-beuve/contracts'
 
 /**
@@ -16,9 +17,7 @@ import type {
  * A projection rather than a re-export of the SDK's own type, for the reason the
  * contracts package exists: the SPA renders these fields, and passing an upstream
  * model straight through would put a cat-factory version bump on the wire between
- * two halves of sainte-beuve. What is dropped is dropped on purpose: the slice
- * bodies (their titles and paths say nothing a curator acts on, and the counts are
- * what a stall is judged from).
+ * two halves of sainte-beuve.
  */
 
 /**
@@ -45,6 +44,7 @@ function findingsOf(decision: PublicPrReviewDecision): AiReviewFinding[] {
     category: finding.category,
     suggestedFix: finding.suggestedFix,
     challenge: challengeOf(finding.challenge),
+    sliceId: finding.sliceId,
   }))
 }
 
@@ -79,7 +79,39 @@ function postReportOf(decision: PublicPrReviewDecision): AiReviewPostReport | nu
   }
 }
 
-function toCuration(decision: PublicPrReviewDecision): AiReviewCuration {
+/**
+ * The findings queued for the fixer behind a post, and whether the instance
+ * queues them at all. Read loosely because the published SDK predates the
+ * field (kibertoad/cat-factory, `fixFindingIds` on the pr-review decision): an
+ * instance that serves it always serves it, so its absence is the answer.
+ */
+function fixQueueOf(decision: PublicPrReviewDecision): {
+  fixFindingIds: string[]
+  combinesPostAndFix: boolean
+} {
+  const queued: unknown = (decision as { fixFindingIds?: unknown }).fixFindingIds
+  if (!Array.isArray(queued)) return { fixFindingIds: [], combinesPostAndFix: false }
+  return {
+    fixFindingIds: queued.filter((id): id is string => typeof id === 'string'),
+    combinesPostAndFix: true,
+  }
+}
+
+/**
+ * How many slices the reviewer cut the diff into. cat-factory records the
+ * slicing only when the review parks, so while it is still reviewing the count
+ * is the reviewer's own to-do list, one entry per slice.
+ */
+function sliceCountOf(decision: PublicPrReviewDecision, progress: AiReviewProgress | null): number {
+  if (decision.slices.length > 0) return decision.slices.length
+  if (decision.status !== 'reviewing') return 0
+  return progress?.subtasks?.total ?? 0
+}
+
+function toCuration(
+  decision: PublicPrReviewDecision,
+  progress: AiReviewProgress | null,
+): AiReviewCuration {
   return {
     status: decision.status,
     findings: findingsOf(decision),
@@ -92,16 +124,27 @@ function toCuration(decision: PublicPrReviewDecision): AiReviewCuration {
     // slice is in: the reviewer emits its findings in one final aggregation turn,
     // and `reportedSliceCount === sliceCount` is what says that turn is where a
     // stall would be.
-    sliceCount: decision.slices.length,
+    sliceCount: sliceCountOf(decision, progress),
     reportedSliceCount: decision.reportedSlices,
     lastActivityAt: decision.lastActivityAt,
     resumeAttempts: decision.resumeAttempts,
     maxResumeAttempts: decision.maxResumeAttempts,
+    summary: decision.summary,
+    slices: decision.slices.map((slice) => ({
+      sliceId: slice.sliceId,
+      title: slice.title,
+      rationale: slice.rationale,
+      paths: [...slice.paths],
+    })),
+    ...fixQueueOf(decision),
   }
 }
 
 /** The curation a decision-list answer carries, or null when it carries no review. */
-export function curationOf(list: PublicDecisionList): AiReviewCuration | null {
+export function curationOf(
+  list: PublicDecisionList,
+  progress: AiReviewProgress | null = null,
+): AiReviewCuration | null {
   const decision = prReviewDecisionOf(list)
-  return decision === null ? null : toCuration(decision)
+  return decision === null ? null : toCuration(decision, progress)
 }

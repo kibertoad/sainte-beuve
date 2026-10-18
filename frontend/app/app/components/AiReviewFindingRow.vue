@@ -4,16 +4,19 @@ import type {
   AiReviewFinding,
   AiReviewSeverity,
 } from '@sainte-beuve/contracts'
+import type { FindingChoice } from '../utils/aiReviewPlan'
 
-// One finding of a parked AI review: whether it is ticked, what it says, and the
-// two things a curator can do to it alone. Challenge sends it to cat-factory's
-// investigator, which upholds, amends or retracts it; Dismiss drops it.
+// One finding of an AI review: what it says, what the curator wants done with
+// it, and the challenge that sends it back to cat-factory's investigator, which
+// upholds, amends or retracts it.
 const props = defineProps<{
   finding: AiReviewFinding
-  selected: boolean
+  choice: FindingChoice
   /** Whether the review is waiting on its curator, which every control here needs. */
   awaiting: boolean
   posted: boolean
+  /** Queued for the fixer behind a post that is under way. */
+  queuedForFix: boolean
   /** Whether the review has challenged as many findings as it may. */
   challengesSpent: boolean
   /** Which action is mid-flight on the run, so one button spins and the rest lock. */
@@ -21,8 +24,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  toggle: []
-  dismiss: []
+  choose: [choice: FindingChoice]
   challenge: [question: string | null]
 }>()
 
@@ -52,6 +54,12 @@ const verdictLabel: Record<AiReviewChallengeStatus, string> = {
   failed: 'investigation failed',
 }
 
+const options: { value: FindingChoice; label: string; icon: string; color: BadgeColor }[] = [
+  { value: 'comment', label: 'Comment', icon: 'i-lucide-message-square', color: 'info' },
+  { value: 'fix', label: 'Fix', icon: 'i-lucide-wrench', color: 'warning' },
+  { value: 'ignore', label: 'Ignore', icon: 'i-lucide-eye-off', color: 'neutral' },
+]
+
 const challengeState = computed(() => props.finding.challenge)
 const retracted = computed(() => challengeState.value?.status === 'retracted')
 
@@ -80,96 +88,94 @@ const location = computed(() => codeLocation(props.finding))
 </script>
 
 <template>
-  <div class="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-    <UCheckbox
-      :model-value="selected && !retracted"
-      :disabled="!awaiting || retracted"
-      class="mt-1"
-      @update:model-value="emit('toggle')"
-    />
-    <div class="min-w-0 grow flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-      <div class="min-w-0 grow">
-        <div class="flex items-center gap-2 flex-wrap">
-          <UBadge :color="severityColor[finding.severity]" size="sm" variant="subtle">
-            {{ finding.severity }}
-          </UBadge>
-          <UBadge size="sm" variant="subtle" color="neutral">{{ finding.category }}</UBadge>
-          <span class="font-medium" :class="{ 'line-through text-muted': retracted }">
-            {{ finding.title }}
-          </span>
-          <UBadge v-if="posted" size="sm" variant="subtle" color="success">posted</UBadge>
-          <UBadge
-            v-if="challengeState"
-            size="sm"
-            variant="subtle"
-            :color="verdictColor[challengeState.status]"
-          >
-            {{ verdictLabel[challengeState.status] }}
-          </UBadge>
-        </div>
-        <p class="font-mono text-xs text-muted mt-1 break-all">{{ location }}</p>
-        <p class="text-sm mt-1 whitespace-pre-wrap" :class="{ 'text-muted': retracted }">
-          {{ finding.detail }}
+  <div class="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:gap-4">
+    <div class="min-w-0 grow">
+      <div class="flex items-center gap-2 flex-wrap">
+        <UBadge :color="severityColor[finding.severity]" size="sm" variant="subtle">
+          {{ finding.severity }}
+        </UBadge>
+        <UBadge size="sm" variant="subtle" color="neutral">{{ finding.category }}</UBadge>
+        <span class="font-medium" :class="{ 'line-through text-muted': retracted }">
+          {{ finding.title }}
+        </span>
+        <UBadge v-if="posted" size="sm" variant="subtle" color="success">commented</UBadge>
+        <UBadge v-if="queuedForFix" size="sm" variant="subtle" color="warning">
+          queued for the fixer
+        </UBadge>
+        <UBadge
+          v-if="challengeState"
+          size="sm"
+          variant="subtle"
+          :color="verdictColor[challengeState.status]"
+        >
+          {{ verdictLabel[challengeState.status] }}
+        </UBadge>
+      </div>
+      <p class="font-mono text-xs text-muted mt-1 break-all">{{ location }}</p>
+      <p class="text-sm mt-1 whitespace-pre-wrap" :class="{ 'text-muted': retracted }">
+        {{ finding.detail }}
+      </p>
+      <pre
+        v-if="finding.suggestedFix && !retracted"
+        class="text-xs mt-2 p-2 rounded bg-elevated overflow-x-auto"
+        >{{ finding.suggestedFix }}</pre>
+      <div v-if="challengeState" class="mt-2 text-sm border-l-2 border-default pl-3">
+        <p v-if="challengeState.question" class="text-muted">
+          Asked: {{ challengeState.question }}
         </p>
-        <pre
-          v-if="finding.suggestedFix && !retracted"
-          class="text-xs mt-2 p-2 rounded bg-elevated overflow-x-auto"
-          >{{ finding.suggestedFix }}</pre>
-        <div v-if="challengeState" class="mt-2 text-sm border-l-2 border-default pl-3">
-          <p v-if="challengeState.question" class="text-muted">
-            Asked: {{ challengeState.question }}
-          </p>
-          <p v-if="challengeState.justification" class="whitespace-pre-wrap">
-            {{ challengeState.justification }}
-          </p>
-          <p v-else-if="challengeState.status === 'investigating'" class="text-muted">
-            cat-factory is re-reading the source behind this finding. The verdict appears here.
-          </p>
-        </div>
-        <div v-if="asking && challengeable" class="mt-2 flex flex-col gap-2">
-          <UTextarea
-            v-model="question"
-            :rows="2"
-            :maxlength="4000"
-            autoresize
-            class="w-full"
-            placeholder="What do you doubt? Leave empty to ask for the grounding."
-          />
-          <div class="flex flex-wrap gap-2">
-            <UButton size="sm" icon="i-lucide-search-check" :disabled="busy !== null" @click="send">
-              Challenge
-            </UButton>
-            <UButton size="sm" variant="ghost" color="neutral" @click="asking = false">
-              Cancel
-            </UButton>
-          </div>
+        <p v-if="challengeState.justification" class="whitespace-pre-wrap">
+          {{ challengeState.justification }}
+        </p>
+        <p v-else-if="challengeState.status === 'investigating'" class="text-muted">
+          cat-factory is re-reading the source behind this finding. The verdict appears here.
+        </p>
+      </div>
+      <div v-if="asking && challengeable" class="mt-2 flex flex-col gap-2">
+        <UTextarea
+          v-model="question"
+          :rows="2"
+          :maxlength="4000"
+          autoresize
+          class="w-full"
+          placeholder="What do you doubt? Leave empty to ask for the grounding."
+        />
+        <div class="flex flex-wrap gap-2">
+          <UButton size="sm" icon="i-lucide-search-check" :disabled="busy !== null" @click="send">
+            Challenge
+          </UButton>
+          <UButton size="sm" variant="ghost" color="neutral" @click="asking = false">
+            Cancel
+          </UButton>
         </div>
       </div>
-      <div class="flex flex-wrap gap-1 sm:shrink-0">
+    </div>
+    <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-col sm:items-end">
+      <UFieldGroup v-if="awaiting && !retracted" size="sm">
         <UButton
-          v-if="challengeable && !asking"
-          size="sm"
-          variant="ghost"
-          color="neutral"
-          icon="i-lucide-search-check"
-          :loading="busy === `challenge:${finding.findingId}`"
-          :disabled="busy !== null"
-          @click="asking = true"
+          v-for="option in options"
+          :key="option.value"
+          :icon="option.icon"
+          :color="choice === option.value ? option.color : 'neutral'"
+          :variant="choice === option.value ? 'solid' : 'outline'"
+          :aria-pressed="choice === option.value"
+          :disabled="busy === 'resolve'"
+          @click="emit('choose', option.value)"
         >
-          Challenge
+          {{ option.label }}
         </UButton>
-        <UButton
-          size="sm"
-          variant="ghost"
-          color="neutral"
-          icon="i-lucide-x"
-          :disabled="!awaiting"
-          :loading="busy === finding.findingId"
-          @click="emit('dismiss')"
-        >
-          Dismiss
-        </UButton>
-      </div>
+      </UFieldGroup>
+      <UButton
+        v-if="challengeable && !asking"
+        size="sm"
+        variant="ghost"
+        color="neutral"
+        icon="i-lucide-search-check"
+        :loading="busy === `challenge:${finding.findingId}`"
+        :disabled="busy !== null"
+        @click="asking = true"
+      >
+        Challenge
+      </UButton>
     </div>
   </div>
 </template>

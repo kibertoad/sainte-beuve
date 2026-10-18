@@ -1,5 +1,5 @@
 import type { Reminder, ReviewRequest } from '@sainte-beuve/contracts'
-import { boardReviewUrl } from '@sainte-beuve/contracts'
+import { aiReviewUrl, boardReviewUrl } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { announcementMessage, escapeSlackText, reminderMessage, slackLink } from './message.js'
 
@@ -99,18 +99,18 @@ describe('reminderMessage', () => {
     )
   })
 
-  it('sends a parked AI review to the board, where its findings are', () => {
+  it('sends a parked AI review to its own screen, where its findings are', () => {
     const text = reminderMessage(
       reminder('ai_review_parked'),
       review(),
       'https://board.example',
     ).text
-    expect(text).toContain('waiting on somebody to say which findings are worth posting')
-    // The pull request is named, but the board is where the answer is: nothing
+    expect(text).toContain('waiting on somebody to say what to do with its findings')
+    // The pull request is named, but the screen is where the answer is: nothing
     // has been posted on the pull request yet, and nothing will be until
     // somebody curates.
     expect(text).toContain(`<${PR_URL}|kibertoad/sainte-beuve#7>`)
-    expect(text).toContain(boardReviewUrl('https://board.example', 'rev-1'))
+    expect(text).toContain(aiReviewUrl('https://board.example', 'rev-1'))
   })
 })
 

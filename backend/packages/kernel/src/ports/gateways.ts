@@ -1,6 +1,7 @@
 import type {
   AiReviewCuration,
-  AiReviewResolution,
+  AiReviewProgress,
+  ResolveAiReview,
   AttentionRequest,
   PullRequestRef,
   Reminder,
@@ -91,6 +92,11 @@ export interface AiReviewReport {
   failureReason: string | null
   /** What there is to curate right now, or null for a run carrying no review. */
   curation: AiReviewCuration | null
+  /**
+   * How far the step the run is on has got. Null or absent when there is no run,
+   * when it has settled, or when the gateway cannot say.
+   */
+  progress?: AiReviewProgress | null
 }
 
 /**
@@ -159,9 +165,7 @@ export interface AiReviewGateway {
    * cat-factory has ACCEPTED the instruction, and what actually landed arrives on
    * a later poll as `postReport`.
    */
-  resolveReview(
-    input: { runId: string; action: AiReviewResolution; findingIds: string[] } & AiReviewWorkspace,
-  ): Promise<void>
+  resolveReview(input: { runId: string } & ResolveAiReview & AiReviewWorkspace): Promise<void>
   /**
    * Re-dispatch the slices a stalled review never got back. Which ones is derived
    * from what the run observed, so there is nothing to pass.

@@ -27,10 +27,14 @@ to be registered where, is [docs/integrations.md](./docs/integrations.md).
 Press **AI review** on a pull request and it goes to cat-factory, which fans
 the diff out across parallel reviewers. The button is on every board row, and on
 the workspace, My PRs and My Reviews for any repository that is linked. A pull
-request that is not on the board yet is put there, because its board row is
-where the review is curated, and the button takes you to it. It posts nothing.
-It comes back and waits, and the row opens on what it found: each finding with
-its severity, the file and line it is about, and the fix it suggests.
+request that is not on the board yet is put there, because a run belongs to a
+board row, and the button opens the **AI review** screen for it. You never need
+cat-factory's own app: the screen shows where the run stands (filed, reviewing
+with how many slices are in, waiting on you, posting and fixing, done) and what
+cat-factory is doing at that moment. It posts nothing. It comes back and waits,
+and the screen opens on what it found: the reviewer's summary, then each finding
+under the slice of the diff it came from, with its severity, the file and line it
+is about, and the fix it suggests.
 
 The review is filed under the cat-factory service that backs the pull request's
 repository, in the workspace that links it. A repository no workspace links yet
@@ -40,37 +44,46 @@ no service backs otherwise (a monorepo, say) goes under the default service the
 org sets on the Configuration screen, and with none set the button offers a link
 that adds it in cat-factory.
 
-You are the gate. Tick the ones worth saying out loud (the blockers and the highs
-start ticked), **Dismiss** the noise, and then choose:
+You are the gate. Every finding gets one of three answers (the blockers and the
+highs start on **Comment**, the rest on **Ignore**, and **Choose by severity**
+sets a whole level at once):
 
-- **Post inline** puts the selection on the pull request as review comments, on
-  the lines they belong to. A finding whose line is outside the diff is folded
-  into the summary comment rather than dropped.
-- **Send to a fixer** hands the selection to an agent that commits onto the
-  reviewed branch.
-- **Finish without posting** closes the review having said nothing, which is the
-  right answer more often than it sounds.
+- **Comment** puts it on the pull request as a review comment, on the line it
+  belongs to. A finding whose line is outside the diff is folded into the summary
+  comment rather than dropped.
+- **Fix** hands it to cat-factory's fixer, which commits onto the reviewed branch.
+- **Ignore** leaves it out.
+
+One **Apply** does all of it: the comments go up first, because they anchor on
+the commit that was reviewed, and the fixes follow once every comment has landed.
+With nothing chosen it closes the review having said nothing, which is the right
+answer more often than it sounds. The choices are a draft in your browser until
+you apply them. Mixing comments and fixes in one pass needs a cat-factory that
+supports it ([kibertoad/cat-factory#2440](https://github.com/kibertoad/cat-factory/pull/2440));
+an older one takes either on its own.
 
 Not sure a finding is right? **Challenge** it, with your doubt or without one.
 cat-factory sends an investigator back to the source behind that finding, and the
 verdict lands on it: upheld, amended (with the new wording or severity), or
-retracted, which unticks it and keeps it off the pull request. Each finding can
+retracted, which sets it to Ignore and keeps it off the pull request. Each finding can
 be challenged once, one at a time, and a review gets five, dismissed ones included.
 
-Posting reports back. If seven comments went out and two bounced, the row says
-which two and why, against the attempt number, and posting again skips what
-already landed rather than commenting twice. And if the reviewer wedges with
+Posting reports back. If seven comments went out and two bounced, the screen says
+which two and why, against the attempt number, and applying again skips what
+already landed rather than commenting twice. The fixer's account of what it
+committed lands on the same screen. And if the reviewer wedges with
 every slice of the diff already in, **Resume** re-dispatches only the slices that
 never reported, so a review that stalled on its last turn is not thrown away.
 
-Opening the row reads cat-factory, and closing it stops. What does not stop is
-the deployment's own clock: the same tick that sends the reminders asks after
-every review still in flight, so one that parks while every board is closed is
-already on the row when somebody next looks, rather than waiting to be
-discovered. And it does not wait to be looked at: a review that parks is a nudge
-like any other — the assigned reviewer's DM, or the channel while nobody owns
-it — said once per park, and again if a post fails and re-parks it. A pull
-request that has already been approved or closed is left alone.
+Opening the screen or the board row reads cat-factory, and closing it stops.
+What does not stop is the deployment's own clock: the same tick that sends the
+reminders asks after every review still in flight, so one that parks while every
+screen is closed is already there when somebody next looks, rather than waiting
+to be discovered. And it does not wait to be looked at: a review that parks is a
+nudge like any other (the assigned reviewer's DM, or the channel while nobody
+owns it) linking the AI review screen, said once per park, and again if a post
+fails and re-parks it. A pull request that has already been approved or closed is
+left alone.
 
 Each run is a billed cat-factory job, so every way to ask for one (the button,
 the label, `@bot ai`, `/review ai`) meets the same limit: one run in flight per
