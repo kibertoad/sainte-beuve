@@ -158,6 +158,7 @@ const location = computed(() => codeLocation(props.finding))
           :color="choice === option.value ? option.color : 'neutral'"
           :variant="choice === option.value ? 'solid' : 'outline'"
           :aria-pressed="choice === option.value"
+          :disabled="busy === 'resolve'"
           @click="emit('choose', option.value)"
         >
           {{ option.label }}

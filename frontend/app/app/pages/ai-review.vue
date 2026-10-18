@@ -2,10 +2,12 @@
 import type { AiReviewRun, ResolveAiReviewInput } from '@sainte-beuve/contracts'
 import {
   AI_REVIEW_PATH,
+  AI_REVIEW_RUN_QUERY,
   BOARD_REVIEW_QUERY,
   boardReviewPath,
   formatPullRequestRef,
 } from '@sainte-beuve/contracts'
+import { isInFlight, isWorking } from '../utils/aiReviewStatus'
 
 // The AI reviews of one board row, followed and settled here: where each run
 // stands, what it found, and what to do with every finding, without a trip to
@@ -25,7 +27,7 @@ const reviewId = computed(() => {
   return typeof value === 'string' && value.length > 0 ? value : null
 })
 
-const { data: review } = useAsyncData(
+const { data: review, error: reviewError } = useAsyncData(
   () => `ai-review-subject-${reviewId.value}`,
   () => (reviewId.value === null ? Promise.resolve(null) : api.getReview(reviewId.value)),
   { lazy: true },
@@ -42,16 +44,13 @@ const { data, pending, error, refresh } = useAsyncData(
 
 const runs = computed<AiReviewRun[]>(() => data.value?.runs ?? [])
 const focused = computed<AiReviewRun | null>(() => {
-  const asked = route.query.run
+  const asked = route.query[AI_REVIEW_RUN_QUERY]
   return runs.value.find((entry) => entry.id === asked) ?? runs.value[0] ?? null
 })
 const earlier = computed(() => runs.value.filter((entry) => entry.id !== focused.value?.id))
 
-const SETTLED = new Set<AiReviewRun['status']>(['completed', 'failed', 'cancelled'])
-const inFlight = computed(() => runs.value.some((entry) => !SETTLED.has(entry.status)))
-const working = computed(() =>
-  runs.value.some((entry) => !SETTLED.has(entry.status) && entry.status !== 'awaiting_selection'),
-)
+const inFlight = computed(() => runs.value.some(isInFlight))
+const working = computed(() => runs.value.some(isWorking))
 
 const { busy, run: act } = useApiAction({ refresh })
 
@@ -62,7 +61,10 @@ usePolling(
 )
 
 function focus(runId: string): void {
-  void router.replace({ path: AI_REVIEW_PATH, query: { ...route.query, run: runId } })
+  void router.replace({
+    path: AI_REVIEW_PATH,
+    query: { ...route.query, [AI_REVIEW_RUN_QUERY]: runId },
+  })
 }
 
 async function requestAnother(): Promise<void> {
@@ -141,6 +143,9 @@ async function resume(runId: string): Promise<void> {
             <p class="text-sm text-muted line-clamp-2">{{ review.title }}</p>
             <p class="text-xs text-muted mt-1">opened by {{ review.authorLogin }}</p>
           </div>
+          <p v-else-if="reviewError" class="text-sm text-muted">
+            The pull request this review is about could not be read.
+          </p>
           <USkeleton v-else class="h-10 w-full sm:w-64" />
           <div class="flex flex-wrap items-center gap-2 sm:shrink-0">
             <UButton :to="boardReviewPath(reviewId)" size="sm" variant="ghost" color="neutral">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AiReviewRun } from '@sainte-beuve/contracts'
 import { aiReviewPath } from '@sainte-beuve/contracts'
+import { isInFlight, isWorking } from '../utils/aiReviewStatus'
 
 // Every AI review filed against one board row, newest first, in a line each.
 // The findings are decided on the review screen, which this links to; the row
@@ -15,7 +16,7 @@ const api = useSainteBeuveApi()
 // NOT awaited, and `lazy` for the same reason: this component mounts when a board
 // row is expanded, and a suspending setup would blank the whole page while one
 // row's reviews were fetched.
-const { data, pending, error, refresh } = useAsyncData(
+const { data, error, refresh } = useAsyncData(
   `ai-review-${props.reviewId}`,
   () => api.listAiReviewRuns(props.reviewId),
   { lazy: true },
@@ -23,34 +24,21 @@ const { data, pending, error, refresh } = useAsyncData(
 
 const runs = computed<AiReviewRun[]>(() => data.value?.runs ?? [])
 
-const SETTLED = new Set<AiReviewRun['status']>(['completed', 'failed', 'cancelled'])
-const inFlight = computed(() => runs.value.some((entry) => !SETTLED.has(entry.status)))
-const working = computed(() =>
-  runs.value.some((entry) => !SETTLED.has(entry.status) && entry.status !== 'awaiting_selection'),
-)
+const inFlight = computed(() => runs.value.some(isInFlight))
+const working = computed(() => runs.value.some(isWorking))
 
 usePolling(
   () => inFlight.value,
   () => refresh(),
   () => (working.value ? 5000 : 30000),
 )
-
-function runPath(runId: string): string {
-  return `${aiReviewPath(props.reviewId)}&run=${encodeURIComponent(runId)}`
-}
 </script>
 
 <template>
   <div class="flex flex-col gap-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-muted">AI reviews of this pull request.</p>
-      <UButton
-        :to="aiReviewPath(reviewId)"
-        size="xs"
-        variant="ghost"
-        icon="i-lucide-bot"
-        :loading="pending && data !== undefined"
-      >
+      <UButton :to="aiReviewPath(reviewId)" size="xs" variant="ghost" icon="i-lucide-bot">
         Open the AI review
       </UButton>
     </div>
@@ -74,7 +62,7 @@ function runPath(runId: string): string {
         v-for="entry in runs"
         :key="entry.id"
         :run="entry"
-        :to="runPath(entry.id)"
+        :to="aiReviewPath(reviewId, entry.id)"
       />
     </div>
   </div>

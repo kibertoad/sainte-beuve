@@ -204,6 +204,13 @@ describe('activity', () => {
     expect(progressFraction(fixing)).toBe(0.5)
   })
 
+  it('does not read a settled review as still slicing', () => {
+    const done = run({
+      curation: curation({ status: 'done', sliceCount: 4, reportedSliceCount: 4 }),
+    })
+    expect(activityLine(done)).toBe('Wrapping up the run.')
+  })
+
   it('says nothing is moving on a parked review', () => {
     expect(activityLine(run({ status: 'awaiting_selection', curation: curation() }))).toBeNull()
   })

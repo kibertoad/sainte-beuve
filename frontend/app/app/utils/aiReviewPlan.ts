@@ -168,6 +168,9 @@ export function activityLine(run: AiReviewRun): string | null {
       return 'Posting the comments on the pull request.'
     case 'fixing':
       return fixingLine(run)
+    case 'done':
+    case 'skipped':
+      return 'Wrapping up the run.'
     default:
       return reviewingLine(run)
   }
@@ -184,7 +187,7 @@ function reviewingLine(run: AiReviewRun): string {
 
 function fixingLine(run: AiReviewRun): string {
   const tasks = run.progress?.subtasks
-  if (tasks === null || tasks === undefined || tasks.total === 0) {
+  if (!tasks || tasks.total === 0) {
     return 'The fixer is committing onto the branch.'
   }
   return `The fixer is committing onto the branch: ${tasks.completed} of ${tasks.total} steps done.`
@@ -194,7 +197,7 @@ function fixingLine(run: AiReviewRun): string {
 export function progressFraction(run: AiReviewRun): number | null {
   if (run.status !== 'running') return null
   const curation = run.curation
-  if ((curation === null || curation.status === 'reviewing') && curation?.sliceCount) {
+  if (curation?.status === 'reviewing' && curation.sliceCount > 0) {
     return Math.min(1, curation.reportedSliceCount / curation.sliceCount)
   }
   const fraction = run.progress?.fraction

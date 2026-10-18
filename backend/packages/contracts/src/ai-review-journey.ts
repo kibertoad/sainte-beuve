@@ -33,7 +33,11 @@ export type AiReviewSlice = v.InferOutput<typeof aiReviewSliceSchema>
  */
 export const aiReviewProgressSchema = v.object({
   agentKind: v.string(),
-  state: v.picklist(['pending', 'working', 'waiting_decision', 'done']),
+  /**
+   * cat-factory's step state, kept open: this is stored on the run, and a state
+   * a newer instance adds must not make the stored row undecodable.
+   */
+  state: v.string(),
   /** 0 to 1, as cat-factory reports it. */
   fraction: v.number(),
   subtasks: v.nullable(

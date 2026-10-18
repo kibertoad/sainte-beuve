@@ -45,8 +45,14 @@ export function boardReviewUrl(appBaseUrl: string, reviewId: string): string {
  */
 export const AI_REVIEW_PATH = '/ai-review'
 
-export function aiReviewPath(reviewId: string): string {
-  return `${AI_REVIEW_PATH}?${BOARD_REVIEW_QUERY}=${encodeURIComponent(reviewId)}`
+/** Which run of the review the screen opens on. Without it, the newest. */
+export const AI_REVIEW_RUN_QUERY = 'run'
+
+export function aiReviewPath(reviewId: string, runId?: string): string {
+  const review = `${AI_REVIEW_PATH}?${BOARD_REVIEW_QUERY}=${encodeURIComponent(reviewId)}`
+  return runId === undefined
+    ? review
+    : `${review}&${AI_REVIEW_RUN_QUERY}=${encodeURIComponent(runId)}`
 }
 
 export function aiReviewUrl(appBaseUrl: string, reviewId: string): string {

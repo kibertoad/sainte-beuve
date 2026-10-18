@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AiReviewRun, ResolveAiReviewInput } from '@sainte-beuve/contracts'
 import { applyLabel, type FindingChoice, planOf } from '../utils/aiReviewPlan'
+import { aiReviewStatusColor, aiReviewStatusLabel } from '../utils/aiReviewStatus'
 
 // One delegated review, followed from filing to the last comment or commit.
 //
@@ -18,28 +19,6 @@ const emit = defineEmits<{
   resolve: [resolution: ResolveAiReviewInput, done: () => void]
   resume: []
 }>()
-
-type BadgeColor = 'error' | 'warning' | 'info' | 'success' | 'neutral'
-
-const statusColor: Record<AiReviewRun['status'], BadgeColor> = {
-  requested: 'neutral',
-  running: 'info',
-  // The one status that is waiting on a PERSON, so it reads like the others do
-  // not: everything else on this card is a report, and this is a request.
-  awaiting_selection: 'warning',
-  completed: 'success',
-  failed: 'error',
-  cancelled: 'neutral',
-}
-
-const statusLabel: Record<AiReviewRun['status'], string> = {
-  requested: 'filed',
-  running: 'working',
-  awaiting_selection: 'waiting on you',
-  completed: 'done',
-  failed: 'failed',
-  cancelled: 'cancelled',
-}
 
 const curation = computed(() => props.run.curation)
 const awaiting = computed(() => props.run.status === 'awaiting_selection')
@@ -63,8 +42,8 @@ function apply(): void {
     <template #header>
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div class="flex flex-wrap items-center gap-2">
-          <UBadge :color="statusColor[run.status]" variant="subtle">
-            {{ statusLabel[run.status] }}
+          <UBadge :color="aiReviewStatusColor[run.status]" variant="subtle">
+            {{ aiReviewStatusLabel[run.status] }}
           </UBadge>
           <span class="text-xs text-muted">
             filed {{ new Date(run.requestedAt).toLocaleString() }}
@@ -141,6 +120,7 @@ function apply(): void {
               color="neutral"
               icon="i-lucide-list-checks"
               class="self-start"
+              :disabled="busy === 'resolve'"
             >
               Choose by severity
             </UButton>
