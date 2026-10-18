@@ -597,6 +597,7 @@ describe('a tick across tenancies', () => {
       failureReason: null,
       curation: null,
       challengedFindingIds: [],
+      progress: null,
       requestedAt: clock.now(),
       lastPolledAt: null,
       parkedAt: null,

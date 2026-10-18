@@ -94,6 +94,7 @@ async function finishAiReview(container: AppContainer, runId: string): Promise<v
     await new AiReviewCurationService(container).resolve(runId, {
       action: 'finish',
       findingIds: [],
+      fixFindingIds: [],
     })
   } catch (err) {
     container.logger.warn({ err, runId }, 'a clean AI review could not be finished')

@@ -244,7 +244,7 @@ describe('challenging a finding of a parked AI review', () => {
     expect(refused.status).toBe(400)
     expect(accepted.status).toBe(202)
     expect(loop.catFactory.resolved).toStrictEqual([
-      { runId: 'cf-run-1', action: 'post', findingIds: ['f-2'] },
+      { runId: 'cf-run-1', action: 'post', findingIds: ['f-2'], fixFindingIds: [] },
     ])
   })
 })

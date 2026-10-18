@@ -26,6 +26,7 @@ function holding(held: AiReviewRun['curation']): AiReviewRun {
     failureReason: null,
     curation: held,
     challengedFindingIds: [],
+    progress: null,
     requestedAt: 1_000,
     lastPolledAt: null,
     parkedAt: null,

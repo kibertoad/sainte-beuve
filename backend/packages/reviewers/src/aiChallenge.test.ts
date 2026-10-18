@@ -21,6 +21,7 @@ function finding(
     severity: 'high',
     category: 'correctness',
     suggestedFix: null,
+    sliceId: null,
     challenge:
       verdict === null ? null : { status: verdict, question: null, justification: 'Because.' },
   }
@@ -43,6 +44,10 @@ function parked(
     lastActivityAt: null,
     resumeAttempts: 0,
     maxResumeAttempts: 3,
+    summary: null,
+    slices: [],
+    fixFindingIds: [],
+    combinesPostAndFix: false,
   }
 }
 

@@ -103,6 +103,7 @@ export class AiReviewService {
       failureReason: null,
       curation: null,
       challengedFindingIds: [],
+      progress: null,
       requestedAt: clock.now(),
       lastPolledAt: null,
       parkedAt: null,
@@ -331,6 +332,7 @@ export class AiReviewService {
       summary: reported.summary,
       failureReason: reported.failureReason,
       curation,
+      progress: settled ? null : (reported.progress ?? null),
       // Stamped by the POLL and not by the report, so a run the clock has just
       // asked about goes to the back of the rotation whatever came back. See
       // `AiReviewRunRepository.listInFlight`.

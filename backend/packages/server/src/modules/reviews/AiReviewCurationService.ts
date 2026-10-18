@@ -1,4 +1,4 @@
-import type { AiReviewResolution, AiReviewRun } from '@sainte-beuve/contracts'
+import type { AiReviewRun, ResolveAiReview } from '@sainte-beuve/contracts'
 import { AI_REVIEW_CHALLENGE_LIMIT } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, AiReviewWorkspace } from '@sainte-beuve/kernel'
 import { ConflictError, NotFoundError, ValidationError, assertFound } from '@sainte-beuve/kernel'
@@ -78,18 +78,17 @@ export class AiReviewCurationService {
    * post it would read the receipt as a comment that went missing. The run is
    * polled before that check for the reason `challenge` polls: the verdict that
    * retracted a finding may not have reached the row yet.
+   *
+   * A fix queued behind a post needs an instance that takes one. An older
+   * cat-factory drops the field and posts alone, which would leave the fixes
+   * somebody asked for silently undone, so it is refused before anything goes.
    */
-  async resolve(
-    runId: string,
-    resolution: { action: AiReviewResolution; findingIds: string[] },
-  ): Promise<AiReviewRun> {
-    if (resolution.action !== 'finish' && resolution.findingIds.length === 0) {
-      throw new ValidationError(
-        `\`${resolution.action}\` needs at least one finding selected. Use \`finish\` to close a review without posting anything`,
-      )
-    }
+  async resolve(runId: string, resolution: ResolveAiReview): Promise<AiReviewRun> {
+    refuseMalformed(resolution)
     const { act, target } = await this.curating(runId)
-    refuseRetracted(await this.runs.get(runId), resolution)
+    const run = await this.runs.get(runId)
+    refuseRetracted(run, resolution)
+    refuseUnsupportedSplit(run, resolution)
     await act((gateway) => gateway.resolveReview({ ...target, ...resolution }))
     return this.runs.get(runId)
   }
@@ -139,16 +138,34 @@ export class AiReviewCurationService {
   }
 }
 
-function refuseRetracted(
-  run: AiReviewRun,
-  resolution: { action: AiReviewResolution; findingIds: string[] },
-): void {
+function refuseMalformed(resolution: ResolveAiReview): void {
+  if (resolution.fixFindingIds.length > 0 && resolution.action !== 'post') {
+    throw new ValidationError(
+      `\`fixFindingIds\` goes with \`post\` only. Send the findings to fix as \`findingIds\` on a \`fix\``,
+    )
+  }
+  if (resolution.action === 'finish' || resolution.findingIds.length > 0) return
+  throw new ValidationError(
+    `\`${resolution.action}\` needs at least one finding selected. Use \`finish\` to close a review without posting anything`,
+  )
+}
+
+function refuseRetracted(run: AiReviewRun, resolution: ResolveAiReview): void {
   if (resolution.action === 'finish') return
   const retracted = retractedFindingIds(run.curation)
-  const named = resolution.findingIds.filter((findingId) => retracted.has(findingId))
+  const named = [...resolution.findingIds, ...resolution.fixFindingIds].filter((findingId) =>
+    retracted.has(findingId),
+  )
   if (named.length === 0) return
   throw new ValidationError(
-    `A challenge retracted ${named.join(', ')}, so it can no longer be acted on. Leave it out of the selection`,
+    `A challenge retracted ${[...new Set(named)].join(', ')}, so it can no longer be acted on. Leave it out of the selection`,
+  )
+}
+
+function refuseUnsupportedSplit(run: AiReviewRun, resolution: ResolveAiReview): void {
+  if (resolution.fixFindingIds.length === 0 || run.curation?.combinesPostAndFix === true) return
+  throw new ConflictError(
+    'This cat-factory cannot post comments and fix findings in one pass. Post or fix on its own, or upgrade cat-factory',
   )
 }
 

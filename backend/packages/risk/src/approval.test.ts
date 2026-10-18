@@ -110,6 +110,7 @@ function finding(severity: AiReviewFinding['severity'], retracted = false): AiRe
     severity,
     category: 'correctness',
     suggestedFix: null,
+    sliceId: null,
     challenge: retracted ? { status: 'retracted', question: null, justification: 'wrong' } : null,
   }
 }
@@ -133,6 +134,10 @@ function parked(findings: AiReviewFinding[]): {
       lastActivityAt: null,
       resumeAttempts: 0,
       maxResumeAttempts: 2,
+      summary: null,
+      slices: [],
+      fixFindingIds: [],
+      combinesPostAndFix: false,
     },
   }
 }

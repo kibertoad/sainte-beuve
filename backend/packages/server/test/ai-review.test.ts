@@ -102,7 +102,7 @@ describe('curating a delegated AI review', () => {
 
     expect(res.status).toBe(202)
     expect(loop.catFactory.resolved).toStrictEqual([
-      { runId: 'cf-run-1', action: 'post', findingIds: ['f-1'] },
+      { runId: 'cf-run-1', action: 'post', findingIds: ['f-1'], fixFindingIds: [] },
     ])
   })
 
@@ -123,7 +123,7 @@ describe('curating a delegated AI review', () => {
     )
     expect(res.status).toBe(202)
     expect(loop.catFactory.resolved).toStrictEqual([
-      { runId: 'cf-run-1', action: 'finish', findingIds: [] },
+      { runId: 'cf-run-1', action: 'finish', findingIds: [], fixFindingIds: [] },
     ])
   })
 
@@ -642,6 +642,7 @@ describe('polling a delegated AI review on the reminder tick', () => {
       failureReason: null,
       curation: null,
       challengedFindingIds: [],
+      progress: null,
       requestedAt: loop.harness.clock.now(),
       lastPolledAt: null,
       parkedAt: null,

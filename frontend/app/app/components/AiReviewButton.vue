@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { PullRequestRef } from '@sainte-beuve/contracts'
-import { boardReviewPath } from '@sainte-beuve/contracts'
+import { aiReviewPath } from '@sainte-beuve/contracts'
 
 // "AI review" on a row that may not be on the board yet. Filing tracks the pull
-// request there when it is not, and the findings are curated on its board row,
-// so the button goes there once cat-factory has the run.
+// request there when it is not, because a run belongs to a board row, and the
+// button then opens the review screen, where the run is followed and settled.
 //
 // Shown only once the org is known to have the capability: unlike a warning,
 // a button that appears and then refuses is a click wasted on every row.
@@ -24,12 +24,12 @@ async function file() {
   busy.value = true
   const reviewId = await fileOrExplain()
   busy.value = false
-  if (reviewId !== null) await navigateTo(boardReviewPath(reviewId))
+  if (reviewId !== null) await navigateTo(aiReviewPath(reviewId))
 }
 
 /**
- * The board row to go to: the one the run was filed on, or, when the refusal
- * names one (a run already in flight, the hourly limit), the row it is about.
+ * The review to open: the one the run was filed on, or, when the refusal names
+ * one (a run already in flight, the hourly limit), the one it is about.
  */
 async function fileOrExplain(): Promise<string | null> {
   try {

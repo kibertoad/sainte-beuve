@@ -122,6 +122,7 @@ export function curation(overrides: Partial<AiReviewCuration> = {}): AiReviewCur
         severity: 'high',
         category: 'correctness',
         suggestedFix: 'Guard the read.',
+        sliceId: null,
         challenge: {
           status: 'upheld',
           question: 'Is the index ever out of range?',
@@ -139,6 +140,10 @@ export function curation(overrides: Partial<AiReviewCuration> = {}): AiReviewCur
     lastActivityAt: 2_000,
     resumeAttempts: 0,
     maxResumeAttempts: 3,
+    summary: null,
+    slices: [],
+    fixFindingIds: [],
+    combinesPostAndFix: false,
     ...overrides,
   }
 }
@@ -160,6 +165,7 @@ export function aiReviewRun(id: string, overrides: Partial<AiReviewRun> = {}): A
     lastPolledAt: null,
     parkedAt: null,
     completedAt: null,
+    progress: null,
     ...overrides,
   }
 }

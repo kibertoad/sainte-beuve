@@ -1,4 +1,4 @@
-import type { AiReviewCuration, AiReviewResolution, PullRequestRef } from '@sainte-beuve/contracts'
+import type { AiReviewCuration, PullRequestRef, ResolveAiReview } from '@sainte-beuve/contracts'
 import type { AiReviewGateway, AiReviewReport } from '@sainte-beuve/kernel'
 import { UpstreamFailedError } from '@sainte-beuve/kernel'
 
@@ -22,6 +22,10 @@ export function curation(overrides: Partial<AiReviewCuration> = {}): AiReviewCur
     lastActivityAt: null,
     resumeAttempts: 0,
     maxResumeAttempts: 3,
+    summary: null,
+    slices: [],
+    fixFindingIds: [],
+    combinesPostAndFix: false,
     ...overrides,
   }
 }
@@ -40,6 +44,7 @@ export function aiFinding(
     severity: 'blocker',
     category: 'correctness',
     suggestedFix: null,
+    sliceId: null,
     challenge: null,
     ...overrides,
   }
@@ -60,7 +65,7 @@ export interface StubAiReview extends AiReviewGateway {
   /** The pull requests handed to the conflict resolver, in order. */
   conflictsResolved: { pullRequest: PullRequestRef; directoryKeys: readonly string[] }[]
   dismissed: { runId: string; findingId: string }[]
-  resolved: { runId: string; action: AiReviewResolution; findingIds: string[] }[]
+  resolved: ({ runId: string } & ResolveAiReview)[]
   resumed: string[]
   challenged: { runId: string; findingId: string; question: string | null }[]
   /** The workspace filing answers with. Null is the key's only workspace. */
@@ -117,6 +122,7 @@ export function stubAiReview(report: Partial<AiReviewReport> = {}): StubAiReview
       summary: null,
       failureReason: null,
       curation: null,
+      progress: null,
       ...report,
     },
     requestReview: async (input) => {
