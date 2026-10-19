@@ -9,6 +9,7 @@ import { AiReviewService } from '../reviews/AiReviewService.js'
 import { readPullRequestAuthor } from '../reviews/pullRequestAuthor.js'
 import { ReviewService } from '../reviews/ReviewService.js'
 import { RiskAssessmentService } from '../risk/RiskAssessmentService.js'
+import { TrackedAutomationService } from '../risk/TrackedAutomationService.js'
 import { botReply } from './botReplies.js'
 
 /**
@@ -96,7 +97,12 @@ export class ReviewIntake {
     const { review, created, result } = intent.route
       ? await service.trackAndAssign(draft, 1)
       : { ...(await service.track(draft)), result: null }
-    if (created) await this.assess(review)
+    if (created || intent.ready) {
+      await new TrackedAutomationService(this.container).onTracked(review, {
+        created,
+        ready: intent.ready,
+      })
+    }
     if (result === null) {
       return { action: created ? 'tracked' : 'already_tracked', reviewId: review.id }
     }
@@ -112,22 +118,6 @@ export class ReviewIntake {
     if (review === null) return IGNORED
     const assessment = await new RiskAssessmentService(this.container).onNewCommits(review)
     return { action: assessment === null ? 'ignored:not_assessed' : 'assess', reviewId: review.id }
-  }
-
-  /**
-   * Queue the risk assessment of a review the board just started tracking. A
-   * failure to queue it is logged rather than failing the delivery, which
-   * would make the host redeliver an event whose tracking already landed.
-   */
-  private async assess(review: ReviewRequest): Promise<void> {
-    try {
-      await new RiskAssessmentService(this.container).queue(review)
-    } catch (err) {
-      this.container.logger.warn(
-        { err, reviewId: review.id },
-        'a risk assessment could not be queued',
-      )
-    }
   }
 
   /**

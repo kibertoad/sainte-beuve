@@ -132,6 +132,9 @@ export function isTrustedAssociation(association: AuthorAssociation | undefined)
 /** The actions that mean "this pull request is ready to be looked at". */
 const TRACKING_ACTIONS = new Set(['opened', 'reopened', 'ready_for_review'])
 
+/** The ones that make it a review request for the first time: a reopen is not new. */
+const READY_ACTIONS = new Set(['opened', 'ready_for_review'])
+
 /**
  * What this delivery asks for, or null when it asks for nothing. Null is the
  * common case and not a fault: GitHub sends every event the App subscribes to,
@@ -165,13 +168,25 @@ function fromPullRequest(
       skills: skillsOf(pr.labels, context),
     })
   }
-  // A draft is not a review request. It is skipped rather than tracked-and-ignored
-  // because `ready_for_review` arrives when it stops being one, which is the event
-  // that should open the row.
-  if (!TRACKING_ACTIONS.has(payload.action ?? '') || pr.draft === true) return null
+  return trackOnOpen(payload.action ?? '', ref, pr, context)
+}
+
+/**
+ * An opening of some kind, as an unrouted track. A draft is not a review request.
+ * It is skipped rather than tracked-and-ignored because `ready_for_review`
+ * arrives when it stops being one, which is the event that should open the row.
+ */
+function trackOnOpen(
+  action: string,
+  ref: PullRequestRef,
+  pr: NonNullable<GitHubEventPayload['pull_request']>,
+  context: GitHubIntentContext,
+): IntakeIntent | null {
+  if (!TRACKING_ACTIONS.has(action) || pr.draft === true) return null
   return {
     kind: 'track',
     route: false,
+    ready: READY_ACTIONS.has(action),
     review: reviewRequest(ref, pr.title, authorOf(pr), skillsOf(pr.labels, context)),
   }
 }

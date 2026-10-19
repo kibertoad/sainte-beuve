@@ -1,12 +1,6 @@
-import {
-  type AiReviewCuration,
-  type AiReviewFinding,
-  defaultRiskPolicy,
-  type RiskPolicy,
-  type RiskVerdict,
-} from '@sainte-beuve/contracts'
+import { defaultRiskPolicy, type RiskPolicy, type RiskVerdict } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
-import { type ApprovalContext, aiReviewOutcome, planApproval } from './approval.js'
+import { type ApprovalContext, planApproval } from './approval.js'
 
 const OPEN: ApprovalContext['pullRequest'] = {
   state: 'open',
@@ -91,82 +85,13 @@ describe('planApproval', () => {
   it('asks for an AI review first when the policy requires one', () => {
     const requiring = { requireAiReview: true }
     expect(planApproval(context({}, requiring))).toEqual({ kind: 'ai_review' })
-    expect(planApproval(context({ aiReview: 'clean' }, requiring))).toEqual({ kind: 'approve' })
-    expect(planApproval(context({ aiReview: 'blocked' }, requiring))).toMatchObject({
+    const clean = { outcome: 'clean', rating: 0.9 } as const
+    expect(planApproval(context({ aiReview: clean }, requiring))).toEqual({ kind: 'approve' })
+    const blocked = { outcome: 'blocked', rating: 0.7, reason: 'rated 0.7' } as const
+    expect(planApproval(context({ aiReview: blocked }, requiring))).toEqual({
       kind: 'hold',
       status: 'requires_review',
+      reason: 'rated 0.7',
     })
-  })
-})
-
-function finding(severity: AiReviewFinding['severity'], retracted = false): AiReviewFinding {
-  return {
-    findingId: severity,
-    title: 't',
-    detail: 'd',
-    path: 'a.ts',
-    line: 1,
-    side: 'RIGHT',
-    severity,
-    category: 'correctness',
-    suggestedFix: null,
-    sliceId: null,
-    challenge: retracted ? { status: 'retracted', question: null, justification: 'wrong' } : null,
-  }
-}
-
-function parked(findings: AiReviewFinding[]): {
-  status: 'awaiting_selection'
-  curation: AiReviewCuration
-} {
-  return {
-    status: 'awaiting_selection',
-    curation: {
-      status: 'awaiting_selection',
-      findings,
-      selectedFindingIds: [],
-      postedFindingIds: [],
-      postedBody: false,
-      postAttempts: 0,
-      postReport: null,
-      sliceCount: 1,
-      reportedSliceCount: 1,
-      lastActivityAt: null,
-      resumeAttempts: 0,
-      maxResumeAttempts: 2,
-      summary: null,
-      slices: [],
-    },
-  }
-}
-
-describe('aiReviewOutcome', () => {
-  it('waits while the review is running', () => {
-    expect(aiReviewOutcome({ status: 'running', curation: null }, 'medium')).toBeNull()
-  })
-
-  it('is clean when nothing reaches the threshold', () => {
-    expect(aiReviewOutcome(parked([finding('low'), finding('nit')]), 'medium')).toBe('clean')
-  })
-
-  it('is blocked by a finding at or above the threshold', () => {
-    expect(aiReviewOutcome(parked([finding('medium')]), 'medium')).toBe('blocked')
-  })
-
-  it('ignores a finding its challenge retracted', () => {
-    expect(aiReviewOutcome(parked([finding('blocker', true)]), 'medium')).toBe('clean')
-  })
-
-  it('blocks on a review that failed', () => {
-    expect(aiReviewOutcome({ status: 'failed', curation: null }, 'medium')).toBe('blocked')
-  })
-
-  it('blocks on a review a person completed by posting its findings', () => {
-    const { curation } = parked([finding('high')])
-    expect(aiReviewOutcome({ status: 'completed', curation }, 'medium')).toBe('blocked')
-  })
-
-  it('is clean when a review completed without findings', () => {
-    expect(aiReviewOutcome({ status: 'completed', curation: null }, 'medium')).toBe('clean')
   })
 })

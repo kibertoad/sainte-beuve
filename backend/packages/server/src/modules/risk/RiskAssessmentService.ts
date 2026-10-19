@@ -13,7 +13,7 @@ import {
   type VcsGateway,
 } from '@sainte-beuve/kernel'
 import { assessmentOf } from '../assessments/PullRequestAssessmentService.js'
-import { aiReviewOutcome } from '@sainte-beuve/risk'
+import { type AiReviewJudgement, judgeAiReview } from '@sainte-beuve/risk'
 import type { AppContainer } from '../../container.js'
 import { resolveVcs } from '../../integrations/resolve.js'
 import { OrgService } from '../orgs/OrgService.js'
@@ -44,7 +44,7 @@ const IN_FLIGHT = new Set<RiskAssessment['status']>(RISK_ASSESSMENT_IN_FLIGHT_ST
 interface StepContext {
   policy: RiskPolicy
   status: PullRequestStatus
-  aiReview: 'clean' | 'blocked' | null
+  aiReview: AiReviewJudgement | null
 }
 
 /**
@@ -73,6 +73,38 @@ export class RiskAssessmentService {
     const policy = await this.policy()
     if (!policy.assess) return null
     return this.start(review, policy)
+  }
+
+  /**
+   * Assess a review from the top under a policy the caller already read,
+   * replacing whatever assessment it had. The caller has decided it should be.
+   */
+  async start(review: ReviewRequest, policy: RiskPolicy): Promise<RiskAssessment> {
+    const now = this.container.clock.now()
+    const row: RiskAssessment = {
+      reviewId: review.id,
+      pullRequest: review.pullRequest,
+      status: 'pending',
+      assessor: policy.assessor,
+      headSha: null,
+      changeClass: null,
+      changedFileCount: null,
+      scores: null,
+      rationale: null,
+      verdict: null,
+      holdReason: null,
+      aiReviewRunId: null,
+      aiReviewRating: null,
+      approvedAs: null,
+      approvalId: null,
+      attempts: 0,
+      revision: this.container.ids.next(),
+      requestedAt: now,
+      updatedAt: now,
+    }
+    await this.container.repositories.riskAssessments.put(row)
+    this.container.defer(this.drive(review.id))
+    return row
   }
 
   /**
@@ -121,33 +153,6 @@ export class RiskAssessmentService {
   async drive(reviewId: string): Promise<void> {
     const row = await this.container.repositories.riskAssessments.get(reviewId)
     if (row !== null && IN_FLIGHT.has(row.status)) await this.step(row)
-  }
-
-  private async start(review: ReviewRequest, policy: RiskPolicy): Promise<RiskAssessment> {
-    const now = this.container.clock.now()
-    const row: RiskAssessment = {
-      reviewId: review.id,
-      pullRequest: review.pullRequest,
-      status: 'pending',
-      assessor: policy.assessor,
-      headSha: null,
-      changeClass: null,
-      changedFileCount: null,
-      scores: null,
-      rationale: null,
-      verdict: null,
-      holdReason: null,
-      aiReviewRunId: null,
-      approvedAs: null,
-      approvalId: null,
-      attempts: 0,
-      revision: this.container.ids.next(),
-      requestedAt: now,
-      updatedAt: now,
-    }
-    await this.container.repositories.riskAssessments.put(row)
-    this.container.defer(this.drive(review.id))
-    return row
   }
 
   /** New commits on an approved pull request: the approval goes, and the board row back on the clock. */
@@ -210,6 +215,7 @@ export class RiskAssessmentService {
       ...scored,
       assessor: policy.assessor,
       aiReviewRunId: null,
+      aiReviewRating: null,
       attempts: row.attempts + 1,
     })
     if (assessed === null) return null
@@ -223,10 +229,10 @@ export class RiskAssessmentService {
     if (row.aiReviewRunId === null) return this.save(row, { status: 'pending' })
     const policy = await this.policy()
     const run = await new AiReviewService(this.container).get(row.aiReviewRunId)
-    const outcome = aiReviewOutcome(run, policy.blockingSeverity)
-    if (outcome === null) return row
+    const judgement = judgeAiReview(run, policy)
+    if (judgement === null) return row
     const status = await (await this.vcs(review)).pullRequestStatus(review.pullRequest)
-    return this.advanced(row, review, { policy, status, aiReview: outcome })
+    return this.advanced(row, review, { policy, status, aiReview: judgement })
   }
 
   private async advanced(
@@ -243,17 +249,22 @@ export class RiskAssessmentService {
         headSha: row.headSha,
         scores: row.scores,
         aiReviewRunId: row.aiReviewRunId,
+        requestedAt: row.requestedAt,
       },
       context,
     )
-    const next = await this.save(row, patch)
+    const rating = context.aiReview === null ? {} : { aiReviewRating: context.aiReview.rating }
+    const next = await this.save(row, { ...patch, ...rating })
     if (patch.status === 'approved') {
       if (next === null) await this.retract(row, review, patch)
       else await settleApproval(this.container, review, row.aiReviewRunId)
       return next
     }
-    // New commits: assess the new head straight away, within the attempt budget.
-    if (next?.status === 'pending' && next.attempts < MAX_ATTEMPTS) {
+    // New commits: assess the new head straight away, within the attempt budget. A
+    // review just handed over is read straight away too: the one adopted may
+    // already have settled, and should not wait on the clock's lease to say so.
+    const again = next?.status === 'pending' && next.attempts < MAX_ATTEMPTS
+    if (again || next?.status === 'awaiting_ai_review') {
       this.container.defer(this.drive(row.reviewId))
     }
     return next

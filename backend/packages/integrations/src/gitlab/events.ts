@@ -130,9 +130,13 @@ function fromActivity(
     const intent = labelIntent(ref, added, context.labels, subject)
     if (intent !== null) intents.push(intent)
   }
-  // The review label already tracks it, routed; an unrouted track first would only be undone.
-  if (becameReady(payload, action) && !intents.some((i) => i.kind === 'track')) {
-    intents.unshift(tracked(ref, subject, false))
+  // The review label already tracks it, routed; an unrouted track first would only be
+  // undone. Becoming ready is said on whichever track there is.
+  if (becameReady(payload, action)) {
+    const ready = action !== 'reopen'
+    const labelled = intents.find((i) => i.kind === 'track')
+    if (labelled === undefined) intents.unshift(tracked(ref, subject, { route: false, ready }))
+    else labelled.ready = ready
   }
   if (action === 'update' && payload.object_attributes?.oldrev) {
     intents.push({ kind: 'assess', pullRequest: ref })
@@ -207,10 +211,14 @@ function isNewMergeRequestNote(attributes: GitLabObjectAttributes | undefined): 
   return attributes.action === undefined || attributes.action === 'create'
 }
 
-function tracked(ref: PullRequestRef, subject: Subject, route: boolean): IntakeIntent {
+function tracked(
+  ref: PullRequestRef,
+  subject: Subject,
+  flags: { route: boolean; ready: boolean },
+): IntakeIntent {
   return {
     kind: 'track',
-    route,
+    ...flags,
     review: reviewRequest(ref, subject.title, subject.author, subject.skills),
   }
 }

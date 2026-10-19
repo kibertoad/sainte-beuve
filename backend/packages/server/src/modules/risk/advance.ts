@@ -1,4 +1,5 @@
 import type {
+  AiReviewRun,
   PullRequestStatus,
   ReviewRequest,
   RiskAssessment,
@@ -6,7 +7,7 @@ import type {
   RiskVerdict,
 } from '@sainte-beuve/contracts'
 import { ConflictError, getErrorMessage } from '@sainte-beuve/kernel'
-import { planApproval } from '@sainte-beuve/risk'
+import { type AiReviewJudgement, planApproval } from '@sainte-beuve/risk'
 import type { AppContainer } from '../../container.js'
 import { type Approver, resolveApprover } from '../../integrations/riskResolve.js'
 import { AiReviewCurationService } from '../reviews/AiReviewCurationService.js'
@@ -26,32 +27,38 @@ export interface Assessed {
   headSha: string
   scores: RiskAssessment['scores']
   aiReviewRunId: string | null
+  /** When the assessment was requested: a review filed since then is about the same head. */
+  requestedAt: number
 }
 
 const AI_REVIEW_INSTRUCTIONS =
   'Filed automatically: this pull request is within the risk policy, and it is approved with nobody looking if this review finds nothing a person should see.'
 
-function approvalBody(assessed: Assessed, aiReviewed: boolean): string {
+function approvalBody(assessed: Assessed, aiReview: AiReviewJudgement | null): string {
   const { verdict, scores } = assessed
   const read =
     scores === null
       ? ''
       : ` (complexity ${scores.complexity}, risk ${scores.risk}, impact ${scores.impact})`
-  const review = aiReviewed ? ' An AI review found nothing at the threshold the policy sets.' : ''
+  const review =
+    aiReview === null
+      ? ''
+      : ` An AI review rated it ${aiReview.rating} and found nothing at the threshold the policy sets.`
   return `Approved by sainte-beuve: the change is within the ${verdict.policyName} risk policy${read}.${review}`
 }
 
 async function approve(
   container: AppContainer,
   assessed: Assessed,
-  approver: Approver,
+  input: { approver: Approver; aiReview: AiReviewJudgement | null },
 ): Promise<AssessmentPatch> {
-  const { review, headSha, aiReviewRunId } = assessed
+  const { review, headSha } = assessed
+  const { approver } = input
   let approval: { approvalId: string | null }
   try {
     approval = await approveOnHost(container, approver, review, {
       headSha,
-      body: approvalBody(assessed, aiReviewRunId !== null),
+      body: approvalBody(assessed, input.aiReview),
     })
   } catch (err) {
     if (err instanceof ConflictError) {
@@ -100,14 +107,46 @@ async function finishAiReview(container: AppContainer, runId: string): Promise<v
   }
 }
 
-async function fileAiReview(
+/**
+ * A review of this pull request filed since the assessment was requested, which
+ * is a review of the head it scored: the one the org files when a pull request
+ * opens, or one a person asked for. A review that never finished vouches for
+ * nothing, so it is not adopted and another is filed.
+ */
+async function adoptableRun(
   container: AppContainer,
-  review: ReviewRequest,
-): Promise<AssessmentPatch> {
+  assessed: Assessed,
+): Promise<AiReviewRun | null> {
+  const runs = await container.repositories.aiReviewRuns.listByReview(assessed.review.id)
+  const candidates = runs.filter(
+    (run) =>
+      run.requestedAt >= assessed.requestedAt &&
+      run.status !== 'failed' &&
+      run.status !== 'cancelled',
+  )
+  return candidates.sort((a, b) => b.requestedAt - a.requestedAt)[0] ?? null
+}
+
+function awaiting(run: AiReviewRun): AssessmentPatch {
+  return { status: 'awaiting_ai_review', aiReviewRunId: run.id, holdReason: null }
+}
+
+/**
+ * Hand the pull request to the AI review the policy asks for: one already filed
+ * on this head when there is one, so a pull request the org reviews on opening
+ * is not reviewed, and billed, twice. A request that loses a race with another
+ * filing adopts the winner.
+ */
+async function fileAiReview(container: AppContainer, assessed: Assessed): Promise<AssessmentPatch> {
+  const adopted = await adoptableRun(container, assessed)
+  if (adopted !== null) return awaiting(adopted)
   try {
-    const run = await new AiReviewService(container).request(review.id, AI_REVIEW_INSTRUCTIONS)
-    return { status: 'awaiting_ai_review', aiReviewRunId: run.id, holdReason: null }
+    return awaiting(
+      await new AiReviewService(container).request(assessed.review.id, AI_REVIEW_INSTRUCTIONS),
+    )
   } catch (err) {
+    const raced = err instanceof ConflictError ? await adoptableRun(container, assessed) : null
+    if (raced !== null) return awaiting(raced)
     return {
       status: 'within_policy',
       holdReason: `the AI review the policy requires could not be filed: ${getErrorMessage(err)}`,
@@ -136,7 +175,7 @@ export async function advance(
   context: {
     policy: RiskPolicy
     status: PullRequestStatus
-    aiReview: 'clean' | 'blocked' | null
+    aiReview: AiReviewJudgement | null
   },
 ): Promise<AssessmentPatch> {
   const { review, verdict, headSha } = assessed
@@ -158,7 +197,10 @@ export async function advance(
   if (step.kind === 'reassess') {
     return { status: 'pending', holdReason: 'new commits arrived since it was assessed' }
   }
-  if (step.kind === 'ai_review') return fileAiReview(container, review)
+  if (step.kind === 'ai_review') return fileAiReview(container, assessed)
   // `planApproval` approves only with an approver in hand.
-  return approve(container, assessed, approver as Approver)
+  return approve(container, assessed, {
+    approver: approver as Approver,
+    aiReview: context.aiReview,
+  })
 }

@@ -58,18 +58,56 @@ Role-scoped rules on a cat-factory policy apply only when the org's key is bound
 to a person in cat-factory, who is then the role it is judged under. A key bound
 to nobody has no role, and those rules do not apply to it.
 
+## When a pull request opens, or leaves draft
+
+Two switches act on a pull request the moment it becomes a review request: it
+opens as a non-draft (`opened` on GitHub, `open` on GitLab), or it leaves draft
+(`ready_for_review`, or an update that clears the draft flag). A reopen or a label
+is not a new review request and sets off neither.
+
+- **Assess** (`assess`) scores it. It also scores any pull request the board starts
+  tracking another way, and it scores again a row the board already held, which
+  is how a draft that was tracked by a label (and held, since a draft is never
+  approved) gets approved once it is ready. An assessment in flight, or one that
+  already approved, is left alone.
+- **AI review** (`autoAiReview`) files cat-factory's AI review of it, whatever its
+  assessment says. It needs cat-factory configured. The review parks with its
+  findings for a person like any other, and it counts against the same limit of
+  one in flight and three an hour.
+
+With both on and the policy waiting on an AI review before approving, the review
+filed on opening is the one the approval waits on: an assessment adopts a review
+of the pull request filed since it was requested, rather than filing and billing a
+second. A refusal to assess or to file (cat-factory not configured, the hourly
+limit) goes to the log and never fails the webhook delivery, which the host would
+otherwise redeliver.
+
 ## What happens to a pull request within the policy
 
 With **automatic approval** off, the assessment is a badge on the board row and
 nothing else. With it on, a pull request within the policy is approved on the
 host, its board row is settled as approved, and its reminders stop.
 
-The policy can also ask for **cat-factory's AI review first**. The review is filed
-as any other, and the pull request is approved only when it comes back with
-nothing at or above the severity the policy names (a finding its challenge
-retracted does not count). A clean review is closed without posting. One that
-found something stays parked with its findings, and the parked-review nudge
-reaches a person the way it always does.
+The policy can also ask for **cat-factory's AI review first**, and the pull
+request is approved only when the review vouches for it, by the rule cat-factory's
+own reviewer gate applies before a run moves past review:
+
+- nothing still standing at or above the severity the policy names (a finding its
+  challenge retracted does not count), and
+- a **rating** at or above the policy's minimum, 0.8 by default, which is
+  cat-factory's own threshold.
+
+cat-factory's pull-request review reports findings and no score, so the rating is
+read off the findings: a review that found nothing rates 1, and each finding
+still standing takes off what its severity costs (blocker 1, high 0.25,
+medium 0.1, low 0.04, nit 0.01; `AI_REVIEW_SEVERITY_PENALTY` in the contracts).
+Two mediums rate 0.8 and pass; three rate 0.7 and do not. A review that failed or
+was cancelled vouches for nothing. The rating is kept on the assessment and shown
+on the board row's badge.
+
+A clean review is closed without posting. One that did not pass stays parked with
+its findings, the row says why (the findings, or the rating against the minimum),
+and the parked-review nudge reaches a person the way it always does.
 
 A pull request is never approved when:
 
