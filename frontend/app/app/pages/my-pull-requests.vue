@@ -190,6 +190,38 @@ async function resolveConflicts(pr: MyPullRequest) {
   })
 }
 
+/** The pull request the "suggest reviewers" dialog is open for. Null when closed. */
+const suggesting = ref<MyPullRequest | null>(null)
+const { busy: askBusy, run: runAsk } = useApiAction()
+
+/** Reviewers are for a pull request still open and out of draft. */
+function offersReviewerSuggestions(pr: MyPullRequest): boolean {
+  return !pr.draft && (pr.status === null || pr.status.state === 'open')
+}
+
+async function askReviewers(request: { reviewerIds: string[]; note: string | null }) {
+  const pr = suggesting.value
+  if (pr === null) return
+  const asked = await runAsk(
+    () =>
+      api.askSuggestedReviewers({
+        pullRequest: pr.pullRequest,
+        title: pr.title,
+        reviewerIds: request.reviewerIds,
+        note: request.note,
+      }),
+    'Could not ask the reviewers',
+    pr.pullRequest.url,
+  )
+  if (!asked) return
+  suggesting.value = null
+  toast.add({
+    color: 'success',
+    title: askedLabel(request.reviewerIds.length),
+    description: 'They are notified and asked to commit to reviewing it.',
+  })
+}
+
 /** Merge comments are for a pull request that could merge once a bot is happy with it. */
 function offersComments(pr: MyPullRequest): boolean {
   return pr.status?.state === 'open' && !pr.status.draft && pr.merge.comments.length > 0
@@ -350,6 +382,15 @@ function offersComments(pr: MyPullRequest): boolean {
                 :pull-request="pr.pullRequest"
                 @linked="refreshAfterLink"
               />
+              <UButton
+                v-if="offersReviewerSuggestions(pr)"
+                size="sm"
+                variant="soft"
+                icon="i-lucide-user-plus"
+                @click="suggesting = pr"
+              >
+                Suggest reviewers
+              </UButton>
               <PullRequestAssessment :pull-request="pr.pullRequest" />
               <AiReviewButton
                 :pull-request="pr.pullRequest"
@@ -375,5 +416,12 @@ function offersComments(pr: MyPullRequest): boolean {
         further back.
       </p>
     </div>
+
+    <SuggestReviewersModal
+      :pull-request="suggesting"
+      :busy="askBusy !== null"
+      @submit="askReviewers"
+      @close="suggesting = null"
+    />
   </UContainer>
 </template>

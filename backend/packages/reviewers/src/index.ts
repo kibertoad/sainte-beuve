@@ -149,7 +149,13 @@ export {
 } from './recommendation.js'
 export { mergeVocabulary, type MergedVocabulary } from './vocabulary.js'
 export { type PartitionedPullRequests, partitionForViewer } from './workspace.js'
-export { isDependencyBot } from './dependencyBots.js'
+export { isBotLogin, isDependencyBot } from './dependencyBots.js'
+export {
+  isBotReviewer,
+  planReviewerSuggestions,
+  type ReviewerSuggestionPlan,
+  type ReviewerSuggestionsInput,
+} from './reviewerSuggestions.js'
 export {
   CLAIMED_NEGLECT_SHARE,
   FAMILIARITY_HALF_POINT,

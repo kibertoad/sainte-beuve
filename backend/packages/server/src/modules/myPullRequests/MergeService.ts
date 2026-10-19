@@ -4,29 +4,21 @@ import type {
   MergeOutcome,
   PostMergeComment,
   Project,
-  PullRequestStatus,
   ResolveConflicts,
-  Viewer,
 } from '@sainte-beuve/contracts'
-import { handleOf } from '@sainte-beuve/contracts'
 import {
   assertFound,
   ConflictError,
   ForbiddenError,
   type PullRequestAddress,
-  UnavailableError,
   ValidationError,
-  type VcsGateway,
 } from '@sainte-beuve/kernel'
-import { isSameHandle } from '@sainte-beuve/reviewers'
 import type { AppContainer } from '../../container.js'
 import { requireCapability } from '../../http/errors.js'
 import { resolveActingAiReview } from '../../integrations/catFactoryPersonal.js'
-import { VcsResolutions } from '../../integrations/resolve.js'
 import type { RequestPrincipal } from '../auth/principal.js'
-import { ViewerService } from '../identity/ViewerService.js'
 import { catFactoryPlacementKeys } from '../projects/directoryKeys.js'
-import { NO_CREDENTIAL } from '../workspace/sweep.js'
+import { type AuthoredPullRequest, readAuthored } from './authored.js'
 import {
   directMergeFor,
   type MergeContext,
@@ -43,13 +35,9 @@ import {
  * viewer did not author. The host still applies its own branch protection.
  */
 
-/** An open pull request the viewer authored, as its host reports it now. */
-interface Authored {
-  viewer: Viewer
+interface Authored extends AuthoredPullRequest {
   project: Project
   address: PullRequestAddress
-  gateway: VcsGateway
-  status: PullRequestStatus
 }
 
 interface Target extends Authored {
@@ -159,30 +147,17 @@ export class MergeService {
     input: { projectId: string; number: number },
     notYours: string,
   ): Promise<Authored> {
-    const viewer = await new ViewerService(this.container, this.principal).current()
     const project = assertFound(
       await this.container.repositories.projects.getById(input.projectId),
       `No project ${input.projectId}`,
     )
-    const gateway = await this.gatewayFor(project)
     const address = {
       provider: project.provider,
       owner: project.owner,
       repo: project.repo,
       number: input.number,
     }
-    const status = await gateway.pullRequestStatus(address)
-    if (!isSameHandle(handleOf(viewer.reviewer.handles, project.provider), status.authorLogin)) {
-      throw new ForbiddenError(notYours)
-    }
-    if (status.state !== 'open') throw new ConflictError(`This pull request is ${status.state}.`)
-    return { viewer, project, address, gateway, status }
-  }
-
-  private async gatewayFor(project: Project): Promise<VcsGateway> {
-    const resolved = await new VcsResolutions(this.container).acting(project.provider)
-    if (resolved === null)
-      throw new UnavailableError(`Cannot reach ${project.provider}: ${NO_CREDENTIAL}`)
-    return resolved.gateway
+    const authored = await readAuthored(this.container, this.principal, address, notYours)
+    return { ...authored, project, address }
   }
 }

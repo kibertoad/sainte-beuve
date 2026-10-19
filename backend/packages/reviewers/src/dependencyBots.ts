@@ -19,3 +19,8 @@ export function isDependencyBot(authorLogin: string): boolean {
     .replace(/\[bot\]$/, '')
   return DEPENDENCY_BOT_NAMES.has(name)
 }
+
+/** Whether a host handle is a bot account: a GitHub App, or a dependency bot on any host. */
+export function isBotLogin(login: string): boolean {
+  return login.trim().toLowerCase().endsWith('[bot]') || isDependencyBot(login)
+}

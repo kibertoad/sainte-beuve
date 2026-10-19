@@ -8,6 +8,12 @@ import {
   postMergeCommentSchema,
   resolveConflictsSchema,
 } from '../my-pull-requests.js'
+import { attentionRequestSchema } from '../attention.js'
+import {
+  askSuggestedReviewersSchema,
+  reviewerSuggestionsQuerySchema,
+  reviewerSuggestionsSchema,
+} from '../reviewer-suggestions.js'
 import { errorResponses } from './_shared.js'
 
 // My PRs route contracts. See MyPullRequestsController in @sainte-beuve/server.
@@ -44,4 +50,24 @@ export const resolveConflictsContract = defineApiContract({
   pathResolver: () => '/my-pull-requests/resolve-conflicts',
   requestBodySchema: resolveConflictsSchema,
   responsesByStatusCode: { 200: conflictResolutionSchema, ...errorResponses },
+})
+
+/** The reviewers who fit the caller's own pull request best, with the top few ticked. */
+export const suggestReviewersContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/my-pull-requests/reviewer-suggestions',
+  requestBodySchema: reviewerSuggestionsQuerySchema,
+  responsesByStatusCode: { 200: reviewerSuggestionsSchema, ...errorResponses },
+})
+
+/**
+ * Ask the people picked to commit to reviewing the caller's own pull request.
+ * Answers the caller's open ask on it, which a repeated call adds to rather
+ * than duplicates.
+ */
+export const askSuggestedReviewersContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/my-pull-requests/reviewer-asks',
+  requestBodySchema: askSuggestedReviewersSchema,
+  responsesByStatusCode: { 200: attentionRequestSchema, ...errorResponses },
 })

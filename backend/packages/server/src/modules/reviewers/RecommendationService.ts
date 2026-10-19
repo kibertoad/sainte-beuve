@@ -83,7 +83,7 @@ function excluded(
   return [...onBoard, ...onHost]
 }
 
-function toRecommendation(candidate: ScoredCandidate) {
+export function toRecommendation(candidate: ScoredCandidate) {
   return {
     reviewerId: candidate.reviewer.id,
     displayName: candidate.reviewer.displayName,
