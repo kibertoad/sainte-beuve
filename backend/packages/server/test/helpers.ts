@@ -139,9 +139,13 @@ export function stubGateways(overrides: Partial<GatewayFactory> = {}): GatewayFa
     guidedReview: () => {
       throw new Error('this case wired no guided reviewer')
     },
-    catFactoryProbe: () => {
-      throw new Error('this case wired no cat-factory probe')
-    },
+    // Links into cat-factory's app resolve through the probe, so only probing refuses.
+    catFactoryProbe: (access) => ({
+      appUrl: async (configured) => configured ?? access.baseUrl,
+      probe: () => {
+        throw new Error('this case wired no cat-factory probe')
+      },
+    }),
     catFactoryDirectory: () => {
       throw new Error('this case wired no cat-factory directory')
     },

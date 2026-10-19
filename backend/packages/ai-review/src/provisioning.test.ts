@@ -169,6 +169,23 @@ describe('provisionService', () => {
     ).toBeNull()
   })
 
+  it('falls back when the key may not link the repository', async () => {
+    const { clients, calls } = clientsOver({
+      'POST /api/v1/repos/link': {
+        status: 403,
+        body: { error: { code: 'insufficient_scope', message: 'needs admin' } },
+      },
+    })
+
+    expect(
+      await provisionService(clients, {
+        pullRequest: PULL_REQUEST,
+        ownerDirectoryKeys: ['ws-a/8'],
+      }),
+    ).toBeNull()
+    expect(calls.map((call) => call.path)).toStrictEqual(['/api/v1/repos/link'])
+  })
+
   it('refuses a repository the connection cannot reach', async () => {
     const { clients } = clientsOver({
       'POST /api/v1/repos/link': {

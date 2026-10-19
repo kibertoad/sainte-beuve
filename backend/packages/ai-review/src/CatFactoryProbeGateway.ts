@@ -14,6 +14,7 @@ import {
   type CatFactoryProbeReport,
   withDeadline,
 } from '@sainte-beuve/kernel'
+import { appUrlOf } from './catFactoryApp.js'
 import { WorkspaceClients } from './workspaceClients.js'
 
 export interface CatFactoryProbeOptions extends CatFactoryAccess {
@@ -72,7 +73,7 @@ function uniqueById<T extends { id: string }>(entries: readonly T[]): T[] {
 export class CatFactoryProbeGateway implements CatFactoryProbe {
   private readonly clients: WorkspaceClients
 
-  constructor(options: CatFactoryProbeOptions) {
+  constructor(private readonly options: CatFactoryProbeOptions) {
     this.clients = new WorkspaceClients(
       (workspaceId) =>
         new CatFactoryClient({
@@ -83,6 +84,10 @@ export class CatFactoryProbeGateway implements CatFactoryProbe {
           ...(workspaceId === undefined ? {} : { workspaceId }),
         }),
     )
+  }
+
+  appUrl(configured: string | null): Promise<string> {
+    return appUrlOf({ ...this.options, appUrl: configured })
   }
 
   async probe(): Promise<CatFactoryProbeReport> {

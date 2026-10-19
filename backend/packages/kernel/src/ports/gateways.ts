@@ -223,6 +223,8 @@ export interface CatFactoryProbeReport {
 
 export interface CatFactoryProbe {
   probe(): Promise<CatFactoryProbeReport>
+  /** Where the instance serves its web app: `configured` when set, else what the instance says. */
+  appUrl(configured: string | null): Promise<string>
 }
 
 /**

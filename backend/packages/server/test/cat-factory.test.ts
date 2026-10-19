@@ -40,7 +40,10 @@ function probing(report: CatFactoryProbeReport): {
     gateways: stubGateways({
       catFactoryProbe: (access) => {
         asked.push(access)
-        return { probe: async () => report }
+        return {
+          probe: async () => report,
+          appUrl: async (configured) => configured ?? access.baseUrl,
+        }
       },
     }),
   })

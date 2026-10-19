@@ -1,10 +1,15 @@
-import { type CatFactoryPersonal, personalCatFactoryKey } from '@sainte-beuve/contracts'
+import {
+  type CatFactoryPersonal,
+  catFactoryAppLink,
+  personalCatFactoryKey,
+} from '@sainte-beuve/contracts'
 import { type CatFactoryProbeReport, UnavailableError, ValidationError } from '@sainte-beuve/kernel'
 import type { AppContainer } from '../../container.js'
 import { hintOfToken } from '../../crypto/tokens.js'
 import { requireCapability } from '../../http/errors.js'
 import { readCatFactoryConfig } from '../../integrations/catFactoryConfig.js'
 import { personalRouteRequired } from '../../integrations/catFactoryPersonal.js'
+import { catFactoryAppUrl } from '../../integrations/catFactoryAppUrl.js'
 import type { RequestPrincipal } from '../auth/principal.js'
 import { SCOPES_THAT_FILE_REVIEWS } from '../connections/catFactoryCheck.js'
 import { ViewerService } from '../identity/ViewerService.js'
@@ -39,14 +44,14 @@ function refuseUnusable(report: CatFactoryProbeReport, baseUrl: string): void {
  * confirms it there.
  */
 function mintPersonalKeyUrl(appUrl: string): string {
-  const url = new URL(`${appUrl.replace(/\/+$/, '')}/`)
-  url.searchParams.set('newApiKey', '1')
-  url.searchParams.set('label', 'sainte-beuve')
-  url.searchParams.set('scope', 'decide')
-  url.searchParams.set('runsAsSelf', '1')
-  // One key for every workspace the person is in, now and later, rather than the one it is minted from.
-  url.searchParams.set('reach', 'memberships')
-  return url.toString()
+  return catFactoryAppLink(appUrl, [
+    ['newApiKey', '1'],
+    ['label', 'sainte-beuve'],
+    ['scope', 'decide'],
+    ['runsAsSelf', '1'],
+    // One key for every workspace the person is in, now and later, rather than the one it is minted from.
+    ['reach', 'memberships'],
+  ])
 }
 
 /**
@@ -72,7 +77,8 @@ export class CatFactoryPersonalService {
     return {
       personalRoute: required ? 'required' : 'not_known',
       key: { stored: key !== null, hint: key?.hint ?? null },
-      mintKeyUrl: config === null ? null : mintPersonalKeyUrl(config.appUrl ?? config.baseUrl),
+      mintKeyUrl:
+        config === null ? null : mintPersonalKeyUrl(await catFactoryAppUrl(this.container, config)),
     }
   }
 

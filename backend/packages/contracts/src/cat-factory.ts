@@ -157,22 +157,34 @@ export function repositoryMissingOf(details: unknown): CatFactoryRepositoryMissi
 }
 
 /**
- * Where a task's run opens in cat-factory's app. The app is one canvas with no
- * path per entity, so the link is a query on its root: `ws` pins the board,
- * `block` selects the task (a public task id is its board block id) and `run`
- * is what makes the app read the link at all. With no run id yet, the app's
- * root, since a link without one is ignored.
+ * A link into cat-factory's app. The app is one canvas with no path per
+ * entity, so every deep link is a query on its root. A path is appended to
+ * `appUrl` rather than resolved against it, so an app served under a prefix
+ * keeps it.
+ */
+export function catFactoryAppLink(
+  appUrl: string,
+  query: readonly (readonly [string, string])[] = [],
+): string {
+  const root = `${appUrl.replace(/\/+$/, '')}/`
+  if (query.length === 0) return root
+  return `${root}?${query.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&')}`
+}
+
+/**
+ * Where a task's run opens in cat-factory's app: `ws` pins the board, `block`
+ * selects the task (a public task id is its board block id) and `run` is what
+ * makes the app read the link at all. With no run id yet, the app's root, since
+ * a link without one is ignored.
  */
 export function catFactoryRunUrl(
   appUrl: string,
   at: { workspaceId: string | null; taskId: string; runId: string | null },
 ): string {
-  const root = `${appUrl.replace(/\/+$/, '')}/`
-  if (at.runId === null) return root
-  const query = [
-    ...(at.workspaceId === null ? [] : [['ws', at.workspaceId]]),
+  if (at.runId === null) return catFactoryAppLink(appUrl)
+  return catFactoryAppLink(appUrl, [
+    ...(at.workspaceId === null ? [] : [['ws', at.workspaceId] as const]),
     ['block', at.taskId],
     ['run', at.runId],
-  ]
-  return `${root}?${query.map(([key, value]) => `${key}=${encodeURIComponent(value ?? '')}`).join('&')}`
+  ])
 }

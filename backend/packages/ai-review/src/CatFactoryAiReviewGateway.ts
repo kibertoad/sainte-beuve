@@ -233,7 +233,7 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     }
     return {
       taskId: task.taskId,
-      url: catFactoryRunUrl(this.options.appUrl ?? this.options.baseUrl, {
+      url: catFactoryRunUrl(await appUrlOf(this.options), {
         workspaceId: placement.workspaceId,
         taskId: task.taskId,
         runId: started.runId,

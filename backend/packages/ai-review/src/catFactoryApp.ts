@@ -1,6 +1,7 @@
 import {
   CAT_FACTORY_REPOSITORY_MISSING,
   type CatFactoryRepositoryMissing,
+  catFactoryAppLink,
   type PullRequestRef,
 } from '@sainte-beuve/contracts'
 import { UnavailableError, withDeadline } from '@sainte-beuve/kernel'
@@ -12,10 +13,10 @@ import { UnavailableError, withDeadline } from '@sainte-beuve/kernel'
  * opens the app.
  */
 function addRepositoryUrl(appUrl: string, pullRequest: PullRequestRef): string {
-  const url = new URL(`${appUrl.replace(/\/+$/, '')}/`)
-  url.searchParams.set('addRepo', `${pullRequest.owner}/${pullRequest.repo}`)
-  url.searchParams.set('provider', pullRequest.provider)
-  return url.toString()
+  return catFactoryAppLink(appUrl, [
+    ['addRepo', `${pullRequest.owner}/${pullRequest.repo}`],
+    ['provider', pullRequest.provider],
+  ])
 }
 
 /**

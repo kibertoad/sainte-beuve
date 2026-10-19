@@ -13,8 +13,9 @@ import type { WorkspaceClients } from './workspaceClients.js'
  * Null when it cannot be done here and the caller should fall back: no single
  * workspace to link into, a monorepo (whose services are per directory, a
  * person's choice), or a key below `admin`, which cat-factory requires to
- * create a service. A repository the connection cannot reach is refused, since
- * no fallback would file its task in the right place either.
+ * link a repository and to create a service. A repository the connection
+ * cannot reach is refused, since no fallback would file its task in the right
+ * place either.
  */
 export async function provisionService(
   clients: WorkspaceClients,
@@ -28,6 +29,7 @@ export async function provisionService(
   try {
     linked = await client.repos.link({ owner: pullRequest.owner, name: pullRequest.repo })
   } catch (err) {
+    if (err instanceof CatFactoryForbiddenError) return null
     throw refusalFor(err, `link ${formatPullRequest(pullRequest)}'s repository in cat-factory`)
   }
   if (linked.serviceId !== null) return { serviceId: linked.serviceId, workspaceId }

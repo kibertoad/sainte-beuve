@@ -1,6 +1,7 @@
 import { type AiReviewRun, catFactoryRunUrl } from '@sainte-beuve/contracts'
 import type { AppContainer } from '../../container.js'
 import { readCatFactoryConfig } from '../../integrations/catFactoryConfig.js'
+import { catFactoryAppUrl } from '../../integrations/catFactoryAppUrl.js'
 
 /**
  * Runs with their link into cat-factory built now, from the org's app URL as it
@@ -13,7 +14,7 @@ export async function withCatFactoryLinks(
 ): Promise<AiReviewRun[]> {
   const config = await readCatFactoryConfig(container)
   if (config === null) return [...runs]
-  const appUrl = config.appUrl ?? config.baseUrl
+  const appUrl = await catFactoryAppUrl(container, config)
   return runs.map((run) =>
     run.catFactoryTaskId === null
       ? run

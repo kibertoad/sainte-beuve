@@ -71,7 +71,8 @@ async function personalDeployment(): Promise<Personal> {
         },
         // Built to report the capability when the settings are read back; never called here.
         guidedReview: () => ({}) as GuidedReviewGateway,
-        catFactoryProbe: () => ({
+        catFactoryProbe: (access) => ({
+          appUrl: async (configured) => configured ?? access.baseUrl,
           probe: async () => ({
             outcome: 'ok',
             detail: null,

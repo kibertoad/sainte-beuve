@@ -118,6 +118,7 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
       { path: '/api/v1/repos', workspace: 'ws-a' },
       { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-a' },
       { path: '/api/v1/tasks/task-1/start', workspace: 'ws-a' },
+      { path: '/api/v1/deployment', workspace: null },
     ])
   })
 
@@ -187,6 +188,7 @@ describe('CatFactoryAiReviewGateway placement', () => {
       { path: '/api/v1/repos', workspace: 'ws-b' },
       { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-b' },
       { path: '/api/v1/tasks/task-1/start', workspace: 'ws-b' },
+      { path: '/api/v1/deployment', workspace: null },
     ])
   })
 
@@ -215,6 +217,7 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
       ...DIRECTORY_UNREAD,
       '/api/v1/services/svc-1/tasks',
       '/api/v1/tasks/task-1/start',
+      '/api/v1/deployment',
     ])
     expect(calls[2]?.body).toMatchObject({ fields: { prNumber: 7, prUrl: PULL_REQUEST.url } })
   })
@@ -236,6 +239,7 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
       { path: '/api/v1/repos', workspace: 'ws-a' },
       { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-a' },
       { path: '/api/v1/tasks/task-1/start', workspace: 'ws-a' },
+      { path: '/api/v1/deployment', workspace: null },
     ])
   })
 
@@ -267,6 +271,7 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
     expect(calls.slice(2).map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
       { path: '/api/v1/services/svc-1/tasks', workspace: null },
       { path: '/api/v1/tasks/task-1/start', workspace: null },
+      { path: '/api/v1/deployment', workspace: null },
     ])
   })
 
@@ -284,9 +289,10 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
     })
 
     expect((await filing(gateway, ['ws-a/42', 'ws-b/42'])).workspaceId).toBe('ws-b')
-    expect(calls.slice(-2).map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
+    expect(calls.slice(-3).map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
       { path: '/api/v1/services/svc-1/tasks', workspace: 'ws-b' },
       { path: '/api/v1/tasks/task-1/start', workspace: 'ws-b' },
+      { path: '/api/v1/deployment', workspace: null },
     ])
   })
 
@@ -299,7 +305,7 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
     })
 
     expect((await filing(gateway, ['ws-a/42', 'ws-b/42'])).workspaceId).toBe('ws-b')
-    expect(calls.at(-2)?.path).toBe('/api/v1/services/svc-42/tasks')
+    expect(calls.at(-3)?.path).toBe('/api/v1/services/svc-42/tasks')
   })
 
   it('refuses with a link that adds the repository when nothing backs it and there is no default', async () => {
