@@ -43,9 +43,8 @@
     },
     "frontend/app": {
       "entry": ["app/**/*.{ts,vue}"],
-      // `vue` and `vue-tsc` are used by tooling rather than by an import: the SFCs
-      // compile against the pinned Vue, and `nuxt typecheck` shells out to vue-tsc.
-      "ignoreDependencies": ["vue", "vue-tsc"],
+      // `nuxt typecheck` shells out to vue-tsc rather than importing it.
+      "ignoreDependencies": ["vue-tsc"],
     },
     "deploy/frontend": {
       "ignoreDependencies": ["vue-tsc"],

@@ -83,6 +83,16 @@ function send(): void {
 
 const location = computed(() => codeLocation(props.finding))
 
+const bodyId = useId()
+const lead = computed(() => leadOf(props.finding.detail))
+const fix = computed(() => (retracted.value ? null : props.finding.suggestedFix))
+const collapsible = computed(() => lead.value.truncated || fix.value !== null)
+const expanded = ref(false)
+const toggleLabel = computed(() => {
+  if (expanded.value) return 'Show less'
+  return lead.value.truncated ? 'Show more' : 'Show the suggested fix'
+})
+
 const diffHref = ref<string | null>(null)
 watch(
   () => [props.pullRequest, props.finding] as const,
@@ -129,13 +139,31 @@ watch(
           title="Files changed"
         />
       </div>
-      <p class="text-sm mt-1 whitespace-pre-wrap" :class="{ 'text-muted': retracted }">
-        {{ finding.detail }}
-      </p>
-      <pre
-        v-if="finding.suggestedFix && !retracted"
-        class="text-xs mt-2 p-2 rounded bg-elevated overflow-x-auto"
-        >{{ finding.suggestedFix }}</pre>
+      <div :id="bodyId" class="text-sm mt-1" :class="{ 'text-muted': retracted }">
+        <MarkdownText v-if="expanded" :source="finding.detail" />
+        <MarkdownText v-else :source="lead.lead" class="line-clamp-2" />
+        <div v-if="expanded && fix" class="mt-2">
+          <p class="text-xs font-medium text-muted mb-1">Suggested fix</p>
+          <MarkdownText v-if="hasCodeFence(fix)" :source="fix" />
+          <pre
+            v-else
+            class="text-xs font-mono p-2 rounded bg-elevated whitespace-pre-wrap break-words"
+            >{{ fix }}</pre>
+        </div>
+      </div>
+      <UButton
+        v-if="collapsible"
+        size="xs"
+        variant="link"
+        color="neutral"
+        class="px-0"
+        :aria-expanded="expanded"
+        :aria-controls="bodyId"
+        :trailing-icon="expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+        @click="expanded = !expanded"
+      >
+        {{ toggleLabel }}
+      </UButton>
       <div v-if="challengeState" class="mt-2 text-sm border-l-2 border-default pl-3">
         <p v-if="challengeState.question" class="text-muted">
           Asked: {{ challengeState.question }}
