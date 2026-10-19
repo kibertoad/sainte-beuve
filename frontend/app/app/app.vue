@@ -54,10 +54,21 @@ const { open: navOpen, close: closeNav } = useNavigationOverlay()
           @click="navOpen = true"
         />
         <span class="font-semibold">sainte-beuve</span>
+        <PersonaSwitcherButton class="ml-auto" />
       </header>
 
-      <aside class="hidden lg:flex w-56 shrink-0 border-r border-default flex-col gap-4 p-4">
-        <span class="font-semibold px-2.5">sainte-beuve</span>
+      <!--
+        Sticky at the viewport's height: the rail's foot holds who the screens
+        render for, and on a rail as tall as the page a long screen pushed it
+        out of sight the moment its data landed.
+      -->
+      <aside
+        class="hidden lg:flex lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto w-56 shrink-0 border-r border-default flex-col gap-4 p-4"
+      >
+        <div class="flex items-center justify-between gap-2 px-2.5">
+          <span class="font-semibold">sainte-beuve</span>
+          <PersonaSwitcherButton />
+        </div>
         <AppNavigation />
       </aside>
 
