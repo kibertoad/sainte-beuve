@@ -268,7 +268,7 @@ export interface GatewayFactory {
   /** The account directory the org's repository list is mirrored from. */
   catFactoryDirectory(access: CatFactoryAccess): RepositoryDirectoryGateway
   /** Scores a pull request and judges it by one of the instance's risk policies. */
-  riskAssessment(access: CatFactoryAccess): RiskAssessmentGateway
+  riskAssessment(access: CatFactoryAccess & { appUrl?: string | null }): RiskAssessmentGateway
   /** The sign-in round trip for one host. Null when no OAuth client is configured for it. */
   signIn(provider: VcsProvider): VcsIdentityGateway | null
 }

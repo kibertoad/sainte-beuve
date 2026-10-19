@@ -43,6 +43,11 @@ function reasonOf(err: unknown): { reason?: string; vendor?: string } {
   }
 }
 
+/** cat-factory's name for a refusal (`repo_not_linked`), or null for anything that is not one. */
+export function refusalReason(err: unknown): string | null {
+  return reasonOf(err).reason ?? null
+}
+
 /** The per-field reasons behind a schema refusal, whose message alone says only that it failed. */
 function issuesOf(err: CatFactoryApiError): string {
   if (err.issues.length === 0) return ''

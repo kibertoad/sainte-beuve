@@ -47,7 +47,8 @@ export interface RiskAssessmentGateway {
   /**
    * `policyId` null judges by the instance's default for unattended work.
    * `directoryKeys` are the repository's mirror keys, which name the workspace
-   * that links it; none asks the key's only workspace.
+   * that links it; with none, cat-factory's directory is asked, and a
+   * repository no workspace links is refused with the link that adds it.
    */
   assess(input: {
     pullRequest: PullRequestRef

@@ -14,14 +14,18 @@ import { CHANGE_CLASSES } from '@sainte-beuve/contracts'
 import {
   type ExternalRiskAssessment,
   type RiskAssessmentGateway,
+  formatPullRequest,
   withDeadline,
 } from '@sainte-beuve/kernel'
-import { locationOf } from './directoryKeys.js'
-import { refusalFor } from './refusals.js'
+import { appUrlOf, repositoryMissing } from './catFactoryApp.js'
+import { refusalFor, refusalReason } from './refusals.js'
+import { repositoryLocations } from './repositoryLocations.js'
 import { WorkspaceClients } from './workspaceClients.js'
 
 export interface CatFactoryRiskAssessmentOptions {
   baseUrl: string
+  /** Origin of its web app, for the link that adds a repository. Null asks the instance. */
+  appUrl?: string | null
   /**
    * `write` assesses, since an assessment spends model budget. Listing the
    * policies for the picker takes `admin` on cat-factory.
@@ -81,8 +85,10 @@ export function toExternalAssessment(answer: PrAssessmentAnswer): ExternalRiskAs
 /** The cat-factory side of the risk-assessment port. */
 export class CatFactoryRiskAssessmentGateway implements RiskAssessmentGateway {
   private readonly clients: WorkspaceClients
+  private readonly options: CatFactoryRiskAssessmentOptions
 
   constructor(options: CatFactoryRiskAssessmentOptions) {
+    this.options = options
     const { baseUrl, apiKey, fetch } = options
     this.clients = new WorkspaceClients(
       (workspaceId) =>
@@ -101,11 +107,11 @@ export class CatFactoryRiskAssessmentGateway implements RiskAssessmentGateway {
     policyId: string | null
     directoryKeys: readonly string[]
   }): Promise<ExternalRiskAssessment> {
-    const workspace = input.directoryKeys.map(locationOf).find((location) => location !== null)
+    const workspaceId = await this.workspaceOf(input.pullRequest, input.directoryKeys)
     const { provider, owner, repo, number } = input.pullRequest
     let answer: PublicPrAssessment
     try {
-      answer = await this.clients.in(workspace?.workspaceId ?? null).prAssessments.assess({
+      answer = await this.clients.in(workspaceId).prAssessments.assess({
         owner,
         repo,
         prNumber: number,
@@ -113,9 +119,36 @@ export class CatFactoryRiskAssessmentGateway implements RiskAssessmentGateway {
         ...(input.policyId === null ? {} : { riskPolicyId: input.policyId }),
       })
     } catch (err) {
+      if (refusalReason(err) === 'repo_not_linked') throw await this.missing(input.pullRequest)
       throw refusalFor(err, 'assess the pull request', 'write')
     }
     return toExternalAssessment(answer)
+  }
+
+  /**
+   * The first workspace linking the repository, which a key reaching several
+   * has to name. Null asks the key's only workspace, when cat-factory's
+   * directory could not be read to say which one links it.
+   */
+  private async workspaceOf(
+    pullRequest: PullRequestRef,
+    directoryKeys: readonly string[],
+  ): Promise<string | null> {
+    const locations = await repositoryLocations(this.clients, pullRequest, directoryKeys)
+    if (locations === null) return null
+    const first = locations[0]
+    if (first === undefined) throw await this.missing(pullRequest)
+    return first.workspaceId
+  }
+
+  private missing(pullRequest: PullRequestRef) {
+    return repositoryMissing(
+      pullRequest,
+      () => appUrlOf(this.options),
+      (repository) =>
+        `Cannot assess ${formatPullRequest(pullRequest)}: no cat-factory workspace links its repository. ` +
+        `Add ${repository} as a service in cat-factory, then assess it again`,
+    )
   }
 
   async listPolicies(): Promise<ExternalRiskPolicy[]> {

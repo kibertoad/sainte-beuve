@@ -12,8 +12,11 @@ export async function resolveRiskAssessment(
   const access = await pending
   if (access === null) return null
   return (
-    container.gateways?.riskAssessment({ baseUrl: access.config.baseUrl, apiKey: access.apiKey }) ??
-    null
+    container.gateways?.riskAssessment({
+      baseUrl: access.config.baseUrl,
+      appUrl: access.config.appUrl,
+      apiKey: access.apiKey,
+    }) ?? null
   )
 }
 

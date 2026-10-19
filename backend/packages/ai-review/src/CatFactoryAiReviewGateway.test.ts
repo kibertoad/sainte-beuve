@@ -32,6 +32,9 @@ function filing(gateway: CatFactoryAiReviewGateway, directoryKeys: readonly stri
   })
 }
 
+/** A key that may not read the directory, then its reach, before a repository nothing links is filed. */
+const DIRECTORY_UNREAD = ['/api/v1/directory/repos', '/api/v1/directory/reach']
+
 /** A workspace's linked repositories, as `GET /api/v1/repos` lists them. */
 function repos(...entries: { repoId: number; serviceId: string | null; provider?: string }[]) {
   return {
@@ -71,13 +74,13 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
       workspaceId: null,
     })
     // No workspace links the repository, and this key cannot say where to link it.
-    expect(calls[0]?.path).toBe('/api/v1/directory/reach')
-    expect(calls[1]?.body).toMatchObject({
+    expect(calls.slice(0, 2).map((call) => call.path)).toStrictEqual(DIRECTORY_UNREAD)
+    expect(calls[2]?.body).toMatchObject({
       taskType: 'resolve-conflicts',
       fields: { prNumber: 7, prUrl: 'https://github.com/kibertoad/sainte-beuve/pull/7' },
       title: 'Resolve conflicts in kibertoad/sainte-beuve#7',
     })
-    expect(calls[2]).toMatchObject({ path: '/api/v1/tasks/task-1/start', body: {} })
+    expect(calls[3]).toMatchObject({ path: '/api/v1/tasks/task-1/start', body: {} })
   })
 
   it('links the task into the app URL when the app is served apart from the API', async () => {
@@ -145,9 +148,54 @@ describe('CatFactoryAiReviewGateway.requestConflictResolution', () => {
       details: { upstream: 'cat-factory', reason: 'attached_pr_repo_mismatch' },
     })
     expect(calls.map((call) => call.path)).toStrictEqual([
-      '/api/v1/directory/reach',
+      ...DIRECTORY_UNREAD,
       '/api/v1/services/svc-1/tasks',
     ])
+  })
+})
+
+describe('CatFactoryAiReviewGateway placement', () => {
+  /** The mirror lags a repository linked since its last pass. */
+  it('files where cat-factory directory links a repository the mirror does not name', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/directory/repos': {
+        body: {
+          asOfSeq: 1,
+          nextCursor: null,
+          items: [
+            {
+              defaultBranch: 'main',
+              monorepo: false,
+              name: 'Sainte-Beuve',
+              owner: 'kibertoad',
+              private: false,
+              provider: 'github',
+              repoId: 42,
+              workspaceId: 'ws-b',
+            },
+          ],
+        },
+      },
+      'ws-b /repos': { body: repos({ repoId: 42, serviceId: 'svc-42' }) },
+      '/tasks': { body: task({ serviceId: 'svc-42' }) },
+      '/start': { body: task({ status: 'running' }) },
+    })
+
+    expect((await filing(gateway)).workspaceId).toBe('ws-b')
+    expect(calls.map(({ path, workspace }) => ({ path, workspace }))).toStrictEqual([
+      { path: '/api/v1/directory/repos', workspace: null },
+      { path: '/api/v1/repos', workspace: 'ws-b' },
+      { path: '/api/v1/services/svc-42/tasks', workspace: 'ws-b' },
+      { path: '/api/v1/tasks/task-1/start', workspace: 'ws-b' },
+    ])
+  })
+
+  it('offers to add the repository when a workspace the mirror names is gone', async () => {
+    const { gateway } = gatewayOver({}, null)
+
+    await expect(filing(gateway, ['ws-gone/42'])).rejects.toMatchObject({
+      details: { reason: 'cat_factory_repository_missing' },
+    })
   })
 })
 
@@ -164,11 +212,11 @@ describe('CatFactoryAiReviewGateway.requestReview', () => {
       workspaceId: null,
     })
     expect(calls.map((call) => call.path)).toStrictEqual([
-      '/api/v1/directory/reach',
+      ...DIRECTORY_UNREAD,
       '/api/v1/services/svc-1/tasks',
       '/api/v1/tasks/task-1/start',
     ])
-    expect(calls[1]?.body).toMatchObject({ fields: { prNumber: 7, prUrl: PULL_REQUEST.url } })
+    expect(calls[2]?.body).toMatchObject({ fields: { prNumber: 7, prUrl: PULL_REQUEST.url } })
   })
 
   it('files under the service backing the repository, in the workspace that links it', async () => {

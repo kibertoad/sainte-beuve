@@ -1,12 +1,10 @@
-import {
-  CAT_FACTORY_REPOSITORY_MISSING,
-  type CatFactoryRepositoryMissing,
-  type PullRequestRef,
-} from '@sainte-beuve/contracts'
-import { UnavailableError, formatPullRequest } from '@sainte-beuve/kernel'
-import { addRepositoryUrl } from './catFactoryApp.js'
-import { type DirectoryLocation, locationOf } from './directoryKeys.js'
+import { CatFactoryNotFoundError } from '@cat-factory/sdk'
+import type { PullRequestRef } from '@sainte-beuve/contracts'
+import { formatPullRequest } from '@sainte-beuve/kernel'
+import { repositoryMissing } from './catFactoryApp.js'
+import type { DirectoryLocation } from './directoryKeys.js'
 import { provisionService } from './provisioning.js'
+import { repositoryLocations } from './repositoryLocations.js'
 import { refusalFor } from './refusals.js'
 import type { WorkspaceClients } from './workspaceClients.js'
 
@@ -34,7 +32,8 @@ export interface PlacementRequest {
  * it, else the default service, in whichever linking workspace holds it. A
  * repository no workspace links is first linked and given a service of its own
  * (`provisionService`), so it is registered rather than filed under another
- * repository's service.
+ * repository's service. The linking workspaces are the mirror's, else
+ * cat-factory's directory's (`repositoryLocations`).
  *
  * The first key whose workspace backs the repository wins, so a lookup refused
  * in one workspace does not stop filing when another backs it. A repository no
@@ -48,9 +47,7 @@ export async function placeTask(
   request: PlacementRequest,
 ): Promise<Placement> {
   const { pullRequest, defaultServiceId } = request
-  const locations = request.directoryKeys
-    .map(locationOf)
-    .filter((location): location is DirectoryLocation => location !== null)
+  const locations = (await repositoryLocations(clients, pullRequest, request.directoryKeys)) ?? []
   const lookups = await Promise.allSettled(
     locations.map((location) => backing(clients, location, pullRequest)),
   )
@@ -68,7 +65,15 @@ export async function placeTask(
     })
     if (provisioned !== null) return provisioned
   }
-  if (defaultServiceId === null) throw await repositoryMissing(pullRequest, request.appUrl)
+  if (defaultServiceId === null) {
+    throw await repositoryMissing(
+      pullRequest,
+      request.appUrl,
+      (repository) =>
+        `Cannot file a cat-factory task for ${formatPullRequest(pullRequest)}: no cat-factory service backs its repository and no default service is set. ` +
+        `Add ${repository} as a service in cat-factory, or set a default service id on the Configuration screen`,
+    )
+  }
   const workspaces = [...new Set(locations.map((location) => location.workspaceId))]
   return {
     serviceId: defaultServiceId,
@@ -77,30 +82,10 @@ export async function placeTask(
 }
 
 /**
- * The refusal for a repository no service backs, carrying the link that adds
- * one in cat-factory, so a screen offers the fix rather than describing it.
- */
-async function repositoryMissing(
-  pullRequest: PullRequestRef,
-  appUrl: () => Promise<string>,
-): Promise<UnavailableError> {
-  const details: CatFactoryRepositoryMissing = {
-    reason: CAT_FACTORY_REPOSITORY_MISSING,
-    repository: `${pullRequest.owner}/${pullRequest.repo}`,
-    provider: pullRequest.provider,
-    addRepositoryUrl: addRepositoryUrl(await appUrl(), pullRequest),
-  }
-  return new UnavailableError(
-    `Cannot file a cat-factory task for ${formatPullRequest(pullRequest)}: no cat-factory service backs its repository and no default service is set. ` +
-      `Add ${details.repository} as a service in cat-factory, or set a default service id on the Configuration screen`,
-    details,
-  )
-}
-
-/**
  * The service backing one linked repository, or null when none does. Matched
  * on the provider as well as the id, because a GitHub repository and a GitLab
- * project can share a numeric id inside one workspace.
+ * project can share a numeric id inside one workspace. A workspace cat-factory
+ * no longer has backs nothing, which a mirror key outliving it can name.
  */
 async function backing(
   clients: WorkspaceClients,
@@ -115,6 +100,7 @@ async function backing(
     const serviceId = linked?.serviceId ?? null
     return serviceId === null ? null : { serviceId, workspaceId: location.workspaceId }
   } catch (err) {
+    if (err instanceof CatFactoryNotFoundError) return null
     throw refusalFor(err, `find the service that backs ${formatPullRequest(pullRequest)}`)
   }
 }

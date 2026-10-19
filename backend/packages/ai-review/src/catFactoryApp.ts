@@ -1,5 +1,9 @@
-import type { PullRequestRef } from '@sainte-beuve/contracts'
-import { withDeadline } from '@sainte-beuve/kernel'
+import {
+  CAT_FACTORY_REPOSITORY_MISSING,
+  type CatFactoryRepositoryMissing,
+  type PullRequestRef,
+} from '@sainte-beuve/contracts'
+import { UnavailableError, withDeadline } from '@sainte-beuve/kernel'
 
 /**
  * cat-factory's add-service window, opened with the pull request's repository
@@ -12,6 +16,25 @@ export function addRepositoryUrl(appUrl: string, pullRequest: PullRequestRef): s
   url.searchParams.set('addRepo', `${pullRequest.owner}/${pullRequest.repo}`)
   url.searchParams.set('provider', pullRequest.provider)
   return url.toString()
+}
+
+/**
+ * The refusal for a repository no cat-factory board has a service for,
+ * carrying the link that adds one, so a screen offers the fix rather than
+ * describing it. `describe` words it for the action that was refused.
+ */
+export async function repositoryMissing(
+  pullRequest: PullRequestRef,
+  appUrl: () => Promise<string>,
+  describe: (repository: string) => string,
+): Promise<UnavailableError> {
+  const details: CatFactoryRepositoryMissing = {
+    reason: CAT_FACTORY_REPOSITORY_MISSING,
+    repository: `${pullRequest.owner}/${pullRequest.repo}`,
+    provider: pullRequest.provider,
+    addRepositoryUrl: addRepositoryUrl(await appUrl(), pullRequest),
+  }
+  return new UnavailableError(describe(details.repository), details)
 }
 
 /**
