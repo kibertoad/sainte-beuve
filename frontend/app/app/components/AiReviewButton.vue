@@ -6,10 +6,11 @@ import { aiReviewPath } from '@sainte-beuve/contracts'
 // request there when it is not, because a run belongs to a board row, and the
 // button then opens the review screen, where the run is followed and settled.
 //
-// Shown only once the org is known to have the capability: unlike a warning,
-// a button that appears and then refuses is a click wasted on every row. A pull
-// request with a run in flight offers that run's progress instead, since a
-// second one would be refused.
+// Ordering is shown only once the org is known to have the capability: unlike a
+// warning, a button that appears and then refuses is a click wasted on every
+// row. A pull request with a run in flight offers that run's progress instead,
+// since a second one would be refused. One whose review completed offers its
+// results first, and a new review only as a secondary icon button.
 const props = defineProps<{
   pullRequest: PullRequestRef
   title: string
@@ -21,15 +22,17 @@ const api = useSainteBeuveApi()
 const capabilities = useCapabilities()
 const { showError } = useErrorToast()
 const busy = ref(false)
-const inFlight = useAiReviewsInFlight()
+const latestRuns = useLatestAiReviewRuns()
 
 watch(
   () => props.pullRequest.url,
-  () => inFlight.want(props.pullRequest),
+  () => latestRuns.want(props.pullRequest),
   { immediate: true },
 )
 
-const progress = computed(() => progressLinks(inFlight.runsOf(props.pullRequest)))
+const progress = computed(() => progressLinks(latestRuns.runsOf(props.pullRequest)))
+const results = computed(() => resultsLink(latestRuns.runsOf(props.pullRequest)))
+const canOrder = computed(() => capabilities.confirmed('aiReview'))
 
 async function file() {
   busy.value = true
@@ -49,7 +52,7 @@ async function fileOrExplain(): Promise<string | null> {
       title: props.title,
       authorLogin: props.authorLogin ?? null,
     })
-    inFlight.remember({
+    latestRuns.remember({
       pullRequest: props.pullRequest,
       reviewId: run.reviewId,
       runId: run.id,
@@ -71,7 +74,7 @@ function refusedReviewId(err: unknown): string | null {
 </script>
 
 <template>
-  <!-- One element root: rows swap between the button and the progress links in the same tick a click navigates away. -->
+  <!-- One element root: rows swap between these buttons in the same tick a click navigates away. -->
   <span class="contents">
     <template v-if="progress.length > 0">
       <UButton
@@ -86,15 +89,38 @@ function refusedReviewId(err: unknown): string | null {
         {{ link.label }}
       </UButton>
     </template>
+    <template v-else-if="results !== null">
+      <UButton
+        :to="results.to"
+        :title="results.title"
+        size="sm"
+        variant="soft"
+        color="success"
+        icon="i-lucide-file-check"
+      >
+        {{ results.label }}
+      </UButton>
+      <UButton
+        v-if="canOrder"
+        size="sm"
+        variant="ghost"
+        color="neutral"
+        icon="i-lucide-rotate-cw"
+        title="Order a new AI review"
+        aria-label="Order a new AI review"
+        :loading="busy"
+        @click="file"
+      />
+    </template>
     <UButton
-      v-else-if="capabilities.confirmed('aiReview')"
+      v-else-if="canOrder"
       size="sm"
       variant="ghost"
       icon="i-lucide-bot"
       :loading="busy"
       @click="file"
     >
-      AI review
+      Order AI review
     </UButton>
   </span>
 </template>

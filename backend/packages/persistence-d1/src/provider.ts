@@ -18,11 +18,8 @@ import { SqlAttentionRepository, SqlReviewCommitmentRepository } from './attenti
 import type { SqlDriver } from './driver.js'
 import { SqlOrgRepository } from './orgs.js'
 import { SqlReviewerRepository } from './reviewers.js'
-import {
-  SqlAiReviewRunRepository,
-  SqlReminderRepository,
-  SqlReviewRequestRepository,
-} from './reviews.js'
+import { SqlReminderRepository, SqlReviewRequestRepository } from './reviews.js'
+import { SqlAiReviewRunRepository } from './ai-review-runs.js'
 import { SqlExternalDirectoryRepository } from './external-directory.js'
 import { SqlRiskAssessmentRepository } from './risk-assessments.js'
 import { SqlExternalRepositoryRepository } from './external-repositories.js'

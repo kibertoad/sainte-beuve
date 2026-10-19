@@ -26,6 +26,20 @@ export class PostgresAiReviewRunRepository implements AiReviewRunRepository {
     return rows.map((row) => row.data)
   }
 
+  async listByReviews(reviewIds: readonly string[]): Promise<AiReviewRun[]> {
+    if (reviewIds.length === 0) return []
+    const rows = await this.db
+      .select()
+      .from(aiReviewRuns)
+      .where(
+        and(
+          eq(aiReviewRuns.orgId, this.orgId),
+          inArray(aiReviewRuns.reviewId, [...new Set(reviewIds)]),
+        ),
+      )
+    return rows.map((row) => row.data)
+  }
+
   async listInFlight(limit: number): Promise<AiReviewRun[]> {
     const rows = await this.db
       .select()

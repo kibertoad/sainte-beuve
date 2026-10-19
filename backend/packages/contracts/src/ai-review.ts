@@ -334,26 +334,30 @@ export type RequestPullRequestAiReview = v.InferOutput<typeof requestPullRequest
 /** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
 export type RequestPullRequestAiReviewInput = v.InferInput<typeof requestPullRequestAiReviewSchema>
 
-/** How many pull requests one in-flight lookup names: a list screen's worth. */
+/** How many pull requests one latest-runs lookup names: a list screen's worth. */
 export const MAX_AI_REVIEW_LOOKUP = 200
 
-export const lookUpAiReviewsInFlightSchema = v.object({
+export const lookUpLatestAiReviewRunsSchema = v.object({
   pullRequests: v.pipe(v.array(pullRequestRefSchema), v.maxLength(MAX_AI_REVIEW_LOOKUP)),
 })
-export type LookUpAiReviewsInFlight = v.InferOutput<typeof lookUpAiReviewsInFlightSchema>
+export type LookUpLatestAiReviewRuns = v.InferOutput<typeof lookUpLatestAiReviewRunsSchema>
 
-/** A run that still holds its pull request's one place in flight, so another is refused. */
-export const aiReviewInFlightSchema = v.object({
+/**
+ * A run a pull request's row offers to open: one still holding the pull
+ * request's place in flight (so another would be refused), or the latest one
+ * that completed, whose results are there to read. Its `status` tells them apart.
+ */
+export const latestAiReviewRunSchema = v.object({
   pullRequest: pullRequestRefSchema,
   reviewId: v.string(),
   runId: v.string(),
   status: aiReviewStatusSchema,
   requestedAt: v.number(),
 })
-export type AiReviewInFlight = v.InferOutput<typeof aiReviewInFlightSchema>
+export type LatestAiReviewRun = v.InferOutput<typeof latestAiReviewRunSchema>
 
-export const aiReviewInFlightListSchema = v.object({ runs: v.array(aiReviewInFlightSchema) })
-export type AiReviewInFlightList = v.InferOutput<typeof aiReviewInFlightListSchema>
+export const latestAiReviewRunListSchema = v.object({ runs: v.array(latestAiReviewRunSchema) })
+export type LatestAiReviewRunList = v.InferOutput<typeof latestAiReviewRunListSchema>
 
 /** Ask cat-factory's investigator to re-examine one finding. */
 export const challengeAiReviewFindingSchema = v.object({

@@ -4,7 +4,7 @@ import {
   dismissAiReviewFindingContract,
   getAiReviewRunContract,
   listAiReviewRunsContract,
-  lookUpAiReviewsInFlightContract,
+  lookUpLatestAiReviewRunsContract,
   requestAiReviewContract,
   requestPullRequestAiReviewContract,
   resolveAiReviewContract,
@@ -17,7 +17,7 @@ import type { AppEnv } from '../../http/env.js'
 import { AiReviewCurationService } from './AiReviewCurationService.js'
 import { AiReviewService } from './AiReviewService.js'
 import { withCatFactoryLink, withCatFactoryLinks } from './catFactoryLinks.js'
-import { aiReviewsInFlight } from './inFlight.js'
+import { latestAiReviewRuns } from './latestRuns.js'
 import { requestPullRequestAiReview } from './pullRequestAiReview.js'
 
 /**
@@ -33,7 +33,7 @@ import { requestPullRequestAiReview } from './pullRequestAiReview.js'
 export function aiReviewController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
   mountFilingAndReads(app)
-  mountInFlightLookup(app)
+  mountLatestRunsLookup(app)
   mountCuration(app)
   return app
 }
@@ -74,9 +74,9 @@ function mountFilingAndReads(app: Hono<AppEnv>): void {
   })
 }
 
-function mountInFlightLookup(app: Hono<AppEnv>): void {
-  buildHonoRoute(app, lookUpAiReviewsInFlightContract, async (c) => {
-    const runs = await aiReviewsInFlight(c.get('container'), c.req.valid('json').pullRequests)
+function mountLatestRunsLookup(app: Hono<AppEnv>): void {
+  buildHonoRoute(app, lookUpLatestAiReviewRunsContract, async (c) => {
+    const runs = await latestAiReviewRuns(c.get('container'), c.req.valid('json').pullRequests)
     return c.json({ runs }, 200)
   })
 }

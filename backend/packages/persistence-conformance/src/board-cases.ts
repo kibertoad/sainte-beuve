@@ -134,6 +134,19 @@ export const reviewCases: readonly ConformanceCase[] = [
     assert.strictEqual(found?.pullRequest.owner, 'Platform')
   }),
 
+  conformanceCase('a list of pull requests finds the reviews tracking them', async (repos) => {
+    await repos.reviews.create(review('rev-1', { pullRequest: pullRequest({ number: 1 }) }))
+    await repos.reviews.create(review('rev-2', { pullRequest: pullRequest({ number: 2 }) }))
+    await repos.reviews.create(review('rev-3', { pullRequest: pullRequest({ number: 3 }) }))
+    const found = await repos.reviews.listByPullRequests([
+      { provider: 'github', owner: 'Platform', repo: 'api', number: 1 },
+      { provider: 'github', owner: 'platform', repo: 'api', number: 3 },
+      { provider: 'gitlab', owner: 'platform', repo: 'api', number: 2 },
+    ])
+    assert.deepStrictEqual(found.map((row) => row.id).sort(), ['rev-1', 'rev-3'])
+    assert.deepStrictEqual(await repos.reviews.listByPullRequests([]), [])
+  }),
+
   conformanceCase('a review patch touches the fields it names', async (repos) => {
     await repos.reviews.create(review('rev-1'))
     const updated = await repos.reviews.update('rev-1', {
@@ -153,6 +166,15 @@ export const reviewCases: readonly ConformanceCase[] = [
 ]
 
 export const aiReviewCases: readonly ConformanceCase[] = [
+  conformanceCase('lists the runs of several reviews at once', async (repos) => {
+    await repos.aiReviewRuns.create(aiReviewRun('run-1', { reviewId: 'review-1' }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-2', { reviewId: 'review-2' }))
+    await repos.aiReviewRuns.create(aiReviewRun('run-3', { reviewId: 'review-3' }))
+    const found = await repos.aiReviewRuns.listByReviews(['review-1', 'review-3', 'nobody'])
+    assert.deepStrictEqual(found.map((row) => row.id).sort(), ['run-1', 'run-3'])
+    assert.deepStrictEqual(await repos.aiReviewRuns.listByReviews([]), [])
+  }),
+
   conformanceCase('a run comes back with the curation it parked on', async (repos) => {
     const written = aiReviewRun('run-1')
     assert.deepStrictEqual(await repos.aiReviewRuns.create(written), written)

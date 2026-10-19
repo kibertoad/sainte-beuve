@@ -1,15 +1,16 @@
-import type { AiReviewInFlight, PullRequestRef } from '@sainte-beuve/contracts'
+import type { LatestAiReviewRun, PullRequestRef } from '@sainte-beuve/contracts'
 import { MAX_AI_REVIEW_LOOKUP } from '@sainte-beuve/contracts'
-import { IN_FLIGHT_FRESH_MS } from '../utils/aiReviewInFlight'
+import { LATEST_RUNS_FRESH_MS } from '../utils/aiReviewLatest'
 
 interface Known {
-  runs: AiReviewInFlight[]
+  runs: LatestAiReviewRun[]
   at: number
 }
 
 /**
- * The AI reviews in flight on the rows on screen, by pull request URL, so a row
- * offers the progress of a run already going rather than a second one.
+ * The AI review runs the rows on screen offer, by pull request URL: the runs in
+ * flight, so a row offers their progress rather than a second run, and the
+ * latest completed one, so it offers its results.
  *
  * Batched like `usePullRequestAssessments`, but asked again once stale, since
  * a run settles while the list is open elsewhere.
@@ -17,9 +18,9 @@ interface Known {
 const queued = new Map<string, PullRequestRef>()
 let flushing: Promise<void> | null = null
 
-export function useAiReviewsInFlight() {
+export function useLatestAiReviewRuns() {
   const api = useSainteBeuveApi()
-  const known = useState<Record<string, Known>>('ai-reviews-in-flight', () => ({}))
+  const known = useState<Record<string, Known>>('latest-ai-review-runs', () => ({}))
 
   async function flush(): Promise<void> {
     await nextTick()
@@ -29,7 +30,7 @@ export function useAiReviewsInFlight() {
     for (let start = 0; start < batch.length; start += MAX_AI_REVIEW_LOOKUP) {
       const chunk = batch.slice(start, start + MAX_AI_REVIEW_LOOKUP)
       try {
-        const { runs } = await api.lookUpAiReviewsInFlight(chunk)
+        const { runs } = await api.lookUpLatestAiReviewRuns(chunk)
         const at = Date.now()
         for (const pullRequest of chunk) {
           const own = runs.filter((run) => run.pullRequest.url === pullRequest.url)
@@ -41,22 +42,22 @@ export function useAiReviewsInFlight() {
     }
   }
 
-  /** Ask for one pull request's runs in flight, unless they are freshly known or asked for. */
+  /** Ask for one pull request's latest runs, unless they are freshly known or asked for. */
   function want(pullRequest: PullRequestRef): void {
     const held = known.value[pullRequest.url]
-    if (held !== undefined && Date.now() - held.at < IN_FLIGHT_FRESH_MS) return
+    if (held !== undefined && Date.now() - held.at < LATEST_RUNS_FRESH_MS) return
     if (queued.has(pullRequest.url)) return
     queued.set(pullRequest.url, pullRequest)
     flushing ??= flush()
   }
 
   /** Record a run just filed, so the row shows its progress without another lookup. */
-  function remember(run: AiReviewInFlight): void {
+  function remember(run: LatestAiReviewRun): void {
     const held = known.value[run.pullRequest.url]?.runs ?? []
     known.value[run.pullRequest.url] = { runs: [...held, run], at: Date.now() }
   }
 
-  function runsOf(pullRequest: PullRequestRef): AiReviewInFlight[] {
+  function runsOf(pullRequest: PullRequestRef): LatestAiReviewRun[] {
     return known.value[pullRequest.url]?.runs ?? []
   }
 

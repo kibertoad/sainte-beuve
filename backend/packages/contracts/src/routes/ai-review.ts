@@ -1,10 +1,10 @@
 import { defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
-  aiReviewInFlightListSchema,
   aiReviewRunSchema,
   challengeAiReviewFindingSchema,
-  lookUpAiReviewsInFlightSchema,
+  latestAiReviewRunListSchema,
+  lookUpLatestAiReviewRunsSchema,
   requestAiReviewSchema,
   requestPullRequestAiReviewSchema,
 } from '../ai-review.js'
@@ -66,15 +66,16 @@ export const listAiReviewRunsContract = defineApiContract({
 })
 
 /**
- * The runs in flight on a list's pull requests, read from the store, so a row
- * offers the run's progress rather than a second run admission would refuse.
- * A POST for its body, not because it writes.
+ * The runs a list's pull requests offer, read from the store: those in flight,
+ * so a row offers the run's progress rather than a second run admission would
+ * refuse, and the latest completed one, so it offers the results. A POST for
+ * its body, not because it writes.
  */
-export const lookUpAiReviewsInFlightContract = defineApiContract({
+export const lookUpLatestAiReviewRunsContract = defineApiContract({
   method: 'post',
-  pathResolver: () => '/ai-review/in-flight/lookup',
-  requestBodySchema: lookUpAiReviewsInFlightSchema,
-  responsesByStatusCode: { 200: aiReviewInFlightListSchema, ...errorResponses },
+  pathResolver: () => '/ai-review/latest/lookup',
+  requestBodySchema: lookUpLatestAiReviewRunsSchema,
+  responsesByStatusCode: { 200: latestAiReviewRunListSchema, ...errorResponses },
 })
 
 /** One run, polled. What a screen watching a single review re-reads. */

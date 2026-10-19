@@ -1,8 +1,12 @@
-import type { AiReviewInFlight } from '@sainte-beuve/contracts'
+import type { LatestAiReviewRun } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
-import { progressLinks } from '../app/utils/aiReviewInFlight'
+import { progressLinks, resultsLink } from '../app/utils/aiReviewLatest'
 
-function run(runId: string, status: AiReviewInFlight['status'] = 'running'): AiReviewInFlight {
+function run(
+  runId: string,
+  status: LatestAiReviewRun['status'] = 'running',
+  requestedAt = 0,
+): LatestAiReviewRun {
   return {
     pullRequest: {
       provider: 'github',
@@ -14,7 +18,7 @@ function run(runId: string, status: AiReviewInFlight['status'] = 'running'): AiR
     reviewId: 'rev-1',
     runId,
     status,
-    requestedAt: 0,
+    requestedAt,
   }
 }
 
@@ -37,7 +41,25 @@ describe('progressLinks', () => {
     ])
   })
 
+  it('leaves a completed run to the results link', () => {
+    expect(
+      progressLinks([run('run-0', 'completed'), run('run-1')]).map((l) => l.key),
+    ).toStrictEqual(['run-1'])
+  })
+
   it('offers nothing when no run is in flight', () => {
     expect(progressLinks([])).toStrictEqual([])
+  })
+})
+
+describe('resultsLink', () => {
+  it('opens the latest completed run', () => {
+    const link = resultsLink([run('run-1', 'completed', 1), run('run-2', 'completed', 2)])
+    expect(link?.to).toBe('/ai-review?review=rev-1&run=run-2')
+    expect(link?.label).toBe('AI review results')
+  })
+
+  it('offers nothing when no run has completed', () => {
+    expect(resultsLink([run('run-1'), run('run-2', 'failed')])).toBeNull()
   })
 })

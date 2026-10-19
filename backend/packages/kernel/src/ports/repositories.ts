@@ -88,6 +88,11 @@ export interface ReviewRequestRepository {
    */
   getByPullRequest(ref: PullRequestAddress): Promise<ReviewRequest | null>
   /**
+   * `getByPullRequest` for a list screen's worth at once, in no promised order.
+   * A pull request nothing tracks has no row in the answer.
+   */
+  listByPullRequests(refs: readonly PullRequestAddress[]): Promise<ReviewRequest[]>
+  /**
    * One repository's reviews in the named statuses, created at or after `since`,
    * newest first with the id as the tie-break, capped at `limit`. What a
    * reviewer's familiarity with a repository is counted from.
@@ -206,6 +211,8 @@ export interface IntegrationTokenRepository {
 
 export interface AiReviewRunRepository {
   listByReview(reviewId: string): Promise<AiReviewRun[]>
+  /** Every run of the named reviews, in no promised order. */
+  listByReviews(reviewIds: readonly string[]): Promise<AiReviewRun[]>
   /**
    * The runs still in flight, LEAST RECENTLY POLLED first. The clock's only read.
    *

@@ -1,4 +1,4 @@
-import type { AiReviewInFlightList, AiReviewRun } from '@sainte-beuve/contracts'
+import type { AiReviewRun, LatestAiReviewRunList } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { stubAiReview } from './ai-review-doubles.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
@@ -131,22 +131,22 @@ describe('filing an AI review by pull request', () => {
   })
 })
 
-describe('looking up the AI reviews in flight on a list', () => {
+describe('looking up the latest AI reviews on a list', () => {
   const OTHER = { ...PR, number: 8, url: 'https://github.com/kibertoad/sainte-beuve/pull/8' }
 
   async function lookUp(harness: TestHarness, pullRequests: unknown[]) {
-    const res = await harness.app.fetch(
-      post('/api/v1/ai-review/in-flight/lookup', { pullRequests }),
-    )
+    const res = await harness.app.fetch(post('/api/v1/ai-review/latest/lookup', { pullRequests }))
     expect(res.status).toBe(200)
-    return ((await res.json()) as AiReviewInFlightList).runs
+    return ((await res.json()) as LatestAiReviewRunList).runs
+  }
+
+  async function file(harness: TestHarness): Promise<AiReviewRun> {
+    return (await (await harness.app.fetch(post('/api/v1/ai-review', BODY))).json()) as AiReviewRun
   }
 
   it('names the run in flight on a pull request, so the row offers its progress', async () => {
     const { harness } = await wired()
-    const filed = (await (
-      await harness.app.fetch(post('/api/v1/ai-review', BODY))
-    ).json()) as AiReviewRun
+    const filed = await file(harness)
 
     expect(await lookUp(harness, [PR, OTHER])).toStrictEqual([
       {
@@ -159,12 +159,39 @@ describe('looking up the AI reviews in flight on a list', () => {
     ])
   })
 
-  it('names nothing once the run has settled', async () => {
+  it('names the latest completed run, so the row offers its results', async () => {
     const { harness } = await wired()
-    const filed = (await (
-      await harness.app.fetch(post('/api/v1/ai-review', BODY))
-    ).json()) as AiReviewRun
-    await harness.container.repositories.aiReviewRuns.update(filed.id, { status: 'completed' })
+    const runs = harness.container.repositories.aiReviewRuns
+    const older = await file(harness)
+    await runs.update(older.id, { status: 'completed' })
+    const latest = await runs.create({
+      ...older,
+      id: 'run-later',
+      status: 'completed',
+      requestedAt: older.requestedAt + 1,
+    })
+    await runs.create({
+      ...older,
+      id: 'run-failed',
+      status: 'failed',
+      requestedAt: older.requestedAt + 2,
+    })
+
+    expect(await lookUp(harness, [PR])).toStrictEqual([
+      {
+        pullRequest: PR,
+        reviewId: latest.reviewId,
+        runId: 'run-later',
+        status: 'completed',
+        requestedAt: latest.requestedAt,
+      },
+    ])
+  })
+
+  it('names nothing once the run has failed', async () => {
+    const { harness } = await wired()
+    const filed = await file(harness)
+    await harness.container.repositories.aiReviewRuns.update(filed.id, { status: 'failed' })
 
     expect(await lookUp(harness, [PR])).toStrictEqual([])
   })

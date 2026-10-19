@@ -7,7 +7,7 @@
 
 A pull request row with an AI review in flight no longer offers **AI review**, which admission
 would refuse. It offers one **AI review progress** button per run in flight instead, each opening
-the review screen on its run. The rows learn it from the new `POST /ai-review/in-flight/lookup`,
+the review screen on its run. The rows learn it from the new `POST /ai-review/latest/lookup`,
 read from the store with the same in-flight rule admission uses (`isAiReviewInFlight`, now exported
 by `@sainte-beuve/reviewers`).
 

@@ -87,6 +87,20 @@ export class PostgresReviewRequestRepository implements ReviewRequestRepository 
     return firstOr(rows)?.data ?? null
   }
 
+  async listByPullRequests(refs: readonly PullRequestAddress[]): Promise<ReviewRequest[]> {
+    if (refs.length === 0) return []
+    const rows = await this.db
+      .select()
+      .from(reviewRequests)
+      .where(
+        and(
+          eq(reviewRequests.orgId, this.orgId),
+          inArray(reviewRequests.pullRequestKey, [...new Set(refs.map(pullRequestKey))]),
+        ),
+      )
+    return rows.map((row) => row.data)
+  }
+
   async listForRepository(
     repository: ProjectRef,
     filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },

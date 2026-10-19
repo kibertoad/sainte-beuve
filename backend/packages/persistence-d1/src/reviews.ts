@@ -1,19 +1,12 @@
 import type {
-  AiReviewRun,
   ProjectRef,
   Reminder,
   ReminderStatus,
   ReviewRequest,
   ReviewStatus,
 } from '@sainte-beuve/contracts'
-import {
-  AI_REVIEW_IN_FLIGHT_STATUSES,
-  aiReviewRunSchema,
-  reminderSchema,
-  reviewRequestSchema,
-} from '@sainte-beuve/contracts'
+import { reminderSchema, reviewRequestSchema } from '@sainte-beuve/contracts'
 import type {
-  AiReviewRunRepository,
   EpochMs,
   PullRequestAddress,
   ReminderRepository,
@@ -26,7 +19,8 @@ import { decodeData, decodeRows, encodeData, patched, placeholders } from './row
 
 /**
  * The board: the reviews a deployment has taken responsibility for, the nudges
- * scheduled against them, and the AI runs delegated from them.
+ * scheduled against them. The AI runs delegated from them are in
+ * `ai-review-runs.ts`.
  *
  * Every ordering here is the one the in-memory store already answers with, and
  * the conformance suite is what keeps the three stores honest about it. There is
@@ -35,6 +29,9 @@ import { decodeData, decodeRows, encodeData, patched, placeholders } from './row
  * engine settled on, and a board that reshuffles between two reads is one nobody
  * can follow.
  */
+
+/** D1 binds at most 100 parameters per statement; one is the org. */
+const KEYS_PER_READ = 90
 
 const REVIEW_UPSERT = `INSERT INTO review_requests (org_id, id, status, pull_request_key, repo_key, created_at, data)
 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -91,6 +88,20 @@ export class SqlReviewRequestRepository implements ReviewRequestRepository {
       [this.orgId, pullRequestKey(ref)],
     )
     return row === null ? null : decodeData(reviewRequestSchema, 'review_requests', row.data)
+  }
+
+  async listByPullRequests(refs: readonly PullRequestAddress[]): Promise<ReviewRequest[]> {
+    const keys = [...new Set(refs.map(pullRequestKey))]
+    const found: ReviewRequest[] = []
+    for (let start = 0; start < keys.length; start += KEYS_PER_READ) {
+      const chunk = keys.slice(start, start + KEYS_PER_READ)
+      const rows = await this.db.all(
+        `SELECT data FROM review_requests WHERE org_id = ? AND pull_request_key IN (${placeholders(chunk.length)})`,
+        [this.orgId, ...chunk],
+      )
+      found.push(...decodeRows(reviewRequestSchema, 'review_requests', rows))
+    }
+    return found
   }
 
   async listForRepository(
@@ -286,80 +297,5 @@ RETURNING id`,
 
   private async write(reminder: Reminder): Promise<void> {
     await this.db.run(REMINDER_UPSERT, reminderParams(this.orgId, reminder))
-  }
-}
-
-const RUN_UPSERT = `INSERT INTO ai_review_runs (org_id, id, review_id, status, requested_at, last_polled_at, data)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (org_id, id) DO UPDATE SET
-  review_id = excluded.review_id,
-  status = excluded.status,
-  requested_at = excluded.requested_at,
-  last_polled_at = excluded.last_polled_at,
-  data = excluded.data`
-
-/**
- * `AI_REVIEW_IN_FLIGHT_STATUSES` as the `IN (...)` list the clock's read needs,
- * in the rotation `AiReviewRunRepository.listInFlight` documents.
- *
- * `NULLS FIRST` is spelled out rather than left to the engine. SQLite already
- * sorts nulls first on an ascending key, but Postgres sorts them last and this
- * read has to answer the same way on both, so neither store leans on its default.
- */
-const IN_FLIGHT = `SELECT data FROM ai_review_runs
-WHERE org_id = ? AND status IN (${placeholders(AI_REVIEW_IN_FLIGHT_STATUSES.length)})
-ORDER BY last_polled_at ASC NULLS FIRST, requested_at, id
-LIMIT ?`
-
-export class SqlAiReviewRunRepository implements AiReviewRunRepository {
-  constructor(
-    private readonly db: SqlDriver,
-    private readonly orgId: string,
-  ) {}
-
-  async listByReview(reviewId: string): Promise<AiReviewRun[]> {
-    const rows = await this.db.all(
-      'SELECT data FROM ai_review_runs WHERE org_id = ? AND review_id = ? ORDER BY requested_at DESC, id DESC',
-      [this.orgId, reviewId],
-    )
-    return decodeRows(aiReviewRunSchema, 'ai_review_runs', rows)
-  }
-
-  async listInFlight(limit: number): Promise<AiReviewRun[]> {
-    const rows = await this.db.all(IN_FLIGHT, [this.orgId, ...AI_REVIEW_IN_FLIGHT_STATUSES, limit])
-    return decodeRows(aiReviewRunSchema, 'ai_review_runs', rows)
-  }
-
-  async getById(runId: string): Promise<AiReviewRun | null> {
-    const row = await this.db.first('SELECT data FROM ai_review_runs WHERE org_id = ? AND id = ?', [
-      this.orgId,
-      runId,
-    ])
-    return row === null ? null : decodeData(aiReviewRunSchema, 'ai_review_runs', row.data)
-  }
-
-  async create(run: AiReviewRun): Promise<AiReviewRun> {
-    await this.write(run)
-    return run
-  }
-
-  async update(runId: string, patch: Partial<AiReviewRun>): Promise<AiReviewRun | null> {
-    const current = await this.getById(runId)
-    if (current === null) return null
-    const next = patched(current, patch)
-    await this.write(next)
-    return next
-  }
-
-  private async write(run: AiReviewRun): Promise<void> {
-    await this.db.run(RUN_UPSERT, [
-      this.orgId,
-      run.id,
-      run.reviewId,
-      run.status,
-      run.requestedAt,
-      run.lastPolledAt,
-      encodeData(run),
-    ])
   }
 }

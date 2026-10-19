@@ -137,6 +137,13 @@ export class InMemoryReviewRequestRepository implements ReviewRequestRepository 
     return null
   }
 
+  async listByPullRequests(refs: readonly PullRequestAddress[]): Promise<ReviewRequest[]> {
+    const wanted = new Set(refs.map(pullRequestKey))
+    return [...this.rows.values()]
+      .filter((row) => wanted.has(pullRequestKey(row.pullRequest)))
+      .map(clone)
+  }
+
   async listForRepository(
     repository: ProjectRef,
     filter: { status: readonly ReviewStatus[]; since: EpochMs; limit: number },
@@ -276,6 +283,11 @@ export class InMemoryAiReviewRunRepository implements AiReviewRunRepository {
       .filter((row) => row.reviewId === reviewId)
       .sort(newestFirst((row) => row.requestedAt))
       .map(clone)
+  }
+
+  async listByReviews(reviewIds: readonly string[]): Promise<AiReviewRun[]> {
+    const wanted = new Set(reviewIds)
+    return [...this.rows.values()].filter((row) => wanted.has(row.reviewId)).map(clone)
   }
 
   async listInFlight(limit: number): Promise<AiReviewRun[]> {
