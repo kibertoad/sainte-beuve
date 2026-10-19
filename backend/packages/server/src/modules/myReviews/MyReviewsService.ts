@@ -8,8 +8,9 @@ import { searchHosts } from '../workspace/search.js'
 import { sweepProjects } from '../workspace/sweep.js'
 
 /**
- * Other people's pull requests the viewer has a part in: asked to review,
- * committed to here, or reviewed already.
+ * Other people's pull requests the viewer has a part in: asked to review, on
+ * the host or by a teammate's attention request, committed to here, or
+ * reviewed already.
  *
  * The registered projects are swept as the workspace sweeps them, because that
  * read works with an App installation and is not subject to the search's lag.
@@ -27,25 +28,28 @@ export class MyReviewsService {
     const viewer = await new ViewerService(this.container, this.principal, resolutions).current()
     const { repositories } = this.container
     const projects = await repositories.projects.list()
-    const [reads, search, commitments] = await Promise.all([
+    const [reads, search, commitments, asks] = await Promise.all([
       sweepProjects(this.container, resolutions, projects),
       // The linked view still searches: a review the viewer gave in a registered
       // repository is only known to the search.
       searchHosts(this.container, resolutions, viewer, ['review_requested', 'reviewed']),
       repositories.commitments.listByReviewer(viewer.reviewer.id),
+      repositories.attention.list({ status: ['open'] }),
     ])
+    const openInProjects = reads.flatMap((read) => read.pullRequests)
     const found = (role: 'review_requested' | 'reviewed') =>
       search.found.filter((hit) => hit.role === role).map((hit) => hit.pullRequest)
     const lists = assembleReviewLists(
       {
-        requestedInProjects: partitionForViewer(
-          reads.flatMap((read) => read.pullRequests),
-          viewer.reviewer.handles,
-        ).reviewRequested,
+        requestedInProjects: partitionForViewer(openInProjects, viewer.reviewer.handles)
+          .reviewRequested,
         requestedFound: found('review_requested'),
         reviewedFound: found('reviewed'),
         commitments,
         projects,
+        openInProjects,
+        asks,
+        viewerId: viewer.reviewer.id,
       },
       query,
     )

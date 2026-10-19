@@ -1,4 +1,9 @@
-import type { OpenPullRequest, Project, ReviewCommitment } from '@sainte-beuve/contracts'
+import type {
+  AttentionRequest,
+  OpenPullRequest,
+  Project,
+  ReviewCommitment,
+} from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { assembleReviewLists, placeCommitments, type ReviewListsInput } from './reviewing.js'
 
@@ -33,6 +38,35 @@ const API: Project = {
   createdAt: 0,
 }
 
+const VIEWER = 'r-viewer'
+
+function askOn(open: OpenPullRequest, overrides: Partial<AttentionRequest> = {}): AttentionRequest {
+  return {
+    id: `ask-${open.pullRequest.number}`,
+    pullRequest: open.pullRequest,
+    title: 'Asked change',
+    requestedById: 'r-asker',
+    requestedByName: 'Asker',
+    recipients: [{ reviewerId: VIEWER, displayName: 'Viewer' }],
+    chatDeliveries: [],
+    declines: [],
+    keepAsking: false,
+    people: { authorLogin: 'carol', requestedReviewerLogins: [] },
+    requiredSkills: [],
+    domains: [],
+    sameTeamOnly: false,
+    team: null,
+    neededCommitments: 1,
+    commitments: [],
+    note: null,
+    status: 'open',
+    createdAt: 0,
+    updatedAt: 10,
+    resolvedAt: null,
+    ...overrides,
+  }
+}
+
 function input(overrides: Partial<ReviewListsInput>): ReviewListsInput {
   return {
     requestedInProjects: [],
@@ -40,6 +74,9 @@ function input(overrides: Partial<ReviewListsInput>): ReviewListsInput {
     reviewedFound: [],
     commitments: [],
     projects: [API],
+    openInProjects: [],
+    asks: [],
+    viewerId: VIEWER,
     ...overrides,
   }
 }
@@ -125,6 +162,56 @@ describe('assembleReviewLists', () => {
     const shown = assembleReviewLists(found, { dependencyBots: 'show' })
     expect(numbers(shown.requested)).toStrictEqual([2, 1])
     expect(numbers(shown.reviewed)).toStrictEqual([4, 3])
+  })
+})
+
+describe('assembleReviewLists with asks', () => {
+  it('lists an ask naming the viewer once, beside the host request for the same pull request', () => {
+    const lists = assembleReviewLists(
+      input({
+        requestedFound: [pr('api', 1)],
+        openInProjects: [pr('api', 2)],
+        asks: [askOn(pr('api', 1)), askOn(pr('api', 2)), askOn(pr('web', 3))],
+      }),
+      {},
+    )
+    expect(
+      lists.requested.map((row) => [row.pullRequest.number, row.authorLogin, row.ask?.attentionId]),
+    ).toStrictEqual([
+      [3, 'carol', 'ask-3'],
+      [2, 'bob', 'ask-2'],
+      [1, 'bob', 'ask-1'],
+    ])
+  })
+
+  it('leaves out asks the viewer answered, was not named on, or that are closed', () => {
+    const answered = { reviewerId: VIEWER, displayName: 'Viewer' }
+    const lists = assembleReviewLists(
+      input({
+        asks: [
+          askOn(pr('api', 1), { commitments: [{ ...answered, committedAt: 1 }] }),
+          askOn(pr('api', 2), { declines: [{ ...answered, reason: null, declinedAt: 1 }] }),
+          askOn(pr('api', 3), { recipients: [{ reviewerId: 'r-other', displayName: 'Other' }] }),
+          askOn(pr('api', 4), { status: 'resolved' }),
+        ],
+      }),
+      {},
+    )
+    expect(lists.requested).toStrictEqual([])
+  })
+
+  it('moves an asked pull request out of reviewed and keeps a committed one under committed', () => {
+    const lists = assembleReviewLists(
+      input({
+        reviewedFound: [pr('api', 1)],
+        commitments: [commitmentOn(pr('api', 2))],
+        asks: [askOn(pr('api', 1)), askOn(pr('api', 2))],
+      }),
+      {},
+    )
+    expect(numbers(lists.requested)).toStrictEqual([1])
+    expect(lists.reviewed).toStrictEqual([])
+    expect(numbers(lists.committed)).toStrictEqual([2])
   })
 })
 

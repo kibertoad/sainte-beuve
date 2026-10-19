@@ -2,8 +2,8 @@
 import type { MyReview, PullRequestRef } from '@sainte-beuve/contracts'
 import { formatPullRequestRef, vcsDisplayName } from '@sainte-beuve/contracts'
 
-// Other people's pull requests you have a part in: asked to review, committed
-// to here, or reviewed already. Like My PRs, a repository nobody linked is
+// Other people's pull requests you have a part in: asked to review, on the host
+// or by a teammate, committed to here, or reviewed already. Like My PRs, a repository nobody linked is
 // listed too, with a button to link it.
 const api = useSainteBeuveApi()
 const route = useRoute()
@@ -73,6 +73,21 @@ async function takeOn(pr: MyReview) {
     () => api.commitToPullRequest(pr.pullRequest, pr.title),
     'Could not record the commitment',
     pr.pullRequest.url,
+  )
+}
+
+/** Answers a teammate's ask through the same calls the attention inbox makes. */
+async function commitToAsk(attentionId: string) {
+  await run(() => api.commitToAttention(attentionId), 'Could not commit to the review', attentionId)
+}
+
+async function declineAsk(row: MyReview, reason: string | null) {
+  if (!row.ask) return
+  const { attentionId } = row.ask
+  await run(
+    () => api.declineAttention(attentionId, reason),
+    'Could not decline the request',
+    attentionId,
   )
 }
 
@@ -216,19 +231,39 @@ function committedTo(pullRequest: PullRequestRef): boolean {
 
       <PullRequestList
         title="Asked to review"
-        description="The host is waiting on your review."
+        description="The host or a teammate is waiting on your review."
         empty="Nobody is waiting on you."
         :pull-requests="data.requested"
         :marked="(pr) => committedTo(pr.pullRequest)"
       >
+        <template #details="{ pullRequest }">
+          <template v-if="pullRequest.ask">
+            <p class="text-xs text-muted">Asked by {{ pullRequest.ask.requestedByName }}</p>
+            <p v-if="pullRequest.ask.note" class="text-sm mt-1">{{ pullRequest.ask.note }}</p>
+          </template>
+        </template>
         <template #actions="{ pullRequest }">
           <LinkRepositoryButton
             v-if="pullRequest.projectId === null"
             :pull-request="pullRequest.pullRequest"
             @linked="refreshAfterLink"
           />
+          <template v-if="pullRequest.ask">
+            <UButton
+              size="sm"
+              variant="soft"
+              :loading="busy === pullRequest.ask.attentionId"
+              @click="commitToAsk(pullRequest.ask.attentionId)"
+            >
+              I will review it
+            </UButton>
+            <DeclineAskButton
+              :loading="busy === pullRequest.ask.attentionId"
+              @decline="(reason) => declineAsk(pullRequest, reason)"
+            />
+          </template>
           <UButton
-            v-if="!committedTo(pullRequest.pullRequest)"
+            v-else-if="!committedTo(pullRequest.pullRequest)"
             size="sm"
             variant="ghost"
             :loading="busy === pullRequest.pullRequest.url"

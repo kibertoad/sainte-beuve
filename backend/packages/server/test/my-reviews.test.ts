@@ -1,6 +1,7 @@
-import type { MyReviews, OpenPullRequest, Project } from '@sainte-beuve/contracts'
+import type { AttentionRequest, MyReviews, OpenPullRequest, Project } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
+  addReviewer,
   buildHarness,
   environmentVcs,
   get,
@@ -106,5 +107,60 @@ describe('My Reviews', () => {
     const view = await list(harness)
     expect(view.requested.map((row) => row.pullRequest.number)).toStrictEqual([1])
     expect(view.searches).toStrictEqual([{ provider: 'github', ok: false, reason: 'rate limited' }])
+  })
+
+  it('lists a teammate ask naming me once per pull request, until I answer it', async () => {
+    const pulls = [pr(1, 'api', { requestedReviewerLogins: ['ada'] }), pr(2, 'api')]
+    const asker = buildHarness({ vcs: environmentVcs(viewerVcs('kibertoad', pulls)) })
+    await addProject(asker, 'api')
+    await addReviewer(asker, { displayName: 'Igor', handles: { github: 'kibertoad' } })
+    const ada = await addReviewer(asker, { displayName: 'Ada', handles: { github: 'ada' } })
+    const bo = await addReviewer(asker, { displayName: 'Bo', handles: { github: 'bo' } })
+    const raise = async (open: OpenPullRequest, neededCommitments = 1) => {
+      const res = await asker.app.fetch(
+        post('/api/v1/attention', {
+          pullRequest: open.pullRequest,
+          title: open.title,
+          recipientIds: [ada.id, bo.id],
+          neededCommitments,
+          note: 'Touches billing',
+        }),
+      )
+      expect(res.status).toBe(201)
+      return (await res.json()) as AttentionRequest
+    }
+    const both = await raise(pulls[0]!)
+    const askedOnly = await raise(pulls[1]!)
+    const declined = await raise(pr(3, 'web'))
+    const committed = await raise(pr(4, 'web'), 2)
+    const harness = buildHarness({
+      ...asker.container,
+      vcs: environmentVcs(viewerVcs('ada', pulls)),
+    })
+    const answer = async (id: string, answer: 'commit' | 'decline') => {
+      const res = await harness.app.fetch(post(`/api/v1/attention/${id}/${answer}`, {}))
+      expect(res.status).toBe(200)
+    }
+    await answer(declined.id, 'decline')
+    await answer(committed.id, 'commit')
+
+    const view = await list(harness)
+    expect(
+      view.requested.map((row) => [row.pullRequest.number, row.ask?.attentionId ?? null]),
+    ).toStrictEqual([
+      [2, askedOnly.id],
+      [1, both.id],
+    ])
+    expect(view.requested[0]?.ask).toStrictEqual({
+      attentionId: askedOnly.id,
+      requestedByName: 'Igor',
+      note: 'Touches billing',
+    })
+    expect(view.committed.map((row) => row.pullRequest.number)).toStrictEqual([4])
+
+    await answer(askedOnly.id, 'commit')
+    const after = await list(harness)
+    expect(after.requested.map((row) => row.pullRequest.number)).toStrictEqual([1])
+    expect(after.committed.map((row) => row.pullRequest.number).sort()).toStrictEqual([2, 4])
   })
 })
