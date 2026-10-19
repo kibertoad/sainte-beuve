@@ -38,11 +38,11 @@ importers:
   backend/packages/ai-review:
     dependencies:
       '@cat-factory/directory-sync':
-        specifier: ^0.2.2
-        version: 0.2.2(@cat-factory/sdk@0.62.0)
+        specifier: ^0.2.3
+        version: 0.2.3(@cat-factory/sdk@0.63.1)
       '@cat-factory/sdk':
-        specifier: ^0.62.0
-        version: 0.62.0
+        specifier: ^0.63.1
+        version: 0.63.1
       '@sainte-beuve/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -63,8 +63,8 @@ importers:
   backend/packages/contracts:
     dependencies:
       '@cat-factory/contracts':
-        specifier: ^0.372.0
-        version: 0.372.0(typescript@7.0.2)
+        specifier: ^0.374.0
+        version: 0.374.0(typescript@7.0.2)
       '@toad-contracts/core':
         specifier: 1.0.0
         version: 1.0.0
@@ -726,21 +726,21 @@ packages:
     resolution: {integrity: sha512-CuNiSqg7+e1cO/GjffyMOm5Tt2jUF9CWHHnvQ/UkqvtkGfHdgwEC0wpmq7fkN3gxwpRnrAN0WzO3vREKmNolMQ==}
     engines: {node: '>=18'}
 
-  '@cat-factory/contracts@0.372.0':
-    resolution: {integrity: sha512-BFbYC7K3ZBLASd3MMjLfOy6CMPnL1syT0Mt5l3euchIzFyotPTMlllKWHE76y/iQnF5eg3vInMiXtPArORHooA==}
+  '@cat-factory/contracts@0.374.0':
+    resolution: {integrity: sha512-c6EGp7CzGp4/C6spiQTDpeZMd5+It8gU0XlAp5v5UsuaVDPpobaeEpP3p/g45mwWtwdZIs+iSUJpKMQp4NqOkw==}
 
-  '@cat-factory/directory-sync@0.2.2':
-    resolution: {integrity: sha512-ldpZmoDAzqmtfTcTINDWJpa2oCOQsOuhFKNhoQgk5plIiOry7cW1ykwBb/ASlDksp3qCr7TD9oPrksAg3ozokA==}
+  '@cat-factory/directory-sync@0.2.3':
+    resolution: {integrity: sha512-txqY+gO6KxDRoZkA5NufH/5O6uN367/NfaC4YAcoPzOWfQXkDOCJ1/uDhYdI1kNlxu1J4FO2F2Ns3jNTRaPjZw==}
     engines: {node: '>=20'}
     peerDependencies:
       '@cat-factory/sdk': '>=0.57.0 <1.0.0'
 
-  '@cat-factory/sdk@0.62.0':
-    resolution: {integrity: sha512-4F1/5iyXy43n3LZ1xvF8Sb8tyNfMk0IMX+D1wqdOyVhL6Xkx+daisJX0y6p7NNwx6Y1X+xLNBfdrozUZXqSZOQ==}
+  '@cat-factory/sdk@0.63.1':
+    resolution: {integrity: sha512-2kn3BLTsa3g/1k+YBVxk9IKNSdwpZFVjHn11XQQbBq6YpOeDDklz1aIwbeUch1MmLMNEUHytjCRt7ga2CqEEgw==}
     engines: {node: '>=20'}
 
-  '@cat-factory/webhooks@0.2.0':
-    resolution: {integrity: sha512-UgKgqAhtPskpTgvu5LWGT3aRGLy1VlB17hq+CKvqvs/3ETfT4q2ZZeYxMNVhXJ4gqJYk79Iu5Zxef2Ph5aczsw==}
+  '@cat-factory/webhooks@0.2.1':
+    resolution: {integrity: sha512-G5/ilqdhOot3sqCfnTn7x/3gMoLFUS5LgkusWnM3dfAvoq7d1mcv42DDPscy6HaAqjLud4hE+Veluqg8sC50eg==}
     engines: {node: '>=20'}
 
   '@changesets/apply-release-plan@8.1.1':
@@ -6736,7 +6736,7 @@ snapshots:
     dependencies:
       fontkitten: 1.0.3
 
-  '@cat-factory/contracts@0.372.0(typescript@7.0.2)':
+  '@cat-factory/contracts@0.374.0(typescript@7.0.2)':
     dependencies:
       '@toad-contracts/core': 1.0.0
       '@toad-contracts/valibot': 1.0.0(valibot@1.5.0(typescript@7.0.2))
@@ -6744,14 +6744,14 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@cat-factory/directory-sync@0.2.2(@cat-factory/sdk@0.62.0)':
+  '@cat-factory/directory-sync@0.2.3(@cat-factory/sdk@0.63.1)':
     dependencies:
-      '@cat-factory/sdk': 0.62.0
-      '@cat-factory/webhooks': 0.2.0
+      '@cat-factory/sdk': 0.63.1
+      '@cat-factory/webhooks': 0.2.1
 
-  '@cat-factory/sdk@0.62.0': {}
+  '@cat-factory/sdk@0.63.1': {}
 
-  '@cat-factory/webhooks@0.2.0': {}
+  '@cat-factory/webhooks@0.2.1': {}
 
   '@changesets/apply-release-plan@8.1.1':
     dependencies:

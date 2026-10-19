@@ -31,8 +31,8 @@
     "test:run": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@cat-factory/directory-sync": "^0.2.2",
-    "@cat-factory/sdk": "^0.62.0",
+    "@cat-factory/directory-sync": "^0.2.3",
+    "@cat-factory/sdk": "^0.63.1",
     "@sainte-beuve/contracts": "workspace:*",
     "@sainte-beuve/kernel": "workspace:*"
   },
