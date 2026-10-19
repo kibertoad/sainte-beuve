@@ -16,7 +16,6 @@ import {
 // in a repository nobody linked is listed too, and merges once it is linked.
 const api = useSainteBeuveApi()
 const { confirm } = useConfirm()
-const capabilities = useCapabilities()
 const toast = useToast()
 const route = useRoute()
 const router = useRouter()
@@ -140,87 +139,9 @@ async function postComment(pr: MyPullRequest, comment: MergeComment) {
   if (posted) toast.add({ color: 'success', title: `Posted "${comment.body}"` })
 }
 
-/**
- * Resolutions requested from this screen, by pull request, with the link to
- * watch each in cat-factory. Nothing stores them, so this is what keeps a second
- * click from filing a second resolver while the first has not pushed yet.
- */
-const resolutions = reactive(new Map<string, string | undefined>())
-
-function conflicting(pr: MyPullRequest): boolean {
-  return pr.status?.mergeability === 'conflicting'
-}
-
-/**
- * A linked pull request whose branch conflicts with its base, on an org that
- * has cat-factory to hand it to, and not yet handed to it from here.
- */
-function offersConflictResolution(pr: MyPullRequest): boolean {
-  return (
-    conflicting(pr) &&
-    pr.projectId !== null &&
-    capabilities.confirmed('aiReview') &&
-    !resolutions.has(pr.pullRequest.url)
-  )
-}
-
-function resolving(pr: MyPullRequest): boolean {
-  return conflicting(pr) && resolutions.has(pr.pullRequest.url)
-}
-
-async function resolveConflicts(pr: MyPullRequest) {
-  const { projectId } = pr
-  if (projectId === null) return
-  const key = pr.pullRequest.url
-  const started = await run(
-    async () => {
-      const { url } = await api.resolveConflicts({ projectId, number: pr.pullRequest.number })
-      resolutions.set(key, safeHref(url))
-    },
-    'Could not start resolving the conflicts',
-    `${key}:conflicts`,
-  )
-  if (!started) return
-  const link = resolutions.get(key)
-  toast.add({
-    color: 'success',
-    title: 'Resolving conflicts',
-    description: `cat-factory will push its resolution to ${formatPullRequestRef(pr.pullRequest)}.`,
-    actions: link ? [{ label: 'Watch in cat-factory', to: link, target: '_blank' }] : [],
-  })
-}
-
-/** The pull request the "suggest reviewers" dialog is open for. Null when closed. */
-const suggesting = ref<MyPullRequest | null>(null)
-const { busy: askBusy, run: runAsk } = useApiAction()
-
-/** Reviewers are for a pull request still open and out of draft. */
-function offersReviewerSuggestions(pr: MyPullRequest): boolean {
-  return !pr.draft && (pr.status === null || pr.status.state === 'open')
-}
-
-async function askReviewers(request: { reviewerIds: string[]; note: string | null }) {
-  const pr = suggesting.value
-  if (pr === null) return
-  const asked = await runAsk(
-    () =>
-      api.askSuggestedReviewers({
-        pullRequest: pr.pullRequest,
-        title: pr.title,
-        reviewerIds: request.reviewerIds,
-        note: request.note,
-      }),
-    'Could not ask the reviewers',
-    pr.pullRequest.url,
-  )
-  if (!asked) return
-  suggesting.value = null
-  toast.add({
-    color: 'success',
-    title: askedLabel(request.reviewerIds.length),
-    description: 'They are notified and asked to commit to reviewing it.',
-  })
-}
+const { resolutions, offersConflictResolution, resolving, resolveConflicts } =
+  useConflictResolution(run)
+const { suggesting, askBusy, offersReviewerSuggestions, askReviewers } = useSuggestReviewers()
 
 /** Merge comments are for a pull request that could merge once a bot is happy with it. */
 function offersComments(pr: MyPullRequest): boolean {
