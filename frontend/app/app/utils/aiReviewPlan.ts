@@ -100,6 +100,22 @@ export function applyLabel(plan: ResolutionPlan): string {
   return plan.outcome === 'comment' ? `Post ${count(n, 'comment')}` : `Fix ${count(n, 'finding')}`
 }
 
+/**
+ * What a finding's checkbox says under each outcome: checked acts on it, as a
+ * comment posted or a fix committed, and unchecked says it is left alone.
+ */
+export const pickChoice: Record<ReviewOutcome, { on: string; off: string }> = {
+  comment: { on: 'Post', off: 'Skipped' },
+  fix: { on: 'Fix', off: 'Ignored' },
+}
+
+/** The footer's tally, in the words the checkboxes use. */
+export function planTally(plan: ResolutionPlan): string {
+  return plan.outcome === 'comment'
+    ? `${plan.picked.length} to post · ${plan.left.length} skipped`
+    : `${plan.picked.length} to fix · ${plan.left.length} ignored`
+}
+
 function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? '' : 's'}`
 }

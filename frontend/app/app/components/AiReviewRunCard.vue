@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AiReviewRun, ResolveAiReviewInput } from '@sainte-beuve/contracts'
-import { applyLabel, planOf, type ReviewOutcome } from '../utils/aiReviewPlan'
+import { applyLabel, planOf, planTally, type ReviewOutcome } from '../utils/aiReviewPlan'
 import { aiReviewStatusColor, aiReviewStatusLabel } from '../utils/aiReviewStatus'
 
 // One delegated review, followed from filing to the last comment or commit.
@@ -165,11 +165,7 @@ function apply(): void {
     <template v-if="awaiting && plan" #footer>
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div class="text-sm">
-          <p>
-            {{ plan.picked.length }}
-            {{ plan.outcome === 'comment' ? 'to comment on' : 'to fix' }} &middot;
-            {{ plan.left.length }} left out
-          </p>
+          <p>{{ planTally(plan) }}</p>
           <p class="text-muted mt-1">Nothing reaches the pull request until you apply.</p>
         </div>
         <UButton

@@ -6,6 +6,7 @@ import {
   initialDraft,
   journeyOf,
   planOf,
+  planTally,
   progressFraction,
   reconcileDraft,
 } from '../app/utils/aiReviewPlan'
@@ -122,12 +123,14 @@ describe('planOf', () => {
     expect(plan.resolution).toStrictEqual({ action: 'post', findingIds: ['a', 'b'] })
     expect(plan.left).toStrictEqual(['c'])
     expect(applyLabel(plan)).toBe('Post 2 comments')
+    expect(planTally(plan)).toBe('2 to post · 1 skipped')
   })
 
   it('hands the picked findings to the fixer', () => {
     const plan = planOf(state, { outcome: 'fix', picks })
     expect(plan.resolution).toStrictEqual({ action: 'fix', findingIds: ['a', 'b'] })
     expect(applyLabel(plan)).toBe('Fix 2 findings')
+    expect(planTally(plan)).toBe('2 to fix · 1 ignored')
   })
 
   it('closes with nothing picked, whatever the outcome', () => {

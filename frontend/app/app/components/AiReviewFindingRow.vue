@@ -4,7 +4,7 @@ import type {
   AiReviewFinding,
   AiReviewSeverity,
 } from '@sainte-beuve/contracts'
-import type { ReviewOutcome } from '../utils/aiReviewPlan'
+import { pickChoice, type ReviewOutcome } from '../utils/aiReviewPlan'
 
 // One finding of an AI review: what it says, whether the review's outcome acts
 // on it, and the challenge that sends it back to cat-factory's investigator, which
@@ -52,11 +52,6 @@ const verdictLabel: Record<AiReviewChallengeStatus, string> = {
   amended: 'amended',
   retracted: 'retracted',
   failed: 'investigation failed',
-}
-
-const pickLabel: Record<ReviewOutcome, { label: string; icon: string }> = {
-  comment: { label: 'Comment', icon: 'i-lucide-message-square' },
-  fix: { label: 'Fix', icon: 'i-lucide-wrench' },
 }
 
 const challengeState = computed(() => props.finding.challenge)
@@ -146,18 +141,14 @@ const location = computed(() => codeLocation(props.finding))
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-col sm:items-end">
-      <UButton
+      <UCheckbox
         v-if="awaiting && !retracted"
-        size="sm"
-        :icon="picked ? pickLabel[outcome].icon : 'i-lucide-eye-off'"
-        :color="picked ? 'primary' : 'neutral'"
-        :variant="picked ? 'solid' : 'outline'"
-        :aria-pressed="picked"
+        :model-value="picked"
+        :label="pickChoice[outcome].on"
+        :description="picked ? undefined : pickChoice[outcome].off"
         :disabled="busy === 'resolve'"
-        @click="emit('pick', !picked)"
-      >
-        {{ picked ? pickLabel[outcome].label : 'Left out' }}
-      </UButton>
+        @update:model-value="(value) => emit('pick', value === true)"
+      />
       <UButton
         v-if="challengeable && !asking"
         size="sm"
