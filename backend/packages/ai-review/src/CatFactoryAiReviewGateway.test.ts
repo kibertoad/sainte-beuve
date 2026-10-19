@@ -648,6 +648,71 @@ describe('CatFactoryAiReviewGateway.getStatus', () => {
   })
 })
 
+/** cat-factory's input gate, as the decision list reports it. */
+function inputGate(status: string, issues: Record<string, unknown>[]) {
+  return { kind: 'input-gate', status, mode: 'standard', checkedAt: 1, issues }
+}
+
+describe('CatFactoryAiReviewGateway input gate', () => {
+  it('stops a run its input gate is holding, and reports it failed with the reason', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/run': { body: run({ status: 'blocked' }) },
+      '/decisions': {
+        body: decisions({
+          decisions: [
+            inputGate('blocked', [
+              { code: 'review_target_missing', severity: 'blocking' },
+              { code: 'description_thin', severity: 'advisory' },
+            ]),
+          ],
+        }),
+      },
+      '/tasks/task-1/stop': { body: task({ status: 'cancelled' }) },
+    })
+
+    expect(await gateway.getStatus(TASK)).toStrictEqual({
+      status: 'failed',
+      runId: 'run-1',
+      summary: null,
+      failureReason:
+        "cat-factory refused the review task's input: the task names no pull request to review",
+      curation: null,
+      progress: null,
+    })
+    expect(calls.filter((call) => call.method === 'POST').map((call) => call.path)).toStrictEqual([
+      '/api/v1/tasks/task-1/stop',
+    ])
+  })
+
+  it('fails the poll when the stop is refused, so the next poll tries again', async () => {
+    const { gateway } = gatewayOver({
+      '/run': { body: run({ status: 'blocked' }) },
+      '/decisions': {
+        body: decisions({
+          decisions: [
+            inputGate('blocked', [{ code: 'review_target_missing', severity: 'blocking' }]),
+          ],
+        }),
+      },
+      '/stop': { status: 500, body: { error: { code: 'internal', message: 'boom' } } },
+    })
+
+    await expect(gateway.getStatus(TASK)).rejects.toThrow(/stop task task-1/)
+  })
+
+  it('leaves a run alone once its input gate has passed', async () => {
+    const { gateway, calls } = gatewayOver({
+      '/run': { body: run({ status: 'blocked' }) },
+      '/decisions': {
+        body: decisions({ decisions: [inputGate('passed', []), decision()] }),
+      },
+    })
+
+    expect((await gateway.getStatus(TASK)).status).toBe('awaiting_selection')
+    expect(calls.some((call) => call.path.endsWith('/stop'))).toBe(false)
+  })
+})
+
 describe('CatFactoryAiReviewGateway curation', () => {
   it('posts the curated selection to the resolve route, in the workspace of the run', async () => {
     const { gateway, calls } = gatewayOver({ '/pr-review/resolve': { body: decisions() } })

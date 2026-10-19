@@ -2,11 +2,11 @@ import {
   CatFactoryClient,
   CatFactoryNotFoundError,
   type CreatePublicTask,
+  type PublicDecisionList,
   type PublicRun,
 } from '@cat-factory/sdk'
 import {
   type AiReviewCuration,
-  type AiReviewProgress,
   type ResolveAiReview,
   catFactoryRunUrl,
 } from '@sainte-beuve/contracts'
@@ -20,6 +20,7 @@ import {
 } from '@sainte-beuve/kernel'
 import { appUrlOf } from './catFactoryApp.js'
 import { curationOf } from './curation.js'
+import { inputGateRefusal } from './inputGate.js'
 import { placeTask } from './placement.js'
 import { progressOf } from './progress.js'
 import { refusalFor } from './refusals.js'
@@ -252,7 +253,10 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
     // poll of every finished review.
     const inFlight = TERMINAL_STATUSES[run.status] === undefined
     const progress = inFlight ? progressOf(run) : null
-    const curation = inFlight ? await this.readCuration(client, run.runId, progress) : null
+    const decisions = inFlight ? await this.readDecisions(client, run.runId) : null
+    const refusal = decisions === null ? null : inputGateRefusal(decisions)
+    if (refusal !== null) return this.stopRefused(client, run, refusal)
+    const curation = decisions === null ? null : curationOf(decisions, progress)
     const status = statusOf(run, curation)
     return {
       status,
@@ -277,7 +281,26 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
   }
 
   /**
-   * The decision the run is parked on, or null when there is none to read.
+   * Stop a run cat-factory's input gate is holding, and report it failed with the
+   * gate's reason. A stop that is refused fails the poll instead, so the run stays
+   * in flight here and the next poll stops it, rather than leaving a parked task in
+   * cat-factory that nothing here will ever look at again.
+   */
+  private async stopRefused(
+    client: CatFactoryClient,
+    run: PublicRun,
+    refusal: string,
+  ): Promise<AiReviewReport> {
+    try {
+      await client.tasks.stop(run.taskId)
+    } catch (err) {
+      throw refusalFor(err, `stop task ${run.taskId}, which its input gate is holding`)
+    }
+    return { ...NO_RUN_YET, status: 'failed', runId: run.runId, failureReason: refusal }
+  }
+
+  /**
+   * The decisions the run is parked on, or null when there are none to read.
    *
    * A 404 is null for the same reason it is on the run: it is an ORDINARY answer
    * here, not a fault. cat-factory prunes a run's decisions, a rotated key sees a
@@ -285,13 +308,12 @@ export class CatFactoryAiReviewGateway implements AiReviewGateway {
    * all. Every one of those means "nothing to curate", and raising them would
    * fail the whole poll of a review whose findings are sitting right there.
    */
-  private async readCuration(
+  private async readDecisions(
     client: CatFactoryClient,
     runId: string,
-    progress: AiReviewProgress | null,
-  ): Promise<AiReviewCuration | null> {
+  ): Promise<PublicDecisionList | null> {
     try {
-      return curationOf(await client.decisions.list(runId), progress)
+      return await client.decisions.list(runId)
     } catch (err) {
       if (err instanceof CatFactoryNotFoundError) return null
       throw refusalFor(err, `report the decisions for run ${runId}`)
