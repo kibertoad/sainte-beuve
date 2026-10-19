@@ -15,28 +15,34 @@ const { showError } = useErrorToast()
 const target = computed(() => targetFromQuery(route.query))
 const prUrl = computed(() => prUrlFromQuery(route.query))
 
-const { data, pending, error, refresh } = useAsyncData(
-  () => `guided-review-${JSON.stringify(target.value)}`,
-  async () => {
-    if (target.value === null) return null
-    return (await api.findGuidedReview(target.value)).session
-  },
+// Tagged with the pull request it answers, because switching pull requests
+// leaves the previous answer on screen until the new one lands. See `answerFor`.
+const subject = computed(() => JSON.stringify(target.value))
+
+const { data, error, refresh } = useAsyncData(
+  () => `guided-review-${subject.value}`,
+  async () => ({
+    subject: subject.value,
+    value: target.value === null ? null : (await api.findGuidedReview(target.value)).session,
+  }),
   { lazy: true },
 )
 
-const view = computed<GuidedReviewSessionView | null>(() => data.value ?? null)
+/** Undefined until the session of THIS pull request has been read. */
+const loaded = computed(() => answerFor(data.value, subject.value))
+const view = computed<GuidedReviewSessionView | null>(() => loaded.value ?? null)
+
+function show(next: GuidedReviewSessionView | null): void {
+  data.value = { subject: subject.value, value: next }
+}
 const session = computed(() => view.value?.session ?? null)
 const threads = computed(() => view.value?.threads ?? [])
 
 // The stream keeps the view current; the poll is what a page without it falls
 // back on, so it only runs while the stream is down.
 const stream = useGuidedReviewStream(() => session.value, {
-  state: (next) => {
-    data.value = next
-  },
-  deleted: () => {
-    data.value = null
-  },
+  state: show,
+  deleted: () => show(null),
 })
 
 usePolling(
@@ -61,7 +67,7 @@ async function open(): Promise<void> {
   if (target.value === null) return
   opening.value = true
   try {
-    data.value = await api.openGuidedReview(target.value)
+    show(await api.openGuidedReview(target.value))
   } catch (err) {
     showError('Could not start the guided review', err, refusalMessage(err))
   } finally {
@@ -160,7 +166,7 @@ const overviewReady = computed(() => session.value?.overview.status === 'complet
       </UCard>
 
       <ApiErrorAlert v-if="error" :error="error" title="Could not read the guided review" />
-      <LoadingCard v-else-if="pending && data === undefined" :rows="3" />
+      <LoadingCard v-else-if="loaded === undefined" :rows="3" />
 
       <UCard v-else-if="session === null">
         <div class="flex flex-col gap-3">

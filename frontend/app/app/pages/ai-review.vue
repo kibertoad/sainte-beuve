@@ -27,22 +27,35 @@ const reviewId = computed(() => {
   return typeof value === 'string' && value.length > 0 ? value : null
 })
 
-const { data: review, error: reviewError } = useAsyncData(
+// Each read is tagged with the review it answers, because switching reviews
+// leaves the previous answer on screen until the new one lands. See `answerFor`.
+const subject = computed(() => reviewId.value ?? '')
+
+const { data: reviewRead, error: reviewError } = useAsyncData(
   () => `ai-review-subject-${reviewId.value}`,
-  () => (reviewId.value === null ? Promise.resolve(null) : api.getReview(reviewId.value)),
+  async () => ({
+    subject: subject.value,
+    value: reviewId.value === null ? null : await api.getReview(reviewId.value),
+  }),
   { lazy: true },
 )
+const review = computed(() => answerFor(reviewRead.value, subject.value) ?? null)
 
-const { data, pending, error, refresh } = useAsyncData(
+const { data, error, refresh } = useAsyncData(
   () => `ai-review-runs-${reviewId.value}`,
-  () =>
-    reviewId.value === null
-      ? Promise.resolve({ runs: [] as AiReviewRun[] })
-      : api.listAiReviewRuns(reviewId.value),
+  async () => ({
+    subject: subject.value,
+    value:
+      reviewId.value === null
+        ? ([] as AiReviewRun[])
+        : (await api.listAiReviewRuns(reviewId.value)).runs,
+  }),
   { lazy: true },
 )
 
-const runs = computed<AiReviewRun[]>(() => data.value?.runs ?? [])
+/** Undefined until the runs of THIS review have been read. */
+const loadedRuns = computed(() => answerFor(data.value, subject.value))
+const runs = computed<AiReviewRun[]>(() => loadedRuns.value ?? [])
 const focused = computed<AiReviewRun | null>(() => {
   const asked = route.query[AI_REVIEW_RUN_QUERY]
   return runs.value.find((entry) => entry.id === asked) ?? runs.value[0] ?? null
@@ -163,7 +176,7 @@ async function resume(runId: string): Promise<void> {
               size="sm"
               icon="i-lucide-bot"
               :loading="busy === 'request'"
-              :disabled="inFlight"
+              :disabled="inFlight || loadedRuns === undefined"
               @click="requestAnother"
             >
               {{ runs.length === 0 ? 'Start an AI review' : 'Review again' }}
@@ -173,7 +186,7 @@ async function resume(runId: string): Promise<void> {
       </UCard>
 
       <ApiErrorAlert v-if="error" :error="error" title="Could not read the AI reviews" />
-      <LoadingCard v-else-if="pending && data === undefined" :rows="3" />
+      <LoadingCard v-else-if="loadedRuns === undefined" :rows="3" />
 
       <UCard v-else-if="focused === null">
         <p class="text-sm">
