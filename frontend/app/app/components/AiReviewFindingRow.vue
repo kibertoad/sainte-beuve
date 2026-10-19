@@ -3,6 +3,7 @@ import type {
   AiReviewChallengeStatus,
   AiReviewFinding,
   AiReviewSeverity,
+  PullRequestRef,
 } from '@sainte-beuve/contracts'
 import { pickChoice, type ReviewOutcome } from '../utils/aiReviewPlan'
 
@@ -11,6 +12,8 @@ import { pickChoice, type ReviewOutcome } from '../utils/aiReviewPlan'
 // upholds, amends or retracts it.
 const props = defineProps<{
   finding: AiReviewFinding
+  /** The pull request under review, for the link into its diff. */
+  pullRequest: PullRequestRef | null
   /** Whether the review's outcome acts on this finding. */
   picked: boolean
   outcome: ReviewOutcome
@@ -79,6 +82,16 @@ function send(): void {
 }
 
 const location = computed(() => codeLocation(props.finding))
+
+const diffHref = ref<string | null>(null)
+watch(
+  () => [props.pullRequest, props.finding] as const,
+  async ([pullRequest, finding]) => {
+    const href = pullRequest === null ? null : await filesChangedHref(pullRequest, finding)
+    if (pullRequest === props.pullRequest && finding === props.finding) diffHref.value = href
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -102,7 +115,20 @@ const location = computed(() => codeLocation(props.finding))
           {{ verdictLabel[challengeState.status] }}
         </UBadge>
       </div>
-      <p class="font-mono text-xs text-muted mt-1 break-all">{{ location }}</p>
+      <div class="flex items-center gap-1 mt-1">
+        <p class="font-mono text-xs text-muted break-all">{{ location }}</p>
+        <UButton
+          v-if="diffHref"
+          :to="diffHref"
+          target="_blank"
+          size="xs"
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-external-link"
+          aria-label="Open in the pull request's changed files"
+          title="Files changed"
+        />
+      </div>
       <p class="text-sm mt-1 whitespace-pre-wrap" :class="{ 'text-muted': retracted }">
         {{ finding.detail }}
       </p>

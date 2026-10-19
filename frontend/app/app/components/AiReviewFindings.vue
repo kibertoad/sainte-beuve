@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { AiReviewCuration, AiReviewFinding, AiReviewSeverity } from '@sainte-beuve/contracts'
+import type {
+  AiReviewCuration,
+  AiReviewFinding,
+  AiReviewSeverity,
+  PullRequestRef,
+} from '@sainte-beuve/contracts'
 import { challengedFindingIdsOf, AI_REVIEW_CHALLENGE_LIMIT } from '@sainte-beuve/contracts'
 import type { FindingPicks, ReviewOutcome } from '../utils/aiReviewPlan'
 
@@ -8,6 +13,7 @@ import type { FindingPicks, ReviewOutcome } from '../utils/aiReviewPlan'
 // list sorted by severity across the whole change.
 const props = defineProps<{
   curation: AiReviewCuration
+  pullRequest: PullRequestRef | null
   challengedFindingIds: string[]
   picks: FindingPicks
   outcome: ReviewOutcome
@@ -101,6 +107,7 @@ const posted = computed(() => new Set(props.curation.postedFindingIds))
           v-for="finding in group.findings"
           :key="finding.findingId"
           :finding="finding"
+          :pull-request="pullRequest"
           :picked="picks[finding.findingId] === true"
           :outcome="outcome"
           :awaiting="awaiting"

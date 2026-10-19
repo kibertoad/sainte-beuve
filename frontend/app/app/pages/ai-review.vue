@@ -187,6 +187,7 @@ async function resume(runId: string): Promise<void> {
         <AiReviewRunCard
           :key="focused.id"
           :run="focused"
+          :pull-request="review?.pullRequest ?? null"
           :busy="busy"
           @challenge="(findingId, question) => challenge(focused!.id, findingId, question)"
           @resolve="(resolution, done) => resolve(focused!.id, resolution, done)"

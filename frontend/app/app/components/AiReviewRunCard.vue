@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AiReviewRun, ResolveAiReviewInput } from '@sainte-beuve/contracts'
+import type { AiReviewRun, PullRequestRef, ResolveAiReviewInput } from '@sainte-beuve/contracts'
 import { applyLabel, planOf, planTally, type ReviewOutcome } from '../utils/aiReviewPlan'
 import { aiReviewStatusColor, aiReviewStatusLabel } from '../utils/aiReviewStatus'
 
@@ -11,6 +11,8 @@ import { aiReviewStatusColor, aiReviewStatusLabel } from '../utils/aiReviewStatu
 // Everything else here is context for that decision.
 const props = defineProps<{
   run: AiReviewRun
+  /** The pull request under review, for links into its diff. Null until it is read. */
+  pullRequest: PullRequestRef | null
   /** Which action is mid-flight on this run, so one button spins and the rest lock. */
   busy: string | null
 }>()
@@ -151,6 +153,7 @@ function apply(): void {
         </div>
         <AiReviewFindings
           :curation="curation"
+          :pull-request="pullRequest"
           :challenged-finding-ids="run.challengedFindingIds"
           :picks="draft.picks"
           :outcome="draft.outcome"
