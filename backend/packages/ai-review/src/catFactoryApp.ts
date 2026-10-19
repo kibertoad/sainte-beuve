@@ -11,7 +11,7 @@ import { UnavailableError, withDeadline } from '@sainte-beuve/kernel'
  * (`?addRepo=<owner>/<name>&provider=<host>`); a cat-factory without it still
  * opens the app.
  */
-export function addRepositoryUrl(appUrl: string, pullRequest: PullRequestRef): string {
+function addRepositoryUrl(appUrl: string, pullRequest: PullRequestRef): string {
   const url = new URL(`${appUrl.replace(/\/+$/, '')}/`)
   url.searchParams.set('addRepo', `${pullRequest.owner}/${pullRequest.repo}`)
   url.searchParams.set('provider', pullRequest.provider)
