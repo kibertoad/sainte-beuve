@@ -1,24 +1,10 @@
-import type {
-  AiReviewCuration,
-  ReviewRequest,
-  RiskAssessment,
-  RiskPolicyInput,
-  RiskPolicySettings,
-} from '@sainte-beuve/contracts'
-import type {
-  ChangedFile,
-  Deferral,
-  ExternalRiskAssessment,
-  GatewayFactory,
-  VcsGateway,
-} from '@sainte-beuve/kernel'
+import type { RiskAssessment, RiskPolicySettings } from '@sainte-beuve/contracts'
+import type { ExternalRiskAssessment } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
-import type { AppContainer } from '../src/container.js'
 import { DRIVE_LEASE_MS } from '../src/modules/risk/RiskAssessmentService.js'
 import { ReviewIntake } from '../src/modules/webhooks/ReviewIntake.js'
 import { runReminderTick } from '../src/reminders/tick.js'
 import { stubAiReview } from './ai-review-doubles.js'
-import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
 import {
   buildHarness,
   environmentVcs,
@@ -29,143 +15,24 @@ import {
   put,
   stubGateways,
   type TestHarness,
-  viewerVcs,
 } from './helpers.js'
+import {
+  APPROVING,
+  appHarness,
+  assessmentOf,
+  collected,
+  host,
+  opened,
+  parkedWith,
+  reviewOf,
+  RISKY,
+  setPolicy,
+  wired,
+} from './risk-harness.js'
 
 // Assessing the board's pull requests and approving the ones the org's risk
 // policy lets through, with nobody looking. Every case drives the deferred work
 // to completion before it asserts, the way a runtime's `waitUntil` would.
-
-const DOCS: ChangedFile[] = [
-  { path: 'docs/guide.md', previousPath: null, status: 'modified', additions: 12, deletions: 3 },
-]
-
-const RISKY: ChangedFile[] = [
-  {
-    path: 'src/auth/session.ts',
-    previousPath: null,
-    status: 'modified',
-    additions: 180,
-    deletions: 40,
-  },
-  {
-    path: 'migrations/0009_users.sql',
-    previousPath: null,
-    status: 'added',
-    additions: 30,
-    deletions: 0,
-  },
-]
-
-const APPROVING: RiskPolicyInput = {
-  assess: true,
-  autoApprove: true,
-  classRules: { docs: 'always' },
-}
-
-/** A host whose pull request #7 changes `files` at `head`, recording what it was asked to approve. */
-function host(author = 'author') {
-  const state = { files: DOCS, head: 'sha-1' }
-  const approvals: { headSha: string; body: string }[] = []
-  const withdrawals: { approvalId: string | null; message: string }[] = []
-  const base = viewerVcs('installation')
-  const gateway: VcsGateway = {
-    ...base,
-    pullRequestStatus: async (pr) => ({
-      ...(await base.pullRequestStatus(pr)),
-      authorLogin: author,
-      headSha: state.head,
-    }),
-    changedFiles: async () => ({ files: state.files, truncated: false }),
-    approve: async (_pr, input) => {
-      approvals.push(input)
-      return { approvalId: `approval-${approvals.length}`, bodyPosted: true }
-    },
-    withdrawApproval: async (_pr, input) => {
-      withdrawals.push(input)
-      return { messagePosted: true }
-    },
-  }
-  return { gateway, state, approvals, withdrawals }
-}
-
-/** The runtime's `waitUntil`, held so a case can wait for what a request started. */
-function collected(): { defer: Deferral; settle: () => Promise<void> } {
-  const work: Promise<unknown>[] = []
-  return {
-    defer: (promise) => {
-      work.push(promise)
-    },
-    settle: async () => {
-      while (work.length > 0) await work.shift()
-    },
-  }
-}
-
-const APP_WIRING = { appSlug: 'sainte-beuve', webhookSecret: null, botLogin: null }
-
-/** A deployment whose GitHub App reads the pull request and approves it. */
-function appHarness(
-  github = host(),
-  gateways: Partial<GatewayFactory> = {},
-  container: Partial<AppContainer> = {},
-) {
-  const deferred = collected()
-  const harness = buildHarness({
-    defer: deferred.defer,
-    github: APP_WIRING,
-    gateways: stubGateways({
-      vcsAsApp: (provider) => (provider === 'github' ? github.gateway : null),
-      ...gateways,
-    }),
-    ...container,
-  })
-  return { harness, github, settle: deferred.settle }
-}
-
-/** The org's policy, set after it registers the repository PR #7 is in, which approving needs. */
-async function setPolicy(harness: TestHarness, policy: RiskPolicyInput): Promise<Response> {
-  await holdRepository(harness)
-  return harness.app.fetch(put('/api/v1/settings/risk-policy', policy))
-}
-
-async function holdRepository(harness: TestHarness): Promise<void> {
-  await harness.app.fetch(
-    post('/api/v1/projects', { provider: PR.provider, owner: PR.owner, repo: PR.repo }),
-  )
-}
-
-async function assessmentOf(
-  harness: TestHarness,
-  reviewId: string,
-): Promise<RiskAssessment | null> {
-  const res = await harness.app.fetch(get(`/api/v1/reviews/${reviewId}/risk-assessment`))
-  expect(res.status).toBe(200)
-  return ((await res.json()) as { assessment: RiskAssessment | null }).assessment
-}
-
-async function reviewOf(harness: TestHarness, reviewId: string): Promise<ReviewRequest> {
-  return (await (
-    await harness.app.fetch(get(`/api/v1/reviews/${reviewId}`))
-  ).json()) as ReviewRequest
-}
-
-/** A pull request opening on the host, as the intake performs it. */
-async function opened(harness: TestHarness): Promise<string> {
-  const outcome = await new ReviewIntake(harness.container).perform({
-    kind: 'track',
-    route: false,
-    review: {
-      pullRequest: PR,
-      title: 'Document the health check',
-      authorLogin: 'author',
-      requiredSkills: [],
-      priority: 'normal',
-      dueAt: null,
-    },
-  })
-  return outcome.reviewId as string
-}
 
 describe('the risk policy', () => {
   it('starts assessing nothing, and reports who would approve', async () => {
@@ -459,6 +326,7 @@ describe('the clock', () => {
       verdict: null,
       holdReason: null,
       aiReviewRunId: null,
+      aiReviewRating: null,
       approvedAs: null,
       approvalId: null,
       attempts: 0,
@@ -487,55 +355,7 @@ describe('the clock', () => {
 })
 
 /** A parked review that found the given severities. */
-function parkedWith(
-  severities: ('blocker' | 'high' | 'medium' | 'low' | 'nit')[],
-): AiReviewCuration {
-  return {
-    status: 'awaiting_selection',
-    findings: severities.map((severity, index) => ({
-      findingId: `f-${index}`,
-      title: 'A finding',
-      detail: 'Detail',
-      path: 'docs/guide.md',
-      line: 3,
-      side: 'RIGHT',
-      severity,
-      category: 'correctness',
-      suggestedFix: null,
-      sliceId: null,
-      challenge: null,
-    })),
-    selectedFindingIds: [],
-    postedFindingIds: [],
-    postedBody: false,
-    postAttempts: 0,
-    postReport: null,
-    sliceCount: 1,
-    reportedSliceCount: 1,
-    lastActivityAt: null,
-    resumeAttempts: 0,
-    maxResumeAttempts: 2,
-    summary: null,
-    slices: [],
-  }
-}
-
 describe('with cat-factory', () => {
-  async function wired(gateways: Partial<GatewayFactory>) {
-    const github = host()
-    const deferred = collected()
-    const harness = buildHarness({
-      ...catFactoryWired({}),
-      defer: deferred.defer,
-      github: APP_WIRING,
-      gateways: stubGateways({ vcsAsApp: () => github.gateway, ...gateways }),
-    })
-    // Before cat-factory is connected, since its directory decides the repositories after.
-    await holdRepository(harness)
-    await connectCatFactory(harness)
-    return { harness, github, settle: deferred.settle }
-  }
-
   it('approves only once the AI review the policy requires comes back clean', async () => {
     const aiReview = stubAiReview()
     const { harness, github, settle } = await wired({ aiReview: () => aiReview })
@@ -555,7 +375,7 @@ describe('with cat-factory', () => {
     await runReminderTick(harness.container)
 
     expect(await assessmentOf(harness, reviewId)).toMatchObject({ status: 'approved' })
-    expect(github.approvals[0]?.body).toContain('An AI review found nothing')
+    expect(github.approvals[0]?.body).toContain('An AI review rated it 0.95 and found nothing')
     expect(aiReview.resolved).toEqual([
       expect.objectContaining({ action: 'finish', findingIds: [] }),
     ])

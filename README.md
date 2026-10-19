@@ -132,9 +132,13 @@ org's ceilings and to a rule per kind of change (documentation, tests, dependenc
 bumps, CI, code, migrations), or handed to one of the org's cat-factory risk
 policies for its verdict.
 
+Both can run on their own as a pull request opens or leaves draft: the
+assessment, and cat-factory's AI review, each behind its own switch.
+
 A pull request within the policy can be approved with nobody looking, as the bot
-account the org stored a token for (or the GitHub App), and only after a clean
-AI review if the policy asks for one. New commits withdraw that approval and the
+account the org stored a token for (or the GitHub App), and only after an AI
+review that vouches for it if the policy asks for one: nothing at the blocking
+severity, and a rating at or above the minimum (0.8, cat-factory's own bar). New commits withdraw that approval and the
 new head is assessed again. The board row says where each one stands and why.
 See [docs/risk-policy.md](./docs/risk-policy.md).
 

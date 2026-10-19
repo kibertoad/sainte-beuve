@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { aiReviewSeveritySchema } from './ai-review.js'
+import { type AiReviewSeverity, aiReviewSeveritySchema } from './ai-review.js'
 import { pullRequestRefSchema } from './vcs.js'
 
 // ---------------------------------------------------------------------------
@@ -83,8 +83,17 @@ export const riskPolicySourceSchema = v.picklist(['native', 'cat-factory'])
 export type RiskPolicySource = v.InferOutput<typeof riskPolicySourceSchema>
 
 const riskPolicyEntries = {
-  /** Score every pull request the board starts tracking. Off, nothing is assessed. */
+  /**
+   * Score every pull request the board starts tracking, and score one again when
+   * it opens or leaves draft. Off, nothing is assessed unprompted.
+   */
   assess: v.optional(v.boolean(), false),
+  /**
+   * File cat-factory's AI review of a pull request when it opens as a non-draft
+   * or leaves draft, whatever its assessment says. Its findings park for a
+   * person as any other review's do.
+   */
+  autoAiReview: v.optional(v.boolean(), false),
   assessor: v.optional(riskAssessorSchema, 'heuristic'),
   policySource: v.optional(riskPolicySourceSchema, 'native'),
   /** The cat-factory policy to evaluate against; null takes its unattended default. */
@@ -102,6 +111,27 @@ const riskPolicyEntries = {
    */
   requireAiReview: v.optional(v.boolean(), false),
   blockingSeverity: v.optional(aiReviewSeveritySchema, 'medium'),
+  /**
+   * The lowest rating (0..1) the AI review may give and the pull request still
+   * be approved. cat-factory's own reviewer gate passes at 0.8, and so does this.
+   * The rating is read off the findings: see `aiReviewRating` in `@sainte-beuve/risk`.
+   */
+  minAiReviewRating: v.optional(riskScoreSchema, 0.8),
+}
+
+/**
+ * What one finding still standing takes off an AI review's perfect rating of 1,
+ * which is how a rating is read off a review that reports findings and no score.
+ * A blocker costs the whole of it. Three mediums, or one high and a medium, take
+ * a review below cat-factory's 0.8; a handful of nits never does. Here rather
+ * than beside the gate so the screen that sets the minimum can say what it means.
+ */
+export const AI_REVIEW_SEVERITY_PENALTY: Readonly<Record<AiReviewSeverity, number>> = {
+  blocker: 1,
+  high: 0.25,
+  medium: 0.1,
+  low: 0.04,
+  nit: 0.01,
 }
 
 const CONSISTENT_SOURCES =
@@ -197,6 +227,11 @@ export const riskAssessmentSchema = v.object({
   holdReason: v.nullable(v.string()),
   /** The AI review the policy asked for before approving. */
   aiReviewRunId: v.nullable(v.string()),
+  /**
+   * What that review rated the pull request, once it settled. A default for a
+   * row written before the rating existed, since the row is a parsed payload.
+   */
+  aiReviewRating: v.optional(v.nullable(riskScoreSchema), null),
   /** The account the approval was posted as. */
   approvedAs: v.nullable(v.string()),
   /** The host's id for that approval, so it can be withdrawn when new commits arrive. */

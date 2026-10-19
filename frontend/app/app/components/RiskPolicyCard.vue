@@ -8,10 +8,11 @@ import type {
   RiskPolicySource,
   RuleableChangeClass,
 } from '@sainte-beuve/contracts'
-import { RULEABLE_CHANGE_CLASSES } from '@sainte-beuve/contracts'
+import { AI_REVIEW_SEVERITY_PENALTY, RULEABLE_CHANGE_CLASSES } from '@sainte-beuve/contracts'
 
 // The org's risk policy: whether pull requests are assessed, who scores them,
-// which scores pass, and whether a pass is approved with nobody looking.
+// which scores pass, whether every new one gets an AI review, and whether a pass
+// is approved with nobody looking.
 const props = defineProps<{
   policy: RiskPolicy
   catFactoryAvailable: boolean
@@ -107,6 +108,19 @@ watch(
   },
 )
 
+// What each finding costs the rating, as the minimum's description says it.
+const ratingCosts = (['high', 'medium', 'low', 'nit'] as const)
+  .map((severity) => `${severity} ${AI_REVIEW_SEVERITY_PENALTY[severity]}`)
+  .join(', ')
+
+/**
+ * A switch that needs cat-factory stays reachable while it is on, so an org that
+ * lost its connection can still turn it off.
+ */
+function needsCatFactory(on: boolean): boolean {
+  return !props.admin || (!props.catFactoryAvailable && !on)
+}
+
 const ceilings: { key: 'maxComplexity' | 'maxRisk' | 'maxImpact'; label: string }[] = [
   { key: 'maxComplexity', label: 'Complexity' },
   { key: 'maxRisk', label: 'Risk' },
@@ -127,8 +141,16 @@ const ceilings: { key: 'maxComplexity' | 'maxRisk' | 'maxImpact'; label: string 
     <div class="flex flex-col gap-5 max-w-2xl">
       <USwitch
         v-model="draft.assess"
-        label="Assess every pull request the board starts tracking"
+        label="Assess a pull request when it opens, or when it leaves draft"
+        description="Any pull request the board starts tracking is assessed too. A draft is scored but never approved."
         :disabled="!admin"
+      />
+
+      <USwitch
+        v-model="draft.autoAiReview"
+        label="Run cat-factory's AI review when a pull request opens, or when it leaves draft"
+        description="Drafts wait until they are marked ready. Its findings park on the AI review screen for a person, unless an approval below settles the review."
+        :disabled="needsCatFactory(draft.autoAiReview)"
       />
 
       <template v-if="draft.assess">
@@ -230,22 +252,37 @@ const ceilings: { key: 'maxComplexity' | 'maxRisk' | 'maxImpact'; label: string 
         <template v-if="draft.autoApprove">
           <USwitch
             v-model="draft.requireAiReview"
-            label="Run cat-factory's AI review first, and approve only if it comes back clean"
-            :disabled="!admin || !catFactoryAvailable"
+            label="Wait for cat-factory's AI review, and approve only if it rates the change well enough"
+            description="The review filed when the pull request opened is the one waited on, when there is one."
+            :disabled="needsCatFactory(draft.requireAiReview)"
           />
-          <UFormField
-            v-if="draft.requireAiReview"
-            label="A finding that holds it for a person"
-            description="The review stays parked with its findings for a person to curate."
-          >
-            <USelect
-              v-model="draft.blockingSeverity"
-              :items="severities"
-              value-key="value"
-              class="w-full sm:w-64"
-              :disabled="!admin"
-            />
-          </UFormField>
+          <template v-if="draft.requireAiReview">
+            <UFormField
+              label="A finding that holds it for a person"
+              description="The review stays parked with its findings for a person to curate."
+            >
+              <USelect
+                v-model="draft.blockingSeverity"
+                :items="severities"
+                value-key="value"
+                class="w-full sm:w-64"
+                :disabled="!admin"
+              />
+            </UFormField>
+            <UFormField
+              label="Lowest rating it may give"
+              :description="`From 0 to 1. A review that found nothing rates 1, and each finding takes off what its severity costs (${ratingCosts}). cat-factory's own reviewer passes at 0.8.`"
+            >
+              <UInputNumber
+                v-model="draft.minAiReviewRating"
+                :min="0"
+                :max="1"
+                :step="0.05"
+                class="w-full sm:w-40"
+                :disabled="!admin"
+              />
+            </UFormField>
+          </template>
         </template>
       </template>
 

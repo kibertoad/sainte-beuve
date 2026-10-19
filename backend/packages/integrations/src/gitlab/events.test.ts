@@ -71,6 +71,7 @@ describe('interpretGitLabDelivery: merge requests', () => {
       {
         kind: 'track',
         route: false,
+        ready: true,
         review: {
           pullRequest: REF,
           title: 'Add a health check',
@@ -86,7 +87,9 @@ describe('interpretGitLabDelivery: merge requests', () => {
   it('leaves a draft alone until it leaves draft, then tracks it', () => {
     expect(interpretGitLabDelivery(mergeRequest('open', {}, { draft: true }), CONTEXT)).toEqual([])
     const ready = mergeRequest('update', { changes: { draft: { previous: true, current: false } } })
-    expect(interpretGitLabDelivery(ready, CONTEXT)).toMatchObject([{ kind: 'track', route: false }])
+    expect(interpretGitLabDelivery(ready, CONTEXT)).toMatchObject([
+      { kind: 'track', route: false, ready: true },
+    ])
   })
 
   it('reads the older work_in_progress flag as draft too', () => {
@@ -118,15 +121,16 @@ describe('interpretGitLabDelivery: merge requests', () => {
       labels: [{ title: 'needs-review' }, { title: 'ai-review' }],
     })
     expect(interpretGitLabDelivery(opened, CONTEXT)).toMatchObject([
-      { kind: 'track', route: true, review: { authorLogin: 'ada' } },
+      { kind: 'track', route: true, ready: true, review: { authorLogin: 'ada' } },
       { kind: 'ai_review', pullRequest: REF, author: 'ada' },
     ])
   })
 
   it('does not route again on the labels a reopened merge request still carries', () => {
     const reopened = mergeRequest('reopen', { labels: [{ title: 'needs-review' }] })
+    // Nor is a reopen a new review request, so nothing runs on it unprompted.
     expect(interpretGitLabDelivery(reopened, CONTEXT)).toMatchObject([
-      { kind: 'track', route: false },
+      { kind: 'track', route: false, ready: false },
     ])
   })
 
@@ -138,7 +142,9 @@ describe('interpretGitLabDelivery: merge requests', () => {
         labels: { previous: [], current: [{ title: 'needs-review' }] },
       },
     })
-    expect(interpretGitLabDelivery(ready, CONTEXT)).toMatchObject([{ kind: 'track', route: true }])
+    expect(interpretGitLabDelivery(ready, CONTEXT)).toMatchObject([
+      { kind: 'track', route: true, ready: true },
+    ])
   })
 
   it('does nothing for a label that was already there or matches no rule', () => {

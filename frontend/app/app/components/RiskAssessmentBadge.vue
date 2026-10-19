@@ -33,6 +33,8 @@ const detail = computed(() => {
     )
   }
   if (verdict !== null) lines.push(`Judged by the ${verdict.policyName} policy`)
+  const rating = props.assessment.aiReviewRating ?? null
+  if (rating !== null) lines.push(`The AI review rated it ${rating}`)
   if (verdict !== null && verdict.exceededAxes.length > 0) {
     lines.push(`Over the ceiling on ${verdict.exceededAxes.join(', ')}`)
   }

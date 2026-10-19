@@ -1,14 +1,11 @@
 import type {
-  AiReviewCuration,
-  AiReviewFinding,
-  AiReviewRun,
-  AiReviewSeverity,
   PullRequestStatus,
   RiskPolicy,
   RiskVerdict,
   VcsProvider,
 } from '@sainte-beuve/contracts'
 import { vcsDisplayName } from '@sainte-beuve/contracts'
+import type { AiReviewJudgement } from './aiReviewGate.js'
 
 /** What to do next with an assessed pull request. */
 export type ApprovalStep =
@@ -31,8 +28,8 @@ export interface ApprovalContext {
   repositoryHeld: boolean
   /** The account approvals go out as, or null when the org has none on this host. */
   approver: { username: string | null } | null
-  /** The AI review the policy asked for, once it has settled on findings; null before. */
-  aiReview: 'clean' | 'blocked' | null
+  /** The AI review the policy asked for, judged once it has settled; null before. */
+  aiReview: AiReviewJudgement | null
 }
 
 function hold(status: 'within_policy' | 'requires_review', reason: string | null): ApprovalStep {
@@ -67,47 +64,7 @@ export function planApproval(context: ApprovalContext): ApprovalStep {
   if (reason !== null) return hold('within_policy', reason)
   if (!policy.requireAiReview) return { kind: 'approve' }
   if (context.aiReview === null) return { kind: 'ai_review' }
-  return context.aiReview === 'clean'
+  return context.aiReview.outcome === 'clean'
     ? { kind: 'approve' }
-    : hold('requires_review', 'the AI review found something a person should look at')
-}
-
-const SEVERITY_RANK: Record<AiReviewSeverity, number> = {
-  blocker: 4,
-  high: 3,
-  medium: 2,
-  low: 1,
-  nit: 0,
-}
-
-function blocks(finding: AiReviewFinding, threshold: AiReviewSeverity): boolean {
-  if (finding.challenge?.status === 'retracted') return false
-  return SEVERITY_RANK[finding.severity] >= SEVERITY_RANK[threshold]
-}
-
-/** The findings that hold a pull request for a person under this threshold. */
-export function blockingFindings(
-  curation: AiReviewCuration | null,
-  threshold: AiReviewSeverity,
-): AiReviewFinding[] {
-  return (curation?.findings ?? []).filter((finding) => blocks(finding, threshold))
-}
-
-/**
- * What an AI review run means for approval: null while it is still working,
- * `clean` when it settled with nothing at the threshold, `blocked` otherwise.
- * A run that failed or was cancelled blocks, since nobody vouched for the code.
- * A completed run is judged by its findings too: a person may have curated and
- * posted them before this looked.
- */
-export function aiReviewOutcome(
-  run: Pick<AiReviewRun, 'status' | 'curation'>,
-  threshold: AiReviewSeverity,
-): 'clean' | 'blocked' | null {
-  if (run.status === 'failed' || run.status === 'cancelled') return 'blocked'
-  const settled =
-    run.status === 'completed' ||
-    (run.status === 'awaiting_selection' && run.curation?.status === 'awaiting_selection')
-  if (!settled) return null
-  return blockingFindings(run.curation, threshold).length === 0 ? 'clean' : 'blocked'
+    : hold('requires_review', context.aiReview.reason)
 }

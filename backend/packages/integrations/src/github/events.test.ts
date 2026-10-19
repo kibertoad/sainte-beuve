@@ -72,7 +72,7 @@ describe('interpretGitHubDelivery: pull requests', () => {
     // Tracked and unassigned on purpose: opening a pull request is not the same
     // gesture as asking for a reviewer, and `open` is the state the reminder
     // ladder exists to shorten.
-    expect(intent).toMatchObject({ kind: 'track', route: false })
+    expect(intent).toMatchObject({ kind: 'track', route: false, ready: true })
     expect(intent).toMatchObject({ review: { pullRequest: REF, authorLogin: 'kibertoad' } })
   })
 
@@ -93,7 +93,14 @@ describe('interpretGitHubDelivery: pull requests', () => {
     const ready = pullRequest({ action: 'ready_for_review' })
     expect(
       interpretGitHubDelivery({ event: 'pull_request', payload: ready }, CONTEXT),
-    ).toMatchObject({ kind: 'track' })
+    ).toMatchObject({ kind: 'track', ready: true })
+  })
+
+  it('tracks a reopened pull request without calling it newly ready', () => {
+    const reopened = pullRequest({ action: 'reopened' })
+    expect(
+      interpretGitHubDelivery({ event: 'pull_request', payload: reopened }, CONTEXT),
+    ).toMatchObject({ kind: 'track', ready: false })
   })
 
   it('closes a review when the pull request closes', () => {
@@ -121,7 +128,7 @@ describe('interpretGitHubDelivery: labels', () => {
     const labeled = pullRequest({ action: 'labeled', label: { name: 'needs-review' } })
     expect(
       interpretGitHubDelivery({ event: 'pull_request', payload: labeled }, CONTEXT),
-    ).toMatchObject({ kind: 'track', route: true })
+    ).toMatchObject({ kind: 'track', route: true, ready: false })
   })
 
   it('delegates to cat-factory when the AI-review label lands', () => {

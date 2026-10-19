@@ -22,6 +22,10 @@ export type BotVerb = 'review' | 'reroll' | 'ai' | 'status'
  * the reminder ladder exists to shorten), while the review LABEL is a team member
  * explicitly asking for a reviewer now.
  *
+ * `ready` on `track` says the pull request just became a review request: it
+ * opened as a non-draft, or left draft. That is what an org's automation runs
+ * on (an assessment, an AI review), where a reopen or a label is not.
+ *
  * `unapprove` is an approval taken back. Only GitLab says so as an event of its
  * own, and it puts a review the approval had settled back on the clock.
  *
@@ -33,7 +37,7 @@ export type BotVerb = 'review' | 'reroll' | 'ai' | 'status'
  * a row with it.
  */
 export type IntakeIntent =
-  | { kind: 'track'; review: IntakeReview; route: boolean }
+  | { kind: 'track'; review: IntakeReview; route: boolean; ready: boolean }
   | { kind: 'close'; pullRequest: PullRequestRef }
   | { kind: 'resolve'; pullRequest: PullRequestRef; status: 'approved' | 'changes_requested' }
   | { kind: 'unapprove'; pullRequest: PullRequestRef }
@@ -131,7 +135,12 @@ export function labelIntent(
   if (added === undefined) return null
   if (added === rules.aiReview) return { kind: 'ai_review', pullRequest: ref, author: pr.author }
   if (added !== rules.review) return null
-  return { kind: 'track', route: true, review: reviewRequest(ref, pr.title, pr.author, pr.skills) }
+  return {
+    kind: 'track',
+    route: true,
+    ready: false,
+    review: reviewRequest(ref, pr.title, pr.author, pr.skills),
+  }
 }
 
 export function reviewRequest(
