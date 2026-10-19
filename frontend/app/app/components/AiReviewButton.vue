@@ -71,27 +71,30 @@ function refusedReviewId(err: unknown): string | null {
 </script>
 
 <template>
-  <template v-if="progress.length > 0">
+  <!-- One element root: rows swap between the button and the progress links in the same tick a click navigates away. -->
+  <span class="contents">
+    <template v-if="progress.length > 0">
+      <UButton
+        v-for="link in progress"
+        :key="link.key"
+        :to="link.to"
+        :title="link.title"
+        size="sm"
+        variant="ghost"
+        icon="i-lucide-loader"
+      >
+        {{ link.label }}
+      </UButton>
+    </template>
     <UButton
-      v-for="link in progress"
-      :key="link.key"
-      :to="link.to"
-      :title="link.title"
+      v-else-if="capabilities.confirmed('aiReview')"
       size="sm"
       variant="ghost"
-      icon="i-lucide-loader"
+      icon="i-lucide-bot"
+      :loading="busy"
+      @click="file"
     >
-      {{ link.label }}
+      AI review
     </UButton>
-  </template>
-  <UButton
-    v-else-if="capabilities.confirmed('aiReview')"
-    size="sm"
-    variant="ghost"
-    icon="i-lucide-bot"
-    :loading="busy"
-    @click="file"
-  >
-    AI review
-  </UButton>
+  </span>
 </template>
