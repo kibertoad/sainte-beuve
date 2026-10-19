@@ -5,6 +5,7 @@ import {
   AI_REVIEW_IN_FLIGHT_CEILING_MS,
   type AdmissionRun,
   decideAiReviewAdmission,
+  isAiReviewInFlight,
 } from './aiAdmission.js'
 
 const NOW = 1_700_000_000_000
@@ -70,5 +71,14 @@ describe('decideAiReviewAdmission', () => {
       run({ status: 'failed', catFactoryTaskId: null }),
     )
     expect(decideAiReviewAdmission(refused, NOW)).toStrictEqual({ admitted: true })
+  })
+})
+
+describe('isAiReviewInFlight', () => {
+  it('holds a filed run until its ceiling, and a settled one never', () => {
+    expect(isAiReviewInFlight(run({ status: 'running' }), NOW)).toBe(true)
+    expect(isAiReviewInFlight(run({ status: 'completed' }), NOW)).toBe(false)
+    const stale = run({ status: 'running', requestedAt: NOW - AI_REVIEW_IN_FLIGHT_CEILING_MS })
+    expect(isAiReviewInFlight(stale, NOW)).toBe(false)
   })
 })

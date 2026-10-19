@@ -7,6 +7,8 @@ import { MAX_ASSESSMENT_LOOKUP } from '@sainte-beuve/contracts'
  *
  * Every row asks for its own pull request, and the asks of one render are read
  * in a single lookup, so a list of fifty rows is one request rather than fifty.
+ * `assessing` holds the pull requests being assessed now, so every row showing
+ * one waits on that assessment instead of offering a second.
  */
 const queued = new Map<string, PullRequestRef>()
 let flushing: Promise<void> | null = null
@@ -17,6 +19,7 @@ export function usePullRequestAssessments() {
     'pull-request-assessments',
     () => ({}),
   )
+  const assessing = useState<Record<string, true>>('pull-requests-assessing', () => ({}))
 
   async function flush(): Promise<void> {
     await nextTick()
@@ -47,5 +50,5 @@ export function usePullRequestAssessments() {
     known.value[assessment.pullRequest.url] = assessment
   }
 
-  return { known, want, remember }
+  return { known, want, remember, assessing }
 }

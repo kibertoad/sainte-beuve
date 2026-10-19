@@ -64,7 +64,8 @@ export function decideAiReviewAdmission(
   runs: readonly AdmissionRun[],
   now: number,
 ): AiReviewAdmission {
-  if (runs.some((run) => isInFlight(run, now))) return { admitted: false, reason: 'in_flight' }
+  if (runs.some((run) => isAiReviewInFlight(run, now)))
+    return { admitted: false, reason: 'in_flight' }
   const filed = runs
     .filter((run) => run.catFactoryTaskId !== null && now - run.requestedAt < HOUR_MS)
     .map((run) => run.requestedAt)
@@ -75,7 +76,11 @@ export function decideAiReviewAdmission(
   return { admitted: false, reason: 'hourly_limit', retryAt: oldest + HOUR_MS }
 }
 
-function isInFlight(run: AdmissionRun, now: number): boolean {
+/**
+ * Whether a run holds its review's one place in flight now: an in-flight status,
+ * inside the ceiling that applies to it.
+ */
+export function isAiReviewInFlight(run: AdmissionRun, now: number): boolean {
   if (!IN_FLIGHT.has(run.status)) return false
   const age = now - run.requestedAt
   if (run.catFactoryTaskId !== null) return age < AI_REVIEW_IN_FLIGHT_CEILING_MS

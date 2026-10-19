@@ -24,6 +24,7 @@ export {
   type AdmissionRun,
   type AiReviewAdmission,
   decideAiReviewAdmission,
+  isAiReviewInFlight,
 } from './aiAdmission.js'
 export {
   type AiChallengeAdmission,

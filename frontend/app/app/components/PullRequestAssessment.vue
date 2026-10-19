@@ -8,8 +8,8 @@ const props = defineProps<{ pullRequest: PullRequestRef }>()
 
 const api = useSainteBeuveApi()
 const capabilities = useCapabilities()
-const { known, want, remember } = usePullRequestAssessments()
-const { busy, run } = useApiAction()
+const { known, want, remember, assessing } = usePullRequestAssessments()
+const { run } = useApiAction()
 
 watch(
   () => props.pullRequest.url,
@@ -31,12 +31,20 @@ function colorOf(score: number): 'success' | 'warning' | 'error' {
   return score >= 1 / 3 ? 'warning' : 'success'
 }
 
+const inFlight = computed(() => assessing.value[props.pullRequest.url] === true)
+
 async function assess(): Promise<void> {
-  await run(
-    async () => remember(await api.assessPullRequest(props.pullRequest)),
-    'Could not assess the pull request',
-    'assess',
-  )
+  const { url } = props.pullRequest
+  if (assessing.value[url]) return
+  assessing.value[url] = true
+  try {
+    await run(
+      async () => remember(await api.assessPullRequest(props.pullRequest)),
+      'Could not assess the pull request',
+    )
+  } finally {
+    delete assessing.value[url]
+  }
 }
 </script>
 
@@ -61,9 +69,9 @@ async function assess(): Promise<void> {
     size="sm"
     variant="ghost"
     icon="i-lucide-gauge"
-    :loading="busy === 'assess'"
+    :loading="inFlight"
     @click="assess()"
   >
-    Assess
+    {{ inFlight ? 'Assessing' : 'Assess' }}
   </UButton>
 </template>

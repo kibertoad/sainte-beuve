@@ -334,6 +334,27 @@ export type RequestPullRequestAiReview = v.InferOutput<typeof requestPullRequest
 /** What a CALLER sends: the schema before defaults, so the optional fields are optional. */
 export type RequestPullRequestAiReviewInput = v.InferInput<typeof requestPullRequestAiReviewSchema>
 
+/** How many pull requests one in-flight lookup names: a list screen's worth. */
+export const MAX_AI_REVIEW_LOOKUP = 200
+
+export const lookUpAiReviewsInFlightSchema = v.object({
+  pullRequests: v.pipe(v.array(pullRequestRefSchema), v.maxLength(MAX_AI_REVIEW_LOOKUP)),
+})
+export type LookUpAiReviewsInFlight = v.InferOutput<typeof lookUpAiReviewsInFlightSchema>
+
+/** A run that still holds its pull request's one place in flight, so another is refused. */
+export const aiReviewInFlightSchema = v.object({
+  pullRequest: pullRequestRefSchema,
+  reviewId: v.string(),
+  runId: v.string(),
+  status: aiReviewStatusSchema,
+  requestedAt: v.number(),
+})
+export type AiReviewInFlight = v.InferOutput<typeof aiReviewInFlightSchema>
+
+export const aiReviewInFlightListSchema = v.object({ runs: v.array(aiReviewInFlightSchema) })
+export type AiReviewInFlightList = v.InferOutput<typeof aiReviewInFlightListSchema>
+
 /** Ask cat-factory's investigator to re-examine one finding. */
 export const challengeAiReviewFindingSchema = v.object({
   /**

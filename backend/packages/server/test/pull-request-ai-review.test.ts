@@ -1,4 +1,4 @@
-import type { AiReviewRun } from '@sainte-beuve/contracts'
+import type { AiReviewInFlightList, AiReviewRun } from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import { stubAiReview } from './ai-review-doubles.js'
 import { catFactoryWired, connectCatFactory } from './cat-factory-harness.js'
@@ -11,6 +11,7 @@ import {
   PR,
   post,
   recordingVcs,
+  type TestHarness,
 } from './helpers.js'
 
 /**
@@ -127,5 +128,44 @@ describe('filing an AI review by pull request', () => {
     const { harness } = await wired()
     const res = await harness.app.fetch(post('/api/v1/ai-review', { pullRequest: PR, title: ' ' }))
     expect(res.status).toBe(400)
+  })
+})
+
+describe('looking up the AI reviews in flight on a list', () => {
+  const OTHER = { ...PR, number: 8, url: 'https://github.com/kibertoad/sainte-beuve/pull/8' }
+
+  async function lookUp(harness: TestHarness, pullRequests: unknown[]) {
+    const res = await harness.app.fetch(
+      post('/api/v1/ai-review/in-flight/lookup', { pullRequests }),
+    )
+    expect(res.status).toBe(200)
+    return ((await res.json()) as AiReviewInFlightList).runs
+  }
+
+  it('names the run in flight on a pull request, so the row offers its progress', async () => {
+    const { harness } = await wired()
+    const filed = (await (
+      await harness.app.fetch(post('/api/v1/ai-review', BODY))
+    ).json()) as AiReviewRun
+
+    expect(await lookUp(harness, [PR, OTHER])).toStrictEqual([
+      {
+        pullRequest: PR,
+        reviewId: filed.reviewId,
+        runId: filed.id,
+        status: 'running',
+        requestedAt: filed.requestedAt,
+      },
+    ])
+  })
+
+  it('names nothing once the run has settled', async () => {
+    const { harness } = await wired()
+    const filed = (await (
+      await harness.app.fetch(post('/api/v1/ai-review', BODY))
+    ).json()) as AiReviewRun
+    await harness.container.repositories.aiReviewRuns.update(filed.id, { status: 'completed' })
+
+    expect(await lookUp(harness, [PR])).toStrictEqual([])
   })
 })

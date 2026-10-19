@@ -1,9 +1,14 @@
-import type { RequestPullRequestAiReviewInput, ResolveAiReviewInput } from '@sainte-beuve/contracts'
+import type {
+  PullRequestRef,
+  RequestPullRequestAiReviewInput,
+  ResolveAiReviewInput,
+} from '@sainte-beuve/contracts'
 import {
   challengeAiReviewFindingContract,
   dismissAiReviewFindingContract,
   getReviewContract,
   listAiReviewRunsContract,
+  lookUpAiReviewsInFlightContract,
   requestAiReviewContract,
   requestPullRequestAiReviewContract,
   resolveAiReviewContract,
@@ -24,6 +29,9 @@ export function aiReviewCalls(call: ContractCaller) {
      */
     requestPullRequestAiReview: (body: RequestPullRequestAiReviewInput) =>
       call(requestPullRequestAiReviewContract, { body }),
+    /** The runs in flight on a list's pull requests, read from the store. */
+    lookUpAiReviewsInFlight: (pullRequests: PullRequestRef[]) =>
+      call(lookUpAiReviewsInFlightContract, { body: { pullRequests } }),
     /** The board row the runs belong to: the pull request the review screen is about. */
     getReview: (reviewId: string) => call(getReviewContract, { pathParams: { reviewId } }),
     /** Every delegated run for one review. Each in-flight one is POLLED to answer this. */
