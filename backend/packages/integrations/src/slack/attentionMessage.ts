@@ -1,5 +1,9 @@
 import type { AttentionRequest } from '@sainte-beuve/contracts'
-import { formatPullRequest, type AttentionAskNotice } from '@sainte-beuve/kernel'
+import {
+  formatPullRequest,
+  type AttentionAskNotice,
+  type ReviewDeclinedNotice,
+} from '@sainte-beuve/kernel'
 import { SLACK_ACTIONS } from './commands.js'
 import {
   button,
@@ -61,6 +65,18 @@ export function attentionShortMessage(
     `answer. Passed: ${escapeSlackText(passed)}.`
   if (appBaseUrl === undefined) return closed(text)
   return closed(`${text} ${slackLink(appBaseUrl, 'Ask the next best match')} from your inbox.`)
+}
+
+/**
+ * The DM an author gets when somebody refuses the review the host asked them
+ * for: who, on which pull request, and their reason when they gave one.
+ */
+export function reviewDeclinedMessage(notice: ReviewDeclinedNotice): SlackMessage {
+  const link = slackLink(notice.pullRequest.url, formatPullRequest(notice.pullRequest))
+  const text =
+    `${escapeSlackText(notice.declinedByName)} will not review ` +
+    `${link} ${escapeSlackText(notice.title)}.`
+  return closed(notice.reason === null ? text : `${text}\n${quoted(notice.reason)}`)
 }
 
 /** The ask itself, with the button that answers it. */

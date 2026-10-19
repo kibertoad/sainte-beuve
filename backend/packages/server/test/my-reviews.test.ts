@@ -1,4 +1,10 @@
-import type { AttentionRequest, MyReviews, OpenPullRequest, Project } from '@sainte-beuve/contracts'
+import type {
+  AttentionRequest,
+  DeclinedReviewRequest,
+  MyReviews,
+  OpenPullRequest,
+  Project,
+} from '@sainte-beuve/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   addReviewer,
@@ -7,6 +13,7 @@ import {
   get,
   openPullRequest,
   post,
+  recordingChat,
   type TestHarness,
   viewerVcs,
 } from './helpers.js'
@@ -162,5 +169,157 @@ describe('My Reviews', () => {
     const after = await list(harness)
     expect(after.requested.map((row) => row.pullRequest.number)).toStrictEqual([1])
     expect(after.committed.map((row) => row.pullRequest.number).sort()).toStrictEqual([2, 4])
+  })
+})
+
+/**
+ * A host that is waiting on whoever its pull requests name, and stops when a
+ * request is withdrawn, so a case can read the list again afterwards.
+ */
+function withdrawingVcs(username: string, pulls: OpenPullRequest[]) {
+  const withdrawn: string[][] = []
+  const vcs = viewerVcs(username, pulls)
+  const find = (number: number) => pulls.find((open) => open.pullRequest.number === number)
+  return {
+    ...vcs,
+    withdrawn,
+    pendingReviewers: async (ref: { number: number }) => [
+      ...(find(ref.number)?.requestedReviewerLogins ?? []),
+    ],
+    removeRequestedReviewers: async (ref: { number: number }, logins: string[]) => {
+      withdrawn.push(logins)
+      const open = find(ref.number)
+      if (open !== undefined) {
+        open.requestedReviewerLogins = open.requestedReviewerLogins.filter(
+          (login) => !logins.includes(login),
+        )
+      }
+    },
+  }
+}
+
+async function decline(
+  harness: TestHarness,
+  open: OpenPullRequest,
+  reason: string | null = null,
+): Promise<DeclinedReviewRequest> {
+  const res = await harness.app.fetch(
+    post(`${MINE}/decline`, { pullRequest: open.pullRequest, title: open.title, reason }),
+  )
+  expect(res.status).toBe(200)
+  return (await res.json()) as DeclinedReviewRequest
+}
+
+describe('declining a review request', () => {
+  it('withdraws the host request and comments to an author nobody can DM', async () => {
+    const pulls = [pr(1, 'api', { requestedReviewerLogins: ['Ada'] })]
+    const vcs = withdrawingVcs('ada', pulls)
+    const harness = buildHarness({ vcs: environmentVcs(vcs) })
+    await addProject(harness, 'api')
+
+    const declined = await decline(harness, pulls[0]!, 'On leave')
+
+    expect(declined).toStrictEqual({
+      withdrawnOnHost: true,
+      declinedAttentionIds: [],
+      authorNotice: 'comment',
+    })
+    expect(vcs.withdrawn).toStrictEqual([['Ada']])
+    expect(vcs.comments).toStrictEqual([
+      { number: 1, body: '@bob: ada will not review this pull request.\n\n> On leave' },
+    ])
+    expect((await list(harness)).requested).toStrictEqual([])
+  })
+
+  it('DMs an author who has a Slack id instead of commenting', async () => {
+    const pulls = [pr(1, 'api', { requestedReviewerLogins: ['ada'] })]
+    const vcs = withdrawingVcs('ada', pulls)
+    const chat = recordingChat()
+    const harness = buildHarness({ vcs: environmentVcs(vcs), chat })
+    await addProject(harness, 'api')
+    await addReviewer(harness, {
+      displayName: 'Bob',
+      handles: { github: 'bob' },
+      slackUserId: 'U-bob',
+    })
+
+    const declined = await decline(harness, pulls[0]!)
+
+    expect(declined.authorNotice).toBe('chat')
+    expect(chat.declinedNotices.map((entry) => entry.target)).toStrictEqual(['U-bob'])
+    expect(chat.declinedNotices[0]?.notice.reason).toBeNull()
+    expect(vcs.comments).toStrictEqual([])
+  })
+
+  it('declines a teammate ask on the same pull request, and only notifies the author for the host', async () => {
+    const pulls = [pr(1, 'api'), pr(2, 'api', { requestedReviewerLogins: ['ada'] })]
+    const asker = buildHarness({ vcs: environmentVcs(viewerVcs('kibertoad', pulls)) })
+    await addProject(asker, 'api')
+    await addReviewer(asker, { displayName: 'Igor', handles: { github: 'kibertoad' } })
+    const ada = await addReviewer(asker, { displayName: 'Ada', handles: { github: 'ada' } })
+    const res = await asker.app.fetch(
+      post('/api/v1/attention', {
+        pullRequest: pulls[0]!.pullRequest,
+        title: pulls[0]!.title,
+        recipientIds: [ada.id],
+        neededCommitments: 1,
+      }),
+    )
+    const ask = (await res.json()) as AttentionRequest
+    const vcs = withdrawingVcs('ada', pulls)
+    const harness = buildHarness({ ...asker.container, vcs: environmentVcs(vcs) })
+
+    const declined = await decline(harness, pulls[0]!, 'Not my area')
+
+    expect(declined).toStrictEqual({
+      withdrawnOnHost: false,
+      declinedAttentionIds: [ask.id],
+      authorNotice: 'none',
+    })
+    const stored = await harness.container.repositories.attention.getById(ask.id)
+    expect(stored?.declines.map((entry) => entry.reason)).toStrictEqual(['Not my area'])
+    expect(vcs.comments).toStrictEqual([])
+    expect((await list(harness)).requested.map((row) => row.pullRequest.number)).toStrictEqual([2])
+  })
+
+  it('answers with nothing done when nobody is waiting on the viewer any more', async () => {
+    const pulls = [pr(1, 'api')]
+    const vcs = withdrawingVcs('ada', pulls)
+    const harness = buildHarness({ vcs: environmentVcs(vcs) })
+
+    expect(await decline(harness, pulls[0]!)).toStrictEqual({
+      withdrawnOnHost: false,
+      declinedAttentionIds: [],
+      authorNotice: 'none',
+    })
+    expect(vcs.withdrawn).toStrictEqual([])
+  })
+
+  it('fails without declining any ask when the host refuses the withdrawal', async () => {
+    const pulls = [pr(1, 'api', { requestedReviewerLogins: ['ada'] })]
+    const asker = buildHarness({ vcs: environmentVcs(viewerVcs('kibertoad', pulls)) })
+    await addReviewer(asker, { displayName: 'Igor', handles: { github: 'kibertoad' } })
+    const ada = await addReviewer(asker, { displayName: 'Ada', handles: { github: 'ada' } })
+    await asker.app.fetch(
+      post('/api/v1/attention', {
+        pullRequest: pulls[0]!.pullRequest,
+        title: pulls[0]!.title,
+        recipientIds: [ada.id],
+        neededCommitments: 1,
+      }),
+    )
+    const refusing = {
+      ...withdrawingVcs('ada', pulls),
+      removeRequestedReviewers: () => Promise.reject(new Error('forbidden')),
+    }
+    const harness = buildHarness({ ...asker.container, vcs: environmentVcs(refusing) })
+
+    const res = await harness.app.fetch(
+      post(`${MINE}/decline`, { pullRequest: pulls[0]!.pullRequest, title: 'Title' }),
+    )
+
+    expect(res.status).toBeGreaterThanOrEqual(500)
+    const [stored] = await harness.container.repositories.attention.list({ status: ['open'] })
+    expect(stored?.declines).toStrictEqual([])
   })
 })

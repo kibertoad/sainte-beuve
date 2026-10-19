@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MyReview, PullRequestRef } from '@sainte-beuve/contracts'
+import type { MyReview, MyReviewCommitment, PullRequestRef } from '@sainte-beuve/contracts'
 import { formatPullRequestRef, vcsDisplayName } from '@sainte-beuve/contracts'
 
 // Other people's pull requests you have a part in: asked to review, on the host
@@ -62,45 +62,52 @@ const ownerOptions = computed(() => {
 
 const unreadable = computed(() => data.value?.sources.filter((source) => !source.ok) ?? [])
 const unsearched = computed(() => data.value?.searches.filter((search) => !search.ok) ?? [])
-const { busy, run } = useApiAction({ refresh })
+const { act } = useOptimisticAction({ refresh })
+const overlay = useReviewOverlay(() => data.value?.committed)
+// A commitment takes a pull request off this list, as the read does once it holds the row.
+const requested = computed(() =>
+  (data.value?.requested ?? []).filter(
+    (row) => overlay.waiting(row.pullRequest.url) && !committedTo(row.pullRequest),
+  ),
+)
 
 async function refreshAfterLink() {
   await Promise.all([refresh(), projects.refresh()])
 }
 
-async function takeOn(pr: MyReview) {
-  await run(
-    () => api.commitToPullRequest(pr.pullRequest, pr.title),
-    'Could not record the commitment',
-    pr.pullRequest.url,
-  )
+/**
+ * "I will review it", on a teammate's ask through the call the inbox makes and
+ * otherwise as a commitment of its own. Either way the row moves at once.
+ */
+function takeOn(row: MyReview) {
+  const { pullRequest, title, projectId, ask } = row
+  act({
+    apply: () => overlay.take(pullRequest, title, projectId),
+    call: () =>
+      ask ? api.commitToAttention(ask.attentionId) : api.commitToPullRequest(pullRequest, title),
+    failure: 'Could not commit to the review',
+  })
 }
 
-/** Answers a teammate's ask through the same calls the attention inbox makes. */
-async function commitToAsk(attentionId: string) {
-  await run(() => api.commitToAttention(attentionId), 'Could not commit to the review', attentionId)
+/** "Not me": the host's request withdrawn and any teammate's ask declined, in one call. */
+function decline(row: MyReview, reason: string | null) {
+  act({
+    apply: () => overlay.decline(row.pullRequest.url),
+    call: () => api.declineReviewRequest(row.pullRequest, row.title, reason),
+    failure: 'Could not decline the review',
+  })
 }
 
-async function declineAsk(row: MyReview, reason: string | null) {
-  if (!row.ask) return
-  const { attentionId } = row.ask
-  await run(
-    () => api.declineAttention(attentionId, reason),
-    'Could not decline the request',
-    attentionId,
-  )
-}
-
-async function release(commitmentId: string) {
-  await run(
-    () => api.releaseCommitment(commitmentId),
-    'Could not release the commitment',
-    commitmentId,
-  )
+function release(commitment: MyReviewCommitment) {
+  act({
+    apply: () => overlay.release(commitment.id),
+    call: () => api.releaseCommitment(commitment.id),
+    failure: 'Could not release the commitment',
+  })
 }
 
 function committedTo(pullRequest: PullRequestRef): boolean {
-  return (data.value?.committed ?? []).some(
+  return overlay.committed.value.some(
     (commitment) => commitment.pullRequest.url === pullRequest.url,
   )
 }
@@ -171,15 +178,15 @@ function committedTo(pullRequest: PullRequestRef): boolean {
                 Promises you made here, whether or not the host knows about them.
               </p>
             </div>
-            <UBadge variant="subtle" color="neutral">{{ data.committed.length }}</UBadge>
+            <UBadge variant="subtle" color="neutral">{{ overlay.committed.value.length }}</UBadge>
           </div>
         </template>
-        <p v-if="data.committed.length === 0" class="text-sm text-muted">
+        <p v-if="overlay.committed.value.length === 0" class="text-sm text-muted">
           You have not taken anything on.
         </p>
         <div v-else class="flex flex-col divide-y divide-default">
           <div
-            v-for="commitment in data.committed"
+            v-for="commitment in overlay.committed.value"
             :key="commitment.id"
             class="flex flex-col gap-2 py-3 pl-3 border-l-2 border-l-primary first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
           >
@@ -208,8 +215,8 @@ function committedTo(pullRequest: PullRequestRef): boolean {
                 size="sm"
                 variant="ghost"
                 color="neutral"
-                :loading="busy === commitment.id"
-                @click="release(commitment.id)"
+                :disabled="isUnsaved(commitment)"
+                @click="release(commitment)"
               >
                 Hand back
               </UButton>
@@ -233,7 +240,7 @@ function committedTo(pullRequest: PullRequestRef): boolean {
         title="Asked to review"
         description="The host or a teammate is waiting on your review."
         empty="Nobody is waiting on you."
-        :pull-requests="data.requested"
+        :pull-requests="requested"
         :marked="(pr) => committedTo(pr.pullRequest)"
       >
         <template #details="{ pullRequest }">
@@ -248,29 +255,14 @@ function committedTo(pullRequest: PullRequestRef): boolean {
             :pull-request="pullRequest.pullRequest"
             @linked="refreshAfterLink"
           />
-          <template v-if="pullRequest.ask">
-            <UButton
-              size="sm"
-              variant="soft"
-              :loading="busy === pullRequest.ask.attentionId"
-              @click="commitToAsk(pullRequest.ask.attentionId)"
-            >
-              I will review it
-            </UButton>
-            <DeclineAskButton
-              :loading="busy === pullRequest.ask.attentionId"
-              @decline="(reason) => declineAsk(pullRequest, reason)"
-            />
-          </template>
           <UButton
-            v-else-if="!committedTo(pullRequest.pullRequest)"
             size="sm"
-            variant="ghost"
-            :loading="busy === pullRequest.pullRequest.url"
+            :variant="pullRequest.ask ? 'soft' : 'ghost'"
             @click="takeOn(pullRequest)"
           >
             I will review it
           </UButton>
+          <DeclineAskButton :loading="false" @decline="(reason) => decline(pullRequest, reason)" />
         </template>
       </PullRequestList>
 

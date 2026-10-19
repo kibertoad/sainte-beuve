@@ -243,8 +243,11 @@ A GitHub App needs `Contents: Read & write` to merge.
 **My Reviews** is the other side of My PRs: open pull requests somebody else
 opened that you have a part in. It lists three things:
 
-- **Asked to review**: the host is waiting on your review. "I will review it"
-  records a commitment, which moves the pull request to the next list.
+- **Asked to review**: the host or a teammate is waiting on your review. "I will
+  review it" records a commitment, which moves the pull request to the next list.
+  **Not me** refuses it: the host's request is taken back off you, any teammate's
+  ask on it is declined, and the row leaves the list. The author is told by DM
+  when they have a Slack id here, and by a comment on the pull request otherwise.
 - **Committed to reviewing**: the promises you made here.
 - **Reviewed**: still open, and you have reviewed them. One the host asks you to
   look at again moves back up to the first list.

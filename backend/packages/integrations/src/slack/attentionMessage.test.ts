@@ -1,7 +1,11 @@
 import type { AttentionRequest } from '@sainte-beuve/contracts'
 import type { AttentionAskNotice } from '@sainte-beuve/kernel'
 import { describe, expect, it } from 'vitest'
-import { attentionAskMessage, attentionShortMessage } from './attentionMessage.js'
+import {
+  attentionAskMessage,
+  attentionShortMessage,
+  reviewDeclinedMessage,
+} from './attentionMessage.js'
 import { SLACK_ACTIONS } from './commands.js'
 
 // The DM a named ask arrives as, in each state the ask passes through. A button
@@ -173,5 +177,25 @@ describe('attentionShortMessage', () => {
 
   it('leaves the link out when the deployment has no address for the app', () => {
     expect(attentionShortMessage(request({ declines }), undefined).text).not.toContain('inbox')
+  })
+})
+
+describe('reviewDeclinedMessage', () => {
+  const declined = {
+    pullRequest: request().pullRequest,
+    title: 'Add a <health> check',
+    declinedByName: 'Ada',
+    reason: null,
+  }
+
+  it('says who will not review which pull request, with no button to press', () => {
+    const message = reviewDeclinedMessage(declined)
+    expect(message.text).toBe(`Ada will not review ${LINK} Add a &lt;health&gt; check.`)
+    expect(buttons(message)).toStrictEqual([])
+  })
+
+  it('quotes the reason when one was given', () => {
+    const message = reviewDeclinedMessage({ ...declined, reason: 'On leave\nuntil Monday' })
+    expect(message.text).toContain('.\n> On leave\n> until Monday')
   })
 })

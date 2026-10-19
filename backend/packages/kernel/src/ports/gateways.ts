@@ -38,6 +38,14 @@ export interface AttentionAskNotice {
   matchedDomains: readonly string[]
 }
 
+/** A review request somebody refused, as the pull request's author hears about it. */
+export interface ReviewDeclinedNotice {
+  pullRequest: PullRequestRef
+  title: string
+  declinedByName: string
+  reason: string | null
+}
+
 /** Chat delivery (Slack today). */
 export interface ChatGateway {
   /** Announce a new review request to the team channel. Returns the message id, for threading. */
@@ -53,6 +61,8 @@ export interface ChatGateway {
    * answer it, and nobody was asked on. `target` is their Slack user id.
    */
   sendAttentionShort(request: AttentionRequest, target: string): Promise<void>
+  /** DM an author that somebody refused to review their pull request. `target` is their Slack user id. */
+  sendReviewDeclined(notice: ReviewDeclinedNotice, target: string): Promise<void>
 }
 
 /** The handle a delegated AI review is tracked by. */

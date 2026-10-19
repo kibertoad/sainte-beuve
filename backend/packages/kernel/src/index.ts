@@ -48,6 +48,7 @@ export type {
   CatFactoryPlacementTarget,
   CatFactoryReviewTarget,
   AttentionAskNotice,
+  ReviewDeclinedNotice,
   ChatGateway,
   ChatMessageRef,
   GatewayFactory,

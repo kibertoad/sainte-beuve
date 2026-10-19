@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { OpenPullRequest } from '@sainte-beuve/contracts'
+import type { AttentionRequest, OpenPullRequest, PlacedCommitment } from '@sainte-beuve/contracts'
+import type { Ref } from 'vue'
 import { formatPullRequestRef } from '@sainte-beuve/contracts'
 
 // The main working space: the three lists one person has to act on, and the
@@ -43,7 +44,45 @@ async function refreshAll(): Promise<void> {
 const workspace = computed(() => data.value?.workspace ?? null)
 const unreadable = computed(() => workspace.value?.sources.filter((source) => !source.ok) ?? [])
 
-const { busy, run } = useApiAction({ refresh })
+const { act } = useOptimisticAction({ refresh })
+const { act: actOnAsk } = useOptimisticAction({ refresh: refreshAll })
+const { act: actOnInbox } = useOptimisticAction({ refresh: attention.refresh })
+const overlay = useReviewOverlay(() => workspace.value?.committed)
+const reviewRequested = computed(() =>
+  (workspace.value?.reviewRequested ?? []).filter((pr) => overlay.waiting(pr.pullRequest.url)),
+)
+
+/** Asks this page answered ahead of the stream saying so. */
+const leftAsks = ref(new Set<string>())
+const committedAsks = ref(new Set<string>())
+const inbox = computed(() => {
+  const viewer = workspace.value?.viewer.reviewer
+  return attention.requests.value
+    .filter((request) => !leftAsks.value.has(request.id))
+    .map((request) =>
+      viewer && committedAsks.value.has(request.id) ? withCommitment(request, viewer) : request,
+    )
+})
+
+function withCommitment(
+  request: AttentionRequest,
+  viewer: { id: string; displayName: string },
+): AttentionRequest {
+  if (request.commitments.some((entry) => entry.reviewerId === viewer.id)) return request
+  const commitment = { reviewerId: viewer.id, displayName: viewer.displayName, committedAt: 0 }
+  return { ...request, commitments: [...request.commitments, commitment] }
+}
+
+/** Add `id` to one of the ask sets, and answer how to take it back out. */
+function mark(set: Ref<Set<string>>, id: string): () => void {
+  set.value = new Set(set.value).add(id)
+  return () => {
+    const next = new Set(set.value)
+    next.delete(id)
+    set.value = next
+  }
+}
+
 const { busy: askBusy, run: runAsk } = useApiAction({ refresh: attention.refresh })
 
 /** The pull request the "ask for attention" dialog is open for. Null when closed. */
@@ -76,49 +115,66 @@ async function ask(request: {
   if (raised) asking.value = null
 }
 
-async function commit(attentionId: string) {
-  await runAsk(
-    () => api.commitToAttention(attentionId),
-    'Could not commit to the review',
-    attentionId,
-  )
-  await refresh()
+function commit(attentionId: string) {
+  const request = attention.requests.value.find((entry) => entry.id === attentionId)
+  actOnAsk({
+    apply: () => {
+      const unmark = mark(committedAsks, attentionId)
+      const untake = request ? overlay.take(request.pullRequest, request.title, null) : () => {}
+      return () => {
+        unmark()
+        untake()
+      }
+    },
+    call: () => api.commitToAttention(attentionId),
+    failure: 'Could not commit to the review',
+  })
 }
 
-async function decline(attentionId: string, reason: string | null) {
-  await runAsk(
-    () => api.declineAttention(attentionId, reason),
-    'Could not decline the request',
-    attentionId,
-  )
+function decline(attentionId: string, reason: string | null) {
+  actOnInbox({
+    apply: () => mark(leftAsks, attentionId),
+    call: () => api.declineAttention(attentionId, reason),
+    failure: 'Could not decline the request',
+  })
 }
 
+/** Not optimistic: who is asked next is the server's choice, and the row shows it. */
 async function askMore(attentionId: string) {
   await runAsk(() => api.askMoreAttention(attentionId), 'Could not ask anybody else', attentionId)
 }
 
-async function withdraw(attentionId: string) {
-  await runAsk(
-    () => api.cancelAttention(attentionId),
-    'Could not withdraw the request',
-    attentionId,
-  )
+function withdraw(attentionId: string) {
+  actOnInbox({
+    apply: () => mark(leftAsks, attentionId),
+    call: () => api.cancelAttention(attentionId),
+    failure: 'Could not withdraw the request',
+  })
 }
 
-async function takeOn(pr: OpenPullRequest) {
-  await run(
-    () => api.commitToPullRequest(pr.pullRequest, pr.title),
-    'Could not record the commitment',
-    pr.pullRequest.url,
-  )
+function takeOn(pr: OpenPullRequest) {
+  act({
+    apply: () => overlay.take(pr.pullRequest, pr.title, null),
+    call: () => api.commitToPullRequest(pr.pullRequest, pr.title),
+    failure: 'Could not record the commitment',
+  })
 }
 
-async function release(commitmentId: string) {
-  await run(
-    () => api.releaseCommitment(commitmentId),
-    'Could not release the commitment',
-    commitmentId,
-  )
+/** "Not me" on a request the host made: withdrawn there, and the author told. */
+function declineRequest(pr: OpenPullRequest, reason: string | null) {
+  act({
+    apply: () => overlay.decline(pr.pullRequest.url),
+    call: () => api.declineReviewRequest(pr.pullRequest, pr.title, reason),
+    failure: 'Could not decline the review',
+  })
+}
+
+function release(commitment: PlacedCommitment) {
+  act({
+    apply: () => overlay.release(commitment.id),
+    call: () => api.releaseCommitment(commitment.id),
+    failure: 'Could not release the commitment',
+  })
 }
 </script>
 
@@ -166,7 +222,7 @@ async function release(commitmentId: string) {
       />
 
       <AttentionInbox
-        :requests="attention.requests.value"
+        :requests="inbox"
         :viewer-id="workspace.viewer.reviewer.id"
         :live="attention.live.value"
         :error="attention.error.value"
@@ -181,17 +237,14 @@ async function release(commitmentId: string) {
         title="Waiting on your review"
         description="Pull requests the host has formally asked you to review."
         empty="Nothing is waiting on you."
-        :pull-requests="workspace.reviewRequested"
+        :pull-requests="reviewRequested"
       >
         <template #actions="{ pullRequest }">
-          <UButton
-            size="sm"
-            variant="ghost"
-            :loading="busy === pullRequest.pullRequest.url"
-            @click="takeOn(pullRequest)"
-          >
-            I will review it
-          </UButton>
+          <UButton size="sm" variant="ghost" @click="takeOn(pullRequest)">I will review it</UButton>
+          <DeclineAskButton
+            :loading="false"
+            @decline="(reason) => declineRequest(pullRequest, reason)"
+          />
         </template>
       </PullRequestList>
 
@@ -204,15 +257,15 @@ async function release(commitmentId: string) {
                 Promises you made here. They survive nobody having pressed the button on the host.
               </p>
             </div>
-            <UBadge variant="subtle" color="neutral">{{ workspace.committed.length }}</UBadge>
+            <UBadge variant="subtle" color="neutral">{{ overlay.committed.value.length }}</UBadge>
           </div>
         </template>
-        <p v-if="workspace.committed.length === 0" class="text-sm text-muted">
+        <p v-if="overlay.committed.value.length === 0" class="text-sm text-muted">
           You have not taken anything on.
         </p>
         <div v-else class="flex flex-col divide-y divide-default">
           <div
-            v-for="commitment in workspace.committed"
+            v-for="commitment in overlay.committed.value"
             :key="commitment.id"
             class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
           >
@@ -231,8 +284,8 @@ async function release(commitmentId: string) {
                 size="sm"
                 variant="ghost"
                 color="neutral"
-                :loading="busy === commitment.id"
-                @click="release(commitment.id)"
+                :disabled="isUnsaved(commitment)"
+                @click="release(commitment)"
               >
                 Hand back
               </UButton>

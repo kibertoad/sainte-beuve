@@ -153,6 +153,18 @@ describe('SlackChatGateway', () => {
     expect(calls[0]?.payload.text).toContain('are left to answer')
   })
 
+  it('DMs the author a refused review request', async () => {
+    const { impl, calls } = stubFetch({ ok: true, channel: 'D-igor', ts: '1.0' })
+    const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
+
+    const notice = { pullRequest: ask.pullRequest, title: ask.title, declinedByName: 'Ada' }
+    await gateway.sendReviewDeclined({ ...notice, reason: 'On leave' }, 'U-igor')
+
+    expect(calls[0]?.url).toBe('https://slack.com/api/chat.postMessage')
+    expect(calls[0]?.payload).toMatchObject({ channel: 'U-igor' })
+    expect(calls[0]?.payload.text).toContain('Ada will not review')
+  })
+
   it('treats an ok:false 200 as a failure, carrying the slug an operator can act on', async () => {
     const { impl } = stubFetch({ ok: false, error: 'channel_not_found' })
     const gateway = new SlackChatGateway({ botToken: 'xoxb-test', fetch: impl })
