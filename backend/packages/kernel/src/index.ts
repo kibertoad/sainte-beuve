@@ -20,7 +20,7 @@ export {
   upstreamOf,
   ValidationError,
 } from './domain/errors.js'
-export { projectRefKey, pullRequestKey } from './domain/keys.js'
+export { ownAskKey, projectRefKey, pullRequestKey } from './domain/keys.js'
 export {
   MAX_REVISION_ATTEMPTS,
   type Revisioned,

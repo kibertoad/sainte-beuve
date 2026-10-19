@@ -29,7 +29,7 @@ async function suggest(harness: TestHarness, body: Record<string, unknown> = {})
   return (await res.json()) as ReviewerSuggestions
 }
 
-function askFor(harness: TestHarness, reviewerIds: string[]): Promise<Response> {
+async function askFor(harness: TestHarness, reviewerIds: string[]): Promise<Response> {
   return harness.app.fetch(post(ASK, { pullRequest: PR, title: 'Add a health check', reviewerIds }))
 }
 
@@ -97,6 +97,21 @@ describe('suggesting reviewers for my pull request', () => {
     expect(more.id).toBe(first.id)
     expect(more.recipients.map((entry) => entry.reviewerId)).toStrictEqual([ada.id, cy.id])
     expect(chat.asks.map((entry) => entry.target)).toStrictEqual(['U-ada'])
+  })
+
+  it('lands two submits made together on one ask naming everybody once', async () => {
+    const [first, second] = await Promise.all([
+      asked(author, [ada.id, bo.id]),
+      asked(author, [bo.id, cy.id]),
+    ])
+
+    const open = await author.container.repositories.attention.list({ status: ['open'] })
+    expect(open.map((request) => request.id)).toStrictEqual([first.id])
+    expect(second.id).toBe(first.id)
+    expect(open[0]?.recipients.map((entry) => entry.reviewerId).toSorted()).toStrictEqual(
+      [ada.id, bo.id, cy.id].toSorted(),
+    )
+    expect(chat.asks.map((entry) => entry.target).toSorted()).toStrictEqual(['U-ada', 'U-bo'])
   })
 
   it('shows who is already on it rather than offering them again', async () => {

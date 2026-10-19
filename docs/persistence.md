@@ -57,7 +57,7 @@ org gets there — no port method takes one, and no service passes one.
 | `host_snapshots`           | `(org_id, source, key)`       | `fetched_at` (a kept host read; see [Kept host reads](#kept-host-reads))                                                        |
 | `pull_request_assessments` | `(org_id, pull_request_key)`  | `assessed_at` (cat-factory's scores for one pull request)                                                                       |
 | `identities`               | `(org_id, provider, subject)` | `reviewer_id`                                                                                                                   |
-| `attention_requests`       | `(org_id, id)`                | `status`, `created_at`, `revision` (moved on by every write, so an answer writes only over the row it read)                     |
+| `attention_requests`       | `(org_id, id)`                | `status`, `created_at`, `revision` (moved on by every write, so an answer writes only over the row it read), `own_ask_key`      |
 | `review_commitments`       | `(org_id, id)`                | `reviewer_id`, `pull_request_key`, `created_at`                                                                                 |
 | `sessions`                 | `(org_id, id)`                | `token_digest` (UNIQUE globally), `reviewer_id`, `provider`, `subject`, `created_at`, `last_seen_at`, `expires_at` (no payload) |
 | `api_keys`                 | `(org_id, id)`                | `token_digest` (UNIQUE globally), `label`, `role`, `hint`, `created_by`, `created_at`, `last_used_at` (no payload)              |
@@ -137,7 +137,7 @@ declares and the in-memory store can only promise.
 
 ## The claims that have to be atomic
 
-There are two, and both are a read that cannot be trusted to still be true by the
+There are three, and each is a read that cannot be trusted to still be true by the
 time the write lands.
 
 `IdentityRepository.link` answers "whose account is this NOW", and the answer is
@@ -149,6 +149,13 @@ Both durable stores settle it in one statement: insert, and on a conflict with
 caller that already holds the key refreshes the handle on the same trip, which
 is what keeps a rename visible. The in-memory store reads and then writes, and
 can only promise the same outcome.
+
+`AttentionRepository.createOrGetOwn` answers "is there already an open ask of
+mine on this pull request", which My PRs asks before it raises one. Both durable
+stores hold a partial UNIQUE index on `(org_id, own_ask_key)` over open rows, so
+two submits that both found none insert once, and the loser reads the winner and
+adds its people to it through `change`. Only asks written by `createOrGetOwn`
+carry a key, and closing an ask takes it out of the index.
 
 `ReminderRepository.claim` answers "am I the one sending this nudge". `listDue`
 is a read, so every pass over a batch sees the same rows — and two passes is what

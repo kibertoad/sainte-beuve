@@ -12,7 +12,7 @@ import type {
   ProjectRepository,
   ReviewCommitmentRepository,
 } from '@sainte-beuve/kernel'
-import { ConflictError, projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
+import { ConflictError, ownAskKey, projectRefKey, pullRequestKey } from '@sainte-beuve/kernel'
 import { clone, patched } from './clone.js'
 import { byText, newestFirst, oldestFirst } from './order.js'
 
@@ -103,6 +103,8 @@ function identityKey(provider: IdentityProvider, subject: string): string {
 
 export class InMemoryAttentionRepository implements AttentionRepository {
   private readonly rows = new Map<string, AttentionRequest>()
+  /** The `ownAskKey` of each ask written by `createOrGetOwn`, by id. */
+  private readonly ownKeys = new Map<string, string>()
 
   async list(filter?: { status?: AttentionStatus[] }): Promise<AttentionRequest[]> {
     const wanted = filter?.status
@@ -120,6 +122,25 @@ export class InMemoryAttentionRepository implements AttentionRepository {
   async create(request: AttentionRequest): Promise<AttentionRequest> {
     this.rows.set(request.id, clone(request))
     return clone(request)
+  }
+
+  /** Synchronous from the check to the write, as `createOrGet` on commitments is. */
+  async createOrGetOwn(
+    request: AttentionRequest,
+  ): Promise<{ request: AttentionRequest; created: boolean }> {
+    const key = ownAskKey(request)
+    for (const [id, held] of this.ownKeys) {
+      const row = this.rows.get(id)
+      if (held === key && row?.status === 'open') return { request: clone(row), created: false }
+    }
+    if (this.rows.has(request.id)) {
+      throw new ConflictError(`Attention request ${request.id} is already taken`, {
+        attentionId: request.id,
+      })
+    }
+    this.rows.set(request.id, clone(request))
+    this.ownKeys.set(request.id, key)
+    return { request: clone(request), created: true }
   }
 
   /** Atomic without a revision: nothing awaits between the read and the write. */

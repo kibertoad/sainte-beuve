@@ -1,7 +1,13 @@
 import type { AttentionRequest, AttentionStatus, ReviewCommitment } from '@sainte-beuve/contracts'
 import { attentionRequestSchema, reviewCommitmentSchema } from '@sainte-beuve/contracts'
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
-import { ConflictError, insertOrRead, pullRequestKey, writeAtRevision } from '@sainte-beuve/kernel'
+import {
+  ConflictError,
+  insertOrRead,
+  ownAskKey,
+  pullRequestKey,
+  writeAtRevision,
+} from '@sainte-beuve/kernel'
 import type { SqlDriver } from './driver.js'
 import { decodeData, decodeRows, encodeData, patched, placeholders } from './rows.js'
 
@@ -16,6 +22,13 @@ ON CONFLICT (org_id, id) DO UPDATE SET
   created_at = excluded.created_at,
   data = excluded.data,
   revision = attention_requests.revision + 1`
+
+// No conflict target: a taken id loses the same way a taken open
+// `(org_id, own_ask_key)` does, and writes nothing.
+const ATTENTION_OWN_INSERT = `INSERT INTO attention_requests (org_id, id, status, created_at, data, revision, own_ask_key)
+VALUES (?, ?, ?, ?, ?, 0, ?)
+ON CONFLICT DO NOTHING
+RETURNING id`
 
 const ATTENTION_WRITE_IF = `UPDATE attention_requests
 SET status = ?, created_at = ?, data = ?, revision = revision + 1
@@ -50,6 +63,28 @@ export class SqlAttentionRepository implements AttentionRepository {
   async create(request: AttentionRequest): Promise<AttentionRequest> {
     await this.write(request)
     return request
+  }
+
+  async createOrGetOwn(
+    request: AttentionRequest,
+  ): Promise<{ request: AttentionRequest; created: boolean }> {
+    const key = ownAskKey(request)
+    const { value, created } = await insertOrRead(request, {
+      describe: `The open ask ${key}`,
+      insert: async () => {
+        const row = await this.db.first(ATTENTION_OWN_INSERT, [
+          this.orgId,
+          request.id,
+          request.status,
+          request.createdAt,
+          encodeData(request),
+          key,
+        ])
+        return row !== null
+      },
+      read: () => this.holderOf(request, key),
+    })
+    return { request: value, created }
   }
 
   async change(
@@ -93,6 +128,19 @@ export class SqlAttentionRepository implements AttentionRepository {
       request.createdAt,
       encodeData(request),
     ])
+  }
+
+  /** The open ask holding the key. An insert that lost while none holds it lost on the id. */
+  private async holderOf(request: AttentionRequest, key: string): Promise<AttentionRequest | null> {
+    const row = await this.db.first(
+      "SELECT data FROM attention_requests WHERE org_id = ? AND own_ask_key = ? AND status = 'open'",
+      [this.orgId, key],
+    )
+    if (row !== null) return decodeData(attentionRequestSchema, 'attention_requests', row.data)
+    if ((await this.getById(request.id)) === null) return null
+    throw new ConflictError(`Attention request ${request.id} is already taken`, {
+      attentionId: request.id,
+    })
   }
 }
 

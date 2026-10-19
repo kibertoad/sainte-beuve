@@ -31,6 +31,7 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import * as v from 'valibot'
 import { epochMs, orgId, payload } from './columns.js'
 
@@ -304,10 +305,16 @@ export const attentionRequests = pgTable(
     data: payload<AttentionRequest>('data', 'attention_requests', attentionRequestSchema).notNull(),
     /** Moves on with every write, so a change writes only over the row it read. */
     revision: integer('revision').notNull().default(0),
+    /** `ownAskKey` on an ask My PRs raised, null on every other. */
+    ownAskKey: text('own_ask_key'),
   },
   (table) => [
     primaryKey({ columns: [table.orgId, table.id] }),
     index('attention_requests_status_idx').on(table.orgId, table.status, table.createdAt),
+    /** One open ask per key: what `createOrGetOwn` conflicts on. */
+    uniqueIndex('attention_requests_own_idx')
+      .on(table.orgId, table.ownAskKey)
+      .where(sql`${table.status} = 'open' AND ${table.ownAskKey} IS NOT NULL`),
   ],
 )
 

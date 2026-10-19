@@ -137,6 +137,7 @@ describe('declining an ask', () => {
           list: (filter) => repositories.attention.list(filter),
           getById: (id) => repositories.attention.getById(id),
           create: (ask) => repositories.attention.create(ask),
+          createOrGetOwn: (ask) => repositories.attention.createOrGetOwn(ask),
           change: async (id, change) => {
             if (!raced) {
               raced = true

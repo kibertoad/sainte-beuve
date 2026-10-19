@@ -1,6 +1,12 @@
 import type { AttentionRequest, AttentionStatus, ReviewCommitment } from '@sainte-beuve/contracts'
 import type { AttentionRepository, ReviewCommitmentRepository } from '@sainte-beuve/kernel'
-import { ConflictError, insertOrRead, pullRequestKey, writeAtRevision } from '@sainte-beuve/kernel'
+import {
+  ConflictError,
+  insertOrRead,
+  ownAskKey,
+  pullRequestKey,
+  writeAtRevision,
+} from '@sainte-beuve/kernel'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { PostgresDatabase } from './database.js'
 import { firstOr, patched } from './rows.js'
@@ -43,6 +49,33 @@ export class PostgresAttentionRepository implements AttentionRepository {
   async create(request: AttentionRequest): Promise<AttentionRequest> {
     await this.write(request)
     return request
+  }
+
+  /** `ON CONFLICT DO NOTHING` names no target, so a taken id loses the same way a taken key does. */
+  async createOrGetOwn(
+    request: AttentionRequest,
+  ): Promise<{ request: AttentionRequest; created: boolean }> {
+    const key = ownAskKey(request)
+    const { value, created } = await insertOrRead(request, {
+      describe: `The open ask ${key}`,
+      insert: async () => {
+        const inserted = await this.db
+          .insert(attentionRequests)
+          .values({
+            orgId: this.orgId,
+            id: request.id,
+            status: request.status,
+            createdAt: request.createdAt,
+            data: request,
+            ownAskKey: key,
+          })
+          .onConflictDoNothing()
+          .returning({ id: attentionRequests.id })
+        return firstOr(inserted) !== null
+      },
+      read: () => this.holderOf(request, key),
+    })
+    return { request: value, created }
   }
 
   async change(
@@ -94,6 +127,25 @@ export class PostgresAttentionRepository implements AttentionRepository {
         target: [attentionRequests.orgId, attentionRequests.id],
         set: { ...row, revision: sql`${attentionRequests.revision} + 1` },
       })
+  }
+
+  /** The open ask holding the key. An insert that lost while none holds it lost on the id. */
+  private async holderOf(request: AttentionRequest, key: string): Promise<AttentionRequest | null> {
+    const rows = await this.db
+      .select()
+      .from(attentionRequests)
+      .where(
+        and(
+          eq(attentionRequests.orgId, this.orgId),
+          eq(attentionRequests.ownAskKey, key),
+          eq(attentionRequests.status, 'open'),
+        ),
+      )
+    const held = firstOr(rows)?.data ?? null
+    if (held !== null || (await this.getById(request.id)) === null) return held
+    throw new ConflictError(`Attention request ${request.id} is already taken`, {
+      attentionId: request.id,
+    })
   }
 }
 

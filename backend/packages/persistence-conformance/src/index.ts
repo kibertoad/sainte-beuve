@@ -48,6 +48,7 @@ import { riskAssessmentCases, riskAssessmentTenancyCases } from './risk-assessme
 import { teamCases, teamTenancyCases } from './teams-cases.js'
 import { type TenancyCase, tenancyConformanceCases as boundaryCases } from './tenancy-cases.js'
 import { commitmentCases } from './commitment-cases.js'
+import { ownAskCases } from './own-ask-cases.js'
 import { attentionCases, identityCases, projectCases } from './workspace-cases.js'
 
 /** Every case, in the order the ports are declared on `Repositories`. */
@@ -63,6 +64,7 @@ export const repositoryConformanceCases: readonly ConformanceCase[] = [
   ...identityCases,
   ...attentionCases,
   ...attentionChangeCases,
+  ...ownAskCases,
   ...commitmentCases,
   ...teamCases,
   ...externalRepositoryCases,
@@ -112,4 +114,5 @@ export { reminderCases } from './reminder-cases.js'
 export { reviewerCases } from './reviewer-cases.js'
 export { riskAssessmentCases, riskAssessmentTenancyCases } from './risk-assessment-cases.js'
 export { commitmentCases } from './commitment-cases.js'
+export { ownAskCases } from './own-ask-cases.js'
 export { attentionCases, identityCases, projectCases } from './workspace-cases.js'

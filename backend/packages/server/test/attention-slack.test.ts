@@ -157,6 +157,7 @@ describe('the Slack DMs of a named ask', () => {
           list: (filter) => repositories.attention.list(filter),
           getById: (id) => repositories.attention.getById(id),
           create: (request) => repositories.attention.create(request),
+          createOrGetOwn: (request) => repositories.attention.createOrGetOwn(request),
           change: async () => {
             throw new Error('the attention store is down')
           },

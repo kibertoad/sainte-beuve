@@ -35,3 +35,14 @@ export function pullRequestKey(pr: {
 }): string {
   return `${projectRefKey(pr)}#${pr.number}`
 }
+
+/**
+ * The key of the one named ask My PRs keeps per requester and pull request:
+ * `requesterId provider:owner/repo#number`. Neither half can hold a space.
+ */
+export function ownAskKey(ask: {
+  requestedById: string
+  pullRequest: { provider: string; owner: string; repo: string; number: number }
+}): string {
+  return `${ask.requestedById} ${pullRequestKey(ask.pullRequest)}`
+}

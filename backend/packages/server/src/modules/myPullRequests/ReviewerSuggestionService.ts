@@ -98,7 +98,8 @@ export class ReviewerSuggestionService {
   /**
    * Ask the people picked to commit, on the caller's open ask for the pull
    * request when there is one and on a new one otherwise. Whoever already
-   * committed, or was already asked on that ask, is passed over.
+   * committed, or was already asked on that ask, is passed over. The store
+   * keeps one such ask, so two submits that both found none land on one.
    */
   async ask(input: AskSuggestedReviewers): Promise<AttentionRequest> {
     const { viewer, status } = await readAuthored(
@@ -127,7 +128,7 @@ export class ReviewerSuggestionService {
     }
     const attention = new AttentionService(this.container)
     if (own !== null) return attention.askMore(viewer.reviewer, own.id, fresh)
-    return attention.raise(viewer.reviewer, {
+    return attention.raiseOrAddTo(viewer.reviewer, {
       pullRequest: { ...input.pullRequest, url: status.url },
       title: input.title,
       recipientIds: fresh,

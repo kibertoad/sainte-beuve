@@ -18,7 +18,6 @@ import {
   commitmentChange,
   declineChange,
   declineRefusal,
-  distinctAsSpelled,
   hasDeclined,
   isInAttentionAudience,
 } from '@sainte-beuve/reviewers'
@@ -29,7 +28,8 @@ import {
 } from '../../integrations/reviewRequests.js'
 import { refreshAskDeliveries, sendAskDms, tellRequesterShort } from './askDeliveries.js'
 import { changeAsk } from './changeAsk.js'
-import { addressAsk, namedAdditions, rankedCandidates } from './recipients.js'
+import { draftAsk } from './draftAsk.js'
+import { namedAdditions, rankedCandidates } from './recipients.js'
 
 /**
  * Asking a team to look at something, and answering the ask.
@@ -58,43 +58,25 @@ export class AttentionService {
   }
 
   async raise(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
-    const { repositories, clock, ids } = this.container
-    const { named, wanted } = await addressAsk(this.container, viewer, input)
-    const recipients = named.map((reviewer) => ({
-      reviewerId: reviewer.id,
-      displayName: reviewer.displayName,
-    }))
-    const now = clock.now()
-    const request = await repositories.attention.create({
-      id: ids.next(),
-      pullRequest: input.pullRequest,
-      title: input.title,
-      requestedById: viewer.id,
-      requestedByName: viewer.displayName,
-      recipients,
-      requiredSkills: distinctAsSpelled(wanted.skills),
-      domains: distinctAsSpelled(wanted.domains),
-      sameTeamOnly: input.sameTeamOnly,
-      // The requester's team is captured HERE rather than read at delivery
-      // time, so somebody changing team does not silently re-address an ask
-      // that is already out.
-      team: viewer.team,
-      neededCommitments: input.neededCommitments,
-      commitments: [],
-      note: input.note,
-      status: 'open',
-      createdAt: now,
-      updatedAt: now,
-      resolvedAt: null,
-      chatDeliveries: [],
-      declines: [],
-      // Asking on means asking the next named person, which an ask sent by
-      // fit has no use for: it already reaches everybody who matches.
-      keepAsking: input.keepAsking && recipients.length > 0,
-      people: input.people,
-    })
-    this.publish('opened', request)
-    return sendAskDms(this.container, request, named)
+    const { request, named } = await draftAsk(this.container, viewer, input)
+    return this.opened(await this.container.repositories.attention.create(request), named)
+  }
+
+  /**
+   * A named ask the requester keeps one of on the pull request. When theirs is
+   * already open, even one that landed a moment ago, the people go on it instead.
+   */
+  async raiseOrAddTo(viewer: Reviewer, input: CreateAttentionRequest): Promise<AttentionRequest> {
+    const draft = await draftAsk(this.container, viewer, input)
+    const { request, created } = await this.container.repositories.attention.createOrGetOwn(
+      draft.request,
+    )
+    if (created) return this.opened(request, draft.named)
+    return this.askMore(
+      viewer,
+      request.id,
+      draft.named.map((reviewer) => reviewer.id),
+    )
   }
 
   /**
@@ -300,6 +282,11 @@ export class AttentionService {
     })
     if (!created) return commitment
     return requestCommittedReviewer(this.container, commitment, viewer)
+  }
+
+  private async opened(request: AttentionRequest, named: Reviewer[]): Promise<AttentionRequest> {
+    this.publish('opened', request)
+    return sendAskDms(this.container, request, named)
   }
 
   private async requireOpen(attentionId: string): Promise<AttentionRequest> {

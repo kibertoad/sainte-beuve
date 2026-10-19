@@ -7,6 +7,16 @@ export interface AttentionRepository {
   getById(attentionId: string): Promise<AttentionRequest | null>
   create(request: AttentionRequest): Promise<AttentionRequest>
   /**
+   * Write a named ask, or answer the open one this requester already wrote
+   * through here on that pull request. The store's unique key on
+   * `(org, ownAskKey)` over open asks decides, so two submits landing together
+   * get one ask and `created` is true for exactly one of them. The key is
+   * released when the ask closes. Asks written by `create` carry no key.
+   */
+  createOrGetOwn(
+    request: AttentionRequest,
+  ): Promise<{ request: AttentionRequest; created: boolean }>
+  /**
    * Change one request atomically. `change` is given the request as stored and
    * answers the fields to write, or null to leave it as it is. When another
    * write lands between the read and this one, the store reads again and calls
